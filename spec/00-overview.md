@@ -1,0 +1,101 @@
+---
+id: 00-overview
+section_type: framing
+spec_version: 0.1.0
+---
+
+# 00 — Overview
+
+**Section type**: framing. This file is context for the reader. It is not
+normative. Host implementations do not need to satisfy anything in this
+file directly; the requirements live in the canonical-prose and
+declarative-contract sections that follow.
+
+## What this workflow is
+
+A spec-first development discipline for AgenticApps projects. It
+combines four pillars:
+
+1. **Commitment ritual** — the agent emits a public, written
+   commitment listing every skill it will invoke before touching any
+   code (canonical block in section 01). Cialdini's commitment principle
+   keeps it consistent with what it said.
+2. **Hook taxonomy** — a fixed set of named gates fire at known points
+   in the phase lifecycle (section 02). Each host binds a concrete skill
+   to each gate; the gate names themselves are spec-canonical.
+3. **Evidence rules** — every task completion produces on-disk evidence
+   (test output, grep result, screenshot path, curl response) before
+   the agent claims completion (section 06). Manual assertions don't
+   count.
+4. **Two-stage review** — spec-compliance review (Stage 1) and
+   code-quality review (Stage 2) are separate review passes by separate
+   reviewer agents (section 07). Collapsing them defeats both.
+
+The workflow is deliberately verbose. It exists because LLM agents
+under deadline pressure rationalize their way out of unloved steps —
+TDD becomes "we'll add tests later", verification becomes "manually
+verified", reviews collapse into one. The commitment ritual + 13 red
+flags + rationalization table are designed to make that rationalization
+visible to the agent itself.
+
+## Why this spec exists
+
+Until v0.1.0, the canonical text for the discipline lived only in
+`claude-workflow`, the Claude Code reference implementation. As the
+pi.dev port and the codex.dev port (planned) consumed parts of it,
+prose drift emerged: missing red flags, half-ported tables, slightly
+reworded ritual blocks. Without a canonical spec, every new host
+either re-derives the discipline or copies a snapshot of one host's
+prose, and the implementations slowly fork.
+
+This repo is the source of truth. Host repos cite a spec version,
+reproduce canonical-prose blocks verbatim, and satisfy declarative
+contracts in their own idiom.
+
+## How to read this spec
+
+- Sections 00 and 09 are **framing** — read them to orient.
+- Sections 01, 03, 04, 05 are **canonical prose** — host implementations
+  reproduce these blocks verbatim. Substitution is permitted only inside
+  `{{...}}` placeholders.
+- Sections 02, 06, 07, 08 are **declarative contracts** — host
+  implementations satisfy the listed MUST / SHOULD / MAY requirements
+  in whatever idiom is natural for the host runtime.
+
+Every file's frontmatter declares its `section_type`. Every declarative
+file cites RFC 2119 for keyword semantics.
+
+## Glossary
+
+The six terms used most across this spec.
+
+**Gate** — a named control point in the workflow lifecycle (e.g.
+`brainstorm-ui`, `verification`, `code-review`). Each gate has a
+trigger condition and a required evidence artifact. Hosts bind a
+concrete skill or tool invocation to each gate. The complete list is
+in section 02.
+
+**Hook** — a host-runtime mechanism that fires a gate's bound skill
+when the trigger condition is met. Hooks may be declarative (a config
+file the host reads) or runtime (a process that observes events and
+fires the bound skill). The spec is silent on hook implementation;
+hosts choose.
+
+**Phase** — a unit of work in the GSD (Get Stuff Done) discipline.
+A phase has a CONTEXT.md (decisions and alternatives), a PLAN.md (task
+breakdown), an executed series of atomic commits, a VERIFICATION.md
+(evidence of `must_have` satisfaction), and a REVIEW.md (Stage 1 and
+Stage 2 review findings).
+
+**Plan** — a single executable unit inside a phase, owned by one
+executor. A plan has tasks, optional `tdd="true"` markers, and an
+expected outcome verifiable against the phase's `must_have` list.
+
+**Verification** — the act of producing on-disk evidence (test output,
+grep result, screenshot path, curl response) that demonstrates a
+`must_have` is satisfied. Section 06 specifies the evidence rules.
+
+**ADR** — Architecture Decision Record at `docs/decisions/NNNN-slug.md`.
+Captures non-trivial technology / architecture / UX decisions with
+rationale and rejected alternatives. The four ADRs in `adrs/` are
+host-agnostic decisions that apply across implementations.
