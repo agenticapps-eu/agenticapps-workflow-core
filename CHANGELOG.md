@@ -20,6 +20,10 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+### Documentation
+
+- **ADR-0011 addendum** documenting the upstream `pbakaus/impeccable` CLI rename (`critique` subcommand removed in v1.0.1; v1.x unpublished from npm; v2.x emits a finding-list shape under `npx impeccable detect`). Skill hook syntax (`impeccable:critique`, `impeccable:audit`) is unchanged and continues to satisfy the gate-point contract. Hosts with CLI-based CI gates have two response options (migrate to `detect` or adopt per-phase artifacts); both satisfy the ADR. Conformance impact: **none** — addendum clarifies existing decision; hosts already at v0.1.0 remain conformant.
+
 ## [0.1.0] — 2026-05-09
 
 First public release. Establishes the canonical specification baseline.
