@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 0.1.0
+spec_version: 0.3.0
 ---
 
 # 00 — Overview
@@ -58,9 +58,15 @@ contracts in their own idiom.
 - Sections 01, 03, 04, 05 are **canonical prose** — host implementations
   reproduce these blocks verbatim. Substitution is permitted only inside
   `{{...}}` placeholders.
-- Sections 02, 06, 07, 08 are **declarative contracts** — host
+- Sections 02, 06, 07, 08, 10 are **declarative contracts** — host
   implementations satisfy the listed MUST / SHOULD / MAY requirements
   in whatever idiom is natural for the host runtime.
+
+Section 10 (observability) was introduced at spec v0.2.0, amended at
+v0.2.1 (cparx-pilot patches), and extended at v0.3.0 with the
+conformance enforcement primitives in §10.9. Hosts may claim
+conformance against any of those versions; the version the host claims
+is the version the host's `implements_spec` field names.
 
 Every file's frontmatter declares its `section_type`. Every declarative
 file cites RFC 2119 for keyword semantics.
