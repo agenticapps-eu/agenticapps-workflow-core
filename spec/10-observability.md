@@ -1,10 +1,30 @@
 ---
 id: 10-observability
 section_type: declarative-contract
-spec_version: 0.3.0
+spec_version: 0.3.2
 ---
 
 # 10 — Observability
+
+> **Changes since 0.3.0**
+> - §10.5 — added MUST-level **Flush primitive** obligation. Wrappers
+>   MUST expose a `Flush(timeout)` (or idiomatic equivalent) that drains
+>   in-flight emission goroutines/microtasks INTO the destination SDK's
+>   transport BEFORE draining the SDK's own buffer. Short-lived processes
+>   (CLI tools, migrations, tests) MUST call it before exit; long-running
+>   services need not. Generators in languages with runtime-await for
+>   short-lived processes (Cloudflare Workers via `ctx.waitUntil`, Deno
+>   Deploy) MAY satisfy the obligation implicitly; generators in languages
+>   without (Go) MUST expose `Flush` explicitly. Witness: factiv/cparx
+>   2026-05-18 Sentry adoption verification — wrapper-routed events were
+>   silently dropped from CLI smoke tests because the SDK's flush
+>   raced against fire-and-forget emission goroutines.
+> - No conformance impact on hosts that already drain via host-runtime
+>   await (`ts-cloudflare-worker`, `ts-cloudflare-pages`, `ts-supabase-edge`,
+>   `ts-react-vite`); they satisfy the obligation implicitly today.
+>   The obligation moves from "implicit best-practice" to "explicit MUST"
+>   so future generators (Rust, Python, Node-on-bare-V8) cannot ship
+>   without it.
 
 > **Changes since 0.2.1**
 > - §10.7 — fifth generator-obligation bullet added: generators MUST
@@ -91,6 +111,7 @@ A conformant project MAY add further instrumentation points (per-query database 
 ### 10.5 Operational requirements
 
 - **Non-blocking emission.** The wrapper MUST NOT block the request path on observability transport. Implementations SHOULD batch and flush asynchronously or use fire-and-forget delivery. A broken or slow observability destination MUST NOT degrade end-user latency or availability.
+- **Flush primitive (added v0.3.2).** Wrappers MUST expose a `Flush(timeout)` primitive (or equivalent — `flush`, `await observability.flush()`, etc., as idiomatic per language) that drains in-flight emission goroutines/microtasks INTO the destination SDK's transport BEFORE draining the SDK's own buffer. Long-running services need not call `Flush` — per-request emission units have time to complete naturally before the next request arrives, and the SDK transport keeps its buffer drained in steady-state. **Short-lived processes (CLI tools, one-off migrations, tests, smoke verifiers) MUST call `Flush` before exit** to avoid silently dropping events. This is required because the destination SDK's flush waits for *its* buffer to drain, not for callers' fire-and-forget goroutines/microtasks that have not yet enqueued; calling the SDK's flush directly on a short-lived process races against the emission layer. Generators MAY satisfy this implicitly if the host runtime drains all pending promises before exit (e.g. Cloudflare Workers via `ctx.waitUntil`, Deno Deploy isolates); generators in languages without runtime-await for short-lived processes (e.g. Go) MUST expose `Flush` explicitly. Implementations MUST report success when the wrapper's emission units have all completed even when the destination SDK was never configured (no DSN, no client), since the emission-layer drain is the only contract `Flush` has in that mode. The witness for this requirement was a goroutine-vs-flush race surfaced in factiv/cparx's 2026-05-18 Sentry adoption verification: wrapper-routed events were silently dropped from CLI smoke tests while direct SDK calls arrived as expected, isolating the bug to the emission layer. See `add-observability/templates/go-fly-http/observability.go` `Flush(timeout)` for a reference implementation and `add-observability/templates/go-fly-http/observability_test.go` `TestFlushDrainsInFlightEmissions` for the contract test.
 - **Fail-safe behavior.** Failures inside the wrapper — network errors, vendor SDK exceptions, malformed envelopes — MUST NOT propagate to the caller. The wrapper MUST log a single warning per failure window (host-defined window length) and continue.
 - **PII discipline.** The envelope `attrs` field MUST NOT contain unredacted secrets, tokens, passwords, full payment card numbers, or other regulated identifiers as defined by applicable law (GDPR, PCI-DSS, HIPAA where relevant). Each project MUST publish a redaction policy in `lib/observability/policy.md` (or equivalent) listing which attributes are scrubbed and how.
 - **Sampling.** The wrapper MAY sample `debug` and `info` events. Events of severity `error` or `fatal` MUST NOT be sampled. Span sampling MAY be applied to traces but MUST preserve any trace containing an `error`-or-higher event.

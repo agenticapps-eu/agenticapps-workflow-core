@@ -20,6 +20,44 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-05-18
+
+Patch release: §10.5 Flush-primitive obligation codified. Most existing
+hosts already satisfy it implicitly via host-runtime await
+(`ts-cloudflare-worker`, `ts-cloudflare-pages`, `ts-supabase-edge`,
+`ts-react-vite`); the change moves the obligation from "implicit
+best-practice" to "explicit MUST" so generators in languages without
+runtime-await for short-lived processes (Go today; future Rust/Python/
+Node-on-bare-V8) cannot ship without addressing it.
+
+### Documentation
+
+- **§10.5 Flush primitive** — added MUST-level bullet between the
+  existing "Non-blocking emission" and "Fail-safe behavior" bullets.
+  Wrappers MUST expose a `Flush(timeout)` (or idiomatic equivalent)
+  that drains in-flight emission goroutines/microtasks INTO the
+  destination SDK's transport BEFORE draining the SDK's own buffer.
+  Short-lived processes MUST call it before exit; long-running services
+  need not. Implementations MUST report success when the destination
+  SDK was never configured (no DSN), since the emission-layer drain is
+  the only contract `Flush` has in that mode. Witness: factiv/cparx
+  2026-05-18 Sentry adoption verification — wrapper-routed events were
+  silently dropped from CLI smoke tests because `sentry.Flush` raced
+  against fire-and-forget emission goroutines.
+
+### Conformance impact for host implementers
+
+- **`claude-workflow`** (current `implements_spec: 0.3.0`) — `ts-*`
+  templates satisfy the new obligation implicitly via host-runtime
+  await. `go-fly-http` template needs an explicit `Flush(timeout)`
+  addition; PR #36 ships the fix at `add-observability` v0.3.3.
+  After PR #36 merges, claude-workflow can bump `implements_spec`
+  0.3.0 → 0.3.2.
+- **`codex-workflow`** — no observability templates today; not affected.
+- **`pi-agentic-apps-workflow`** — adoption pending; absorbs the
+  obligation at adoption time.
+- **`agenticapps-dashboard`** — consumer-only; not affected.
+
 ## [0.3.1] — 2026-05-15
 
 Patch release: ADR-0011 addendum documenting the upstream
