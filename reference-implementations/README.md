@@ -2,6 +2,11 @@
 
 Host repos that adopt (or will adopt) the AgenticApps workflow spec.
 
+**Current spec version:** 0.4.0 (released 2026-05-20). See `CHANGELOG.md`
+in the spec root for the host-implementer actions required to move a
+host row from a prior version to 0.4.0. Host rows below move via the
+host's own adoption PR, not via this file.
+
 | Host repo | Type | Spec version implemented | Conformance level | Notes |
 |---|---|---|---|---|
 | [claude-workflow](https://github.com/agenticapps-eu/claude-workflow) | Workflow scaffolder for Claude Code | 0.3.0 | `full` | Source of canonical prose. `add-observability` skill at v0.3.1 ships `implements_spec: 0.3.0`: §10.7 init flow (wrapper + middleware + per-stack policy + CLAUDE.md metadata, 5 stacks), §10.8 metadata schema, §10.9 MUSTs (`scan --since-commit`, `--update-baseline`, `.observability/{baseline,delta}.json`). §10.9.3 CI workflow shipped as opt-in reference (`observability.yml.example`); migration `0011` installs local-only enforcement (Option-4 stance documented in CLAUDE.md). |
