@@ -20,6 +20,99 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-20
+
+Additive minor release. Three new spec sections and one host-agnostic
+ADR placeholder. Hosts at v0.3.2 remain conformant for v0.3.2 claims;
+hosts wishing to claim v0.4.0 satisfy the new sections per the
+host-implementer actions block below.
+
+### Added
+
+- **`spec/11-coding-discipline.md`** — canonical-prose section with
+  four short rules (Think Before Coding, Simplicity First, Surgical
+  Changes, Goal-Driven Execution), each followed by 5–6 anti-pattern
+  bullets the rule prevents. Provenance: distilled from public
+  discussion of recurring failure modes in coding-agent output
+  (Karpathy, 2025-2026), as gathered in the community skill
+  collection `multica-ai/andrej-karpathy-skills`. Hosts updating to
+  v0.4.0 MUST reproduce the canonical block verbatim in their
+  primary project-instruction file (CLAUDE.md, AGENTS.md, or
+  equivalent).
+- **`spec/12-authoring-conventions.md`** — declarative contract for
+  authoring host SKILL.md, AGENTS.md, and contract spec files. Three
+  SHOULD/MAY-level requirements: SHOULD render branchy workflows as
+  Mermaid `flowchart` diagrams with explicit cycle/fallback paths
+  and a REPORT terminal; SHOULD keep judgment-heavy passages in
+  prose; MAY combine both within a single section. Plus an advisory
+  on placement of behavior-critical prose given known
+  long-context-attention drop-off. Cites Xiao et al., *FlowBench*
+  (EMNLP 2024 Findings, arXiv:2406.14884) and Liu et al., *Lost in
+  the Middle* (arXiv:2307.03172, TACL 2024).
+- **`spec/13-ts-declare-first.md`** — declarative contract for a
+  host-provided `ts-declare-first` skill (host-named equivalents
+  permitted). SHOULD-level for hosts that target TypeScript
+  projects. Defines a three-phase discipline: Phase 1 produces a
+  `declare`-only type-surface file with zero implementation bodies;
+  Phase 2 produces tests that import and exercise the declared
+  surface and fail in the expected way; Phase 3 produces the
+  implementation whose exported signatures match the declarations
+  exactly. Piggy-backs on §06 for evidence shapes; integrates with
+  the §02 `verification` gate; MUST NOT collapse Phase 1 and Phase 3
+  into a single commit.
+- **`adrs/0015-secret-scanner.md`** — placeholder ADR. Status:
+  Proposed; Decision: **TBD pending evaluation in claude-workflow's
+  `feat/v1.14.0-workflow-additions` branch**. Reserves the ADR
+  number and gives the downstream evaluation a stable target file to
+  populate with the benchmark outcome. Context captures the
+  candidates (`gitleaks` vs `betterleaks`) and the four evaluation
+  criteria the populated Decision must address (true-positive
+  recall, false-positive rate, migration cost, CI runtime).
+
+### Changed
+
+- **`spec/00-overview.md`** — section-list updated to include §11 as
+  canonical prose and §12, §13 as declarative contracts. Explanatory
+  paragraph extended to cover the v0.4.0 additions. Frontmatter
+  `spec_version` bumped to 0.4.0.
+- **`spec/09-conformance.md`** — §11 added to the canonical-prose
+  list (item 1 under `full`); §12 and §13 added to the declarative-
+  MUST list (item 2 under `full`), with §13 noted as
+  TypeScript-target-only. `implements_spec` citation-format example
+  bumped from `0.3.0` to `0.4.0`. Header prose updated from "at
+  version 0.3.0" to "at version 0.4.0". Frontmatter `spec_version`
+  bumped to 0.4.0.
+- **`reference-implementations/README.md`** — current-spec version
+  noted as 0.4.0. Host conformance rows unchanged; hosts move to
+  v0.4.0 via their own adoption PRs.
+
+### Host implementer actions
+
+- **All hosts.** Reproduce the §11 canonical block verbatim in
+  CLAUDE.md / AGENTS.md / equivalent at the host's next minor
+  release. Bump `implements_spec` to `0.4.0` after the block is in
+  place and any other applicable sections (§12, §13) are satisfied.
+- **All hosts.** Audit existing SKILL.md / AGENTS.md / contract spec
+  files against §12 at next significant rewrite. Convert branchy
+  workflows to Mermaid `flowchart` diagrams with explicit
+  cycle/fallback paths. Bulk conversion is not required; the
+  obligation is SHOULD-level and applies to newly authored sections
+  at or after v0.4.0 adoption.
+- **TS-targeting hosts (`claude-workflow`, `codex-workflow`).** Ship
+  a `ts-declare-first` skill (or host-named equivalent) satisfying
+  §13's Phase 1 / Phase 2 / Phase 3 contract and integrating with
+  the §02 `verification` gate. Non-TS-targeting hosts MAY omit the
+  skill and SHOULD record the omission as a spec delta per §09.
+- **`pi-agentic-apps-workflow`, `agenticapps-dashboard`.** Adoption
+  pending at v0.1.0; absorb v0.2.0 → v0.4.0 additions at adoption
+  time. Dashboard is consumer-only and not affected by §11, §12, or
+  §13 directly.
+- **`claude-workflow`** specifically additionally drives the
+  benchmark that populates ADR-0015's Decision block. Until that
+  benchmark lands, ADR-0015 ships as Proposed; hosts SHOULD continue
+  using `gitleaks` as the de facto default and SHOULD NOT switch
+  defaults based on the Proposed status alone.
+
 ## [0.3.2] — 2026-05-18
 
 Patch release: §10.5 Flush-primitive obligation codified. Most existing

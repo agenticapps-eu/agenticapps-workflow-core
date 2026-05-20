@@ -43,6 +43,9 @@ CHECKS=(
   "05-pressure-test|Pressure-Test Scenarios — Self-Check"
   "05-pressure-test|Would a senior engineer reviewing this work accept the shortcut"
   "05-pressure-test|If any answer gives you pause, follow the protocol"
+  "11-coding-discipline|Coding Discipline (NON-NEGOTIABLE)"
+  "11-coding-discipline|Think Before Coding"
+  "11-coding-discipline|These four rules are reread every session"
 )
 
 # --- header ----------------------------------------------------------------
