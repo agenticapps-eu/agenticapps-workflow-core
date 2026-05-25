@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 0.4.0
+spec_version: 0.5.0
 ---
 
 # 00 — Overview
@@ -67,9 +67,11 @@ v0.2.1 (cparx-pilot patches), extended at v0.3.0 with the conformance
 enforcement primitives in §10.9, and clarified at v0.3.2 with the §10.5
 Flush-primitive obligation. Section 11 (coding discipline), section 12
 (authoring conventions), and section 13 (TS declare-first skill) were
-added at v0.4.0 as additive minor sections. Hosts may claim conformance
-against any of those versions; the version the host claims is the
-version the host's `implements_spec` field names.
+added at v0.4.0 as additive minor sections. Section 02 (hook taxonomy)
+gained the `plan-review` pre-execution gate at v0.5.0, specifying the
+robust phase-resolution order and grandfather rule (ADR-0025). Hosts may
+claim conformance against any of those versions; the version the host
+claims is the version the host's `implements_spec` field names.
 
 Every file's frontmatter declares its `section_type`. Every declarative
 file cites RFC 2119 for keyword semantics.

@@ -1,7 +1,7 @@
 ---
 id: 02-hook-taxonomy
 section_type: declarative-contract
-spec_version: 0.1.0
+spec_version: 0.5.0
 ---
 
 # 02 — Hook Taxonomy
@@ -77,6 +77,36 @@ evidence artifact**, and **binding guidance**.
   artifacts that names at least one specific design issue and its
   remediation.
 - **Binding guidance**: hosts bind a designer-eye review skill.
+
+### Pre-execution gate
+
+#### `plan-review`
+
+- **When fires**: after a phase's plans exist (one or more `*-PLAN.md`)
+  and before the first code-touching execution edit, UNLESS the phase
+  has already been executed (a `*-SUMMARY.md` artifact exists — see
+  grandfather rule below).
+- **Required evidence artifact**: a per-phase `REVIEWS.md` containing
+  independent plan review from at least two external AI reviewers
+  (adversarial review of the plan before any code is written).
+- **Binding guidance**: hosts bind a multi-AI plan-review skill and
+  SHOULD enforce it with a programmatic gate. The enforcing gate MUST
+  resolve the active phase robustly: relying on a single mutable
+  pointer (e.g. a `current-phase` symlink) is non-conformant when that
+  pointer is also used for another purpose (an observed failure mode —
+  see ADR-0025). Recommended resolution order is an explicit phase
+  pointer → workflow state (`current_phase`) → newest plan artifact by
+  mtime → fail-open (allow). The gate MUST **grandfather** already-
+  executed phases — when a `*-SUMMARY.md` exists for the resolved
+  phase, the gate MUST allow the edit — so that enabling enforcement
+  never retroactively blocks work in repositories that shipped phases
+  before the gate functioned.
+
+> **Host conformance (follow-up):** claude-workflow implements this
+> resolver and grandfather guard as of spec 0.5.0 (ADR 0025 / migration
+> 0016). codex-workflow and pi-agentic-apps-workflow MUST adopt the
+> identical resolution order and grandfather rule to stay conformant —
+> tracked as a follow-up, not yet implemented.
 
 ### Per-task / execution gates
 
