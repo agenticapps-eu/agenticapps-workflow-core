@@ -1,14 +1,14 @@
 ---
 id: 09-conformance
 section_type: framing
-spec_version: 0.4.0
+spec_version: 0.6.0
 ---
 
 # 09 — Conformance
 
 **Section type**: framing. This section describes how a host
 implementation claims conformance with the AgenticApps workflow spec
-at version 0.4.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
+at version 0.6.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
 MAY are used per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
 ## Conformance levels
@@ -46,12 +46,15 @@ A host claiming `full` conformance MUST:
    inside `{{...}}` placeholders is permitted; alteration of the
    surrounding prose is non-conformant.
 2. **Satisfy every declarative MUST.** Sections 02, 06, 07, 08, 10,
-   12, 13 list declarative requirements. Each is honored by some
+   12, 13, 14 list declarative requirements. Each is honored by some
    host mechanism — a skill binding, a runtime extension, a CI job,
    a reviewer agent. The mechanism is at the host's discretion; the
    honoring is required. Section 13 applies only to hosts targeting
    TypeScript projects; non-TS-targeting hosts MAY omit it with a
-   spec delta per the rules below.
+   spec delta per the rules below. Section 14 applies only to hosts
+   whose projects build LLM prompts from non-self-authored values;
+   a host with no LLM prompt-building surface is trivially conformant
+   and says so with a spec delta.
 3. **Bind every applicable gate.** Section 02 enumerates 15 gates.
    For each gate whose trigger condition can occur in the host's
    project type, the host MUST document the bound skill (or
@@ -60,7 +63,7 @@ A host claiming `full` conformance MUST:
    MUST include the line `implements_spec: <version>` in its
    frontmatter (or host-equivalent metadata block), where
    `<version>` is the spec version the host claims (e.g. `0.1.0`,
-   `0.2.0`, `0.3.0`, `0.4.0`).
+   `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`).
 5. **Maintain artifact shapes.** Phases produce CONTEXT.md, PLAN.md,
    VERIFICATION.md, REVIEW.md (with Stage 1 and Stage 2 sections),
    and SECURITY.md when applicable. The artifacts are
@@ -111,7 +114,7 @@ its primary instruction file:
 ---
 name: <host-workflow-skill-name>
 version: <host-version>
-implements_spec: 0.4.0
+implements_spec: 0.6.0
 description: |
   ...
 ---

@@ -20,6 +20,77 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-17
+
+Additive minor release. One new conditional spec section and one ADR.
+Hosts at v0.5.0 remain conformant for v0.5.0 claims; hosts wishing to
+claim v0.6.0 satisfy §14 for each LLM-prompt-building stack, or declare
+the trivial / single-shot delta per the host-implementer actions below.
+
+### Added
+
+- **`spec/14-prompt-injection.md`** — declarative contract,
+  architecture-first, for projects that build LLM prompts from
+  non-self-authored values. Seven requirements with per-language
+  bindings: trust classification at the call site (tenant-untrusted /
+  tenant-trusted, fail-closed); static CI enforcement (TypeScript
+  custom ESLint rule, Go `go/analysis` analyzer, with the inline-only
+  v1 limitation documented per host); a refreshable untrusted-input
+  registry; runtime trust separation via a `fenceUntrusted` contract;
+  output schema-validation plus a leak canary; least privilege
+  (allowlist + confirmation) for tool-calling agents; and a dynamic
+  (input × attack-family × payload) regression matrix with model-drift
+  pinning. Includes a "Detection is the weakest layer" prose block
+  naming detection as defense-in-depth only, never a guarantee.
+  Provenance: generalized from `fx-signal-agent`'s REQ-SEC03 / D-05
+  tenant-untrusted tagging and D-06 attack-matrix test into a
+  stack-agnostic contract, the way §10 generalized the observability
+  wrapper.
+- **`adrs/0016-prompt-injection-defense.md`** — records the decision to
+  lift the fx-signal-agent pattern into a portable spec section and the
+  architecture-first stance (detection is the weakest layer; the
+  load-bearing guarantees are trust separation, output validation, and
+  least privilege).
+
+### Changed
+
+- **`spec/02-hook-taxonomy.md`** — the `security` gate (which already
+  fires on LLM trust boundaries) now requires SECURITY.md to record §14
+  conformance evidence when the changeset touches an LLM prompt-building
+  path; `spec_version` advanced to 0.6.0.
+- **`spec/09-conformance.md`** — §14 added to the `full` declarative-MUST
+  list with its conditional-applicability rule (hosts with no LLM
+  prompt-building surface are trivially conformant via a spec delta);
+  version references advanced to 0.6.0.
+- **`spec/00-overview.md`** — §14 added to the declarative-contract
+  index and the version history; `spec_version` advanced to 0.6.0.
+
+### Host-implementer actions
+
+- A host with **no LLM prompt-building surface** (e.g. the dashboard)
+  declares §14 N/A under "Spec deltas" and remains conformant.
+- A host with a **single-shot** surface (prompt → JSON, no tool
+  dispatch) satisfies 14.1–14.5 and 14.7 and records 14.6 (tool
+  least-privilege) as N/A.
+- A host with an **LLM prompt-building surface** claiming v0.6.0
+  satisfies §14.1–14.7 for each such stack. Propagation machinery (the
+  `claude-workflow` migration + `add-injection-guard` generator) is a
+  separate brief that depends on this section.
+
+## [0.5.0] — 2026-06-03
+
+Additive minor release. (Backfilled 2026-06-17 — the 0.5.0 spec change
+shipped without a CHANGELOG entry; reconstructed from `00-overview.md`
+and the git history for a coherent version record.)
+
+### Changed
+
+- **`spec/02-hook-taxonomy.md`** — added the `plan-review`
+  pre-execution gate, specifying the robust phase-resolution order and
+  the grandfather rule for phases planned before the gate existed.
+  Hosts claiming v0.5.0 bind the new gate where its trigger condition
+  can occur.
+
 ## [0.4.0] — 2026-05-20
 
 Additive minor release. Three new spec sections and one host-agnostic
