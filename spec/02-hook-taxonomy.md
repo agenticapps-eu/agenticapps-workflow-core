@@ -1,7 +1,7 @@
 ---
 id: 02-hook-taxonomy
 section_type: declarative-contract
-spec_version: 0.5.0
+spec_version: 0.6.0
 ---
 
 # 02 — Hook Taxonomy
@@ -174,8 +174,12 @@ evidence artifact**, and **binding guidance**.
   storage, request handling, secret material, or LLM trust boundaries.
 - **Required evidence artifact**: SECURITY.md (or equivalent host
   artifact) referenced from the phase's VERIFICATION.md, listing
-  audited threat models and mitigation evidence.
-- **Binding guidance**: hosts bind a security-audit skill.
+  audited threat models and mitigation evidence. When the changeset
+  touches an LLM prompt-building path, SECURITY.md MUST record §14
+  (prompt-injection defense) conformance evidence for the affected
+  surface.
+- **Binding guidance**: hosts bind a security-audit skill. The audit
+  checks §14 conformance on LLM-scoped phases.
 
 #### `database-security`
 
