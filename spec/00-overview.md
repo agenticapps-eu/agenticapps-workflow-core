@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 0.6.0
+spec_version: 0.7.0
 ---
 
 # 00 — Overview
@@ -58,7 +58,7 @@ contracts in their own idiom.
 - Sections 01, 03, 04, 05, 11 are **canonical prose** — host
   implementations reproduce these blocks verbatim. Substitution is
   permitted only inside `{{...}}` placeholders.
-- Sections 02, 06, 07, 08, 10, 12, 13, 14 are **declarative
+- Sections 02, 06, 07, 08, 10, 12, 13, 14, 15 are **declarative
   contracts** — host implementations satisfy the listed MUST / SHOULD
   / MAY requirements in whatever idiom is natural for the host runtime.
 
@@ -72,7 +72,10 @@ gained the `plan-review` pre-execution gate at v0.5.0, specifying the
 robust phase-resolution order and grandfather rule. Section 14
 (prompt-injection defense) was added at v0.6.0 as an additive minor
 section, conditional on the host shipping an LLM prompt-building surface
-(ADR-0016). Hosts may claim conformance against any of those versions;
+(ADR-0016). Section 15 (knowledge capture) was added at v0.7.0 as an
+additive minor section — wired per host, activated per repo via an
+opt-in `knowledge_capture` block in `.planning/config.json`
+(ADR-0017). Hosts may claim conformance against any of those versions;
 the version the host claims is the version the host's `implements_spec`
 field names.
 

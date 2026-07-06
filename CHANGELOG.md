@@ -20,6 +20,77 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-06
+
+Additive minor release. One new conditional spec section and one ADR.
+Hosts at v0.6.0 remain conformant for v0.6.0 claims; hosts wishing to
+claim v0.7.0 wire the knowledge-capture trigger points and skip
+behavior per the host-implementer actions below. Repos opt in
+individually; a repo that never opts in is conformant-by-skip.
+
+### Added
+
+- **`spec/15-knowledge-capture.md`** — declarative contract for
+  capturing transferable learnings into the operator's Obsidian vault
+  as a cross-repo, human-readable memory (one note per repo). Six
+  requirements: three MUST-level trigger points (session handoff, plan
+  completion, phase completion — each as the final step of its ritual,
+  after the ritual's artifact is committed, never failing the ritual);
+  destination resolved exclusively from an opt-in `knowledge_capture`
+  block in `.planning/config.json` (`enabled`, `note`) — vault paths
+  hardcoded in host skill logic are non-conformant; silent graceful
+  skip (one info line, no error, no folder creation) when the block is
+  absent, disabled, or the note's parent folder does not exist (other
+  machines, CI, containers); a note schema mirrored from the
+  vault-side `CLAUDE.md` (curated `## Key Learnings` targeting ~10–20
+  items; append-only newest-first `## Log` with
+  `### YYYY-MM-DD — <handoff|plan|phase> — <short title> (<host>)`
+  headings; create-from-template on first write); a selectivity bar of
+  1–5 transferable learnings per trigger with nothing-qualifies →
+  write nothing (status updates, plan restatements, and facts already
+  in ADRs/handoffs do not qualify); and vault-safety rules (touch only
+  the configured note; no secrets, no client-confidential data).
+  Architecture: contract in core, generators in hosts — the two-layer
+  shape §10 / ADR-0014 established for observability.
+- **`adrs/0017-knowledge-capture-obsidian.md`** — records the decision
+  to lift learnings out of per-repo `session-handoff.md` (where they
+  are overwritten and never cross repos or hosts) into a per-repo
+  vault note, the per-repo-config / no-hardcoded-paths stance, the
+  rejected alternatives (handoff-only, family wiki, central memory
+  service, hardcoded paths), and the consequence that the external
+  path dependency is opt-in and machine-local while downstream hosts
+  must mirror via their own migrations.
+
+### Changed
+
+- **`spec/09-conformance.md`** — §15 added to the `full`
+  declarative-MUST list with its wired-per-host / activated-per-repo
+  rule; new "Knowledge-capture checks (§15)" block naming the three
+  review checks (trigger wiring present in host ritual instructions,
+  config block honored with no hardcoded vault path, graceful-skip
+  behavior); version references advanced to 0.7.0.
+- **`spec/00-overview.md`** — §15 added to the declarative-contract
+  index and the version history; `spec_version` advanced to 0.7.0.
+- **`reference-implementations/README.md`** — "Current spec version"
+  header advanced to 0.7.0 (it had been left at 0.4.0 through the
+  0.5.0/0.6.0 releases). Host rows untouched — hosts move themselves
+  via their own adoption PRs.
+
+### Host-implementer actions
+
+- A **consumer-only** host (e.g. the dashboard) has no ritual surface
+  and is trivially conformant — no action.
+- A host with session-handoff / plan / phase rituals claiming v0.7.0
+  wires the knowledge-capture write as the final step of each of the
+  three rituals, reads the destination from the repo's
+  `knowledge_capture` config block, and implements the silent skip.
+  Propagation machinery (the `claude-workflow` / `codex-workflow` /
+  pi migrations and config-template updates) is a separate brief that
+  depends on this section.
+- **Repos** opt in by adding the `knowledge_capture` block to
+  `.planning/config.json` on machines where the vault exists. No
+  repo-side action is required to stay conformant.
+
 ## [0.6.0] — 2026-06-17
 
 Additive minor release. One new conditional spec section and one ADR.
