@@ -1,14 +1,14 @@
 ---
 id: 09-conformance
 section_type: framing
-spec_version: 0.6.0
+spec_version: 0.7.0
 ---
 
 # 09 — Conformance
 
 **Section type**: framing. This section describes how a host
 implementation claims conformance with the AgenticApps workflow spec
-at version 0.6.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
+at version 0.7.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
 MAY are used per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
 ## Conformance levels
@@ -46,15 +46,18 @@ A host claiming `full` conformance MUST:
    inside `{{...}}` placeholders is permitted; alteration of the
    surrounding prose is non-conformant.
 2. **Satisfy every declarative MUST.** Sections 02, 06, 07, 08, 10,
-   12, 13, 14 list declarative requirements. Each is honored by some
-   host mechanism — a skill binding, a runtime extension, a CI job,
-   a reviewer agent. The mechanism is at the host's discretion; the
-   honoring is required. Section 13 applies only to hosts targeting
-   TypeScript projects; non-TS-targeting hosts MAY omit it with a
-   spec delta per the rules below. Section 14 applies only to hosts
-   whose projects build LLM prompts from non-self-authored values;
-   a host with no LLM prompt-building surface is trivially conformant
-   and says so with a spec delta.
+   12, 13, 14, 15 list declarative requirements. Each is honored by
+   some host mechanism — a skill binding, a runtime extension, a CI
+   job, a reviewer agent. The mechanism is at the host's discretion;
+   the honoring is required. Section 13 applies only to hosts
+   targeting TypeScript projects; non-TS-targeting hosts MAY omit it
+   with a spec delta per the rules below. Section 14 applies only to
+   hosts whose projects build LLM prompts from non-self-authored
+   values; a host with no LLM prompt-building surface is trivially
+   conformant and says so with a spec delta. Section 15 is wired per
+   host but activated per repo: the host MUST ship the trigger wiring
+   and skip behavior; a repo without the §15.2 config block is
+   skipped silently and remains conformant, no delta required.
 3. **Bind every applicable gate.** Section 02 enumerates 15 gates.
    For each gate whose trigger condition can occur in the host's
    project type, the host MUST document the bound skill (or
@@ -63,7 +66,7 @@ A host claiming `full` conformance MUST:
    MUST include the line `implements_spec: <version>` in its
    frontmatter (or host-equivalent metadata block), where
    `<version>` is the spec version the host claims (e.g. `0.1.0`,
-   `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`).
+   `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`, `0.7.0`).
 5. **Maintain artifact shapes.** Phases produce CONTEXT.md, PLAN.md,
    VERIFICATION.md, REVIEW.md (with Stage 1 and Stage 2 sections),
    and SECURITY.md when applicable. The artifacts are
@@ -90,6 +93,27 @@ A host claiming `consumer-only` conformance MUST:
 3. Not assert authorship of any of the gates from section 02.
    (A consumer that authors gates is no longer consumer-only.)
 
+## Knowledge-capture checks (§15)
+
+A conformance review of a host claiming 0.7.0 applies three checks
+for §15; a consumer-only host has no ritual surface and skips all
+three.
+
+1. **Trigger wiring present in the host's ritual instructions.** The
+   host's SKILL.md (or equivalent) names the knowledge-capture write
+   as the final step of each of the three §15.1 rituals — session
+   handoff, plan completion, phase completion — after the ritual's
+   own artifact is committed.
+2. **Config block honored, path not hardcoded.** Repos opting in
+   carry the `knowledge_capture` block in `.planning/config.json` per
+   §15.2, and the host resolves the note path exclusively from that
+   block. A vault path literal inside host skill logic (checkable by
+   grep over the host repo) is non-conformant.
+3. **Graceful-skip behavior.** With the block absent, `enabled:
+   false`, or the note's parent folder missing, each ritual completes
+   normally with at most one informational line — no error, no
+   created folders, no empty note.
+
 ## Allowed extensions
 
 A host MAY:
@@ -114,7 +138,7 @@ its primary instruction file:
 ---
 name: <host-workflow-skill-name>
 version: <host-version>
-implements_spec: 0.6.0
+implements_spec: 0.7.0
 description: |
   ...
 ---
