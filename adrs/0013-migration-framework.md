@@ -1,6 +1,8 @@
 # ADR-0013: Migration framework for AgenticApps workflow upgrades
 
-**Status:** Accepted
+**Status:** Accepted — the "Setup ⊕ update unification" assumption below is
+superseded in part by [ADR-0018](0018-snapshot-install-conformance.md) (spec
+v0.9.0). The framework decision itself stands.
 **Date:** 2026-05-03
 **Linear:** —
 
@@ -89,6 +91,17 @@ Migration `0000-baseline.md` codifies the v1.2.0 starting state as a
 sequence of file-creation steps. Setup applies migrations from `0000`
 forward; update applies migrations from the project's installed version
 forward. Same migration files, same runtime, same on-disk outcome.
+
+> **Superseded in part by ADR-0018 (spec v0.9.0).** This paragraph assumes
+> every migration chain is shell-replayable, so that setup can reach the end
+> state by replaying it. A chain containing prose, agent, or interactive steps
+> cannot be — the Negative consequences below name the seed of this. §08 now
+> makes the *end state* normative rather than the mechanism: setup MUST produce
+> an end state equivalent to a full `0000`→latest replay, reached either by
+> replaying or by installing a prebuilt snapshot assembled from the same
+> sources behind a CI drift guard. The guarantee this section was written to
+> deliver — one source of truth for the on-disk shape, no divergent code paths
+> — is unchanged and still binding.
 
 ## Alternatives Rejected
 

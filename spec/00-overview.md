@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 0.8.0
+spec_version: 0.9.0
 ---
 
 # 00 — Overview
@@ -79,7 +79,13 @@ opt-in `knowledge_capture` block in `.planning/config.json`
 host-specific additions at v0.8.0: additions are appended after the
 canonical 13, and the heading's leading count is not normative —
 resolving a contradiction that had left the section's own "adding is
-permitted" allowance unusable. Hosts may claim conformance against any
+permitted" allowance unusable. Section 08 (migration format) was amended
+at v0.9.0 to make the *end state* of the setup flow normative rather than
+the mechanism: setup MUST produce an end state equivalent to a full
+`0000`→latest replay, reached either by replaying or by installing a
+prebuilt snapshot assembled from the same sources behind a CI drift guard
+(ADR-0018, superseding ADR-0013's assumption that every chain is
+shell-replayable). Hosts may claim conformance against any
 of those versions; the version the host claims is the version the host's
 `implements_spec` field names.
 
@@ -118,5 +124,5 @@ grep result, screenshot path, curl response) that demonstrates a
 
 **ADR** — Architecture Decision Record at `docs/decisions/NNNN-slug.md`.
 Captures non-trivial technology / architecture / UX decisions with
-rationale and rejected alternatives. The four ADRs in `adrs/` are
+rationale and rejected alternatives. The ADRs in `adrs/` are
 host-agnostic decisions that apply across implementations.

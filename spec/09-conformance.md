@@ -1,14 +1,14 @@
 ---
 id: 09-conformance
 section_type: framing
-spec_version: 0.8.0
+spec_version: 0.9.0
 ---
 
 # 09 — Conformance
 
 **Section type**: framing. This section describes how a host
 implementation claims conformance with the AgenticApps workflow spec
-at version 0.8.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
+at version 0.9.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
 MAY are used per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
 ## Conformance levels
@@ -58,7 +58,7 @@ A host claiming `full` conformance MUST:
    host but activated per repo: the host MUST ship the trigger wiring
    and skip behavior; a repo without the §15.2 config block is
    skipped silently and remains conformant, no delta required.
-3. **Bind every applicable gate.** Section 02 enumerates 15 gates.
+3. **Bind every applicable gate.** Section 02 enumerates 16 gates.
    For each gate whose trigger condition can occur in the host's
    project type, the host MUST document the bound skill (or
    plugin, or tool) in a single host-side hook-bindings table.
@@ -66,7 +66,8 @@ A host claiming `full` conformance MUST:
    MUST include the line `implements_spec: <version>` in its
    frontmatter (or host-equivalent metadata block), where
    `<version>` is the spec version the host claims (e.g. `0.1.0`,
-   `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`).
+   `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`,
+   `0.9.0`).
 5. **Maintain artifact shapes.** Phases produce CONTEXT.md, PLAN.md,
    VERIFICATION.md, REVIEW.md (with Stage 1 and Stage 2 sections),
    and SECURITY.md when applicable. The artifacts are
@@ -118,7 +119,7 @@ three.
 
 A host MAY:
 
-- Define additional gates beyond the 15 in section 02 (host-specific
+- Define additional gates beyond the 16 in section 02 (host-specific
   concerns).
 - Add rows to the rationalization table (section 03) and red-flag
   list (section 04) for host-specific failure modes.
@@ -138,7 +139,7 @@ its primary instruction file:
 ---
 name: <host-workflow-skill-name>
 version: <host-version>
-implements_spec: 0.8.0
+implements_spec: 0.9.0
 description: |
   ...
 ---

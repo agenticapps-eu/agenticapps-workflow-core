@@ -1,7 +1,7 @@
 ---
 id: 08-migration-format
 section_type: declarative-contract
-spec_version: 0.1.0
+spec_version: 0.9.0
 ---
 
 # 08 — Migration Format
@@ -15,15 +15,30 @@ MUST NOT, SHOULD, SHOULD NOT, and MAY are used per [RFC 2119](https://www.rfc-ed
 
 A migration is a versioned, idempotent, atomic, dry-runnable patch
 that brings an installed AgenticApps workflow scaffolding from one
-version to the next. Both fresh-project setup and existing-project
-update consume migrations from the same directory: setup applies
-every migration from `0000-baseline` forward; update applies only
-those whose `from_version` is newer than the project's installed
-version.
+version to the next. The `migrations/` directory is the single source
+of truth for what each version looks like on disk. The existing-project
+update flow consumes it directly, applying only those migrations whose
+`from_version` is newer than the project's installed version.
 
-There is no parallel "setup writes one shape, update writes a
-different shape" code path. Both flows route through the same
-migration files. See ADR-0013 for the rationale.
+The fresh-project setup flow MUST arrive at the same end state that a
+full `0000-baseline`→latest replay produces — but it need not get there
+by replaying. Two strategies are conformant: **replay** (setup applies
+every migration from `0000-baseline` forward) and **snapshot** (setup
+installs a prebuilt artifact assembled from those same sources, with a
+drift guard in CI proving artifact and sources agree). The Conformance
+section below is the normative statement.
+
+What this spec forbids is a *second source of truth*: a setup path that
+writes a shape derived from somewhere other than the migration sources,
+so that "what does v1.3.0 look like on disk" is maintained twice and can
+silently diverge. A guarded snapshot is not a second source of truth —
+it is a build artifact of the first one, and the guard is what makes
+that claim checkable rather than merely asserted.
+
+ADR-0013 established the migration framework and assumed both flows
+would replay. ADR-0018 supersedes that assumption: a chain containing
+prose, agent, or interactive steps cannot be shell-replayed, so the end
+state — not the mechanism — is what the spec makes normative.
 
 ## Requirements
 
@@ -190,8 +205,20 @@ optional_for:
 
 A host implementation:
 
-- **MUST** store migrations in a single directory consumed by both
-  setup and update flows.
+- **MUST** store migrations in a single directory that the update flow
+  consumes. The setup flow **MUST** produce an end state equivalent to a
+  full `0000`→latest replay, by one of:
+  - **replay** — setup applies every migration from `0000-baseline` forward; or
+  - **snapshot** — setup installs a prebuilt artifact assembled from the same
+    sources, PROVIDED a drift guard runs in CI and fails the build when the
+    snapshot and the sources disagree.
+
+  The snapshot strategy exists because a migration chain containing prose,
+  agent, or interactive steps cannot be shell-replayed (ADR-0013 assumed it
+  could; ADR-0018 supersedes that assumption). What is normative is the
+  equivalence of the end state and a mechanical guard proving it — not the
+  mechanism. A host choosing snapshot **MUST** name its guard in its
+  instruction file.
 - **MUST** support the frontmatter fields, step structure,
   idempotency contract, atomicity contract, and dry-run mode listed
   above.

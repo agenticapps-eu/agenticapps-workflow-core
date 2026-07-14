@@ -20,6 +20,126 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-14
+
+Additive minor release. One declarative contract relaxed; no canonical prose
+reworded. **Hosts at 0.8.0 remain conformant with no action** — the §08 change
+only widens what satisfies an existing MUST; it tightens nothing.
+
+### Changed
+
+- **`spec/08-migration-format.md`** — the setup flow's **end state** is now
+  normative; the mechanism is not. The section previously required migrations be
+  stored "in a single directory consumed by both setup and update flows", which
+  read as: setup reaches the current version by replaying `0000`→latest.
+
+  That assumed every migration chain is shell-replayable. A chain containing
+  **prose, agent, or interactive steps cannot be** — a step whose apply is "the
+  agent composes prose appropriate to this project" or "ask the user which stack
+  they want" has no mechanical equivalent, so a script replaying it either hangs
+  or silently produces a different shape than the chain describes. `claude-workflow`
+  (host ADR-0036, host issue #74) and `opencode-workflow` (its ADR-0007) both hit
+  this and both independently shipped the same answer: install a prebuilt snapshot
+  from setup, and run a CI guard proving the snapshot equals the chain's end state.
+  Under §08 as written, both were non-conformant on a MUST — including the host
+  that authors this spec's canonical prose.
+
+  v0.9.0 states the guarantee §08 actually wanted instead of the mechanism that
+  happened to deliver it. Setup **MUST** produce an end state equivalent to a full
+  `0000`→latest replay, by one of two conformant strategies:
+  - **replay** — setup applies every migration from `0000-baseline` forward; or
+  - **snapshot** — setup installs a prebuilt artifact assembled from the same
+    sources, **PROVIDED** a drift guard runs in CI and fails the build when the
+    snapshot and the sources disagree.
+
+  A host choosing snapshot **MUST** name its guard in its instruction file. The
+  update flow's obligation is unchanged: it consumes the single `migrations/`
+  directory directly.
+
+  The guard is the load-bearing half. §08's original concern — one source of truth
+  for "what does v1.3.0 look like on disk", no divergent code paths — is unchanged
+  and still binding. A guarded snapshot is not a second source of truth; it is a
+  build artifact of the first one, and the guard is what makes that claim checkable
+  rather than merely asserted. An **unguarded** snapshot is still non-conformant.
+
+  The Concept section was rewritten accordingly (it cited ADR-0013, which assumed
+  replayability), and `spec_version` advanced `0.1.0` → `0.9.0` — its first change
+  since the spec's initial population.
+
+- **`spec/09-conformance.md`** — **§09 said "Section 02 enumerates 15 gates"; it
+  enumerates 16.** The count was never updated when the `plan-review` gate landed
+  at v0.5.0. Corrected in both places it appeared (the `full` gate-binding
+  requirement and the "Allowed extensions" allowance, which said "beyond the 15").
+  No gate changed; this is a documentation defect, not a conformance change — a
+  host that bound all applicable gates was already conformant. Version references
+  and the `implements_spec` citation example advanced to 0.9.0.
+
+- **`spec/00-overview.md`** — §08's v0.9.0 amendment added to the version history.
+  `spec_version` advanced to 0.9.0. Also dropped a stale count in the glossary
+  ("The four ADRs in `adrs/`" — there are nine).
+
+- **`adrs/0013-migration-framework.md`** — Status annotated and a superseded-in-part
+  note added to its "Setup ⊕ update unification" section. ADR-0013's decision (the
+  migration framework itself) stands unamended; only its replayability assumption
+  is superseded.
+
+- **`reference-implementations/README.md`** — the `claude-workflow` row was two
+  releases stale and factually wrong in two ways. It claimed spec **0.3.0** (now
+  **0.9.0**, `full`, audited 2026-07-14 per host ADR-0040) and credited the
+  `add-observability` skill as shipping from that repo — the skill was **removed at
+  claude-workflow's 2.0.0** (`217baec`) and now lives in the standalone
+  `agenticapps-observability` repo. The new row states §10/§14 as **delegated** to
+  that skill (satisfied MUSTs per §09, not deltas), §15 as wired at all three ritual
+  triggers, and the snapshot install as conformant under §08 as amended here. Header
+  "Current spec version" advanced to 0.9.0 (its trailing "to 0.7.0" cross-reference
+  had also been left behind by the 0.8.0 release).
+
+### Added
+
+- **`adrs/0018-snapshot-install-conformance.md`** — records the §08 decision: the
+  end state plus a mechanical guard is normative, the mechanism is not. Rejects
+  forcing replay (impossible for prose/agent/interactive chains — it would mean
+  deleting the scaffolder's actual value to preserve a mechanism the spec only ever
+  wanted for its guarantee), leaving §08 as-is and letting the reference
+  implementation carry a permanent `partial` (makes `full` structurally unreachable
+  for the host authoring the canonical prose, and strands `opencode-workflow`'s
+  existing `full` claim as quietly false), permitting snapshot without a guard (the
+  one shape that genuinely reintroduces the divergent-shape risk), and specifying
+  the guard's implementation (the same error as freezing replay, one level down).
+  Supersedes ADR-0013's replayability assumption.
+
+### Host-implementer actions
+
+- **A replaying host needs no action.** Replay remains fully conformant and is
+  still the first-listed strategy. A host at 0.8.0 may claim 0.9.0 on its next
+  audit with no implementation change.
+- **A host that installs from a snapshot** (`claude-workflow`,
+  `opencode-workflow`) must, to claim 0.9.0: ensure its drift guard **runs in CI
+  and fails the build** on disagreement — a guard that exists but is not wired into
+  CI does not satisfy the MUST — and **name the guard in its instruction file**.
+  Both hosts already ship a `check-snapshot-parity.sh`; the new obligation is that
+  the guard be named where a reviewer can find it.
+- **A host staying at its current claim needs no action at all.**
+  `implements_spec` names the version the host claims; a host citing 0.4.0 remains
+  conformant at 0.4.0.
+- **No host needs to act on the §09 gate-count fix.** It corrects the spec's own
+  description of section 02, which is unchanged.
+
+### Known gap
+
+- **`tools/drift-report.sh` has no notion of setup strategy** and does not check
+  the §08 equivalence obligation, the guard's existence, or its CI wiring. Nothing
+  in this repo can independently verify a host's snapshot equals its chain end
+  state; the spec takes the host's guard at its word. A §09 review-check block for
+  snapshot hosts (mirroring the §15 knowledge-capture checks) is deferred until a
+  third host ships the pattern — see ADR-0018 Follow-ups.
+- **The 0.8.0 known gap is unchanged and still open.** `drift-report.sh`'s §04
+  check greps the literal `13 Red Flags — STOP → DELETE → RESTART` heading, so it
+  still reports DRIFT for a host that legitimately appends a flag and updates the
+  count per the 0.8.0 rules — which `claude-workflow` now does (its host-specific
+  flag sits at position 14). That finding is **expected and is a defect in the
+  check, not in the host**. Deliberately not fixed here; tracked separately.
+
 ## [0.8.0] — 2026-07-14
 
 Additive minor release. One section clarified; no canonical prose reworded.
