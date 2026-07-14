@@ -20,6 +20,36 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+No spec change — registry and tooling only. No conformance impact; no host
+action required.
+
+### Added
+- **`reference-implementations/README.md`** — row for
+  [`opencode-workflow`](https://github.com/agenticapps-eu/opencode-workflow)
+  (scaffolder for opencode, spec **0.4.0**, `full`). The host has been shipping
+  since its fork from `codex-workflow` but was never registered here, so it was
+  absent from the adoption table and invisible to every fleet-level check.
+- **`tools/drift-report.sh`** — `opencode-workflow` added to `HOSTS`. It passes
+  all 15 canonical-phrase checks (§01, §03, §04, §05, §11) on first inclusion.
+
+### Fixed
+- **`tools/drift-report.sh` resolved no hosts at all.** `HOSTS_DIR` defaulted to
+  a hardcoded `~/Sourcecode`, which silently stopped resolving once the repos
+  were reorganized into per-family subdirectories (`~/Sourcecode/agenticapps/…`).
+  Every host reported `SKIP: not cloned` and the summary read `0 OK / 0 DRIFT /
+  60 SKIP` — a green-looking report that had in fact checked nothing. The default
+  now derives from `BASH_SOURCE` (the spec repo's parent, where the host clones
+  are siblings), so it stays correct wherever the family tree lives. An explicit
+  path argument is unaffected.
+
+  With the path fixed, the report resolves for the first time: **67 OK / 8 DRIFT
+  / 0 SKIP**. The 8 findings are advisory and pre-existing —
+  `pi-agentic-apps-workflow` (3, §11) and `agenticapps-dashboard` (4, §04 + §11)
+  are expected (adoption pending / consumer-only, no ritual surface). The one
+  worth a look: **`claude-workflow` is missing §04's `13 Red Flags — STOP →
+  DELETE → RESTART`** despite being the source of canonical prose and claiming
+  `full`. Not addressed here — flagged for its own PR.
+
 ## [0.7.0] — 2026-07-06
 
 Additive minor release. One new conditional spec section and one ADR.

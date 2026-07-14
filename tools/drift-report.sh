@@ -6,15 +6,22 @@
 # (monthly is fine) or before cutting a spec minor/major release.
 #
 # Usage: drift-report.sh [path-to-host-clones-dir]
-# Default: ~/Sourcecode
+# Default: this repo's parent directory — the family dir the host clones
+# sit in, alongside the spec repo itself.
 #
 # Exit code is always 0. The script is read-only — it does not modify
 # any file in the spec repo or in any host clone.
 
 set -euo pipefail
 
-HOSTS_DIR="${1:-$HOME/Sourcecode}"
 SPEC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../spec" && pwd)"
+
+# Default to the spec repo's parent — the hosts are siblings of this repo.
+# Previously hardcoded to ~/Sourcecode, which silently stopped resolving when
+# the repos were reorganized into per-family subdirectories: every host reported
+# "SKIP: not cloned" and the report showed 0 OK / 0 DRIFT for everyone. Deriving
+# it from BASH_SOURCE keeps the default correct wherever the family tree lives.
+HOSTS_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # Hosts to check (relative to HOSTS_DIR). A host that isn't cloned is
 # reported as SKIP — drift checks only run against present clones.
@@ -22,6 +29,7 @@ HOSTS=(
   "claude-workflow"
   "pi-agentic-apps-workflow"
   "codex-workflow"
+  "opencode-workflow"
   "agenticapps-dashboard"
 )
 
