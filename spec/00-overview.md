@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 0.7.0
+spec_version: 0.8.0
 ---
 
 # 00 — Overview
@@ -75,9 +75,13 @@ section, conditional on the host shipping an LLM prompt-building surface
 (ADR-0016). Section 15 (knowledge capture) was added at v0.7.0 as an
 additive minor section — wired per host, activated per repo via an
 opt-in `knowledge_capture` block in `.planning/config.json`
-(ADR-0017). Hosts may claim conformance against any of those versions;
-the version the host claims is the version the host's `implements_spec`
-field names.
+(ADR-0017). Section 04 (red flags) gained explicit composition rules for
+host-specific additions at v0.8.0: additions are appended after the
+canonical 13, and the heading's leading count is not normative —
+resolving a contradiction that had left the section's own "adding is
+permitted" allowance unusable. Hosts may claim conformance against any
+of those versions; the version the host claims is the version the host's
+`implements_spec` field names.
 
 Every file's frontmatter declares its `section_type`. Every declarative
 file cites RFC 2119 for keyword semantics.

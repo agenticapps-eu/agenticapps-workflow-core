@@ -20,10 +20,67 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
-No spec change — registry and tooling only. No conformance impact; no host
-action required.
+## [0.8.0] — 2026-07-14
 
-### Added
+Additive minor release. One section clarified; no canonical prose reworded.
+
+### Changed
+- **`spec/04-red-flags.md`** — the section contradicted itself. It required
+  hosts to "reproduce the block below verbatim" *and* stated that "adding red
+  flags is permitted". No host could satisfy both: appending a 14th flag
+  necessarily changes the heading count, the numbering, or both. A host that
+  exercised the permission was non-conformant under the verbatim rule; a host
+  that honored the verbatim rule could not exercise the permission.
+
+  v0.8.0 makes the permission usable by scoping what "verbatim" binds:
+  - Host-specific flags MUST be **appended after** the canonical 13 (position
+    14+). Inserting one between canonical flags is now explicitly forbidden.
+  - The canonical 13 therefore keep positions **1–13**, in the listed order,
+    with the listed wording.
+  - The heading's **leading count is not normative** — a host that appends
+    updates it to its own total (`## 14 Red Flags — STOP → DELETE → RESTART`).
+    The rest of the heading stays canonical and MUST NOT be reworded.
+
+  Rationale: pinning the canonical 13 to positions 1–13 keeps the block's first
+  thirteen numbered lines byte-identical across hosts, so conformance is an
+  exact match rather than an order-preserving subsequence search that has to
+  strip numbering first.
+
+  **The 13 canonical flags are untouched** — no wording, no order, no
+  additions. This is a clarification of the rules *around* the block, not a
+  change to the block. Per the versioning policy a reworded canonical block
+  would be a major; this is not one.
+
+### Host-implementer actions
+- **A host that adds no red flags** (`codex-workflow`, `opencode-workflow` —
+  both reproduce the canonical 13 exactly) needs **no action**. It is already
+  compliant with the 0.8.0 rules and may claim 0.8.0 on its next audit.
+- **A host that inserts a host-specific flag between the canonical 13** must
+  move it to the end. Known case: `claude-workflow`'s `skill/SKILL.md` carries
+  `8. /gsd-review skipped — no {phase}-REVIEWS.md artifact`, which renumbers
+  canonical 8–13 into 9–14. Moving it to position 14 restores canonical
+  numbering; its heading may stay `## 14 Red Flags — …` (the count is not
+  normative). All 13 canonical flags are already byte-identical there, so this
+  is a reordering, not a rewrite.
+- **A host staying at its current claim needs no action at all.**
+  `implements_spec` names the version the host claims; a host citing 0.4.0
+  remains conformant at 0.4.0. All three scaffolders currently cite 0.4.0.
+
+### Known gap
+- **`tools/drift-report.sh` does not yet implement these rules.** Its §04 check
+  greps the literal heading `13 Red Flags — STOP → DELETE → RESTART`, so it
+  still reports DRIFT for a host that legitimately appends a flag and updates
+  the count — including `claude-workflow` after it complies. Its other two §04
+  checks are substring matches (`Code written before the test`, `This case is
+  different because`), which match reworded flags too and therefore pass on
+  prose that violates "with the listed wording". Deliberately not fixed here:
+  the check should assert the thirteen canonical flag lines rather than the
+  heading. Tracked separately.
+
+### Added — registry and tooling
+
+Shipped alongside the §04 clarification; no conformance impact of their own.
+
 - **`reference-implementations/README.md`** — row for
   [`opencode-workflow`](https://github.com/agenticapps-eu/opencode-workflow)
   (scaffolder for opencode, spec **0.4.0**, `full`). The host has been shipping
