@@ -43,11 +43,11 @@ assert_not_contains() { # $1=haystack $2=needle $3=description
 # red-flags heading (varies per test: the leading count is not normative per
 # spec 04 rule 3).
 #
-# Section 11 is deliberately NOT here. No host keeps it in its workflow
-# SKILL.md: codex and opencode carry it in AGENTS.md behind a provenance
-# anchor, and claude-workflow carries it in a spec mirror under templates/.
-# It is a block hosts inject into consuming projects rather than prose the
-# workflow skill speaks to itself. The fixture mirrors that split.
+# Section 11 is deliberately NOT here. spec/11 binds its block to the host's
+# "primary project-instruction file (CLAUDE.md, AGENTS.md, ...)" — a different
+# file from the workflow SKILL.md that spec/09 item 1 binds 01/03/04/05 to.
+# codex and opencode carry it in AGENTS.md behind a provenance anchor. The
+# fixture mirrors that split.
 write_instruction_file() {
   local target="$1"
   local red_flags_heading="${2:-## 13 Red Flags — STOP → DELETE → RESTART}"
@@ -99,8 +99,7 @@ make_hosts_dir() {
   local dir
   dir="$(mktemp -d)"
   write_instruction_file "$dir/claude-workflow/skill/SKILL.md"
-  write_coding_discipline_block \
-    "$dir/claude-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  write_coding_discipline_block "$dir/claude-workflow/CLAUDE.md"
   write_instruction_file "$dir/codex-workflow/skills/agentic-apps-workflow/SKILL.md"
   write_coding_discipline_block "$dir/codex-workflow/AGENTS.md"
   write_instruction_file "$dir/opencode-workflow/skills/agentic-apps-workflow/SKILL.md"
@@ -115,8 +114,7 @@ make_single_host_dir() {
   local dir
   dir="$(mktemp -d)"
   write_instruction_file "$dir/claude-workflow/skill/SKILL.md"
-  write_coding_discipline_block \
-    "$dir/claude-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  write_coding_discipline_block "$dir/claude-workflow/CLAUDE.md"
   printf '%s' "$dir"
 }
 
@@ -244,13 +242,33 @@ assert_not_contains "$out" "DRIFT [11-coding-discipline]" \
 rm -rf "$d"
 
 # --- T10: removing the declared secondary file IS drift -------------------
+# This is the real state of claude-workflow today: its own CLAUDE.md does not
+# carry the section 11 block, so the live report shows this DRIFT.
 echo ""
-echo "T10: losing the declared secondary file reports drift"
+echo "T10: losing the declared project-instruction file reports drift"
 d="$(make_single_host_dir)"
-rm -f "$d/claude-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+rm -f "$d/claude-workflow/CLAUDE.md"
 out="$("$DRIFT" "$d" 2>&1)"
 assert_contains "$out" "DRIFT [11-coding-discipline]" \
-  "a missing section 11 mirror is reported as drift"
+  "a project-instruction file without the block is reported as drift"
+rm -rf "$d"
+
+# --- T13: a scaffolding payload does NOT satisfy section 11 ---------------
+# The trap this tool walked into once already: claude-workflow ships the
+# section 11 block in templates/spec-mirrors/, which migration 0014 injects
+# into CONSUMING projects. It instructs nobody in the host repo, so it must
+# not satisfy the host's own section 11 check — spec/11 binds the block to the
+# host's primary project-instruction file, not to what it ships to others.
+echo ""
+echo "T13: a templates/ payload does not satisfy section 11"
+d="$(make_single_host_dir)"
+rm -f "$d/claude-workflow/CLAUDE.md"
+mkdir -p "$d/claude-workflow/templates/spec-mirrors"
+write_coding_discipline_block \
+  "$d/claude-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+out="$("$DRIFT" "$d" 2>&1)"
+assert_contains "$out" "DRIFT [11-coding-discipline]" \
+  "the shipped payload mirror does not rescue the host's own section 11"
 rm -rf "$d"
 
 # --- T11: the known-divergent payload copy does NOT satisfy §04 -----------
@@ -272,20 +290,20 @@ assert_contains "$out" "DRIFT [04-red-flags]" \
 rm -rf "$d"
 
 # --- T12: the result must not depend on the caller's directory ------------
-# A secondary pattern must reach the host as a PATTERN. If it is glob-expanded
-# against the caller's cwd first, it collapses into whatever that directory
-# happens to contain and is then looked for, literally, under the host — so the
-# report's answer changes with the directory you run it from. The decoy below
-# makes the pattern match something in cwd that the host does not have.
+# A declared path must be resolved against the HOST, never against the caller.
+# An earlier revision globbed the secondary patterns unquoted, so they were
+# pathname-expanded against the caller's cwd before reaching the host and the
+# verdict changed with the directory you ran from. The decoy cwd below carries
+# its own CLAUDE.md with no canonical prose in it: if the tool ever resolves a
+# declared path against cwd again, section 11 flips to DRIFT here.
 echo ""
 echo "T12: results do not depend on the caller's working directory"
 d="$(make_hosts_dir)"
 decoy="$(mktemp -d)"
-mkdir -p "$decoy/templates/spec-mirrors"
-printf 'decoy\n' > "$decoy/templates/spec-mirrors/DECOY-not-the-hosts-file.md"
+printf 'a decoy CLAUDE.md with no canonical prose\n' > "$decoy/CLAUDE.md"
 out="$(cd "$decoy" && "$DRIFT" "$d" 2>&1)"
 assert_not_contains "$out" "DRIFT [11-coding-discipline]" \
-  "a cwd matching the secondary glob does not hijack the pattern"
+  "a cwd holding a same-named file does not hijack the declared path"
 rm -rf "$d" "$decoy"
 
 # --- summary --------------------------------------------------------------

@@ -52,13 +52,19 @@ Two further problems surfaced while testing:
 files the host declares as carrying its canonical prose.**
 
 Each host is declared as
-`"repo-dir|primary-instruction-file|secondary prose files (globs ok)"`:
+`"repo-dir|workflow-instruction-file|project-instruction-file"`:
 
 ```
-claude-workflow|skill/SKILL.md|templates/spec-mirrors/*.md
+claude-workflow|skill/SKILL.md|CLAUDE.md
 codex-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md
 opencode-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md
 ```
+
+The paths are literal, not globs. An earlier revision globbed them and paid for
+it: an unquoted `for pat in $secondary_pats` pathname-expands each pattern
+against the *caller's* directory before it reaches the host, so the report
+answered differently depending on where it was run from. No host needs a glob,
+so the feature is gone rather than fixed.
 
 The primary file must carry `implements_spec:` (spec/09 item 4); if it is
 missing or unversioned the host reports `ERROR` and is not scored. The
@@ -81,26 +87,59 @@ precisely the bug class this ADR closes. A declared path is boring, and it
 fails loudly (`ERROR`) when a host moves its file instead of quietly scoring
 the wrong one.
 
-### Why a set rather than one file
+### Why two files rather than one
 
-spec/09 says "the host's instruction file" (singular), but no host keeps every
-canonical block in one file, and this is not sloppiness. §11 Coding Discipline
-is not prose the workflow skill speaks to itself — it is a block the host
-**injects into consuming projects**. codex and opencode carry it in `AGENTS.md`
-behind a provenance anchor; claude-workflow carries it in a spec mirror under
-`templates/` (installed by its migration 0014).
+§09 item 1 says "the host's instruction file" (singular), and read alone that
+suggests one file per host. But **§11 carries its own binding clause**, to a
+different file:
 
-Scoping to a single file per host was tried first and reported a **false DRIFT
-on §11 for all three hosts**. It was caught only by running against the real
-clones — the synthetic fixtures, which assumed the spec's singular framing,
-passed. The fixtures now mirror the real split.
+> Host implementations MUST reproduce the block below verbatim in their
+> **primary project-instruction file** (CLAUDE.md, AGENTS.md, or whichever
+> filename the host runtime treats as canonical project-level guidance).
 
-The set is deliberately narrow. claude-workflow's glob is
-`templates/spec-mirrors/*.md`, **not** `templates/*.md`: the host also ships a
-reworded 13-flag list in its vendored CLAUDE.md payload
-(`templates/.claude/claude-md/workflow.md`) which its own spec delta declares
-is *not* bound by §09 item 1. A broad glob would let that known divergence
-satisfy §04 — reintroducing the false PASS in a new costume. A test pins this.
+So the two-file split is the spec's own design, not a host convenience: the
+workflow skill carries §01/03/04/05, and the project-instruction file carries
+§11. Each host declares both.
+
+Scoping to a single file per host was tried first and reported a false DRIFT on
+§11 for all three hosts. It was caught only by running against the real clones;
+the synthetic fixtures, which assumed the singular framing, passed.
+
+### What must never go in the declared set: a scaffolding payload
+
+The first attempt to fix the above declared claude-workflow's
+`templates/spec-mirrors/*.md`, reasoning that §11 is "injected into consuming
+projects rather than spoken by the skill". That reasoning was wrong, and the
+error is worth recording because it is subtle and it recreated the very defect
+this ADR closes.
+
+The mirror under `templates/` is **payload**: migration 0014 injects it into
+consuming projects. It instructs nobody in claude-workflow itself. Counting it
+made §11 report OK for claude-workflow off the back of a template — the same
+false PASS as the gitignored scratch, wearing better clothes — and it **masked
+a real gap**. Under §11's actual clause:
+
+| Host | §11 block lives in | Conformant? |
+|---|---|---|
+| codex-workflow | `AGENTS.md` | yes |
+| opencode-workflow | `AGENTS.md` | yes |
+| claude-workflow | *(nowhere in the host's own files)* | **no** |
+
+claude-workflow's `CLAUDE.md` does not carry the block, and `skill/SKILL.md`'s
+spec-deltas list declares no §11 delta — which §09 requires for any unsatisfied
+requirement. The source of canonical prose is the one host not reproducing this
+block. The old recursive grep never caught it because the block appears in
+`templates/`, `setup/`, and `migrations/0014`; it has been a false PASS for as
+long as the tool has existed.
+
+Declaring `CLAUDE.md` surfaces it as honest DRIFT. A test (T13) pins the payload
+mirror as something that must not satisfy the check.
+
+The narrowness matters for §04 too: claude-workflow ships a *reworded* 13-flag
+list in its vendored payload (`templates/.claude/claude-md/workflow.md`) which
+its own spec delta declares is not bound by §09 item 1. Nothing under
+`templates/` is in the declared set, so that divergence cannot satisfy §04
+either. A test pins this too (T11).
 
 ## Alternatives Rejected
 
@@ -124,9 +163,16 @@ satisfy §04 — reintroducing the false PASS in a new costume. A test pins this
 
 ## Consequences
 
-- The report went from 68 OK / 7 DRIFT across 5 repos to **45 OK / 0 DRIFT /
+- The report went from 68 OK / 7 DRIFT across 5 repos to **42 OK / 3 DRIFT /
   0 ERROR across 3 hosts**, and every OK is now earned against a declared
-  prose file rather than possibly against scratch.
+  prose file rather than against scratch or a payload.
+- **The 3 DRIFT are real, and they are the tool's first true finding:**
+  claude-workflow does not reproduce the §11 block in its own `CLAUDE.md`,
+  while codex and opencode both do in their `AGENTS.md`. This is a live
+  conformance gap in the host that claims `full` at 0.9.0 and is the source of
+  canonical prose. It needs either the block added to `claude-workflow/CLAUDE.md`
+  or a §11 delta declared in its `skill/SKILL.md` — a host change, out of scope
+  here. The tool's job was to stop hiding it.
 - `tools/drift-report.test.sh` is core's **first test of any kind**. The tool
   shipped three defects precisely because nothing exercised it. 16 assertions,
   no network, no real clones, temp dirs only.
@@ -148,8 +194,11 @@ satisfy §04 — reintroducing the false PASS in a new costume. A test pins this
 
 - Give the ledger a machine-readable per-host field and have the tool read it
   (retires the duplicated `HOSTS` table).
-- Consider spec/09 wording: "the host's instruction file" (singular) does not
-  describe how hosts actually distribute canonical blocks across their
-  instruction surfaces. The reality — §11 injected into consuming projects, the
-  rest in the workflow skill — is sound; the spec's framing is what is narrow.
+- **claude-workflow §11 gap** (surfaced by this change): add the block to
+  `claude-workflow/CLAUDE.md`, or declare a §11 spec delta in its
+  `skill/SKILL.md`. Until then its `full` claim at 0.9.0 is overstated.
+- README.md:100 classifies §09 as "Not normative", yet §09 is where every
+  conformance MUST lives, and both this ADR and the spec reason from it as
+  normative. README.md:92-99 is also stale (canonical-prose "01, 03, 04, 05"
+  omits 11). Pre-existing; worth reconciling.
 - Consider a full canonical-block differ per spec/04's exact-match rationale.

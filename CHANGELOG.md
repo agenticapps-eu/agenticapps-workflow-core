@@ -68,12 +68,26 @@ does need a host change; see under *Fixed*.
   canonical prose. Between them they contributed 27 of the report's 68 OKs. A
   missing or unversioned instruction file now reports `ERROR` and is not scored.
 
+- **`tools/drift-report.sh` let a scaffolding payload satisfy §11.** §11 binds
+  its block to the host's "primary project-instruction file (CLAUDE.md,
+  AGENTS.md, …)". claude-workflow's block appears only in `templates/`,
+  `setup/` and `migrations/0014` — payload it ships *into* consuming projects —
+  so the old repo-wide grep reported OK while the host's own `CLAUDE.md` carries
+  no §11 block at all. Checks now read the declared project-instruction file.
+
+  **This surfaces a real conformance gap:** claude-workflow does not reproduce
+  the §11 block in its own `CLAUDE.md`, and declares no §11 delta, while codex
+  and opencode both carry it in `AGENTS.md`. The report now shows it as DRIFT
+  (3 checks). Fixing it is a host change — add the block to
+  `claude-workflow/CLAUDE.md` or declare a §11 delta in its `skill/SKILL.md`.
+
 ### Added
 
-- **`tools/drift-report.test.sh`** — the first tests in this repo. 16 assertions
+- **`tools/drift-report.test.sh`** — the first tests in this repo. 18 assertions
   driving `drift-report.sh` through its public interface against synthetic host
   clones (temp dirs; no network, no real clones). The three defects above
-  shipped because nothing exercised the tool.
+  shipped because nothing exercised the tool. T13 pins the payload-mirror case;
+  T12 pins the report against depending on the caller's working directory.
 
 ### Removed
 

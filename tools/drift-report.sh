@@ -41,29 +41,35 @@ HOSTS_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # can silently pick the wrong file. That is the bug class this tool shipped
 # with; declaring the paths keeps the check honest and its failure mode loud.
 #
-# On the secondary files: spec/09 says "the host's instruction file"
-# (singular), but no host keeps every canonical block in one file, because
-# section 11 is not prose the workflow skill speaks to itself — it is a block
-# the host injects into consuming projects. codex and opencode carry it in
-# AGENTS.md behind a provenance anchor; claude-workflow carries it in a spec
-# mirror under templates/. Each host therefore declares the full set of files
-# its canonical prose legitimately lives in, and a phrase satisfies a check
-# when it appears in ANY file of that set.
+# On the secondary file: the canonical blocks are not all bound to one file,
+# and the spec says so itself. spec/09 item 1 binds sections 01/03/04/05 to
+# "the host's instruction file (e.g. SKILL.md)". spec/11 separately and
+# explicitly binds its own block to a DIFFERENT file: "Host implementations
+# MUST reproduce the block below verbatim in their primary project-instruction
+# file (CLAUDE.md, AGENTS.md, or whichever filename the host runtime treats as
+# canonical project-level guidance)."
 #
-# The set is kept deliberately narrow. claude-workflow's glob is
-# templates/spec-mirrors/*.md, NOT templates/*.md: the host also ships a
-# reworded 13-flag list in its vendored CLAUDE.md payload
-# (templates/.claude/claude-md/workflow.md) which its own spec delta declares
-# is NOT bound by spec/09 item 1. A broad templates glob would let that known
-# divergence satisfy section 04 — the exact false PASS this rewrite exists to
-# prevent.
+# So each host declares two files: the workflow skill (01/03/04/05) and the
+# project-instruction file (11). A phrase satisfies a check when it appears in
+# either.
+#
+# What must NOT go in this list is a scaffolding payload. An earlier revision
+# declared claude-workflow's templates/spec-mirrors/*.md here, reasoning that
+# section 11 is "injected into consuming projects rather than spoken by the
+# skill". That is a description of the payload, not of an instruction file: the
+# mirror under templates/ is shipped INTO other projects by migration 0014 and
+# instructs nobody in this repo. Counting it made section 11 report OK for
+# claude-workflow off the back of a template — the same false PASS this tool
+# shipped with, in better clothes — and masked a real gap: claude-workflow's
+# own CLAUDE.md does not carry the block, while codex's and opencode's
+# AGENTS.md both do. Declaring CLAUDE.md surfaces that as honest DRIFT.
 #
 # Only hosts that author canonical prose belong here:
 #   - pi-agentic-apps-workflow was retired as a host (adoption not pursued).
 #   - agenticapps-dashboard is a consumer — it reads workflow artifacts and
 #     authors none, so canonical-prose checks do not apply to it.
 HOSTS=(
-  "claude-workflow|skill/SKILL.md|templates/spec-mirrors/*.md"
+  "claude-workflow|skill/SKILL.md|CLAUDE.md"
   "codex-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md"
   "opencode-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md"
 )
@@ -109,10 +115,11 @@ Hosts dir: $HOSTS_DIR
 Checks:    ${#CHECKS[@]} canonical-phrase lookups per host
 
 This is an advisory check. Exit code is always 0. Each host is checked
-against its declared primary instruction file ONLY — canonical prose
-found anywhere else in the clone (docs, migrations, test fixtures,
-planning notes, untracked scratch) does not satisfy a check, because
-spec/09 binds the blocks to that one file.
+against the files it declares below as carrying canonical prose — its
+workflow instruction file (spec/09 item 1) and its project-instruction
+file (spec/11) — and nothing else. Canonical prose found anywhere else
+in the clone (docs, migrations, test fixtures, scaffolding payloads,
+planning notes, untracked scratch) does not satisfy a check.
 
 EOF
 
@@ -174,17 +181,32 @@ for entry in "${HOSTS[@]}"; do
   # pattern collapses to that file's name and is then looked for, literally,
   # under the host. The report's answer would depend on where it was run from.
   # T12 covers this.
+  # Secondary paths are literal, not globs. An earlier revision globbed them,
+  # which cost a real bug: `for pat in $secondary_pats` pathname-expands each
+  # pattern against the CALLER'S directory before it ever reaches the host, so
+  # running from a directory that happened to contain a matching path silently
+  # rewrote the pattern into that file's name — the report answered differently
+  # depending on where you ran it from. No host needs a glob, so the feature is
+  # gone rather than fixed: "$host_path/$rel" is quoted end to end and cannot
+  # be expanded against anything.
+  #
+  # The -n guard is not redundant: on bash 3.2 — what /usr/bin/env bash still
+  # resolves to on macOS — expanding "${arr[@]}" on an EMPTY array under
+  # `set -u` aborts with "unbound variable", which would take the script down
+  # and break the "exit code is always 0" contract above. No current host has an
+  # empty third field, so it guards the next one rather than anything today.
   prose_files=("$instruction_file")
   prose_rel="$instruction_rel"
-  read -ra secondary_list <<< "$secondary_pats"
-  for pat in "${secondary_list[@]}"; do
-    for candidate in "$host_path"/$pat; do
+  if [[ -n "$secondary_pats" ]]; then
+    read -ra secondary_list <<< "$secondary_pats"
+    for rel in "${secondary_list[@]}"; do
+      candidate="$host_path/$rel"
       if [[ -f "$candidate" ]]; then
         prose_files+=("$candidate")
-        prose_rel="$prose_rel, ${candidate#"$host_path"/}"
+        prose_rel="$prose_rel, $rel"
       fi
     done
-  done
+  fi
 
   echo "  $instruction_rel — $(grep -E '^implements_spec:' "$instruction_file" | head -1)"
   echo "  prose set: $prose_rel"
