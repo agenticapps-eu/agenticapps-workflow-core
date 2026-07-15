@@ -174,7 +174,7 @@ either. A test pins this too (T11).
   or a §11 delta declared in its `skill/SKILL.md` — a host change, out of scope
   here. The tool's job was to stop hiding it.
 - `tools/drift-report.test.sh` is core's **first test of any kind**. The tool
-  shipped three defects precisely because nothing exercised it. 16 assertions,
+  shipped three defects precisely because nothing exercised it. 18 assertions,
   no network, no real clones, temp dirs only.
 - Adding a host, or a host moving its prose, now requires a one-line edit to
   `HOSTS`. Forgetting produces a loud `ERROR`, not a silent wrong answer.
