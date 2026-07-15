@@ -271,6 +271,23 @@ assert_contains "$out" "DRIFT [04-red-flags]" \
   "the vendored payload copy does not satisfy section 04"
 rm -rf "$d"
 
+# --- T12: the result must not depend on the caller's directory ------------
+# A secondary pattern must reach the host as a PATTERN. If it is glob-expanded
+# against the caller's cwd first, it collapses into whatever that directory
+# happens to contain and is then looked for, literally, under the host — so the
+# report's answer changes with the directory you run it from. The decoy below
+# makes the pattern match something in cwd that the host does not have.
+echo ""
+echo "T12: results do not depend on the caller's working directory"
+d="$(make_hosts_dir)"
+decoy="$(mktemp -d)"
+mkdir -p "$decoy/templates/spec-mirrors"
+printf 'decoy\n' > "$decoy/templates/spec-mirrors/DECOY-not-the-hosts-file.md"
+out="$(cd "$decoy" && "$DRIFT" "$d" 2>&1)"
+assert_not_contains "$out" "DRIFT [11-coding-discipline]" \
+  "a cwd matching the secondary glob does not hijack the pattern"
+rm -rf "$d" "$decoy"
+
 # --- summary --------------------------------------------------------------
 echo ""
 echo "====================="

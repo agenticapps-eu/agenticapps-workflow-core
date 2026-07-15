@@ -166,9 +166,18 @@ for entry in "${HOSTS[@]}"; do
   # The prose set: the primary instruction file plus any declared secondary
   # files that exist. An unmatched glob stays literal in bash, so the -f test
   # filters it out rather than handing grep a nonexistent path.
+  #
+  # `read -ra` splits the patterns on whitespace WITHOUT expanding them. An
+  # unquoted `for pat in $secondary_pats` would instead glob each pattern
+  # against the caller's current directory before it ever reaches the host: run
+  # from a directory that happens to contain templates/spec-mirrors/*.md, the
+  # pattern collapses to that file's name and is then looked for, literally,
+  # under the host. The report's answer would depend on where it was run from.
+  # T12 covers this.
   prose_files=("$instruction_file")
   prose_rel="$instruction_rel"
-  for pat in $secondary_pats; do
+  read -ra secondary_list <<< "$secondary_pats"
+  for pat in "${secondary_list[@]}"; do
     for candidate in "$host_path"/$pat; do
       if [[ -f "$candidate" ]]; then
         prose_files+=("$candidate")
