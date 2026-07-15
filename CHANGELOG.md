@@ -20,7 +20,11 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
-Registry only — no spec change, no conformance impact, no host action.
+**No spec version change.** Everything below touches `tools/` and
+`reference-implementations/`, neither of which is normative spec text. No
+host's conformance claim changes and no host action is required — though the
+drift-report fixes surface a pre-existing §11 gap in `claude-workflow` that
+does need a host change; see under *Fixed*.
 
 ### Changed
 - **`reference-implementations/README.md`** — `opencode-workflow` moves from
@@ -39,6 +43,59 @@ Registry only — no spec change, no conformance impact, no host action.
   Fleet status after this: `claude-workflow` 0.9.0, `opencode-workflow` 0.9.1,
   `codex-workflow` 0.4.0. The fleet is no longer uniform — and `codex-workflow`
   has the same pre-0.9.0 §08 exposure, since it too installs from a snapshot.
+
+### Fixed
+
+- **`tools/drift-report.sh` reported a false PASS on §04.** It grepped for the
+  literal `13 Red Flags — STOP → DELETE → RESTART`, but `spec/04` rule 3 (since
+  0.8.0) makes the heading's leading count **not normative** — a host appending
+  a host-specific flag updates it to its own total. claude-workflow ships
+  `## 14 Red Flags`, which no tracked file matched; the check stayed green only
+  because two **gitignored scratch files** quoted the old phrase. The tool was
+  enforcing a literal the spec explicitly declares non-normative. It now matches
+  only the canonical, non-count portion of the heading.
+- **`tools/drift-report.sh` accepted canonical prose from anywhere in a clone.**
+  A repo-wide `grep -r --include="*.md"` meant a phrase in a migration, a test
+  fixture, or a planning doc satisfied a conformance check — a host could gut its
+  instruction file and still pass on a fixture's quotation. Checks now read each
+  host's declared prose files only (`spec/09` items 1 and 4), which also removes
+  the gitignored-scratch problem by construction rather than by an exclusion
+  list. See ADR-0019.
+- **`tools/drift-report.sh` scored repos that claim nothing.**
+  pi-agentic-apps-workflow carried `implements_spec` in no file yet scored 12 OK,
+  though `spec/09` item 4 says such a host "is unversioned and cannot claim any
+  conformance level"; agenticapps-dashboard is a consumer that authors no
+  canonical prose. Between them they contributed 27 of the report's 68 OKs. A
+  missing or unversioned instruction file now reports `ERROR` and is not scored.
+
+- **`tools/drift-report.sh` let a scaffolding payload satisfy §11.** §11 binds
+  its block to the host's "primary project-instruction file (CLAUDE.md,
+  AGENTS.md, …)". claude-workflow's block appears only in `templates/`,
+  `setup/` and `migrations/0014` — payload it ships *into* consuming projects —
+  so the old repo-wide grep reported OK while the host's own `CLAUDE.md` carries
+  no §11 block at all. Checks now read the declared project-instruction file.
+
+  **This surfaced a real conformance gap:** claude-workflow did not reproduce
+  the §11 block in its own `CLAUDE.md`, and declared no §11 delta, while codex
+  and opencode both carry it in `AGENTS.md`. Fixed by **claude-workflow#88**;
+  until that merges the report shows it as DRIFT (3 checks), which is correct.
+  With both merged: 45 OK / 0 DRIFT.
+
+### Added
+
+- **`tools/drift-report.test.sh`** — the first tests in this repo. 18 assertions
+  driving `drift-report.sh` through its public interface against synthetic host
+  clones (temp dirs; no network, no real clones). The three defects above
+  shipped because nothing exercised the tool. T13 pins the payload-mirror case;
+  T12 pins the report against depending on the caller's working directory.
+
+### Removed
+
+- **pi-agentic-apps-workflow** is retired as a host: removed from the
+  `reference-implementations` table and from the drift report. Adoption was
+  never pursued and the repo is no longer in use. It held no conformance claim
+  to withdraw. Recorded under "Retired hosts" in
+  `reference-implementations/README.md`.
 
 ## [0.9.1] — 2026-07-15
 

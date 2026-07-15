@@ -10,10 +10,26 @@ host's own adoption PR, not via this file.
 | Host repo | Type | Spec version implemented | Conformance level | Notes |
 |---|---|---|---|---|
 | [claude-workflow](https://github.com/agenticapps-eu/claude-workflow) | Workflow scaffolder for Claude Code | 0.9.0 | `full` | Source of canonical prose. Audited 2026-07-14 (host ADR-0040); `skill/SKILL.md` carries `implements_spec: 0.9.0`. §10 observability and §14 prompt-injection **delegated** to the standalone [`agenticapps-observability`](https://github.com/agenticapps-eu/agenticapps-observability) skill (0.13.0) and its `injection-guard` sub-skill — *satisfied* MUSTs per §09, not deltas; migrations `0022`/`0023` fail closed if the skill is absent. The `add-observability` skill this row previously credited was removed from this host at its 2.0.0 (`217baec`) and now lives in that standalone repo. §15 knowledge capture wired at all three ritual triggers, config-routed (no hardcoded vault path), guarded by `check-snapshot-parity.sh`. Setup installs via **snapshot, not replay** (host ADR-0036) — conformant under §08 **as amended at 0.9.0** (ADR-0018), with end-state equivalence guarded by `migrations/check-snapshot-parity.sh` in CI. Spec deltas listed in the host's `skill/SKILL.md`: §13's implicit GSD trigger is unwired (§13's Conformance is SHOULD/MAY and the host is not a TS project); a divergent §04 copy ships in the host's vendored CLAUDE.md payload (the canonical block is byte-identical in the host's own instruction file, so §09 item 1 holds). |
-| [pi-agentic-apps-workflow](https://github.com/agenticapps-eu/pi-agentic-apps-workflow) | Workflow scaffolder for pi.dev | 0.1.0 (target — adoption pending) | TBD | Pi runtime extension is a host-specific extension beyond the spec. |
 | [codex-workflow](https://github.com/agenticapps-eu/codex-workflow) | Workflow scaffolder for OpenAI Codex CLI | [0.4.0](https://github.com/agenticapps-eu/codex-workflow/releases/tag/v0.2.1) | `full` | Native Codex skill re-author of the gate stack (1 trigger + 14 gate + 5 GSD entry-points + 2 lifecycle = 22 skills). v0.2.0 absorbs the 0.2.0→0.4.0 deltas: §11 Coding Discipline (verbatim in `AGENTS.md` behind a provenance anchor), §13 declare-first TS (`codex-ts-declare-first`, strengthens the `tdd` gate), §12 surgical Mermaid, and §10 observability **delegated** to the standalone `agenticapps-observability` skill (consumed via its Codex install surface — a *satisfied* §10 MUST per §09, not a delta; migration `0003`). Migration chain `0000`–`0004`. 8 spec/02 gates remain documented Spec Deltas in `docs/ENFORCEMENT-PLAN.md` (triggers cannot occur in a UI-less/DB-less scaffolder) — full conformance preserved per spec/09. |
 | [opencode-workflow](https://github.com/agenticapps-eu/opencode-workflow) | Workflow scaffolder for opencode | 0.9.1 | `full` | Forked from `codex-workflow`, then **rebound to upstream rather than re-ported**: GSD and Superpowers are consumed as upstream skills instead of re-authored as `opencode-*` copies, so the stack is 11 skills (1 trigger + 8 gate + 2 lifecycle) against codex's 22, and gates bind `superpowers:*` directly. §11 Coding Discipline verbatim in `AGENTS.md` behind a provenance anchor; §13 declare-first TS (`opencode-ts-declare-first`, strengthens the `tdd` gate); §10 observability **delegated** to the standalone `agenticapps-observability` skill (a *satisfied* §10 MUST per §09, not a delta; migration `0003`, ADR-0005). Installs from a **snapshot, not a migration replay** (ADR-0007) — `check-snapshot-parity.sh` keeps snapshot ≡ chain end-state. Migration chain `0000`–`0006`. Spec deltas documented in `docs/ENFORCEMENT-PLAN.md` — full conformance preserved per spec/09. Absorbed 0.4.0 → **0.9.1** at scaffolder v0.4.0 (migration `0007`): §02 `plan-review` bound to the upstream `/gsd-review` command; §14 declared *trivially conformant* (builds no LLM prompts from non-self-authored values — trigger cannot occur, §09 requires only that the host say so; downstream delegated to `injection-guard`); §08's guard named in the instruction file per v0.9.0. §15 shipped earlier at v0.3.0 (`0005`, ADR-0008). Note the §08 history: this host's guarded-snapshot install was non-conformant under pre-0.9.0 §08 for as long as it cited 0.4.0 — the v0.9.0 amendment (written citing this host and claude-workflow) is what made the strategy legitimate, so absorbing *retired* a violation rather than adding obligations. |
 | [agenticapps-dashboard](https://github.com/agenticapps-eu/agenticapps-dashboard) | Workflow artifact viewer | 0.1.0 (target — adoption pending) | TBD (consumer) | Reads workflow artifacts produced by hosts; does not author them. |
+
+## Retired hosts
+
+- **pi-agentic-apps-workflow** (workflow scaffolder for pi.dev) — listed until
+  2026-07-15 as "0.1.0 (target — adoption pending)". Adoption was never
+  pursued and the repo is no longer in use, so the row is removed rather than
+  left as a permanent pending claim. It carried `implements_spec` in no file,
+  which per §09 item 4 means it never held a conformance claim to withdraw.
+  Removed from `tools/drift-report.sh` at the same time (ADR-0019).
+
+## Which repos the drift report checks
+
+`tools/drift-report.sh` scores only the rows above that **author** canonical
+prose: claude-workflow, codex-workflow, opencode-workflow. The
+agenticapps-dashboard row is a consumer — it reads workflow artifacts and
+authors none — so canonical-prose checks do not apply to it and it is not
+scored. See ADR-0019.
 
 ## Conformance levels
 
