@@ -1,7 +1,7 @@
 ---
 id: 08-migration-format
 section_type: declarative-contract
-spec_version: 0.9.0
+spec_version: 0.9.1
 ---
 
 # 08 — Migration Format
@@ -17,8 +17,12 @@ A migration is a versioned, idempotent, atomic, dry-runnable patch
 that brings an installed AgenticApps workflow scaffolding from one
 version to the next. The `migrations/` directory is the single source
 of truth for what each version looks like on disk. The existing-project
-update flow consumes it directly, applying only those migrations whose
-`from_version` is newer than the project's installed version.
+update flow consumes it directly, applying only those migrations not yet
+applied — those whose `to_version` is newer than the project's installed
+version (equivalently, the chain of migrations whose `from_version` is at or
+after the installed version). This matches the per-field rules below: a
+migration is skipped when the installed version is below its `from_version`
+or already at or beyond its `to_version`.
 
 The fresh-project setup flow MUST arrive at the same end state that a
 full `0000-baseline`→latest replay produces — but it need not get there

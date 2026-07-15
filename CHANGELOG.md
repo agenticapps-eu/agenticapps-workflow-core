@@ -20,6 +20,21 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-07-15
+
+Patch — clarification only, no conformance impact. A host conformant at 0.9.0
+remains conformant at 0.9.1.
+
+### Fixed
+- **`spec/08-migration-format.md` §Concept** — the migration-selection sentence
+  said the update flow applies migrations "whose `from_version` is newer than
+  the project's installed version." That is wrong and contradicted the file's
+  own per-field rules (§Frontmatter: skip when installed `<` `from_version`;
+  §Skip cases: skip when installed `≥` `to_version`). Taken literally, a project
+  at 2.4.0 would skip the 2.4.0→2.5.0 migration (its `from_version` is 2.4.0,
+  not *newer*) and could never advance. Reworded to select by "not yet applied"
+  (`to_version` newer than installed), consistent with the normative table.
+
 ## [0.9.0] — 2026-07-14
 
 Additive minor release. One declarative contract relaxed; no canonical prose
