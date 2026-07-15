@@ -20,6 +20,26 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+Registry only — no spec change, no conformance impact, no host action.
+
+### Changed
+- **`reference-implementations/README.md`** — `opencode-workflow` moves from
+  **0.4.0 → 0.9.1** (`full`), reflecting its adoption PR (host v0.4.0, migration
+  `0007`). It binds §02 `plan-review` to the upstream `/gsd-review` command,
+  declares §14 trivially conformant (no LLM prompt-building surface — the
+  trigger cannot occur; §09 requires only that the host say so), and names its
+  §08 drift guard in its instruction file per v0.9.0.
+
+  Worth recording for the §08 history: this host's guarded-snapshot install was
+  **non-conformant under pre-0.9.0 §08 for as long as it cited 0.4.0** — its
+  claim, not its code, was the liability. The v0.9.0 amendment (written citing
+  this host's ADR-0007 alongside `claude-workflow`) is what legitimized the
+  strategy, so absorbing *retired* a violation rather than adding obligations.
+
+  Fleet status after this: `claude-workflow` 0.9.0, `opencode-workflow` 0.9.1,
+  `codex-workflow` 0.4.0. The fleet is no longer uniform — and `codex-workflow`
+  has the same pre-0.9.0 §08 exposure, since it too installs from a snapshot.
+
 ## [0.9.1] — 2026-07-15
 
 Patch — clarification only, no conformance impact. A host conformant at 0.9.0
