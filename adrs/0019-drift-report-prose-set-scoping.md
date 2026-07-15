@@ -166,13 +166,20 @@ either. A test pins this too (T11).
 - The report went from 68 OK / 7 DRIFT across 5 repos to **42 OK / 3 DRIFT /
   0 ERROR across 3 hosts**, and every OK is now earned against a declared
   prose file rather than against scratch or a payload.
-- **The 3 DRIFT are real, and they are the tool's first true finding:**
-  claude-workflow does not reproduce the §11 block in its own `CLAUDE.md`,
-  while codex and opencode both do in their `AGENTS.md`. This is a live
-  conformance gap in the host that claims `full` at 0.9.0 and is the source of
-  canonical prose. It needs either the block added to `claude-workflow/CLAUDE.md`
-  or a §11 delta declared in its `skill/SKILL.md` — a host change, out of scope
-  here. The tool's job was to stop hiding it.
+- **The 3 DRIFT were real, and they are the tool's first true finding:**
+  claude-workflow did not reproduce the §11 block in its own `CLAUDE.md`, while
+  codex and opencode both do in their `AGENTS.md`. A live conformance gap in the
+  host that claims `full` at 0.9.0 and is the source of canonical prose — hidden
+  for the life of the tool, because the old repo-wide grep kept finding the block
+  in `templates/`, `setup/` and `migrations/0014`, all payload shipped *into*
+  other projects.
+
+  **Fixed in claude-workflow#88**, which adds the block to that host's `CLAUDE.md`
+  (and tracks the file — it was gitignored as a GitNexus artifact, so the host had
+  no tracked project-instruction file at all). With #88 merged the report reads
+  **45 OK / 0 DRIFT / 0 ERROR**. The two land independently: this PR makes the
+  gap visible, #88 closes it. Whichever merges first, the other stays correct —
+  only the DRIFT count moves.
 - `tools/drift-report.test.sh` is core's **first test of any kind**. The tool
   shipped three defects precisely because nothing exercised it. 18 assertions,
   no network, no real clones, temp dirs only.

@@ -75,11 +75,11 @@ does need a host change; see under *Fixed*.
   so the old repo-wide grep reported OK while the host's own `CLAUDE.md` carries
   no §11 block at all. Checks now read the declared project-instruction file.
 
-  **This surfaces a real conformance gap:** claude-workflow does not reproduce
-  the §11 block in its own `CLAUDE.md`, and declares no §11 delta, while codex
-  and opencode both carry it in `AGENTS.md`. The report now shows it as DRIFT
-  (3 checks). Fixing it is a host change — add the block to
-  `claude-workflow/CLAUDE.md` or declare a §11 delta in its `skill/SKILL.md`.
+  **This surfaced a real conformance gap:** claude-workflow did not reproduce
+  the §11 block in its own `CLAUDE.md`, and declared no §11 delta, while codex
+  and opencode both carry it in `AGENTS.md`. Fixed by **claude-workflow#88**;
+  until that merges the report shows it as DRIFT (3 checks), which is correct.
+  With both merged: 45 OK / 0 DRIFT.
 
 ### Added
 
