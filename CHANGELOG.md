@@ -106,6 +106,39 @@ does need a host change; see under *Fixed*.
   to withdraw. Recorded under "Retired hosts" in
   `reference-implementations/README.md`.
 
+## [Unreleased]
+
+**No spec version change.** `reference-implementations/` and `tools/` are not
+normative spec text. No host's conformance claim is altered *by this repo*.
+
+### Changed
+
+- **`pi-agentic-apps-workflow` is un-retired** and listed in the active table
+  again, at **0.10.0 / `partial`**. ADR-0019 removed its row on the grounds that
+  it carried `implements_spec` in no file (per §09 item 4, unversioned and unable
+  to claim any level) and shipped no §11 canonical block. Both were fixed at host
+  v0.2.0: §11 is vendored byte-identical to codex's and opencode's mirrors and
+  injected into a new `AGENTS.md` behind a provenance anchor, and the trigger
+  skill now carries `implements_spec: 0.10.0`. Its §01/§03/§04/§05 blocks were
+  already verbatim.
+
+  It claims `partial`, not `full`, and names its deltas as §09 requires — §10
+  observability unsatisfied, §14 undeclared (likely trivially conformant but
+  unaudited, so not assumed away), §15 unwired, §02 `plan-review` unbound, and
+  a session handoff that is not host-scoped.
+
+  Notably it was **built to §12's instruction-surface economy rather than
+  migrated to it**: `templates/pi-md-sections.md` went 179 lines → the §11 block
+  plus a trigger-skill pointer and a session-handoff pointer, in the same change
+  that gave it a §11 block at all.
+
+- **`tools/drift-report.sh` scores pi again** — added back to `HOSTS` as
+  `pi-agentic-apps-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md`. It
+  reports **15/15 OK**, taking the report to **60 OK / 0 DRIFT / 0 ERROR** across
+  four hosts. `drift-report.test.sh` T8 is inverted rather than deleted: it still
+  pins that the dashboard (a genuine consumer) is never scored, and now also pins
+  that pi *is*. 18/18 tests pass.
+
 ## [0.10.0] — 2026-07-19
 
 Additive minor release, SHOULD-level. One new §12 convention; **no canonical

@@ -65,13 +65,17 @@ HOSTS_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # AGENTS.md both do. Declaring CLAUDE.md surfaces that as honest DRIFT.
 #
 # Only hosts that author canonical prose belong here:
-#   - pi-agentic-apps-workflow was retired as a host (adoption not pursued).
+#   - pi-agentic-apps-workflow was retired as a host at spec 0.9.1 (adoption not
+#     pursued; it carried implements_spec in no file and shipped no section 11
+#     block, so there was nothing to score). Both were fixed at host v0.2.0, so
+#     it is scored again as of 2026-07-19.
 #   - agenticapps-dashboard is a consumer — it reads workflow artifacts and
 #     authors none, so canonical-prose checks do not apply to it.
 HOSTS=(
   "claude-workflow|skill/SKILL.md|CLAUDE.md"
   "codex-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md"
   "opencode-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md"
+  "pi-agentic-apps-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md"
 )
 
 # Canonical phrases per spec section. Format: "section-id|phrase".
