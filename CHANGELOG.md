@@ -41,8 +41,17 @@ does need a host change; see under *Fixed*.
   strategy, so absorbing *retired* a violation rather than adding obligations.
 
   Fleet status after this: `claude-workflow` 0.9.0, `opencode-workflow` 0.9.1,
-  `codex-workflow` 0.4.0. The fleet is no longer uniform — and `codex-workflow`
-  has the same pre-0.9.0 §08 exposure, since it too installs from a snapshot.
+  `codex-workflow` 0.4.0. The fleet is no longer uniform.
+
+  > **Correction (2026-07-19).** This entry originally added: "and
+  > `codex-workflow` has the same pre-0.9.0 §08 exposure, since it too installs
+  > from a snapshot." **That is false.** `codex-workflow` installs by **replay**
+  > — its setup skill walks `0000`→latest step by step, it ships no
+  > `check-snapshot-parity.sh`, and its CI runs only `migrations/run-tests.sh`.
+  > Replay is §08's first-listed strategy, so the v0.9.0 amendment's drift-guard
+  > obligation — which binds snapshot installers — never applied to that host,
+  > and it had no §08 exposure to retire. Surfaced while auditing codex for its
+  > 0.10.0 adoption.
 
 ### Fixed
 
