@@ -1,14 +1,14 @@
 ---
 id: 09-conformance
 section_type: framing
-spec_version: 0.9.0
+spec_version: 0.10.0
 ---
 
 # 09 — Conformance
 
 **Section type**: framing. This section describes how a host
 implementation claims conformance with the AgenticApps workflow spec
-at version 0.9.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
+at version 0.10.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
 MAY are used per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
 ## Conformance levels
@@ -67,7 +67,7 @@ A host claiming `full` conformance MUST:
    frontmatter (or host-equivalent metadata block), where
    `<version>` is the spec version the host claims (e.g. `0.1.0`,
    `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`,
-   `0.9.0`).
+   `0.9.0`, `0.9.1`, `0.10.0`).
 5. **Maintain artifact shapes.** Phases produce CONTEXT.md, PLAN.md,
    VERIFICATION.md, REVIEW.md (with Stage 1 and Stage 2 sections),
    and SECURITY.md when applicable. The artifacts are
@@ -139,7 +139,7 @@ its primary instruction file:
 ---
 name: <host-workflow-skill-name>
 version: <host-version>
-implements_spec: 0.9.0
+implements_spec: 0.10.0
 description: |
   ...
 ---

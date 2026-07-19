@@ -2,7 +2,7 @@
 
 Host repos that adopt (or will adopt) the AgenticApps workflow spec.
 
-**Current spec version:** 0.9.1 (released 2026-07-15). See `CHANGELOG.md`
+**Current spec version:** 0.10.0 (released 2026-07-19). See `CHANGELOG.md`
 in the spec root for the host-implementer actions required to move a
 host row from a prior version to 0.9.0. Host rows below move via the
 host's own adoption PR, not via this file.

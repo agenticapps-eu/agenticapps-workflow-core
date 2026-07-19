@@ -1,7 +1,7 @@
 ---
 id: 12-authoring-conventions
 section_type: declarative-contract
-spec_version: 0.4.0
+spec_version: 0.10.0
 ---
 
 # 12 — Authoring Conventions
@@ -112,6 +112,48 @@ Practical applications:
   position is acceptable because re-reading it at runtime is not
   required.
 
+### Instruction-surface economy (eager vs lazy)
+
+The placement advisory above governs *ordering* within the
+always-loaded file. This requirement governs *membership*: what belongs
+in that file at all.
+
+A host's always-loaded instruction file — the file the runtime injects
+on every turn, e.g. `CLAUDE.md` / `AGENTS.md` — is the most expensive
+real estate in the workflow. Its entire content is paid on every turn,
+whether or not the turn touches code. Minimal hosts feel this most.
+
+A host implementation **SHOULD** keep the always-loaded file to the
+minimum that must be resident on *every* turn:
+
+- the §11 canonical block, verbatim and near the top per the placement
+  advisory, and
+- a short pointer to the trigger skill that carries the rest.
+
+A host implementation **SHOULD** place procedural and reference content
+that is only needed once a code task is underway in the lazily-loaded
+trigger skill (`SKILL.md` or equivalent) or in a workflow-config, not
+in the always-loaded file. This includes the §02 gate-binding table,
+task-size routing, the §15 knowledge-capture ritual tail (already
+required to live in the host's SKILL.md by §15), the session-handoff
+procedure, and gate-procedure prose such as a plan-review runbook. A
+host whose runtime enforces a gate programmatically keeps the *hook
+wiring* wherever the runtime requires it — only the explanatory prose
+moves.
+
+The commitment ritual (§01), the rationalization table (§03), and the
+red flags (§04) **MAY** live in the trigger skill, since that skill
+loads on exactly the code-touching turns where those blocks bind. A
+host **MAY** keep them eager instead if it judges the per-turn budget
+affordable.
+
+Rationale: models underweight mid-context content (Liu et al., 2023),
+and every eager token is re-billed per turn. A lean always-loaded file
+both cuts that recurring cost and keeps the §11 block prominent rather
+than buried among procedure. `claude-workflow`'s `CLAUDE.md` — §11 plus
+a trigger-skill pointer, with the gate table, routing, ritual tail, and
+session-handoff procedure in `skill/SKILL.md` — is the reference shape.
+
 ## Illustrative example (non-normative)
 
 The following before/after is illustrative; it is not a normative
@@ -161,7 +203,7 @@ arises) that the diagram cannot encode.
 
 ## Conformance
 
-A host implementation claiming conformance with spec version 0.4.0:
+A host implementation claiming conformance with spec version 0.10.0:
 
 - **MUST** satisfy the "Branchy workflows" SHOULD-level convention in
   every host SKILL.md, AGENTS.md, or contract spec file it newly
@@ -172,12 +214,18 @@ A host implementation claiming conformance with spec version 0.4.0:
   does not encode the criteria.
 - **SHOULD** apply the placement advisory to behavior-critical prose
   in its primary project-instruction file.
+- **SHOULD** keep its always-loaded instruction file to the §11 block
+  plus a trigger-skill pointer, placing the §02 gate table, task-size
+  routing, the §15 ritual tail, session-handoff, and gate-procedure
+  prose in the lazily-loaded trigger skill or a workflow-config (see
+  "Instruction-surface economy").
 - **MAY** define host-specific diagram syntaxes when the host runtime
   does not render Mermaid. The contract is the decision shape made
   explicit, not the specific syntax.
 
 A host that ships a new branchy workflow as prose-only at or after
-0.4.0 is non-conformant against this section's SHOULD, but is not
+0.4.0, or that ships a heavy always-loaded instruction file at or after
+0.10.0, is non-conformant against this section's SHOULDs, but is not
 non-conformant against the overall spec — SHOULD-level requirements
 move the host above the minimum bar but do not break conformance.
 

@@ -97,6 +97,62 @@ does need a host change; see under *Fixed*.
   to withdraw. Recorded under "Retired hosts" in
   `reference-implementations/README.md`.
 
+## [0.10.0] — 2026-07-19
+
+Additive minor release, SHOULD-level. One new §12 convention; **no canonical
+prose reworded and no §11 bytes changed**. Hosts at 0.9.x remain conformant
+for their 0.9.x claims and need take no action to keep them.
+
+### Added
+
+- **`spec/12-authoring-conventions.md` — "Instruction-surface economy (eager
+  vs lazy)."** §12 already governed *where in* the always-loaded instruction
+  file behavior-critical prose sits; it said nothing about *what belongs in
+  that file at all*, and the fleet split on the question. A host **SHOULD**
+  now keep its always-loaded file (`CLAUDE.md` / `AGENTS.md`) to the §11
+  canonical block plus a short pointer to the trigger skill, and **SHOULD**
+  place content only needed once a code task is underway — the §02 gate-binding
+  table, task-size routing, the §15 ritual tail, session-handoff, and
+  gate-procedure prose — in the lazily-loaded trigger skill or a
+  workflow-config. Hook *wiring* stays wherever the runtime needs it; only the
+  explanatory prose moves. §01/§03/§04 **MAY** move to the trigger skill, or
+  stay eager if the host judges the budget affordable.
+
+  The always-loaded file is re-billed on every turn, including turns that never
+  touch code, and padding it pushes the §11 block toward the mid-context
+  position the existing placement advisory exists to avoid (Liu et al., 2023).
+  `claude-workflow`'s 98-line §11-only `CLAUDE.md` is named as the reference
+  shape. Rationale and rejected alternatives — a MUST, host discretion, a hard
+  token budget — in **ADR-0020**.
+
+- **`adrs/0020-instruction-surface-economy.md`** (Accepted, 2026-07-19).
+
+### Changed
+
+- **`spec/12`** — Conformance gains one SHOULD bullet for the new convention;
+  the section's claim version advances `0.4.0` → `0.10.0`. The existing
+  branchy-workflow bullet's "at or after 0.4.0 adoption" anchor is unchanged.
+- **`spec/00-overview.md`** — §12's v0.10.0 addition recorded in the version
+  history; `spec_version` → 0.10.0.
+- **`spec/09-conformance.md`** — `spec_version`, the "at version" line, the
+  `implements_spec` citation example, and the claimable-version list advance to
+  0.10.0 (the list also backfills the previously omitted `0.9.1`).
+- **`reference-implementations/README.md`** — "Current spec version" → 0.10.0.
+  Host rows untouched per convention; they move via each host's adoption PR.
+
+### Conformance impact
+
+- `claude-workflow` **already satisfies** the new SHOULD (its `CLAUDE.md` is
+  the reference shape). No action; it may re-assert at 0.10.0 opportunistically.
+- `codex-workflow` and `opencode-workflow` adopt by slimming their ~220–250-line
+  `AGENTS.md` and bumping `implements_spec`, each via its own migration and
+  adoption PR.
+- A host that ships a heavy always-loaded file at 0.10.0 is below this SHOULD
+  but **not non-conformant overall**, exactly like the existing branchy-workflow
+  SHOULD.
+- `tools/drift-report.sh` is unaffected: it scores canonical-prose blocks, and
+  none changed.
+
 ## [0.9.1] — 2026-07-15
 
 Patch — clarification only, no conformance impact. A host conformant at 0.9.0

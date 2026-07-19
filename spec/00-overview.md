@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 0.9.0
+spec_version: 0.10.0
 ---
 
 # 00 — Overview
@@ -85,7 +85,13 @@ the mechanism: setup MUST produce an end state equivalent to a full
 `0000`→latest replay, reached either by replaying or by installing a
 prebuilt snapshot assembled from the same sources behind a CI drift guard
 (ADR-0018, superseding ADR-0013's assumption that every chain is
-shell-replayable). Hosts may claim conformance against any
+shell-replayable). Section 12 (authoring conventions) gained an
+"Instruction-surface economy" convention at v0.10.0: the always-loaded
+instruction file SHOULD carry the §11 block plus a pointer to the trigger
+skill, with gate tables, routing, ritual tails, and gate-procedure prose
+moved into the lazily-loaded skill — extending §12's existing placement
+advisory from *ordering* to *membership* (ADR-0020). Hosts may claim
+conformance against any
 of those versions; the version the host claims is the version the host's
 `implements_spec` field names.
 
