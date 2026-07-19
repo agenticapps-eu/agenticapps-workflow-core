@@ -132,6 +132,21 @@ normative spec text. No host's conformance claim is altered *by this repo*.
   plus a trigger-skill pointer and a session-handoff pointer, in the same change
   that gave it a §11 block at all.
 
+- **`codex-workflow` moves 0.4.0 → 0.10.0** (`full`), reflecting its adoption PR
+  (host v0.9.0, migration `0012`). Two things landed together: §12's
+  instruction-surface economy (`AGENTS.md` 269 → 120 lines; gate table, routing,
+  session-handoff, §15 tail and the plan-review *procedure* moved to the
+  lazily-loaded trigger skill, with the `PreToolUse` hook wiring untouched), and
+  a citation reconciliation. The citation had been stale by six spec versions —
+  0.5.0/0.7.0/0.8.0/0.9.0 were already satisfied by shipped implementation, and
+  the one real gap was **§14 (0.6.0), a *declaration* gap**: no LLM
+  prompt-building surface exists, but §09 requires the host to say so. The
+  migration refuses to advance the claim unless the declaration lands first.
+
+  With this the fleet is uniform again at **0.10.0**: `claude-workflow` 0.9.0 →
+  pending, `codex-workflow` 0.10.0, `opencode-workflow` 0.10.0,
+  `pi-agentic-apps-workflow` 0.10.0 (`partial`).
+
 - **`tools/drift-report.sh` scores pi again** — added back to `HOSTS` as
   `pi-agentic-apps-workflow|skills/agentic-apps-workflow/SKILL.md|AGENTS.md`. It
   reports **15/15 OK**, taking the report to **60 OK / 0 DRIFT / 0 ERROR** across
