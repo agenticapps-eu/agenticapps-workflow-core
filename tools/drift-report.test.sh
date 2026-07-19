@@ -217,16 +217,24 @@ assert_not_contains "$out" "OK    [01-commitment-ritual]" \
   "an unversioned host is not scored (spec 09 item 4)"
 rm -rf "$d"
 
-# --- T8: retired hosts are not checked -----------------------------------
-# pi-agentic-apps-workflow was retired as a host; the dashboard is a
-# consumer that authors no canonical prose. Neither should be scored.
+# --- T8: consumer repos are not checked -----------------------------------
+# agenticapps-dashboard is a consumer: it reads workflow artifacts and authors
+# no canonical prose, so canonical-prose checks do not apply to it and it must
+# never be scored.
+#
+# This test used to also assert that pi-agentic-apps-workflow is not scored,
+# encoding its retirement in ADR-0019. That retirement was reversed at pi host
+# v0.2.0, which added the `implements_spec` citation and the section 11 block
+# whose absence was the reason for removal. pi is a scored host again, so the
+# assertion is inverted rather than deleted — a bare directory with no
+# instruction file must now report ERROR (spec/09 item 4), not vanish silently.
 echo ""
-echo "T8: retired/consumer repos are not scored"
+echo "T8: consumer repos are not scored; a revived host is"
 d="$(make_hosts_dir)"
-mkdir -p "$d/pi-agentic-apps-workflow" "$d/agenticapps-dashboard"
+mkdir -p "$d/agenticapps-dashboard"
 out="$("$DRIFT" "$d" 2>&1)"
-assert_not_contains "$out" "pi-agentic-apps-workflow" "pi is not checked"
 assert_not_contains "$out" "agenticapps-dashboard" "dashboard is not checked"
+assert_contains "$out" "pi-agentic-apps-workflow" "pi is checked again after its v0.2.0 revival"
 rm -rf "$d"
 
 # --- T9: a declared secondary prose file satisfies its section ------------
