@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run a change · OpenSpec + Superpowers cheatsheet</title>
+<style>
+  :root{
+    --ink:#1a1f2b; --muted:#5b6472; --faint:#8b93a3; --line:#e9ecf3;
+    --linear-a:#ff8a2b; --linear-b:#ff5d5d;
+    --spec-a:#4f8cff;  --spec-b:#7a5cff;
+    --review-a:#ff5d73; --review-b:#e03b93;
+    --gate-a:#9b5cff;  --gate-b:#6a5cff;
+    --exec-a:#1fc98a;  --exec-b:#0fb6b6;
+    --ship-a:#13b6a4;  --ship-b:#0e8fb8;
+    --card:#ffffff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html{-webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility}
+  body{
+    font-family:"Inter","Segoe UI","Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 600px at 12% -8%, #eaf1ff 0%, rgba(234,241,255,0) 55%),
+      radial-gradient(1000px 620px at 108% 4%, #ffeef6 0%, rgba(255,238,246,0) 55%),
+      radial-gradient(1100px 700px at 50% 120%, #e8fbf3 0%, rgba(232,251,243,0) 60%),
+      #f7f9fd;
+    min-height:100vh;
+    padding:48px 20px 60px;
+  }
+  .sheet{max-width:900px; margin:0 auto}
+
+  .eyebrow{
+    display:inline-block; font-size:11px; font-weight:800; letter-spacing:.18em;
+    text-transform:uppercase; color:#6a5cff;
+    background:linear-gradient(135deg,#efeaff,#e9f0ff); padding:6px 12px; border-radius:999px;
+    border:1px solid #e2ddff;
+  }
+  h1{ font-size:clamp(30px,5vw,46px); font-weight:900; letter-spacing:-.02em; line-height:1.05; margin:16px 0 6px; }
+  h1 .grad{
+    background:linear-gradient(100deg,var(--linear-a),var(--review-b) 42%,var(--spec-b) 70%,var(--exec-a));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .lede{font-size:15.5px; color:var(--muted); max-width:660px; line-height:1.55}
+  .lede b{color:var(--ink)}
+
+  /* how-to-read strip */
+  .howto{
+    margin:18px 0 2px; padding:14px 16px; border-radius:16px;
+    background:linear-gradient(135deg,#ffffff,#fbfcff); border:1px solid var(--line);
+    box-shadow:0 6px 20px -16px rgba(20,25,40,.4);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; font-size:12.5px; color:var(--muted);
+  }
+  .howto .h{font-weight:800; color:var(--ink); margin-right:2px}
+  .howto .item{display:inline-flex; align-items:center; gap:8px}
+  .howto b{color:var(--ink)}
+  .surface{
+    display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800;
+    padding:3px 9px; border-radius:999px; letter-spacing:.01em; white-space:nowrap;
+    border:1px solid transparent;
+  }
+  .s-agent{background:#eef0ff; color:#4b40d6; border-color:#dcdcff}
+  .s-cli{background:#1c2130; color:#cfe6ff}
+  .s-script{background:#fff2dd; color:#a9660a; border-color:#ffe2b0}
+  .s-auto{background:#f2e8ff; color:#7a3ecf; border-color:#e6d5ff}
+  .s-linear{background:#fff0e6; color:#c85f1c; border-color:#ffdcc2}
+  .howto .note{width:100%; margin-top:4px; padding-top:10px; border-top:1px dashed #e6e9f2; font-size:12px}
+
+  .layers{display:flex; flex-wrap:wrap; gap:10px; margin:16px 0 6px}
+  .layer{
+    display:flex; align-items:center; gap:9px; padding:9px 14px; border-radius:14px;
+    background:var(--card); border:1px solid var(--line);
+    box-shadow:0 1px 2px rgba(20,25,40,.04); font-size:13px; font-weight:600;
+  }
+  .layer .sw{width:14px; height:14px; border-radius:5px}
+  .layer small{color:var(--faint); font-weight:500}
+
+  .flow{position:relative; margin-top:26px; padding-left:8px}
+  .grouplabel{
+    display:flex; align-items:center; gap:10px; margin:22px 0 12px; padding-left:6px;
+    font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--faint);
+  }
+  .grouplabel::after{content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--line),transparent)}
+
+  .step{position:relative; display:grid; grid-template-columns:56px 1fr; gap:16px; align-items:stretch; margin:14px 0;}
+  .rail{display:flex; flex-direction:column; align-items:center}
+  .badge{
+    width:52px; height:52px; border-radius:16px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:900; font-size:17px; letter-spacing:-.02em;
+    box-shadow:0 8px 20px -8px rgba(20,25,40,.5), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .badge.sm{font-size:13px}
+  .connector{flex:1 1 auto; width:3px; margin:6px 0; border-radius:3px;
+    background:linear-gradient(180deg, rgba(150,160,180,.5), rgba(150,160,180,.12));}
+  .step:last-child .connector{display:none}
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:18px;
+    padding:16px 18px; position:relative; overflow:hidden;
+    box-shadow:0 10px 30px -18px rgba(20,25,40,.28);
+    transition:transform .18s ease, box-shadow .18s ease;
+  }
+  .card::before{content:""; position:absolute; left:0; top:0; bottom:0; width:5px}
+  .card:hover{transform:translateY(-3px); box-shadow:0 18px 40px -18px rgba(20,25,40,.4)}
+  .card .top{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .card h3{font-size:16.5px; font-weight:800; letter-spacing:-.01em}
+  .cmd{
+    font-family:"JetBrains Mono","SF Mono",Consolas,monospace; font-size:12.5px; font-weight:600;
+    color:#e8ecff; background:#1c2130; padding:6px 12px; border-radius:9px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06); white-space:nowrap;
+  }
+  .cmd .p{color:#7cf0c8; margin-right:7px}
+  .cmd .alt{color:#8a93a8; font-family:inherit}
+  .tag{font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; color:#fff; letter-spacing:.02em}
+  .note{margin-top:9px; font-size:13px; color:var(--muted); line-height:1.55}
+  .note code{font-family:"JetBrains Mono","SF Mono",Consolas,monospace; font-size:11.5px;
+    background:#f1f3f9; border:1px solid #e6e9f2; border-radius:6px; padding:1px 6px; color:#334}
+  .kbd{font-weight:800}
+
+  .l-linear .badge{background:linear-gradient(140deg,var(--linear-a),var(--linear-b))}
+  .l-linear .card::before{background:linear-gradient(180deg,var(--linear-a),var(--linear-b))}
+  .l-spec .badge{background:linear-gradient(140deg,var(--spec-a),var(--spec-b))}
+  .l-spec .card::before{background:linear-gradient(180deg,var(--spec-a),var(--spec-b))}
+  .l-review .badge{background:linear-gradient(140deg,var(--review-a),var(--review-b))}
+  .l-review .card::before{background:linear-gradient(180deg,var(--review-a),var(--review-b))}
+  .l-exec .badge{background:linear-gradient(140deg,var(--exec-a),var(--exec-b))}
+  .l-exec .card::before{background:linear-gradient(180deg,var(--exec-a),var(--exec-b))}
+  .l-ship .badge{background:linear-gradient(140deg,var(--ship-a),var(--ship-b))}
+  .l-ship .card::before{background:linear-gradient(180deg,var(--ship-a),var(--ship-b))}
+  .sw-linear{background:linear-gradient(140deg,var(--linear-a),var(--linear-b))}
+  .sw-spec{background:linear-gradient(140deg,var(--spec-a),var(--spec-b))}
+  .sw-review{background:linear-gradient(140deg,var(--review-a),var(--review-b))}
+  .sw-exec{background:linear-gradient(140deg,var(--exec-a),var(--exec-b))}
+  .sw-ship{background:linear-gradient(140deg,var(--ship-a),var(--ship-b))}
+  .t-review{background:linear-gradient(140deg,var(--review-a),var(--review-b))}
+  .t-exec{background:linear-gradient(140deg,var(--exec-a),var(--exec-b))}
+
+  .gate{
+    position:relative; margin:16px 0; padding:16px 20px; border-radius:18px;
+    color:#fff; background:linear-gradient(120deg,var(--gate-b),var(--gate-a));
+    box-shadow:0 16px 34px -16px rgba(106,92,255,.7);
+    display:flex; align-items:center; gap:16px; overflow:hidden;
+  }
+  .gate::after{content:""; position:absolute; inset:0;
+    background:repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0 12px, rgba(255,255,255,0) 12px 24px); pointer-events:none}
+  .gate .lock{font-size:26px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.25))}
+  .gate .g-body{position:relative; z-index:1}
+  .gate .gt{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .gate h3{font-size:16px; font-weight:900; letter-spacing:-.01em}
+  .gate .auto{background:rgba(255,255,255,.22); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:999px}
+  .gate .cond{display:inline-flex; gap:8px; align-items:center; margin-top:7px; font-weight:700; font-size:14px}
+  .gate .pill{background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.35); padding:3px 10px; border-radius:999px; font-size:12.5px}
+  .gate .esc{margin-top:8px; font-size:12px; color:#eee}
+  .gate .esc code{background:rgba(0,0,0,.25); padding:1px 7px; border-radius:6px; font-family:"JetBrains Mono",monospace}
+
+  .foot{
+    margin-top:30px; background:var(--card); border:1px solid var(--line); border-radius:20px;
+    padding:20px 22px; box-shadow:0 10px 30px -20px rgba(20,25,40,.3);
+  }
+  .foot .grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px}
+  .foot .cell{display:flex; gap:10px; align-items:flex-start}
+  .foot .k{font-family:"JetBrains Mono",monospace; font-size:12px; font-weight:700}
+  .foot .v{font-size:12.5px; color:var(--muted); line-height:1.4}
+  .foot .dot{width:9px; height:9px; border-radius:3px; margin-top:4px; flex:0 0 auto}
+  .agnostic{margin-top:16px; padding-top:14px; border-top:1px dashed #e3e7f0; font-size:12.5px; color:var(--muted); text-align:center}
+  .agnostic b{color:var(--ink)}
+  .agnostic .h{padding:2px 8px; border-radius:7px; font-weight:700; font-size:11.5px; color:#fff; margin:0 2px; display:inline-block}
+  .credit{text-align:center; color:var(--faint); font-size:11px; margin-top:18px}
+  @media (max-width:620px){ .foot .grid{grid-template-columns:1fr 1fr} .cmd{white-space:normal} }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <span class="eyebrow">AgenticApps · spec-first workflow</span>
+    <h1>Run a change · <span class="grad">Linear → shipped</span></h1>
+    <p class="lede">Every code-touching task follows the same eight moves. The <b>OpenSpec CLI</b> orchestrates the spec, <b>Superpowers</b> builds it, <b>Linear</b> says what's next — and it runs the same on claude, codex, opencode &amp; pi.</p>
+
+    <div class="howto">
+      <span class="h">Where you type it →</span>
+      <span class="item"><span class="surface s-agent">⌘ in agent</span> a <b>/opsx:</b> slash command</span>
+      <span class="item"><span class="surface s-cli">▸ CLI</span> an <b>openspec</b> verb</span>
+      <span class="item"><span class="surface s-script">⚙ script</span> a gate shell script</span>
+      <span class="item"><span class="surface s-auto">🔒 auto</span> enforced, no typing</span>
+      <div class="note">You stay in <b>one agent session</b> the whole time — it runs the ▸ and ⚙ commands for you. The only separate actors are the <b>plan-review agents (2b)</b>, which run headless and hand back a file.</div>
+    </div>
+
+    <div class="layers">
+      <span class="layer"><span class="sw sw-linear"></span>Linear <small>roadmap</small></span>
+      <span class="layer"><span class="sw sw-spec"></span>OpenSpec <small>spec &amp; lifecycle</small></span>
+      <span class="layer"><span class="sw sw-exec"></span>Superpowers <small>execution</small></span>
+      <span class="layer"><span class="sw sw-review"></span>Adversarial review</span>
+      <span class="layer"><span class="sw sw-ship"></span>Ship</span>
+    </div>
+  </header>
+
+  <div class="flow">
+
+    <div class="grouplabel">Plan the change · Linear → validated spec</div>
+
+    <div class="step l-linear">
+      <div class="rail"><div class="badge">0</div><div class="connector"></div></div>
+      <div class="card">
+        <div class="top"><h3>Pick the Linear issue</h3><span class="surface s-linear">in Linear</span></div>
+        <div class="note">Grab the ticket you're working. Note its ID — e.g. <span class="kbd">AGE-123</span> — you'll reference it in the change. Linear owns priority; there's no sync.</div>
+      </div>
+    </div>
+
+    <div class="step l-spec">
+      <div class="rail"><div class="badge">1</div><div class="connector"></div></div>
+      <div class="card">
+        <div class="top"><h3>Propose</h3><span class="surface s-agent">⌘ in agent</span><span class="cmd"><span class="p">›</span>/opsx:propose "idea"<span class="alt">  → runs openspec new change</span></span></div>
+        <div class="note">The agent scaffolds the change folder and authors it: <code>proposal.md</code> (+ <code>Linear: AGE-123</code>) · <code>design.md</code> · the <b>spec delta</b> · <code>tasks.md</code>. State the delta <i>before</i> writing code.</div>
+      </div>
+    </div>
+
+    <div class="step l-spec">
+      <div class="rail"><div class="badge">2</div><div class="connector"></div></div>
+      <div class="card">
+        <div class="top"><h3>Validate</h3><span class="surface s-cli">▸ CLI</span><span class="cmd"><span class="p">›</span>openspec validate --all</span></div>
+        <div class="note">The agent runs it for you (or you run it in a terminal — same command). Green = every requirement has a scenario. A structural lint, <b>not</b> a review.</div>
+      </div>
+    </div>
+
+    <div class="step l-review">
+      <div class="rail"><div class="badge sm">2b</div><div class="connector"></div></div>
+      <div class="card">
+        <div class="top"><h3>Plan-review</h3><span class="surface s-script">⚙ script</span><span class="cmd"><span class="p">›</span>run-plan-review.sh &lt;slug&gt;</span></div>
+        <div class="note">One command spawns <b>≥2 other-vendor agents headless</b> (<code>gemini -p …</code>, <code>codex exec … &lt;/dev/null</code>) to critique the <i>proposal + spec delta</i> → <code>changes/&lt;slug&gt;/REVIEWS.md</code>. You don't switch into them — they run and hand back a file. Read it, fix, re-validate.</div>
+      </div>
+    </div>
+
+    <div class="gate">
+      <div class="lock">🔒</div>
+      <div class="g-body">
+        <div class="gt"><h3>Gate — no code edits yet</h3><span class="auto">🔒 automatic · hook + CI</span></div>
+        <div class="cond"><span class="pill">validate GREEN</span> <span>+</span> <span class="pill">REVIEWS.md ≥ 2</span></div>
+        <div class="esc">You don't run this — the hook + CI enforce it. Emergency escape: <code>GSD_SKIP_REVIEWS=1</code></div>
+      </div>
+    </div>
+
+    <div class="grouplabel">Build the change</div>
+
+    <div class="step l-exec">
+      <div class="rail"><div class="badge">3</div><div class="connector"></div></div>
+      <div class="card">
+        <div class="top"><h3>Implement</h3><span class="surface s-agent">⌘ in agent</span><span class="cmd"><span class="p">›</span>/opsx:apply<span class="alt">  + TDD</span></span></div>
+        <div class="note">Superpowers: writing-plans → <span style="color:#d64545;font-weight:700">RED</span> (failing test first) → <span style="color:#1a9e63;font-weight:700">GREEN</span>. Conditional gates fire by what you touch: <b>security</b> always · <b>db-sentinel</b> (SQL/RLS) · <b>design + qa</b> (UI).</div>
+      </div>
+    </div>
+
+    <div class="step l-exec">
+      <div class="rail"><div class="badge">4</div><div class="connector"></div></div>
+      <div class="card">
+        <div class="top"><h3>Code-review + verify</h3><span class="surface s-agent">⌘ in agent</span><span class="tag t-exec">the diff</span></div>
+        <div class="note">An independent reviewer critiques the <b>implementation diff</b>, then <code>verification-before-completion</code> confirms the diff satisfies the tasks and the spec delta.</div>
+      </div>
+    </div>
+
+    <div class="grouplabel">Land the change</div>
+
+    <div class="step l-spec">
+      <div class="rail"><div class="badge">5</div><div class="connector"></div></div>
+      <div class="card">
+        <div class="top"><h3>Archive</h3><span class="surface s-cli">▸ CLI</span><span class="cmd"><span class="p">›</span>openspec archive &lt;slug&gt; -y</span></div>
+        <div class="note">Folds the delta into <code>specs/</code> — now current truth — and moves the change to <code>changes/archive/</code>.</div>
+      </div>
+    </div>
+
+    <div class="step l-ship">
+      <div class="rail"><div class="badge">6</div></div>
+      <div class="card">
+        <div class="top"><h3>Ship</h3><span class="surface s-cli">▸ CLI / you</span><span class="tag" style="background:linear-gradient(140deg,var(--ship-a),var(--ship-b))">release</span></div>
+        <div class="note">Conventional commit · PR · changelog · version · close the Linear issue. <b>archive ≠ ship</b> — OpenSpec never commits, PRs, or tags.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <div class="grid">
+      <div class="cell"><span class="dot sw-spec"></span><div><div class="k">specs/</div><div class="v">current truth — what the system does now</div></div></div>
+      <div class="cell"><span class="dot" style="background:#9aa3b2"></span><div><div class="k">changes/archive/</div><div class="v">history — what changed &amp; when</div></div></div>
+      <div class="cell"><span class="dot" style="background:#c9820f"></span><div><div class="k">docs/decisions/</div><div class="v">why — ADRs, your convention (kept)</div></div></div>
+      <div class="cell"><span class="dot sw-linear"></span><div><div class="k">Linear</div><div class="v">what's next — roadmap &amp; priority</div></div></div>
+    </div>
+    <div class="agnostic">
+      The <b>openspec</b> CLI runs <b>outside</b> any agent, so the workflow is agent-agnostic — the same steps drive
+      <span class="h" style="background:linear-gradient(140deg,#4f8cff,#7a5cff)">claude</span>
+      <span class="h" style="background:linear-gradient(140deg,#22c58b,#0fb6b6)">codex</span>
+      <span class="h" style="background:linear-gradient(140deg,#ff8a2b,#ff5d5d)">opencode</span>
+      <span class="h" style="background:linear-gradient(140deg,#ff5d73,#e03b93)">pi</span>
+    </div>
+  </div>
+
+  <div class="credit">OpenSpec + Superpowers workflow · AgenticApps standard</div>
+</div>
+</body>
+</html>
