@@ -1,15 +1,24 @@
 ---
 id: 09-conformance
 section_type: framing
-spec_version: 0.10.0
+spec_version: 1.0.0
 ---
 
 # 09 — Conformance
 
 **Section type**: framing. This section describes how a host
 implementation claims conformance with the AgenticApps workflow spec
-at version 0.10.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
+at version 1.0.0. The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and
 MAY are used per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
+
+> **Two front ends coexist.** Spec v1.0.0 introduces the OpenSpec front
+> end (§16–§19) and remaps §02/§07 onto it. A host citing a **0.x**
+> version implements the GSD front end (§02 gate taxonomy, §07 two-stage
+> review) and remains fully conformant to its claim — 1.0.0 does not
+> retroactively invalidate a 0.x host. A host citing **1.0.0 or later**
+> implements the OpenSpec front end: it satisfies §16–§19, and §02/§07
+> are read through §17's gate mapping. The whole 0.x fleet stays valid at
+> its cited version until it chooses to adopt 1.0.0.
 
 ## Conformance levels
 
@@ -46,10 +55,15 @@ A host claiming `full` conformance MUST:
    inside `{{...}}` placeholders is permitted; alteration of the
    surrounding prose is non-conformant.
 2. **Satisfy every declarative MUST.** Sections 02, 06, 07, 08, 10,
-   12, 13, 14, 15 list declarative requirements. Each is honored by
+   12, 13, 14, 15 list declarative requirements — and, for a host
+   citing 1.0.0 or later, sections 16, 17, 18, 19 (the OpenSpec front
+   end). Each is honored by
    some host mechanism — a skill binding, a runtime extension, a CI
    job, a reviewer agent. The mechanism is at the host's discretion;
-   the honoring is required. Section 13 applies only to hosts
+   the honoring is required. Sections 16–19 replace the §02/§07 review
+   gates with the OpenSpec lifecycle for 1.0.0 hosts (§17 maps the
+   gates); a 1.0.0 host reproduces the §01/§03/§04/§05/§11 canonical
+   Superpowers-execution prose unchanged. Section 13 applies only to hosts
    targeting TypeScript projects; non-TS-targeting hosts MAY omit it
    with a spec delta per the rules below. Section 14 applies only to
    hosts whose projects build LLM prompts from non-self-authored
@@ -67,7 +81,7 @@ A host claiming `full` conformance MUST:
    frontmatter (or host-equivalent metadata block), where
    `<version>` is the spec version the host claims (e.g. `0.1.0`,
    `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`,
-   `0.9.0`, `0.9.1`, `0.10.0`).
+   `0.9.0`, `0.9.1`, `0.10.0`, `1.0.0`).
 5. **Maintain artifact shapes.** Phases produce CONTEXT.md, PLAN.md,
    VERIFICATION.md, REVIEW.md (with Stage 1 and Stage 2 sections),
    and SECURITY.md when applicable. The artifacts are
@@ -139,7 +153,7 @@ its primary instruction file:
 ---
 name: <host-workflow-skill-name>
 version: <host-version>
-implements_spec: 0.10.0
+implements_spec: 1.0.0
 description: |
   ...
 ---

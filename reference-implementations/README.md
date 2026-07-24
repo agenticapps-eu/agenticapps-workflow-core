@@ -2,9 +2,15 @@
 
 Host repos that adopt (or will adopt) the AgenticApps workflow spec.
 
-**Current spec version:** 0.10.0 (released 2026-07-19). See `CHANGELOG.md`
+**Current spec version:** 1.0.0 (released 2026-07-24) — the first major,
+replacing the GSD-engine front end with the **OpenSpec + Superpowers** front
+end (§16–§19, ADR-0021). **No host cites 1.0.0 yet:** it coexists with the 0.x
+line (§09 "Two front ends coexist"), the fleet below remains valid at
+**0.10.0**, and the first adoption target is the cParX app repo (pilot recorded
+in `PILOT-REPORT.md` / `MEASUREMENT.md`, migrated via
+`docs/recipes/0001-planning-to-openspec.md`). See `CHANGELOG.md`
 in the spec root for the host-implementer actions required to move a
-host row from a prior version to 0.9.0. Host rows below move via the
+host row between versions. Host rows below move via the
 host's own adoption PR, not via this file.
 
 | Host repo | Type | Spec version implemented | Conformance level | Notes |

@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 0.10.0
+spec_version: 1.0.0
 ---
 
 # 00 — Overview
@@ -58,9 +58,14 @@ contracts in their own idiom.
 - Sections 01, 03, 04, 05, 11 are **canonical prose** — host
   implementations reproduce these blocks verbatim. Substitution is
   permitted only inside `{{...}}` placeholders.
-- Sections 02, 06, 07, 08, 10, 12, 13, 14, 15 are **declarative
-  contracts** — host implementations satisfy the listed MUST / SHOULD
-  / MAY requirements in whatever idiom is natural for the host runtime.
+- Sections 02, 06, 07, 08, 10, 12, 13, 14, 15, 16, 17, 18, 19 are
+  **declarative contracts** — host implementations satisfy the listed
+  MUST / SHOULD / MAY requirements in whatever idiom is natural for the
+  host runtime.
+- Sections 16–19 are the **OpenSpec front end** (spec v1.0.0). A host
+  citing 1.0.0 or later implements them; §02 and §07 are remapped onto
+  the OpenSpec lifecycle for those hosts and remain as written for hosts
+  citing a 0.x version.
 
 Section 10 (observability) was introduced at spec v0.2.0, amended at
 v0.2.1 (cparx-pilot patches), extended at v0.3.0 with the conformance
@@ -90,7 +95,17 @@ shell-replayable). Section 12 (authoring conventions) gained an
 instruction file SHOULD carry the §11 block plus a pointer to the trigger
 skill, with gate tables, routing, ritual tails, and gate-procedure prose
 moved into the lazily-loaded skill — extending §12's existing placement
-advisory from *ordering* to *membership* (ADR-0020). Hosts may claim
+advisory from *ordering* to *membership* (ADR-0020). Spec **v1.0.0** is
+the first major: it replaces the GSD-engine front end with the
+**OpenSpec + Superpowers** front end. Sections 16–19 were added — the
+OpenSpec spec slot (§16), the propose→validate→execute→archive lifecycle
+and the §02 gate-mapping table (§17), the retargeted `PreToolUse`
+change-gate (§18), and the spec-vs-process placement rule with loose
+Linear coupling (§19). §02 and §07 are remapped for 1.0.0 hosts (the two
+review gates collapse into `validate`; execution gates are retained) and
+remain normative for 0.x hosts. The change is grounded in a measured
+cParX pilot (`PILOT-REPORT.md`, `MEASUREMENT.md`) and recorded in
+ADR-0021. Hosts may claim
 conformance against any
 of those versions; the version the host claims is the version the host's
 `implements_spec` field names.
@@ -114,11 +129,19 @@ file the host reads) or runtime (a process that observes events and
 fires the bound skill). The spec is silent on hook implementation;
 hosts choose.
 
-**Phase** — a unit of work in the GSD (Get Stuff Done) discipline.
+**Phase** — the 0.x unit of work in the GSD (Get Stuff Done) discipline.
 A phase has a CONTEXT.md (decisions and alternatives), a PLAN.md (task
 breakdown), an executed series of atomic commits, a VERIFICATION.md
 (evidence of `must_have` satisfaction), and a REVIEW.md (Stage 1 and
-Stage 2 review findings).
+Stage 2 review findings). Under the 1.0.0 OpenSpec front end the unit of
+work is a **change** instead (see below); phases remain the unit for
+hosts citing a 0.x version.
+
+**Change** — the 1.0.0 unit of product work: an OpenSpec change under
+`openspec/changes/<slug>/` holding a proposal, a design note, a spec
+delta, and a task list. It moves propose → validate → Superpowers-execute
+→ archive (§17), and when done is folded into `openspec/specs/` and moved
+to `changes/archive/`. See §16 and §17.
 
 **Plan** — a single executable unit inside a phase, owned by one
 executor. A plan has tasks, optional `tdd="true"` markers, and an

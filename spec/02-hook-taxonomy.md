@@ -1,7 +1,7 @@
 ---
 id: 02-hook-taxonomy
 section_type: declarative-contract
-spec_version: 0.6.0
+spec_version: 1.0.0
 ---
 
 # 02 — Hook Taxonomy
@@ -10,6 +10,16 @@ spec_version: 0.6.0
 satisfy the requirements below. Prose, formatting, file paths, and
 skill names are at the host's discretion. The keywords MUST, MUST NOT,
 SHOULD, SHOULD NOT, and MAY are used per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
+
+> **Remapped at spec v1.0.0.** This gate taxonomy is the 0.x (GSD-engine)
+> front end and remains **normative for hosts that cite a 0.x version**.
+> A host that cites **1.0.0 or later** implements the OpenSpec front end:
+> the gates below are *remapped* onto the OpenSpec lifecycle by §17 (the
+> gate-mapping table) — `plan-review` and `spec-review` collapse into
+> `validate`, `code`/`tdd`/`verification`/`security` are retained, and
+> the design/database/qa gates stay conditional. §18 retargets the
+> `plan-review` enforcement hook to the OpenSpec change-gate. This
+> section is not deleted; it is superseded for 1.0.0 hosts. See ADR-0021.
 
 ## Concept
 

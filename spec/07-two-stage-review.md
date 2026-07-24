@@ -1,7 +1,7 @@
 ---
 id: 07-two-stage-review
 section_type: declarative-contract
-spec_version: 0.1.0
+spec_version: 1.0.0
 ---
 
 # 07 — Two-Stage Review
@@ -10,6 +10,16 @@ spec_version: 0.1.0
 satisfy the requirements below. Prose, formatting, file paths, and
 agent-binding mechanisms are at the host's discretion. The keywords
 MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
+
+> **Remapped at spec v1.0.0.** Under the OpenSpec front end, **Stage 1
+> (spec compliance) collapses into `openspec validate` plus the
+> pre-code multi-AI review** (§17, §18): the machine checks the change's
+> delta against the spec slot, and independent reviewers adversarially
+> review the change *before code exists*. **Stage 2 (code quality) is
+> retained unchanged** — `validate` does not read code, so an
+> independent code-quality review in a fresh context still fires, and
+> the independence rules below still bind. Hosts citing a 0.x version
+> implement this section as written. See ADR-0021.
 
 ## Concept
 
