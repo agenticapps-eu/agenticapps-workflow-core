@@ -56,10 +56,20 @@ A host implementation:
 The implementer's job is to *read this spec* and *write their host's
 artifacts* accordingly. The spec does not generate code.
 
+## The workflow explained
+
+For a narrative walkthrough of how the pieces fit — the OpenSpec spec
+slot, the propose→validate→execute→archive lifecycle, the retargeted
+change-gate, and where prose lives — read **[`docs/WORKFLOW.md`](docs/WORKFLOW.md)**.
+As of **spec v1.0.0** the workflow's front end is **OpenSpec + Superpowers**
+(§16–§19, ADR-0021), replacing the GSD engine; §02/§07 are remapped and the
+0.x line stays valid (§09). No host cites 1.0.0 yet — see
+`reference-implementations/README.md`.
+
 ## Layout
 
 ```
-spec/                      Ten files: the workflow specification
+spec/                      The workflow specification (00–19)
   00-overview.md           Elevator pitch + glossary (framing)
   01-commitment-ritual.md  Canonical block (verbatim reproduction required)
   02-hook-taxonomy.md      Gate definitions (declarative contract)
@@ -70,12 +80,21 @@ spec/                      Ten files: the workflow specification
   07-two-stage-review.md   Independent-reviewer requirement (declarative)
   08-migration-format.md   Migration file format (declarative)
   09-conformance.md        Per-host MUST / SHOULD / MAY (framing)
+  10-15 …                  observability, coding discipline, authoring,
+                           TS declare-first, prompt-injection, knowledge capture
+  16-openspec-spec-slot.md         OpenSpec front end (declarative, v1.0.0)
+  17-lifecycle-and-gate-mapping.md OpenSpec front end (declarative, v1.0.0)
+  18-retargeted-change-gate.md     OpenSpec front end (declarative, v1.0.0)
+  19-spec-vs-process-and-linear.md OpenSpec front end (declarative, v1.0.0)
 
 adrs/                      Host-agnostic architecture decisions
-  0010-backend-language-routing-go.md
-  0011-impeccable-design-quality-gate.md
-  0012-database-sentinel-rls-audit-gate.md
-  0013-migration-framework.md
+  0010 … 0020              (see directory)
+  0021-openspec-superpowers-standard.md   The v1.0.0 front-end decision
+
+docs/
+  WORKFLOW.md              Reader-facing explainer of the workflow
+  recipes/
+    0001-planning-to-openspec.md   The planning→OpenSpec migration recipe
 
 reference-implementations/
   README.md                Table of host repos and their conformance state
@@ -83,6 +102,8 @@ reference-implementations/
 tools/
   drift-report.sh          Advisory health check (not CI)
 
+PILOT-REPORT.md            cParX OpenSpec pilot (2026-07-24) — the proven recipe
+MEASUREMENT.md             Measured-trial evidence for the v1.0.0 adoption
 CHANGELOG.md               Per-version conformance impact for hosts
 LICENSE                    MIT
 ```

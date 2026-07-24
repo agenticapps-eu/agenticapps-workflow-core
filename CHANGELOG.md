@@ -154,6 +154,75 @@ normative spec text. No host's conformance claim is altered *by this repo*.
   pins that the dashboard (a genuine consumer) is never scored, and now also pins
   that pi *is*. 18/18 tests pass.
 
+## [1.0.0] — 2026-07-24
+
+**Major release — the first. Breaking: the GSD-engine front end is replaced
+by the OpenSpec + Superpowers front end.**
+
+**Conformance impact.** A host claiming a **0.x** version is **unaffected** and
+remains fully conformant at its cited version — 1.0.0 does not retroactively
+invalidate it (§09 "Two front ends coexist"). A host that wants the new
+behavior adopts 1.0.0 by satisfying the four new sections and stamping
+`implements_spec: 1.0.0`. No host cites 1.0.0 yet; the whole fleet stays at
+0.10.0. This is a major because the §02/§07 review gates are remapped and the
+front-end lifecycle changes — a host cannot claim the new behavior while
+implementing the old gates.
+
+**Grounded in a measured pilot, not a hypothesis.** The 2026-07-24 cParX pilot
+(`PILOT-REPORT.md`) ran a real task end-to-end through the new lifecycle; the
+retargeted gate blocked a code edit before review and permitted it after, and
+an adversarial reviewer caught a real spec defect *before code*. Measurements
+in `MEASUREMENT.md`.
+
+### Added
+
+- **§16 — OpenSpec spec slot.** Three-slot model (`specs/` durable truth,
+  `changes/` deltas, `archive/` history), two-part done-ness rule (delta folded
+  **and** `validate --all` green), and the bind-upstream rule (OpenSpec is a
+  per-host upstream tool, not re-ported). The installed CLI is authoritative
+  over this prose where they disagree.
+- **§17 — Lifecycle & gate mapping.** propose → validate → Superpowers-execute
+  → archive; `archive ≠ ship`; and the table mapping every §02 gate to
+  collapsed / retained / conditional. `plan-review` + `spec-review` collapse
+  into `validate`; `code-review`/`tdd`/`verification`/`security` retained;
+  `security` always; design/db/qa conditional; §13 declare-first → lint.
+- **§18 — Retargeted change-gate.** The 0.x `PreToolUse` plan-review hook
+  retargeted from "`*-PLAN.md` without `*-REVIEWS.md`" to "active OpenSpec change
+  without validation + review", with a normative exit-code truth table
+  (0 allow / 2 block; OpenSpec-artifact writes exempt; escape hatch; fail-open
+  on garbage; validate-green **and** ≥2 reviewers required).
+- **§19 — Spec-vs-process placement & Linear coupling.** The "product guarantee
+  vs way of working?" test; capabilities merged-not-mirrored from phases; Linear
+  coupled loosely by convention, never synced.
+- **ADR-0021**, `docs/WORKFLOW.md` (the explainer),
+  `docs/recipes/0001-planning-to-openspec.md` (the migration recipe, three
+  tiers + Tier-1 script + git-ref fixture contract), `PILOT-REPORT.md`, and
+  `MEASUREMENT.md`.
+
+### Changed
+
+- **§02 (hook taxonomy) and §07 (two-stage review) are remapped, not deleted.**
+  Each gained a banner: normative as written for 0.x hosts; read through §17's
+  gate mapping for 1.0.0 hosts. Their `spec_version` frontmatter bumped to
+  1.0.0 (the banners are the change).
+- **§00 (overview)** — added the v1.0.0 trajectory paragraph, a `Change`
+  glossary term, and §16–§19 to the section lists. **§09 (conformance)** — the
+  two-front-ends coexistence rule and §16–§19 added to the declarative-MUST
+  list.
+
+### Notes
+
+- **gitnexus** has no normative binding in the core spec (a grep of `spec/` and
+  active ADRs finds only one incidental historical mention in ADR-0019). The
+  GSD-era gitnexus *host* binding retires on a host's adoption of 1.0.0; nothing
+  in §16–§19 references it.
+- **The migration recipe is a reference, not a shipped migration.** This repo is
+  spec-only prose and ships no runnable `migrations/` chain; the executable
+  `run-tests.sh` git-ref fixture is the adopting host's deliverable (cParX
+  first). Host-level: claude-workflow's ADR-0003/0007/0009 and
+  `docs/standards/gsd-binding-and-planning.md` are superseded in that host on
+  adoption.
+
 ## [0.10.0] — 2026-07-19
 
 Additive minor release, SHOULD-level. One new §12 convention; **no canonical
