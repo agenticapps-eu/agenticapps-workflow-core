@@ -1,0 +1,63 @@
+# .github/workflows/pages-cheatsheet.yml
+# Publishes the cheatsheet to GitHub Pages and regenerates its PNG from the HTML on every
+# change — so the live page AND the org-README image never drift. Source of truth is the
+# self-contained cheatsheet HTML (publish/index.html).
+#
+# One-time setup: repo Settings -> Pages -> Source = "GitHub Actions".
+name: Publish cheatsheet to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'publish/index.html'            # the cheatsheet (source of truth)
+      - 'docs/WORKFLOW.md'              # workflow text — bump to force a rebuild
+      - 'scripts/render-cheatsheet.mjs'
+      - '.github/workflows/pages-cheatsheet.yml'
+  workflow_dispatch:                     # manual "Run workflow" button
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npm install --no-save playwright@latest
+          npx playwright install --with-deps chromium
+
+      - name: Assemble site + regenerate PNG
+        run: |
+          mkdir -p _site
+          cp publish/index.html _site/index.html
+          node scripts/render-cheatsheet.mjs _site/index.html _site/cheatsheet.png
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
