@@ -69,7 +69,13 @@ unblocked. A missing review is not a parse error and always blocks.
    silently republishes it over a newer one and reverts the fix for every agent
    on the machine. Installers MUST compare the incoming marker against the
    installed one and refuse to downgrade (treat an unmarked file as `0.0.0`).
-   `claude-workflow`'s `install.sh` is the worked example.
+
+   **Refusing to downgrade is necessary and not sufficient.** The compare and the
+   write must be serialised, or two installers each deciding correctly against
+   the same observed state still let the later writer win regardless of version —
+   the exact outcome the marker exists to prevent. Do not hand-roll that: call
+   [`install-shared-artifact.sh`](../shared-install/), which holds a lock across
+   the whole read-compare-write and renames the file into place.
 7. Run the harness. Report the result in the host's adoption PR. The harness
    `unset`s `OPENSPEC_GATE_SELF` itself, so an ambient value is harmless — but
    if you are scoring an older vendored harness that predates that, run it as

@@ -84,9 +84,16 @@ and §18's threshold would be satisfied by one opinion wearing two names.
    host writes the same shared path, so without arbitration it is
    last-writer-wins. Installers MUST compare the incoming marker against the
    installed one and **refuse to downgrade** (treat an unmarked file as
-   `0.0.0`). This is the same rule, and the same one-line clause, as the change
-   gate's `# gate-version:` — the gate has had it since 1.2.0, this file did not,
-   and the difference is the entire content of #41.
+   `0.0.0`). This is the same rule as the change gate's `# gate-version:` — the
+   gate has had it since 1.2.0, this file did not, and the difference is the
+   entire content of #41.
+
+   **Refusing to downgrade is necessary and not sufficient.** The compare and the
+   write must be serialised, or two installers each deciding correctly against
+   the same observed state still let the later writer win regardless of version.
+   Do not hand-roll that: call
+   [`install-shared-artifact.sh`](../shared-install/), which holds a lock across
+   the whole read-compare-write and renames the file into place.
 4. Run the harness. Report the result in the host's adoption PR.
 
 ```bash

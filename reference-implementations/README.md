@@ -9,11 +9,19 @@ Host repos that adopt (or will adopt) the AgenticApps workflow spec — and, as 
 |---|---|---|
 | [`openspec-change-gate/`](openspec-change-gate/) | [§18](../spec/18-retargeted-change-gate.md) | `tools/change-gate-conformance.sh` — 37/37 |
 | [`reviewer-cli/`](reviewer-cli/) | [§18](../spec/18-retargeted-change-gate.md) (review production) | `tools/reviewer-cli-conformance.sh` — 14/14 |
+| [`shared-install/`](shared-install/) | the shared-path install contract | `tools/shared-install-conformance.sh` — 12/12 |
 
 The gate **consumes** review evidence; `reviewer-cli` **produces** it. Both
 install to the shared `~/.agenticapps/bin/`, and both therefore carry a version
 marker that installers MUST arbitrate on — `# gate-version:` and
 `# reviewer-cli-version:` respectively. An unmarked file is `0.0.0`.
+
+`shared-install/` is **how** that arbitration must be performed. Refusing to
+downgrade is necessary and not sufficient: the compare and the write have to be
+serialised, or two installers each deciding correctly against the same observed
+state still let the later writer win. Per-host arbitration does not compose into
+machine-wide monotonicity, so the arbiter is published once and called by all
+four hosts rather than reinvented in each.
 
 Offered, not mandated: §18's normative text is unchanged and a host may still
 ship its own. But the same failure has now happened twice — five divergent gate
