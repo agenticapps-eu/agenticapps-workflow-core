@@ -125,6 +125,44 @@ does need a host change; see under *Fixed*.
 
 ### Fixed
 
+- **Gate 1.2.2 — two symlink escapes in the `openspec/` exemption.** Both
+  pre-existing since 1.2.0 (verified by running the same reproducer against
+  1.2.0 and 1.2.1 with identical results), so neither is a regression from the
+  1.2.1 symlinked-root fix.
+
+  - **`..` was collapsed textually before physical resolution.** Where a symlink
+    inside `openspec/` precedes the `..`, the textual pass and the kernel
+    disagree — `openspec/out/../victim` with `openspec/out -> /tmp/outdir` reads
+    as `$ROOT/openspec/victim` (exempt) while the write lands in `/tmp`. Now
+    resolves physically first; a `..` that survives forfeits the exemption
+    rather than being guessed at, since it sits below a directory that does not
+    exist and its destination is unknowable.
+  - **The final path component was never resolved.** A symlinked artifact path
+    (`openspec/changes/x/design.md -> src/app.go`) was exempted and the writer
+    followed it, truncating code under an unsatisfied change. Now resolved when
+    it exists and is a symlink. The not-yet-existing Write target that 1.2.1
+    fixed is unaffected: `[ -L ]` is false for a path that does not exist.
+
+  The comments in both places asserted the opposite of what the code did —
+  claiming the textual-first order "keeps the escape rows blocked" (it keeps
+  only the *bare* escapes blocked) and that refusing to resolve the last
+  component prevented following a link out of the tree (it is what permitted
+  it). Corrected; that was the more durable hazard.
+
+  **Severity is lower than "escape" suggests.** Both need a symlink to already
+  exist inside `openspec/`, which needs shell access — at which point the
+  `PreToolUse` hook is bypassable by writing through bash anyway. `--pre-commit`
+  and `--ci` were never affected: staged paths are repo-relative, git cannot
+  stage a `..` component, and a staged symlink stores its target as the blob.
+
+  Four harness rows added (33 → 37): symlink-then-`..`, an unresolvable `..`
+  below `openspec/`, a symlinked artifact pointing at code, and a not-yet-
+  existing artifact pinning the 1.2.1 behaviour. The first two defect rows fail
+  against 1.2.1 and the third against a fix lacking the leftover-`..` guard, so
+  each is load-bearing. **Hosts must re-vendor** — see
+  [#34](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/34).
+  Closes [#36](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/36).
+
 - **`tools/change-gate-conformance.sh` inherited `OPENSPEC_GATE_SELF` from the
   environment it was measuring.** The vendoring README tells hosts to export the
   variable (step 5) and then run the harness (step 7); doing both in one shell
