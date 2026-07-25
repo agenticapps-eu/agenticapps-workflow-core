@@ -1,22 +1,32 @@
 # Reference Implementations
 
 Host repos that adopt (or will adopt) the AgenticApps workflow spec — and, as of
-2026-07-25, the one artifact this repo publishes *for* them to adopt.
+2026-07-25, the artifacts this repo publishes *for* them to adopt.
 
 ## Published implementations
 
 | Directory | Satisfies | Conformance |
 |---|---|---|
-| [`openspec-change-gate/`](openspec-change-gate/) | [§18](../spec/18-retargeted-change-gate.md) | `tools/change-gate-conformance.sh` — 19/19 |
+| [`openspec-change-gate/`](openspec-change-gate/) | [§18](../spec/18-retargeted-change-gate.md) | `tools/change-gate-conformance.sh` — 37/37 |
+| [`reviewer-cli/`](reviewer-cli/) | [§18](../spec/18-retargeted-change-gate.md) (review production) | `tools/reviewer-cli-conformance.sh` — 14/14 |
+
+The gate **consumes** review evidence; `reviewer-cli` **produces** it. Both
+install to the shared `~/.agenticapps/bin/`, and both therefore carry a version
+marker that installers MUST arbitrate on — `# gate-version:` and
+`# reviewer-cli-version:` respectively. An unmarked file is `0.0.0`.
 
 Offered, not mandated: §18's normative text is unchanged and a host may still
-ship its own gate. But five divergent copies of that script existed across the
-family before this directory did ([#32](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/32),
-ADR-0022), none of them conformant, so the burden of proof sits with a host that
-writes its own. Score it either way:
+ship its own. But the same failure has now happened twice — five divergent gate
+copies before this directory existed ([#32](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/32),
+ADR-0022), then three divergent `reviewer-cli` copies that silently dropped a
+vendor arm at the shared path
+([#41](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/41)).
+Both went unnoticed because a drifted artifact reports clean. The burden of proof
+sits with a host that writes its own. Score it either way:
 
 ```bash
-tools/change-gate-conformance.sh --family
+tools/change-gate-conformance.sh  --family
+tools/reviewer-cli-conformance.sh --family
 ```
 
 **Current spec version:** 1.0.0 (released 2026-07-24) — the first major,

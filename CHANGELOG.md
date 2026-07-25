@@ -27,6 +27,38 @@ drift-report fixes surface a pre-existing §11 gap in `claude-workflow` that
 does need a host change; see under *Fixed*.
 
 ### Added
+- **`reference-implementations/reviewer-cli/`** — core now publishes the reviewer
+  wrapper too, plus **`tools/reviewer-cli-conformance.sh`** (14 rows) to score
+  any copy. The change gate *consumes* review evidence; this is what *produces*
+  it, and it was the same fork the gate had just been rescued from.
+
+  Three divergent copies existed at the shared `~/.agenticapps/bin/` path with no
+  version marker and no arbitration — `codex-workflow` 95 lines / 4 vendor arms,
+  `pi-agentic-apps-workflow` 85 / 3, `opencode-workflow` 72 / 2, `claude-workflow`
+  none. On 2026-07-25 a host installer delivered the correctly-arbitrated `1.2.2`
+  gate and **in the same run** blind-installed a 3-arm wrapper over the 4-arm one;
+  the next review asking for `opencode` got `unknown vendor`. The gate survived
+  because it carries `# gate-version:` and every host arbitrates on it. This file
+  had no marker, so the same installer run upgraded one shared artifact and
+  downgraded the other.
+
+  Not a gate bypass — a producer excluding its own host still had two vendors and
+  §18's `>= 2` threshold held. It is a silent capability loss that surfaces
+  mid-review, gets recorded as "reviewer unavailable", and proceeds with one
+  fewer opinion.
+
+  The canonical is a **merge, not a pick**: `pi`'s structure (stdin pinned inside
+  `run_bounded` in one place covering both branches, explicit usage checks, the
+  unbounded-run warning) with `codex`'s coverage (four arms, and the note that
+  `opencode` is a *client not a provider* so the producer must record the
+  resolved model). Neither copy was simply better. Ships at
+  `# reviewer-cli-version: 1.0.0`; installers MUST refuse to downgrade.
+
+  **No spec version change and no host action required by this entry** — §18's
+  normative text is untouched and vendoring is offered, not mandated. Hosts that
+  adopt should re-vendor; until then the fleet scores 58/70 (see the harness).
+  Closes [#41](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/41).
+
 - **Two conformance rows for defects no row covered** (31 → 33). Both are fixed
   in the canonical gate, so nothing was broken — but a future change could have
   regressed either and still scored every declared row green.
