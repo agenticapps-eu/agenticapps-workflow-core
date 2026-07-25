@@ -35,6 +35,19 @@
 
 set -uo pipefail
 
+# A measurement tool must not inherit state from the thing it measures. The
+# README's vendoring steps tell hosts to export OPENSPEC_GATE_SELF (so the
+# host's own reviews are excluded) and then to run this harness — do both in
+# one shell and a fully conformant gate scores one row short: the two-reviewer
+# row seeds `claude` and `codex`, and an ambient OPENSPEC_GATE_SELF=codex makes
+# the gate correctly drop one, leaving one reviewer and a block. The row fails
+# for a gate that is behaving exactly as specified.
+#
+# Section E sets this per-row (`OPENSPEC_GATE_SELF=pi run_row ...`), which is a
+# command-scoped assignment and unaffected by the unset here. So the harness
+# never needs the ambient value, and clearing it is free.
+unset OPENSPEC_GATE_SELF
+
 pass=0
 fail=0
 inconclusive=0
@@ -187,6 +200,19 @@ score_gate() {
   run_row "active change, no REVIEWS.md -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
+  # ...and the same decision must hold from a SUBDIRECTORY. A gate that locates
+  # `openspec/changes` relative to $PWD instead of `git rev-parse
+  # --show-toplevel` finds nothing from below the root, concludes there is no
+  # active change, and allows the edit — while logging a line that reads like a
+  # correct decision. A PreToolUse hook inherits the session's cwd, which is
+  # wherever the user happens to be, so this is the common case rather than the
+  # exotic one. Witness: the pre-adoption codex-workflow copy returned 0 here.
+  fx="$(make_fixture 0)"; mkdir -p "$fx/repo/sub/dir"
+  ROW_CWD="$fx/repo/sub/dir"
+  run_row "active change, evaluated from a subdirectory -> block" 2 "$fx" "$(p_claude src/main.go)"
+  ROW_CWD=""
+  rm -rf "$fx"
+
   # Active change, validate fails → block.
   fx="$(make_fixture 1)"; reviewers "$fx/repo/openspec/changes/add-thing" claude codex
   run_row "validate FAILS (reviewed) -> block" 2 "$fx" "$(p_claude src/main.go)"
@@ -214,6 +240,14 @@ score_gate() {
   local before="$fail"
   run_row "garbage stdin -> allow (fail-open)" 0 "$fx" 'not json {{{'
   run_row "empty stdin -> allow (fail-open)"   0 "$fx" ''
+  # Brace-bearing garbage (above) is not discriminating: a gate whose JSON
+  # branch is guarded on `{` skips it and reaches a `TOOL<TAB>PATH` fallback,
+  # which on whitespace-only input splits out a plausible path and proceeds to
+  # POLICY — blocking on a payload it never understood. That is a fail-CLOSED
+  # parse error, the one posture §18 forbids. Only brace-free garbage reaches
+  # the fallback, so this row is what separates the two. Witness: the pre-
+  # adoption codex-workflow copy returned 2 here where canonical returns 0.
+  run_row "brace-free garbage stdin -> allow (fail-open)" 0 "$fx" 'not json at all'
   [ "$fail" -eq "$before" ] && FAILS_OPEN=1 || FAILS_OPEN=0
   rm -rf "$fx"
 

@@ -60,6 +60,9 @@ unblocked. A missing review is not a parse error and always blocks.
    "including against a human editor", and a `PreToolUse` hook cannot gate the
    session that installed it.
 5. Set `OPENSPEC_GATE_SELF` to the host's name so its own reviews are excluded.
+   Scope it to the gate's own invocation — **do not export it job-wide.** Step 7
+   runs in the same environment, and the harness measures a gate that must not
+   see it (see the note there).
 6. **Teach the host's installer to honour `# gate-version:`.** Every host writes
    to the shared `~/.agenticapps/bin/openspec-change-gate.sh`, so without
    arbitration it is last-writer-wins: a host still vendoring an older copy
@@ -67,7 +70,15 @@ unblocked. A missing review is not a parse error and always blocks.
    on the machine. Installers MUST compare the incoming marker against the
    installed one and refuse to downgrade (treat an unmarked file as `0.0.0`).
    `claude-workflow`'s `install.sh` is the worked example.
-7. Run the harness. Report the result in the host's adoption PR.
+7. Run the harness. Report the result in the host's adoption PR. The harness
+   `unset`s `OPENSPEC_GATE_SELF` itself, so an ambient value is harmless — but
+   if you are scoring an older vendored harness that predates that, run it as
+   `env -u OPENSPEC_GATE_SELF tools/change-gate-conformance.sh <gate>`. Use
+   `env -u`, not `OPENSPEC_GATE_SELF=`: set-but-empty and unset differ for a
+   `set -u` consumer that reads the variable without a `:-` default. A
+   conformant gate scores one row short with the value leaked in — the
+   two-reviewer row seeds `claude` and `codex`, so `=codex` correctly drops one
+   and leaves a block.
 
 If a host genuinely needs different behaviour, change it **here** and add a
 harness row, then re-vendor. That is the point of this directory.
