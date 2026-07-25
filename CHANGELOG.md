@@ -27,6 +27,27 @@ drift-report fixes surface a pre-existing §11 gap in `claude-workflow` that
 does need a host change; see under *Fixed*.
 
 ### Added
+- **Two conformance rows for defects no row covered** (31 → 33). Both are fixed
+  in the canonical gate, so nothing was broken — but a future change could have
+  regressed either and still scored every declared row green.
+
+  - *`active change, evaluated from a subdirectory -> block`.* A gate that
+    resolves `openspec/changes` against `$PWD` rather than `git rev-parse
+    --show-toplevel` finds no active change from below the root and allows the
+    edit, while logging a line that reads like a correct decision. A
+    `PreToolUse` hook inherits the session's cwd, so this is the common case.
+  - *`brace-free garbage stdin -> allow (fail-open)`.* The existing garbage row
+    uses `not json {{{`, which is **not discriminating**: a gate whose JSON
+    branch is guarded on `{` skips it and reaches a `TOOL<TAB>PATH` fallback
+    that splits whitespace-only input into a plausible path and proceeds to
+    policy — failing CLOSED on a parse error, the one posture §18 forbids.
+    `not json at all` is the input that separates the two.
+
+  Both rows were mutation-checked: each fails against a gate carrying the
+  corresponding defect while the surrounding rows stay green. Reported from
+  `codex-workflow`'s adoption (GAP-1 / GAP-4).
+  Closes [#37](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/37).
+
 - **`reference-implementations/openspec-change-gate/`** — core now publishes the
   §18 change-gate itself (script, `pre-commit` wrapper, CI workflow), plus
   **`tools/change-gate-conformance.sh`** to score any copy against §18's truth
@@ -103,6 +124,20 @@ does need a host change; see under *Fixed*.
   > 0.10.0 adoption.
 
 ### Fixed
+
+- **`tools/change-gate-conformance.sh` inherited `OPENSPEC_GATE_SELF` from the
+  environment it was measuring.** The vendoring README tells hosts to export the
+  variable (step 5) and then run the harness (step 7); doing both in one shell
+  scored a **fully conformant gate 30/31**. The two-reviewer row seeds `claude`
+  and `codex`, so an ambient `OPENSPEC_GATE_SELF=codex` made the gate correctly
+  drop one review, leaving one reviewer and a block — the row failed for a gate
+  behaving exactly as specified. The harness now `unset`s it at the top; the
+  section-E rows set it per-row as a command-scoped assignment and are
+  unaffected. README steps 5 and 7 gained the matching warnings, including
+  `env -u` rather than `VAR=` (set-but-empty and unset differ under `set -u`).
+  Reported from `codex-workflow`'s adoption, where it bit the CI driver and then
+  the workflow's own job-level `env:`.
+  Closes [#37](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/37).
 
 - **`tools/drift-report.sh` reported a false PASS on §04.** It grepped for the
   literal `13 Red Flags — STOP → DELETE → RESTART`, but `spec/04` rule 3 (since
