@@ -18,7 +18,7 @@ copies** of a script whose entire purpose is to make behaviour uniform:
 | Copy | lines | lineage |
 |---|---|---|
 | `core/gate/` (untracked working-tree scratch) | 138 | A |
-| `claude-workflow/bin/` | 184 | A |
+| `claude-workflow/bin/` | 138 → 184 → 195 *(moved twice during this work)* | A |
 | `pi-agentic-apps-workflow/bin/` | 193 | A |
 | `opencode-workflow/bin/` | 164 | B (ground-up rewrite) |
 | `codex-workflow/bin/` | 164 | B (byte-identical to opencode) |
@@ -59,13 +59,48 @@ solves. The pointer lives in `reference-implementations/README.md`.
 
 Three supporting choices:
 
-**The implementation is composed, not adopted.** Neither surviving variant was
-correct. `pi-193` passed the truth table, every payload shape, and the
-`--pre-commit`/`--ci` floor but counted reviewers with `grep -c`.
-`claude-184` counted reviewers correctly but could not parse pi's payload.
-Each was taken for what it got right; the union scores 19/19.
+**The implementation is composed, not adopted** — and the composition was got
+wrong once before it was got right, which is worth recording because the failure
+mode is instructive.
+
+The first attempt took `pi-193` as the base and grafted in `claude`'s reviewer
+counter. Independent review found it **weaker than the variant it credited**, on
+four axes:
+
+- it inherited pi's unanchored `*/openspec/*` exemption glob, which exempts
+  `src/openspec/app.ts` and even `/tmp/openspec/x.ts` — a repo with a source
+  directory of that name could edit code freely while the gate was unsatisfied;
+- it inherited pi's `(^|/)openspec/` staged-file filter, the same hole at the
+  `--pre-commit` entry point;
+- it re-added the `reviewers:` YAML fallback that `claude` had deliberately
+  deleted — and because such a fallback runs only when the hardened count is
+  below threshold, with no fence skipping and no dedup, it defeated all three
+  hardening properties at once;
+- it made the heading colon optional, so the prose header `## Reviewers` parsed
+  as a reviewer named `s`.
+
+`claude-workflow` had already found and fixed the first three that same morning
+(commit `f68e92d`, 08:51). The base was chosen on a measurement taken before
+that commit existed, and the graft was not faithful.
+
+The landed implementation inverts the composition: **`claude-195` is the base**
+(anchored exemption, anchored staged filter, hardened reviewer counting), with
+`pi`'s three genuinely portable additions grafted on — `OPENSPEC_BIN`, the
+multi-host payload keys, and `OPENSPEC_GATE_SELF`. It also adopts `claude`'s
+`# gate-version:` marker so installers can refuse to downgrade the shared copy.
+28/28.
+
+The general lesson, and the reason the harness matters more than the gate: a
+composition is only as good as the moment its inputs were measured, and nothing
+but an executable contract catches a graft that quietly drops a fix.
 
 **Conformance is executable, and a behaviour change requires a harness row.**
+The first attempt scored 19/19 while carrying all four defects above, because
+the rows had been drawn to match the code rather than the threat model. The
+harness now carries rows for the exemption path, the staged filter, and each
+reviewer-counting bypass; scored against the pre-review implementation it
+reports 21/28.
+
 The harness stubs `openspec` on PATH and adds `OPENSPEC_BIN` so `validate` can be
 driven green or red independently of the gate's own logic. This is what makes
 §18's "demonstrable by direct invocation" clause true rather than aspirational.

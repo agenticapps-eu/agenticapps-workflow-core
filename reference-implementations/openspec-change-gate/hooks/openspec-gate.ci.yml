@@ -23,6 +23,10 @@ jobs:
         # A gate that has drifted can pass every repo it guards while enforcing
         # nothing (issue #32: five copies, none conformant). Score it before
         # trusting its verdict.
+        #
+        # Requires the harness to be vendored alongside the gate — see the
+        # vendoring steps in the gate README. Both files come from core; keep
+        # them in sync, since a stale harness certifies a stale gate.
         run: bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
       - name: Run the change gate
         run: bash bin/openspec-change-gate.sh --ci

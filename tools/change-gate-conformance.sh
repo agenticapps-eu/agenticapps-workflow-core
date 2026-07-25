@@ -26,13 +26,18 @@
 #      these rows score the agent-agnostic floor. Reported separately
 #      because a hook-only gate may legitimately not implement them.
 #   D. Reviewer counting — §02/§18 count independent reviewers, not lines
-#      matching a heading. Duplicate and fenced-example headings must not
-#      inflate the count past the threshold.
+#      matching a heading. Duplicate headings, fenced examples, prose section
+#      headers and bare `reviewers:` YAML must not inflate the count past the
+#      threshold.
+#   E. Self-review exclusion — OPENSPEC_GATE_SELF. Reported separately because
+#      a host that does not set it is not thereby non-conformant to §18; the
+#      rows pin the behaviour where it IS implemented.
 
 set -uo pipefail
 
 pass=0
 fail=0
+inconclusive=0
 WORK=""
 
 cleanup() { [ -n "$WORK" ] && rm -rf "$WORK"; }
@@ -77,6 +82,7 @@ run_row() { # $1=desc $2=expected $3=fixture $4=payload $5...=gate args
   # banking a false PASS.
   if [ "${ROW_NEEDS_FAILOPEN:-0}" = "1" ] && [ "$FAILS_OPEN" != "1" ]; then
     echo "  ????  $desc — inconclusive (gate fails closed; a block here does not prove the shape parsed)"
+    inconclusive=$((inconclusive + 1))
     return
   fi
   if [ "$got" = "$want" ]; then
@@ -88,15 +94,44 @@ run_row() { # $1=desc $2=expected $3=fixture $4=payload $5...=gate args
   fi
 }
 
+# Like run_row, but additionally asserts the gate's stderr does NOT contain a
+# marker string. Use where the expected exit code is also what a broken gate
+# produces for the wrong reason — the marker distinguishes the two paths.
+run_row_stderr_lacks() { # $1=desc $2=expected $3=marker $4=fixture $5=payload $6...=gate args
+  local desc="$1" want="$2" marker="$3" fx="$4" payload="$5"; shift 5
+  local err got
+  err="$(
+    cd "$fx/repo" || exit 99
+    printf '%s' "$payload" | bash "$GATE" "$@" 2>&1 >/dev/null
+  )"
+  got="$(
+    cd "$fx/repo" || exit 99
+    printf '%s' "$payload" | PATH="$fx/stub:$PATH" bash "$GATE" "$@" >/dev/null 2>&1
+    printf '%s' "$?"
+  )"
+  if [ "$got" = "$want" ] && ! printf '%s' "$err" | grep -qF -- "$marker"; then
+    echo "  PASS  $desc (exit $got)"
+    pass=$((pass + 1))
+  elif [ "$got" = "$want" ]; then
+    echo "  FAIL  $desc — exit $got is correct but reached via '$marker' (no mode dispatch?)"
+    fail=$((fail + 1))
+  else
+    echo "  FAIL  $desc — expected $want, got $got"
+    fail=$((fail + 1))
+  fi
+}
+
 # Payload envelopes, one per host runtime.
-p_claude() { printf '{"tool_input":{"file_path":"%s"}}' "$1"; }          # Claude PreToolUse
-p_pi()     { printf '{"toolName":"edit","input":{"path":"%s"}}' "$1"; }  # pi tool_call
-p_generic(){ printf '{"path":"%s"}' "$1"; }
+p_claude()  { printf '{"tool_input":{"file_path":"%s"}}' "$1"; }          # Claude PreToolUse
+p_pi()      { printf '{"toolName":"edit","input":{"path":"%s"}}' "$1"; }  # pi tool_call
+p_opencode(){ printf '{"args":{"filePath":"%s"}}' "$1"; }                 # opencode tool.execute.before
+p_generic() { printf '{"path":"%s"}' "$1"; }
 
 score_gate() {
   # Absolutise: every row runs after a `cd` into the fixture repo, so a relative
   # gate path would resolve to nothing there and score 127 on every row.
   GATE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+  local p0="$pass" f0="$fail" i0="$inconclusive"
   echo
   echo "═══ $GATE"
   echo "    ($(wc -l < "$GATE" | tr -d ' ') lines)"
@@ -113,6 +148,13 @@ score_gate() {
   fx="$(make_fixture 0)"
   run_row "openspec artifact write -> allow" 0 "$fx" \
     "$(p_claude openspec/changes/add-thing/proposal.md)"
+  # ...but the exemption must be THIS repo's spec slot, not any path containing a
+  # directory called `openspec`. A glob like */openspec/* exempts a source tree
+  # with that name, and even paths outside the repo — a repo could then edit code
+  # freely while the gate was unsatisfied.
+  run_row "src/openspec/ is NOT exempt -> block"   2 "$fx" "$(p_claude src/openspec/app.ts)"
+  run_row "/tmp/openspec/ is NOT exempt -> block"  2 "$fx" "$(p_claude /tmp/openspec/x.ts)"
+  run_row "..-escape is NOT exempt -> block"       2 "$fx" "$(p_claude openspec/../src/app.ts)"
   rm -rf "$fx"
 
   # Active change, validate green, no REVIEWS.md → block.
@@ -135,6 +177,13 @@ score_gate() {
   GSD_SKIP_REVIEWS=1 run_row "GSD_SKIP_REVIEWS=1 -> allow" 0 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
+  # The hatch bypasses the REVIEW clause, not validate. §18's row reads
+  # unconditionally; this narrowing is a documented deviation (see the gate
+  # header) and is pinned here so it cannot drift silently in either direction.
+  fx="$(make_fixture 1)"
+  GSD_SKIP_REVIEWS=1 run_row "GSD_SKIP_REVIEWS=1 + validate RED -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
   # Fail OPEN on parse error — never on policy.
   fx="$(make_fixture 0)"
   local before="$fail"
@@ -149,9 +198,10 @@ score_gate() {
   # gate silently does not enforce on that host. Driving a *code* edit (not an
   # artifact write) is what discriminates: under fail-open both exit 0.
   fx="$(make_fixture 0)"
-  run_row "Claude  {tool_input.file_path} -> block" 2 "$fx" "$(p_claude src/main.go)"
-  run_row "pi      {input.path}           -> block" 2 "$fx" "$(p_pi src/main.go)"
-  run_row "generic {path}                 -> block" 2 "$fx" "$(p_generic src/main.go)"
+  run_row "Claude   {tool_input.file_path} -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row "pi       {input.path}           -> block" 2 "$fx" "$(p_pi src/main.go)"
+  run_row "opencode {args.filePath}        -> block" 2 "$fx" "$(p_opencode src/main.go)"
+  run_row "generic  {path}                 -> block" 2 "$fx" "$(p_generic src/main.go)"
   rm -rf "$fx"
   ROW_NEEDS_FAILOPEN=0
 
@@ -162,9 +212,20 @@ score_gate() {
   run_row "--ci, unsatisfied change -> fail"                1 "$fx" '' --ci
   rm -rf "$fx"
 
+  # Same exemption hole, second entry point: a nested openspec/ dir must not
+  # launder a staged file out of the pre-commit check.
+  fx="$(make_fixture 0)"
+  mkdir -p "$fx/repo/src/openspec"; printf 'x\n' > "$fx/repo/src/openspec/app.ts"
+  ( cd "$fx/repo" && git add src/openspec/app.ts >/dev/null 2>&1 )
+  run_row "--pre-commit, src/openspec/ staged -> block" 1 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
   fx="$(make_fixture 0)"
   ( cd "$fx/repo" && git add openspec >/dev/null 2>&1 )
-  run_row "--pre-commit, only openspec staged -> allow" 0 "$fx" '' --pre-commit
+  # Discriminating: a gate with NO mode dispatch falls through to hook mode,
+  # reads empty stdin, parses no path and fails open with 0 — passing this row
+  # for the wrong reason. Assert it did not take the fail-open path.
+  run_row_stderr_lacks "--pre-commit, only openspec staged -> allow" 0 'fail-open' "$fx" '' --pre-commit
   rm -rf "$fx"
 
   echo "  ── D. Reviewer counting ──"
@@ -180,6 +241,30 @@ score_gate() {
     printf 'Template for reviewers to copy:\n\n```markdown\n## Reviewer: codex\n```\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
   run_row "fenced example is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # A prose section header is not a reviewer. With the colon optional,
+  # "## Reviewers" parses to a reviewer literally named "s", so any REVIEWS.md
+  # with a section header plus one real review clears a threshold of 2.
+  fx="$(make_fixture 0)"
+  printf '## Reviewers\n\n## Reviewer: claude\n\nReal.\n' \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "prose '## Reviewers' is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # A `reviewers: [a, b]` YAML line carries no review content. If a fallback
+  # honours it, it defeats dedup, fence-skipping and self-exclusion at once,
+  # because such fallbacks run only when the hardened count is below threshold.
+  fx="$(make_fixture 0)"
+  printf '## Reviewer: claude\n\n## Reviewer: claude\n\nreviewers: [claude, claude]\n' \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"
+  printf '## Reviewer: claude\n\n```yaml\nreviewers: [a, b]\n```\n' \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "fenced YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   echo "  ── E. Self-review exclusion (OPENSPEC_GATE_SELF; advisory) ──"
@@ -198,6 +283,9 @@ score_gate() {
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi pilot-crew claude
   OPENSPEC_GATE_SELF=pi run_row "exclusion is anchored, not a prefix -> allow" 0 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
+
+  local pd=$((pass - p0)) fd=$((fail - f0)) idd=$((inconclusive - i0))
+  echo "  ── $pd passed, $fd failed, $idd inconclusive of $((pd + fd + idd)) rows"
 }
 
 # ── entry point ──────────────────────────────────────────────────────────────
@@ -205,7 +293,7 @@ if [ "${1:-}" = "--family" ]; then
   FAMILY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   set --
   for c in \
-    "$FAMILY/agenticapps-workflow-core/gate/openspec-change-gate.sh" \
+    "$FAMILY/agenticapps-workflow-core/reference-implementations/openspec-change-gate/openspec-change-gate.sh" \
     "$FAMILY/claude-workflow/bin/openspec-change-gate.sh" \
     "$FAMILY/codex-workflow/bin/openspec-change-gate.sh" \
     "$FAMILY/opencode-workflow/bin/openspec-change-gate.sh" \
@@ -222,5 +310,5 @@ for g in "$@"; do
 done
 
 echo
-echo "═══ $pass passed, $fail failed"
+echo "═══ TOTAL: $pass passed, $fail failed, $inconclusive inconclusive"
 [ "$fail" -eq 0 ]

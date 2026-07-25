@@ -47,15 +47,28 @@ does need a host change; see under *Fixed*.
 
   | Copy | Score |
   |---|---|
-  | `reference-implementations/openspec-change-gate/` | **19/19** |
-  | `claude-workflow/bin/` | 17/19 |
-  | `pi-agentic-apps-workflow/bin/` | 17/19 |
-  | `codex-workflow/bin/` · `opencode-workflow/bin/` | 14/19 |
-  | `~/.agenticapps/bin/` (shared install) | 14/19 |
+  | `reference-implementations/openspec-change-gate/` | **28/28** |
+  | `claude-workflow/bin/` | 25/28 |
+  | `pi-agentic-apps-workflow/bin/` | 18/28 |
+  | `codex-workflow/bin/` · `opencode-workflow/bin/` | 16/28 |
+  | `~/.agenticapps/bin/` (shared install) | 16/28 |
 
   Expect **host copies to start reporting failures against unchanged behaviour**
   — the harness is new, the defects are not. A hook-only gate was already
   non-conformant to §18's "real enforcement surface" clause; it now says so.
+
+  The gate carries a **`# gate-version:`** marker (currently `1.2.0`) so host
+  installers can arbitrate writes to the shared path and refuse to downgrade.
+  Adopted from `claude-workflow`; **every host installer needs this check**, not
+  just the one that had it — a host without it still clobbers.
+
+  Two of the 28 rows exist because independent review caught the *first* version
+  of this implementation scoring a clean 19/19 while carrying four bypasses,
+  including an `openspec/` exemption that exempted `src/openspec/app.ts` and
+  `/tmp/openspec/x.ts`. The rows had been drawn to match the code rather than
+  the threat model. Recorded in ADR-0022 because the failure mode generalises:
+  a composed implementation is only as good as the moment its inputs were
+  measured.
 
   Note the shared-install race the issue documented: `claude-workflow`'s
   installer writes to `~/.agenticapps/bin/`, where every host's shim, `pre-commit`
