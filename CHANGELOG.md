@@ -27,6 +27,43 @@ drift-report fixes surface a pre-existing §11 gap in `claude-workflow` that
 does need a host change; see under *Fixed*.
 
 ### Added
+- **`reference-implementations/shared-install/`** — the arbiter every host
+  installer calls to write a versioned artifact into `~/.agenticapps/bin/`, plus
+  **`tools/shared-install-conformance.sh`** (12 rows).
+
+  Core had specified only *"refuse to downgrade"*. All four hosts implemented
+  that correctly and the shared path was **still** not monotonic, because the
+  arbitration is a read-compare-write with nothing held across it — two
+  installers each deciding correctly against the same observed state let the
+  later writer win regardless of version. **Per-host arbitration does not compose
+  into machine-wide monotonicity.** Reported as
+  [pi-agentic-apps-workflow#13](https://github.com/agenticapps-eu/pi-agentic-apps-workflow/issues/13);
+  the same shape as [#41](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/41)
+  one level down, where the *write* was unguarded rather than the *decision*.
+
+  The contract is now stated as a postcondition — after any set of concurrent
+  installs the path holds the newest version offered — and both the gate and
+  `reviewer-cli` READMEs were corrected: they specified the necessary half of the
+  rule and were silent on serialisation, which is why four correct
+  implementations still raced.
+
+  Mutual exclusion is `mkdir`-based (atomic on POSIX; `flock(1)` is absent on
+  macOS), per-artifact so the gate does not serialise against `reviewer-cli`, and
+  stale locks are broken by pid so one killed installer cannot wedge the machine
+  permanently. Writes land via rename-into-place so an agent whose `PreToolUse`
+  hook fires mid-install never reads a truncated script — the lock gives
+  monotonicity, the rename gives readers integrity, and they solve different
+  problems.
+
+  The harness pins the distinction that matters: an implementation with correct
+  arbitration and no lock **passes every arbitration row and fails monotonicity**
+  (9/12). That gap is the defect, and it is why "we refuse downgrades" is not
+  evidence of conformance.
+
+  **No spec version change and no host action required by this entry** — hosts
+  currently ship correct-but-unserialised arbitration and should adopt, but
+  nothing they publish today is non-conformant to §18.
+
 - **`reference-implementations/reviewer-cli/`** — core now publishes the reviewer
   wrapper too, plus **`tools/reviewer-cli-conformance.sh`** (14 rows) to score
   any copy. The change gate *consumes* review evidence; this is what *produces*
