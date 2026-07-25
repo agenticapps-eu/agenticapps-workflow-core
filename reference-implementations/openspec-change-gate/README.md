@@ -6,7 +6,7 @@ Hosts **vendor this file**; they do not maintain their own.
 | File | Purpose |
 |---|---|
 | `openspec-change-gate.sh` | The gate. Modes: hook (default), `--pre-commit`, `--ci`. Carries `# gate-version:` for installer arbitration. |
-| `pre-commit` | Git hook wrapper — the floor that catches humans and non-hooked agents. |
+| `pre-commit` | Git hook wrapper — the floor that catches humans and non-hooked agents. Resolves the gate from `OPENSPEC_GATE`, or `OPENSPEC_CHANGE_GATE` as an alias. |
 | `hooks/openspec-gate.ci.yml` | GitHub Actions workflow — the floor no local config can bypass. |
 
 Conformance is executable, not prose:
@@ -78,6 +78,14 @@ harness row, then re-vendor. That is the point of this directory.
 shape, and a bare fallback. A key it does not know yields an empty path, which
 fails open — the gate then **silently stops enforcing** on that host, which is
 exactly how the pi defect in #32 went unnoticed.
+
+Paths arrive **absolute** from most hosts — Claude Code always sends an absolute
+`file_path`. The `openspec/` exemption therefore resolves both the payload path
+and `$ROOT` to their physical forms before comparing: `$ROOT` comes from `git
+rev-parse --show-toplevel`, which resolves symlinks, so a repo reached through a
+symlink would otherwise fail a plain string-prefix test and block the write of
+`proposal.md` itself (fixed in 1.2.1). The final path component is never
+resolved — it usually does not exist yet.
 
 Adding a host means adding its key *and* a section-B harness row. Note that a B
 row must drive a **code** edit, not an artifact write: under fail-open an

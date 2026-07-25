@@ -16,7 +16,11 @@
 # and score whatever you land on:
 #
 #   tools/change-gate-conformance.sh "$OPENSPEC_GATE"
-GATE="${OPENSPEC_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}"
+# OPENSPEC_CHANGE_GATE is accepted as an alias for OPENSPEC_GATE. The pi host
+# shipped that name first and its extension already resolves the gate through
+# it; honouring both here means pi vendors this wrapper unmodified instead of
+# carrying a one-line divergence, which is the failure mode issue #32 records.
+GATE="${OPENSPEC_GATE:-${OPENSPEC_CHANGE_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}}"
 [ -x "$GATE" ] || GATE="$(git rev-parse --show-toplevel)/bin/openspec-change-gate.sh"
 
 if [ ! -x "$GATE" ]; then
