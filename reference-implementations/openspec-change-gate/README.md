@@ -95,8 +95,17 @@ Paths arrive **absolute** from most hosts — Claude Code always sends an absolu
 and `$ROOT` to their physical forms before comparing: `$ROOT` comes from `git
 rev-parse --show-toplevel`, which resolves symlinks, so a repo reached through a
 symlink would otherwise fail a plain string-prefix test and block the write of
-`proposal.md` itself (fixed in 1.2.1). The final path component is never
-resolved — it usually does not exist yet.
+`proposal.md` itself (fixed in 1.2.1).
+
+Resolution is **physical first, then `..`** (1.2.2). Collapsing `..` textually up
+front disagrees with the kernel wherever a symlink inside `openspec/` precedes
+it, and the kernel is what the writer obeys — so a `..` surviving physical
+resolution forfeits the exemption rather than being guessed at. The final
+component is resolved too **when it exists and is a symlink**, because the writer
+follows it: an artifact path symlinked at code would otherwise be exempted and
+the write would truncate its target. A component that does not exist yet is still
+never resolved — that is the ordinary Write-target case, and `[ -L ]` is false
+for it.
 
 Adding a host means adding its key *and* a section-B harness row. Note that a B
 row must drive a **code** edit, not an artifact write: under fail-open an
