@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# .git/hooks/pre-commit — the agent-agnostic enforcement floor (spec §18).
+#
+# Blocks a commit that stages code while an OpenSpec change is neither validated
+# nor reviewed. This is what actually guarantees the rule: a PreToolUse hook is
+# loaded at session start and cannot gate the session that installed it, and it
+# does not exist at all for a human with an editor.
+#
+# Install: copy to .git/hooks/pre-commit and chmod +x.
+#
+# Resolution order is deliberate. The shared install path is preferred so a
+# single upgrade reaches every repo, but issue #32 recorded its failure mode:
+# whichever host's installer ran last owns that path, so a host shipping a stale
+# or defective copy silently replaces a conformant one for every other host.
+# Pin OPENSPEC_GATE to a known-good copy if you need to opt out of that race,
+# and score whatever you land on:
+#
+#   tools/change-gate-conformance.sh "$OPENSPEC_GATE"
+GATE="${OPENSPEC_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}"
+[ -x "$GATE" ] || GATE="$(git rev-parse --show-toplevel)/bin/openspec-change-gate.sh"
+
+if [ ! -x "$GATE" ]; then
+  # Fail OPEN on a missing gate, consistent with §18's fail-open-on-error
+  # posture: a commit hook that hard-fails because tooling is absent trains
+  # people to pass --no-verify, which disables the floor permanently.
+  printf 'openspec-gate: WARNING — gate not found at %s; commit not gated.\n' "$GATE" >&2
+  exit 0
+fi
+
+exec "$GATE" --pre-commit

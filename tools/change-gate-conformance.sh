@@ -94,7 +94,9 @@ p_pi()     { printf '{"toolName":"edit","input":{"path":"%s"}}' "$1"; }  # pi to
 p_generic(){ printf '{"path":"%s"}' "$1"; }
 
 score_gate() {
-  GATE="$1"
+  # Absolutise: every row runs after a `cd` into the fixture repo, so a relative
+  # gate path would resolve to nothing there and score 127 on every row.
+  GATE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
   echo
   echo "═══ $GATE"
   echo "    ($(wc -l < "$GATE" | tr -d ' ') lines)"
@@ -178,6 +180,23 @@ score_gate() {
     printf 'Template for reviewers to copy:\n\n```markdown\n## Reviewer: codex\n```\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
   run_row "fenced example is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  echo "  ── E. Self-review exclusion (OPENSPEC_GATE_SELF; advisory) ──"
+  # The implementing host reviewing its own change is not an independent second
+  # opinion. A gate that counts it disagrees with the §02 evidence verifier,
+  # which rejects it — the ADR-0018 drift pattern, inside the tooling.
+  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi claude
+  OPENSPEC_GATE_SELF=pi run_row "self + 1 other = 1 independent -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi claude codex
+  OPENSPEC_GATE_SELF=pi run_row "self + 2 others = 2 independent -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # Anchored: a reviewer whose name merely starts with the host's is not swallowed.
+  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi pilot-crew claude
+  OPENSPEC_GATE_SELF=pi run_row "exclusion is anchored, not a prefix -> allow" 0 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 }
 
