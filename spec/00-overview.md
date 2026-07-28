@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.1.0
+spec_version: 1.2.0
 ---
 
 # 00 — Overview
@@ -77,10 +77,14 @@ gained the `plan-review` pre-execution gate at v0.5.0, specifying the
 robust phase-resolution order and grandfather rule. Section 14
 (prompt-injection defense) was added at v0.6.0 as an additive minor
 section, conditional on the host shipping an LLM prompt-building surface
-(ADR-0016). Section 15 (knowledge capture) was added at v0.7.0 as an
-additive minor section — wired per host, activated per repo via an
-opt-in `knowledge_capture` block in `.planning/config.json`
-(ADR-0017). Section 04 (red flags) gained explicit composition rules for
+(ADR-0016). Section 15 (knowledge capture) was added at v0.7.0 (ADR-0017) and
+**REMOVED at v1.2.0**. Its purpose — retaining what was learned across
+sessions — is served by the OpenSpec archive: `openspec/changes/archive/`
+retains each change's proposal, design, delta and review evidence
+permanently, which §15's distilled note duplicated at lower fidelity.
+**Section 15 is retired, not reused.** The number stays vacant so that
+every §16–§19 reference in the fleet keeps resolving; renumbering to close
+the gap would invalidate cross-references in four hosts. Section 04 (red flags) gained explicit composition rules for
 host-specific additions at v0.8.0: additions are appended after the
 canonical 13, and the heading's leading count is not normative —
 resolving a contradiction that had left the section's own "adding is

@@ -134,8 +134,7 @@ A host implementation **SHOULD** place procedural and reference content
 that is only needed once a code task is underway in the lazily-loaded
 trigger skill (`SKILL.md` or equivalent) or in a workflow-config, not
 in the always-loaded file. This includes the §02 gate-binding table,
-task-size routing, the §15 knowledge-capture ritual tail (already
-required to live in the host's SKILL.md by §15), the session-handoff
+task-size routing, the session-handoff
 procedure, and gate-procedure prose such as a plan-review runbook. A
 host whose runtime enforces a gate programmatically keeps the *hook
 wiring* wherever the runtime requires it — only the explanatory prose
@@ -216,7 +215,7 @@ A host implementation claiming conformance with spec version 0.10.0:
   in its primary project-instruction file.
 - **SHOULD** keep its always-loaded instruction file to the §11 block
   plus a trigger-skill pointer, placing the §02 gate table, task-size
-  routing, the §15 ritual tail, session-handoff, and gate-procedure
+  routing, session-handoff, and gate-procedure
   prose in the lazily-loaded trigger skill or a workflow-config (see
   "Instruction-surface economy").
 - **MAY** define host-specific diagram syntaxes when the host runtime
