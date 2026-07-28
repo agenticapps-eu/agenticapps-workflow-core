@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gate-version: 1.3.1
+# gate-version: 1.4.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. That path is written by claude / codex /
@@ -7,6 +7,13 @@
 # a host still vendoring an older copy silently republishes it over a newer one
 # and reverts the fix for every agent on the machine. Installers MUST refuse to
 # overwrite a higher version. Bump this whenever the gate's behaviour changes.
+#   1.4.0 — reviewer FLOOR drops to 1; 2 becomes a reported preference.
+#           Implements spec 1.1.0 §18 (MUST >= 1, SHOULD >= 2). A hard floor of
+#           two blocked all work whenever the second vendor was slow, rate
+#           limited or down — trading a large certain cost for a small
+#           uncertain one. Two is still better and is still surfaced, now via
+#           PREFERRED_REVIEWERS and a NOTE rather than a refusal. Set
+#           MIN_REVIEWERS=2 to restore the previous behaviour.
 #   1.3.1 — tolerate markdown emphasis around the verdict label. 1.3.0 anchored
 #           on a bare `VERDICT:` and missed `**VERDICT: REQUEST-CHANGES**`,
 #           which is what opencode wrote on the first real run after 1.3.0
@@ -51,7 +58,8 @@
 #
 # Rule: you may not edit code while an OpenSpec change is active unless
 #   (1) `openspec validate --all` is GREEN, and
-#   (2) every active change carries REVIEWS.md with >= MIN_REVIEWERS reviewers.
+#   (2) every active change carries REVIEWS.md with >= MIN_REVIEWERS reviewers
+#       (floor 1; 2 preferred and reported, not enforced).
 # This is the OpenSpec-era retarget of the ADR-0018 multi-AI plan-review gate.
 #
 # Three modes:
@@ -64,7 +72,8 @@
 # Env:
 #   GSD_SKIP_REVIEWS=1     bypass the review requirement (emergency escape; still needs validate).
 #   OPENSPEC_GATE_STRICT=1 also block edits when there is NO active change ("no code without a change").
-#   MIN_REVIEWERS=2        override the reviewer threshold.
+#   MIN_REVIEWERS=1        blocking floor (spec 1.1.0 MUST). Set 2 for the old behaviour.
+#   PREFERRED_REVIEWERS=2  reported-but-not-enforced target (spec 1.1.0 SHOULD).
 #   OPENSPEC_BIN=openspec  override the openspec CLI name/path.
 #   OPENSPEC_GATE_SELF     name of the implementing host; its own reviews do not count.
 #
@@ -77,7 +86,11 @@
 # change whose spec delta does not parse — and it is pinned by a harness row.
 
 set -uo pipefail
-MIN_REVIEWERS="${MIN_REVIEWERS:-2}"
+# FLOOR (blocks) and PREFERENCE (reports). Spec 1.1.0 §18: MUST >= 1,
+# SHOULD >= 2. Raising MIN_REVIEWERS back to 2 restores the old hard behaviour
+# for a repo that wants it; both are env-overridable.
+MIN_REVIEWERS="${MIN_REVIEWERS:-1}"
+PREFERRED_REVIEWERS="${PREFERRED_REVIEWERS:-2}"
 # Indirect the CLI so the conformance harness can stub `validate` and assert THIS
 # script's logic hermetically, rather than testing OpenSpec. §18 requires the gate
 # be "demonstrable by direct script invocation with simulated payloads"; a
@@ -222,6 +235,20 @@ gate_check(){
       log "change '${d#"$ROOT"/}' has $n/$MIN_REVIEWERS reviewers — run plan-review to write REVIEWS.md"
       blocked=1
       continue
+    fi
+    # Spec 1.1.0 moved the FLOOR to one reviewer and made two a SHOULD. The gap
+    # between them is reported, never enforced: a single reviewer is a
+    # reportable condition, not a failure.
+    #
+    # The evidence says two really is better — across three changes reviewed in
+    # the 2026-07-28 migration the decisive finding was unique to one vendor
+    # every time — but that argues one reviewer is worse than two, not that it
+    # is worse than none. A hard floor of two blocked all work whenever the
+    # second vendor was slow, rate-limited or down, which is what this split
+    # fixes. Silence would throw away the distinction entirely, so the shortfall
+    # is surfaced at the moment it is being relied on.
+    if [ "$n" -lt "$PREFERRED_REVIEWERS" ]; then
+      log "NOTE change '${d#"$ROOT"/}' has $n reviewer(s); $PREFERRED_REVIEWERS preferred — allowed on the floor, a second opinion would be stronger"
     fi
     # The threshold is a QUORUM, not an approval: §18's truth table keys `allow`
     # on the reviewer COUNT and carries no verdict term, so two REQUEST-CHANGES

@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.0.0
+spec_version: 1.1.0
 ---
 
 # 00 — Overview
