@@ -44,6 +44,26 @@ bytes to publish into the shared path.
 Four repos carry four artifacts each so that four installers have something to
 `install -m 0755`.
 
+**Correction (same day, before rollout).** The paragraph above is wrong, and the
+error matters. `install.sh` is the *runtime-relevant* consumer, but not the only
+one. Measured in `claude-workflow`:
+
+| consumer | refs | why it needs the path |
+|---|---|---|
+| `migrations/0032-bind-openspec-v1.md` | 15 | replayed by `/update-agenticapps-workflow` for any project still on 2.9.0 — its pre-flight *aborts* if the file is absent |
+| `migrations/test-fixtures/0032/*` | 9 | pin 0032's released behaviour |
+| `templates/` + `setup/snapshot/` hooks | 8 | the shim's repo-local fallback |
+| `setup/SKILL.md` | 5 | the greenfield install path, which does not replay migrations |
+| `.github/workflows/openspec-gate.yml` | 3 | CI |
+| `update/`, `skill/` SKILL.md | 4 | instruction surfaces |
+
+Deleting the vendored files broke six 0032 fixtures and one producer test
+immediately. A released migration is an **executable artifact, not a record** —
+it must keep working for repos replaying the chain, and it hardcodes
+`$SCAFFOLDER/bin/…`.
+
+This does not invalidate the decision; it resizes the rollout. See *Rollout* below.
+
 ## Decision
 
 **Hosts record a pin; core supplies the bytes.**
@@ -101,6 +121,26 @@ and keeps publishing an old gate — the version arbiter stops it clobbering a
 newer shared copy, but the host itself never notices it is behind. Detecting
 that is a follow-up: a CI row comparing the pin against core's HEAD, advisory
 not blocking.
+
+## Rollout
+
+Pinning is correct and the mechanism is proven (resolver + 13-row harness;
+verified end-to-end producing bytes identical to `core@pin`). Getting there is
+a sequence, not a delete:
+
+1. **Relax, don't rewrite, `0032`'s pre-flight** — accept *either* a vendored
+   file *or* a resolvable pin. Backward compatible for repos replaying the
+   chain; its six fixtures move with it.
+2. **Retarget `setup/SKILL.md`** — greenfield installs never replay migrations,
+   so this is the path that must resolve from the pin first.
+3. **Templates and snapshot hooks** — the shim's repo-local fallback. Decide
+   whether hosts keep a materialised (gitignored) copy for that fallback, or
+   whether the fallback is retired now that the installer is the bootstrap.
+4. **CI** — score the pin, not the copy.
+5. **Only then delete the committed artifacts**, host by host.
+
+Doing (5) first — which is what the first attempt did — breaks migration replay
+for every project below 3.0.0.
 
 ## Alternatives considered
 
