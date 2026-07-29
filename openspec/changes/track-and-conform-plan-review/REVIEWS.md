@@ -1,26 +1,32 @@
 ## Reviewer: gemini
-_generated 2026-07-29T07:20:47Z · timeout 600s_
+_generated 2026-07-29T07:30:40Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
-- **The review artifact is incomplete.** The proposal states that failed reviewers will be named in the "run's output". This is insufficient. The `REVIEWS.md` artifact itself must be self-contained and record not only which reviewers succeeded, but also which were requested and failed to respond. A consumer reading only the artifact would otherwise be misled into thinking fewer reviewers were consulted than was actually the case.
-- **The `MIN_REVIEWERS` override is insufficiently constrained.** While allowing callers to request a *higher* floor is correct, the spec establishes a hard floor of one reviewer. The implementation should reject any attempt to set `MIN_REVIEWERS` to a value less than 1, as this would allow a caller to bypass the spec's minimum quality gate.
-- **The definition of "failure" is ambiguous.** The text focuses on timeouts, but a vendor might fail in other ways (return an error, exit non-zero). The specification should clarify that *any* inability to secure a valid review from a requested vendor is a reportable failure, not just a timeout.
+
+- **The definition of a "review" is incomplete.** The proposal hinges on counting sections with a "parseable verdict", but never defines what format is considered parseable. This is a new, critical requirement for the gate and should be specified exactly (e.g., case-insensitive `^VERDICT:\s*(APPROVE|REQUEST-CHANGES)$`). Without this, the rule is ambiguous.
+
+- **The self-exclusion mechanism is not specified.** The proposal correctly states that relying on `OPENSPEC_GATE_SELF` is fragile and opts to exclude the host's vendor "by rule". It does not, however, specify what that rule is or how the host vendor is determined, which is a critical detail for an independence guarantee.
+
+- **The change increases data exfiltration risk without mitigation.** By lowering the success threshold to one reviewer, the tool will now send prompts to third-party vendors more often, including in cases where it previously would have failed and sent nothing. While deferring a full secret-scanner is reasonable, the proposal should acknowledge this increased risk and clarify that invocation implies consent for *all requested vendors*, not just those that succeed.
+
+- **The rollback plan is incomplete.** It covers restoring the script, but omits reverting the corresponding breaking changes to spec §18, which would leave the spec and the (rolled-back) tool in a contradictory state.
 
 ## Reviewer: codex
-_generated 2026-07-29T07:23:15Z · timeout 600s_
+_generated 2026-07-29T07:33:06Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
 
-- §18 remains contradictory: its truth table requires ≥1, while its block scenario and Conformance clause still require ≥2. The change must modify §18 rather than claim no modified capability.
-- Independence is unenforced. The promoted script defaults `AGENT_SELF=claude`; on another host, one self-review can satisfy the new floor. Self-exclusion and vendor deduplication must be normative and tested.
-- The current script accepts `MIN_REVIEWERS=0`, which can publish an empty `REVIEWS.md` and exit successfully. Overrides must be integers ≥1.
-- “Complete review” is undefined. Any nonempty exit-zero output counts, including a refusal or malformed response; REQUEST-CHANGES also clears the floor. Require a valid verdict and define its readiness semantics.
-- Failed-vendor details exist only in ephemeral stderr. Persist requested, successful, excluded, and failed vendors with reasons in `REVIEWS.md`; otherwise a later reader cannot distinguish “not requested” from “failed.”
-- The producer sends change contents to external agentic CLIs without an explicit egress manifest, affirmative consent, or secret/PII screening; the prompt is also exposed through process arguments. The new producer capability must specify this trust boundary.
-- The publication path is incomplete: `resolve-core-artifact.sh` has no mapping for `bin/run-plan-review.sh`, while the Claude installer still sources its vendored 1.0.0 copy. Add the resolver/install integration and conformance coverage, or core will not actually be the operational source of truth.
+- The OpenSpec delta contains only the new producer capability; the normative §18 changes exist only as proposal prose/tasks. Add an actual modified-capability delta or exact normative patch so validation and reviewers can assess the changed contract.
+- The gate still counts reviewer headings without requiring verdicts, while tasks harden only the producer. Hand-written, stale, or older-producer evidence can therefore pass. Update and version the gate, conformance harness, README, and host publication path.
+- “Determine the running host by rule” is undefined and impossible for one shared host-agnostic binary to infer reliably. Specify an authoritative identity input and fail closed when it is absent or invalid.
+- Task 7.3 does not fix process-table exposure: the producer already passes a file to `reviewer-cli.sh`, which reads it and passes the full prompt as a vendor CLI argument. The wrapper and its tests/version must change.
+- Reviews are not bound to the reviewed artifact revision. An amended change can retain an old `REVIEWS.md`, and a failed rerun deliberately leaves it untouched. Record content hashes and have the gate verify them, or define reliable invalidation.
+- The egress contract overstates its boundary: agentic vendor CLIs may inspect files beyond the prompt, and “invocation is consent” removes the existing explicit vendor×file confirmation. Document actual tool access, require affirmative consent, and address the untrusted third-party output ingress; deferring secret/PII screening does not make those guarantees true.
 
 ## Reviewer: opencode
-_generated 2026-07-29T07:24:14Z · timeout 600s_
+_generated 2026-07-29T07:35:02Z · timeout 600s_
 
-I'll fact-check this change against the actual repo before issuing a verdict. Starting with the session handoff (per project instructions) and the key artifacts the change makes claims about.
+I'll verify the change's claims against the actual repo and installed files before issuing a verdict.
+Session handoff read (modified today). Line counts and version markers check out. Now verifying the §18 spec claims:
+The contradiction claim is verified (truth table says ≥1, lines ~146/174 say ≥2). Now checking the producer code, the change's own REVIEWS.md, and the resolver/installer claims:
 

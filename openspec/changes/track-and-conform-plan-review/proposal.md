@@ -56,10 +56,47 @@ confirmed against the code:
   layout already used by `openspec-change-gate/`, `reviewer-cli/` and
   `shared-install/`.
 
+This change covers the whole review pipeline, not the producer alone. The
+enforcement point is the **gate**, so hardening the producer by itself would be
+cosmetic: a hand-written or stale `REVIEWS.md` opens the gate regardless of
+what produced it. Three shared-bin artifacts and one spec section are involved:
+
+| Artifact | Version | Defect |
+|---|---|---|
+| `spec/18-retargeted-change-gate.md` | — | mandates ≥1 and ≥2 simultaneously |
+| `run-plan-review.sh` | 1.0.0 | stale floor; accepts `MIN=0`; discards partial results; untracked |
+| `openspec-change-gate.sh` | 1.4.0 | counts headings, not verdicts; reviews not bound to the revision reviewed |
+| `reviewer-cli.sh` | 1.1.0 | passes the full prompt as a vendor CLI argument |
+
 - **Repair §18's contradiction.** Lines 146 and 174 are corrected to the floor
   the truth table and rationale already state, so the section mandates one
   floor rather than two. **BREAKING** for any host that read the ≥2 clauses as
   authoritative.
+
+- **Add a verdict term to §18's truth table.** The gate today deliberately
+  refuses to block on verdicts, and says why in its own source: "§18's truth
+  table has no verdict term, so a gate that blocked on this would be
+  non-conformant." Requiring a verdict to *count* a reviewer is therefore a
+  spec change first and a gate change second. The two cannot ship separately.
+
+- **Make the gate require verdicts.** `reviewer_count()` counts `## Reviewer`
+  headings; `pending_rejections()` parses verdicts, tolerating markdown
+  emphasis since 1.3.1. They already diverge exactly as that file's comment
+  warns — "the gate counts one set of reviewers and reports on another." A
+  section with no verdict counts toward the floor while reporting nothing.
+  `reviewer_count()` adopts the same verdict predicate. Gate → **1.5.0**.
+
+- **Bind reviews to what was reviewed.** `REVIEWS.md` SHALL record a content
+  digest of the artifacts reviewed, and the gate SHALL treat a review as stale
+  when they no longer match. Today an amended change keeps its old
+  `REVIEWS.md` and the gate cannot tell — a hole walked through twice during
+  this very session, when both open changes were revised after review.
+
+- **Stop the wrapper exposing prompts in the process table.** `reviewer-cli.sh`
+  reads the prompt file and then passes its full contents as an argv element
+  to every vendor (`claude -p "$prompt"`, `codex exec "$prompt"`). The producer
+  already passes a file; the exposure is entirely in the wrapper. It moves to
+  stdin or a file path. Wrapper → **1.2.0**.
 
 - **Default `MIN_REVIEWERS` to 1 and reject values below 1.** An explicit
   higher value is honoured; `0` is now an error rather than a silent
@@ -69,9 +106,17 @@ confirmed against the code:
   if it carries a parseable verdict. A vendor that produced output without one
   is recorded as failed, not counted.
 
-- **Make self-exclusion normative.** The host's own vendor is excluded from the
-  count by rule rather than by an environment default that is wrong on every
-  host but one, and duplicate vendors count once.
+- **Make self-exclusion normative and fail closed.** One host-agnostic binary
+  cannot infer which host invoked it, so "determine the host by rule" is not
+  implementable. Instead the caller SHALL supply an authoritative identity, and
+  the producer and gate SHALL **refuse to count any reviewer** when it is
+  absent or invalid — rather than defaulting to `claude`, which is wrong on
+  every host but one. Duplicate vendors count once.
+
+- **Specify the verdict format exactly** rather than saying "parseable":
+  case-insensitive, anchored at line start, optional markdown emphasis, one of
+  a closed vocabulary — matching the parser the gate already ships, so no
+  existing well-formed `REVIEWS.md` is invalidated.
 
 - **Report, do not discard.** When the floor is met but fewer reviewers
   succeeded than were requested, the producer SHALL write the reviews it
@@ -80,11 +125,14 @@ confirmed against the code:
   later reader can tell "not requested" from "failed", without relying on
   ephemeral stderr.
 
-- **Document the egress trust boundary** in the new capability: what leaves the
-  machine, to which vendors, and that invoking the producer is the operator's
-  consent. Pass the prompt by file rather than process argument, so change
-  contents are not exposed in the process table. Secret/PII screening is
-  explicitly deferred to its own change.
+- **Document the egress trust boundary honestly.** The vendors are *agentic*
+  CLIs with their own file access — they can read beyond the prompt they are
+  handed, so the boundary is the repository, not the prompt. The capability
+  SHALL say so rather than implying the prompt bounds it. Reviewer output is
+  likewise **untrusted third-party input** that lands in `REVIEWS.md` and is
+  then read back by agents, and SHALL be documented as such. Secret/PII
+  screening is deferred to its own named change; deferring it does not make the
+  narrower boundary claim true, which is why the claim is corrected here.
 
 - **Complete the publication path.** Add the `resolve-core-artifact.sh` mapping
   for the producer and point the Claude installer at core rather than its
@@ -106,9 +154,14 @@ confirmed against the code:
 ## Capabilities
 
 ### New Capabilities
-- `plan-review-production`: how the plan-review producer sources reviews,
-  what floor it enforces, what it does with a partial result, and where its
+- `plan-review-production`: how the plan-review producer sources reviews, what
+  floor it enforces, what it does with a partial result, and where its
   implementation is tracked.
+- `change-gate-enforcement`: the normative contract §18's changes amount to —
+  one floor stated once, a verdict required to count, rejections counting,
+  independence supplied rather than guessed, and reviews bound to the revision
+  they reviewed. Written as a delta so `validate` and reviewers can assess the
+  changed contract, rather than it existing only as proposal prose.
 
 ### Modified Capabilities
 <!-- Core's durable spec lives in spec/*.md, not openspec/specs/ — migrating
