@@ -1,20 +1,24 @@
 ## ADDED Requirements
 
-### Requirement: A hook implementation lives in exactly one place
+### Requirement: A hook implementation is authoritative in one place
 
-A workflow hook's behaviour SHALL be implemented in exactly one file on a given
-machine. A project SHALL NOT carry a copy of a hook implementation.
+A workflow hook's behaviour SHALL be defined in exactly one authoritative file.
+A project SHALL NOT carry a copy of that behaviour.
 
-This is the rule that the existing drift violates: five hook implementations
-copied into seven projects produced three distinct versions of
-`normalize-claude-md.sh` and `database-sentinel.sh`, and two of
-`design-shotgun-gate.sh` and `skill-router-log.sh`.
+A shim resolves the authoritative file through an ordered lookup, and that
+lookup naming several candidate locations does not make several
+implementations: at most one is authoritative on a given machine, and the order
+decides which.
+
+This is the rule the current fleet violates: two hook implementations copied
+into seven projects produced three distinct versions of
+`normalize-claude-md.sh` and of `database-sentinel.sh`.
 
 #### Scenario: A hook's behaviour is changed
 
 - **WHEN** a maintainer changes what a hook does
 - **THEN** exactly one file is edited, and the change is live in every project
-  on that machine without any per-project edit, PR, or migration
+  on that machine once republished, without any per-project edit or migration
 
 #### Scenario: Two projects are compared
 
@@ -26,10 +30,10 @@ copied into seven projects produced three distinct versions of
 ### Requirement: A project binds a hook through a shim
 
 A project SHALL bind a hook by shipping a shim that locates and `exec`s the
-canonical implementation. The shim SHALL contain no behaviour of its own beyond
-resolution, host self-identification, and `exec`.
+authoritative implementation. The shim SHALL contain no behaviour of its own
+beyond resolution, host self-identification, and `exec`.
 
-The shim SHALL resolve the implementation in this order:
+The shim SHALL resolve in this order:
 
 1. An explicit environment override, when set
 2. `~/.agenticapps/bin/<hook>.sh` — the shared install
@@ -42,78 +46,110 @@ The shim SHALL resolve the implementation in this order:
 
 #### Scenario: An override is set
 
-- **WHEN** the hook's explicit override variable names an executable file
-- **THEN** the shim `exec`s that file in preference to the shared install,
-  so a test can substitute an implementation without editing any project
+- **WHEN** the hook's override variable names an executable file
+- **THEN** the shim `exec`s that in preference to the shared install, so a test
+  can substitute an implementation without editing any project
 
-### Requirement: An unresolvable hook fails open
+### Requirement: The fail posture follows the hook's class
 
-When a shim cannot resolve any implementation, it SHALL exit 0 (allow) rather
-than block.
+An unresolvable shim SHALL fail according to what the hook protects:
 
-A missing shared install MUST NOT brick every edit in a session. The git
-pre-commit and CI floor remain the guarantee that actually binds, per §18 — a
-`PreToolUse` hook cannot gate its own installing session in any case.
+- A hook enforcing a **security control** SHALL fail **closed** — it blocks.
+- A hook providing **cosmetic or advisory** behaviour SHALL fail **open** — it
+  allows.
 
-#### Scenario: No implementation is resolvable
+§18's pre-commit and CI floor backstops the OpenSpec change gate only. It does
+not check destructive SQL, `.env` access, or any other control. A
+security-relevant hook that fails open therefore removes protection with
+nothing beneath it, and does so silently — the worst combination. A cosmetic
+hook that fails closed would brick a machine for no safety gain.
 
-- **WHEN** a hook fires, no override is set, and neither
-  `~/.agenticapps/bin/<hook>.sh` nor `<repo>/bin/<hook>.sh` is executable
-- **THEN** the shim exits 0 and the tool call proceeds
+#### Scenario: A security hook cannot resolve an implementation
 
-#### Scenario: A project is cloned on a machine with no install
+- **WHEN** `database-sentinel`'s shim finds no override, no shared install and
+  no repo `bin/` copy
+- **THEN** it blocks the tool call and reports that the implementation is
+  missing, rather than allowing an unchecked `.env` or migration edit
+
+#### Scenario: A cosmetic hook cannot resolve an implementation
+
+- **WHEN** `normalize-claude-md`'s shim resolves nothing
+- **THEN** it exits 0 and the tool call proceeds
+
+#### Scenario: A project is cloned before the installer runs
 
 - **WHEN** a project is cloned onto a machine where the installer has never run
-- **THEN** every hook fails open, the project is fully editable, and hook
-  enforcement is absent rather than the project being unusable
+- **THEN** cosmetic hooks are absent without obstruction, and security hooks
+  block with an actionable message naming the installer
 
-### Requirement: A gate whose sentinel mechanism is absent does not block
+### Requirement: Reconciling divergent copies selects semantics deliberately
 
-A gate that predicates blocking on a sentinel artifact SHALL allow the action
-when the mechanism that produces that sentinel is not present in the project.
-A gate SHALL NOT block on a condition that the project has no available means
-to satisfy.
+When copies of a hook have diverged, the canonical implementation SHALL be
+chosen by comparing behaviour, not by recency. Where variants differ in what
+they protect, the canonical implementation SHALL take the superset of
+protection.
 
-This is the `design-shotgun-gate` defect: it blocks edits to design surfaces
-unless `.planning/current-phase/design-shotgun-passed` exists, but only GSD-era
-preflight ever wrote that sentinel, and GSD was removed on 2026-07-28. In
-`callbot` and `fbc-platform`, which have no `.planning/current-phase/`
-directory, this blocked every edit to 90 and 114 tracked design files
-respectively, with a printed remedy that no longer exists.
+Choosing "the newest file" would have silently narrowed `.env` matching from a
+wildcard to a four-item enumeration, dropping protection for any suffix nobody
+enumerated.
 
-#### Scenario: The sentinel directory is absent
+#### Scenario: Variants differ in matched paths
 
-- **WHEN** an edit targets a design surface and `.planning/current-phase/` does
-  not exist in the project
-- **THEN** the gate allows the edit, because the project has no mechanism that
-  could produce the sentinel
+- **WHEN** one variant matches `.env.*` by wildcard and another enumerates
+  specific suffixes
+- **THEN** the wildcard is canonical, together with any explicit allowance
+  (`.env.example`, `.env.template`) the narrower variant did not need
 
-#### Scenario: The sentinel directory exists but the sentinel does not
+#### Scenario: Variants differ in handled tools
 
-- **WHEN** an edit targets a design surface, `.planning/current-phase/` exists,
-  and `design-shotgun-passed` is absent from it
-- **THEN** the gate blocks the edit, because the project does have a working
-  sentinel mechanism and the pre-flight has genuinely not run
+- **WHEN** one variant handles a tool (`MultiEdit`) the others omit
+- **THEN** the canonical implementation handles it
 
-#### Scenario: The sentinel is present
+#### Scenario: A variant is deliberately inert
 
-- **WHEN** an edit targets a design surface and the sentinel exists
-- **THEN** the gate allows the edit, unchanged from current behaviour
+- **WHEN** a project documents in-file that its copy is intentionally
+  unregistered
+- **THEN** that decision is preserved: the project is not re-registered, and
+  the variant is not treated as drift to be reconciled away
 
 ### Requirement: An extension hook may be removed; a named gate may not
 
-A host-specific extension hook — one not named in §02's normative gate list —
-MAY be deleted without a spec delta. A hook that binds a gate named in §02
-SHALL NOT be deleted; a defective binding is repaired, not removed.
+A hook not named in §02's normative gate list is a host-specific extension and
+MAY be deleted without a §02 delta. A hook binding a §02-named gate SHALL NOT
+be deleted.
+
+A shell hook that merely shares a gate's name is not that gate's binding. §02
+binds gates to skills and to evidence artifacts; identifying a hook with a gate
+by filename alone confuses the two.
 
 #### Scenario: An inert extension hook is removed
 
-- **WHEN** a hook is not named in §02's gate list and its trigger condition
-  cannot occur in any project
+- **WHEN** a hook is not named in §02's gate list and its trigger cannot occur
 - **THEN** it MAY be deleted from every project without a §02 delta
 
-#### Scenario: A named gate's binding is defective
+#### Scenario: A hook shares a gate's name but is not its binding
 
-- **WHEN** a hook binds a §02-named gate and is found to misbehave
-- **THEN** the binding is repaired and retained, because §02 states that
-  removing or renaming a gate in its list is non-conformant
+- **WHEN** a hook is named after a §02 gate, but that gate's binding is a skill
+  named in the host instruction file
+- **THEN** deleting the hook does not remove the gate's binding, and no §02
+  delta is required
+
+### Requirement: A hook does not write into archived directories
+
+A hook SHALL NOT write to a directory the fleet designates as frozen history.
+
+`.planning/` is frozen GSD history: read for context, never written, never
+treated as the current plan. A hook writing live session data there
+contradicts that designation and makes archived and live content
+indistinguishable.
+
+#### Scenario: A hook needs to persist session data
+
+- **WHEN** a hook records telemetry or state across sessions
+- **THEN** it writes outside `.planning/`, or it is removed
+
+#### Scenario: Session data is read back into model context
+
+- **WHEN** a hook prints stored content into a session's context
+- **THEN** that content is treated as untrusted input, delimited as such — or
+  the hook is removed rather than carried

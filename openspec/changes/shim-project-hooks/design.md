@@ -1,159 +1,179 @@
 ## Context
 
 `docs/PLAN-lightweight-fleet.md` step 3 says projects should carry almost
-nothing. Its evidence for how is already on disk: `openspec-change-gate.sh` is
-the only hook bound by a shim rather than a copy, and it is the only hook with
-no drift. This change generalises that one working pattern and removes what the
-measurement exposed as dead.
+nothing. The evidence for how was already on disk: `openspec-change-gate.sh` is
+the only hook bound by a shim rather than a copy, and the only hook with no
+drift.
 
-Measured before designing, across the seven repos that carry `.claude/hooks/`:
+Measured across the seven repos that carry `.claude/hooks/`, before designing:
 
-| Hook | Lines | Distinct versions | §02 gate? | Disposition |
+| Hook | Lines | Versions | §02 gate? | Disposition |
 |---|---|---|---|---|
 | `openspec-change-gate` | 46 | 1 | `plan-review` (retargeted, §18) | Template — unchanged |
 | `normalize-claude-md` | 288 | 3 | no | Shim |
-| `database-sentinel` | 71 | 3 | `database-security` | Shim |
-| `skill-router-log` | 67 | 2 | no | Shim |
-| `session-bootstrap` | 29 | 1 | no | Shim |
-| `design-shotgun-gate` | 41 | 2 | **`design-shotgun`** | Shim + fail-open fix |
-| `phase-sentinel` | 20 | 1 | no | Delete |
-| `architecture-audit-check` | 72 | 1 | no | Delete |
+| `database-sentinel` | 71 | 3 | `database-security` | Shim, fail closed |
+| `skill-router-log` | 67 | 2 | no | **Delete** |
+| `session-bootstrap` | 29 | 1 | no | **Delete** |
+| `design-shotgun-gate` | 41 | 2 | name only | **Delete** |
+| `phase-sentinel` | 20 | 1 | no | **Delete** |
+| `architecture-audit-check` | 72 | 1 | no | **Delete** |
 
-Two facts from this table drove the design:
-
-- **The copy pattern produces drift; the shim pattern prevents it.** The four
-  multi-version hooks are all copied. The shimmed one is not. `dashboard`'s
-  `normalize-claude-md` fix (2026-07-26) reached one of seven repos in a month.
-- **`design-shotgun` is on §02's normative gate list.** §02 lines 33–35 state
-  the list is normative and that removing a gate is non-conformant. That single
-  clause is why the defective hook is repaired rather than deleted.
+The table is the design. Five of eight hooks earn deletion; only two are worth
+a shim. That ratio was not visible from the plan, which assumed the hooks were
+live machinery needing cheaper maintenance.
 
 ## Goals / Non-Goals
 
 **Goals**
 
-- One implementation per hook, on disk once, live everywhere immediately.
-- Remove hooks that cannot fire, rather than shimming them.
-- Stop `design-shotgun-gate` blocking 204 design files it cannot unblock.
-- Propagate `dashboard`'s `normalize-claude-md` fix to the other six repos.
+- One authoritative implementation per surviving hook.
+- Delete what cannot fire, what blocks wrongly, and what violates the
+  `.planning/` policy — rather than making any of it cheaper to maintain.
+- Stop `design-shotgun-gate` blocking 204 design files.
+- Propagate `dashboard`'s `normalize-claude-md` fix to the other six.
 
 **Non-Goals**
 
-- **Retargeting §02 from GSD vocabulary to OpenSpec.** Every gate in §02 still
-  triggers on "a phase", `CONTEXT.md`, `*-PLAN.md`, `*-SUMMARY.md`. §18 already
-  retargeted `plan-review` out of it. That staleness is the root cause of which
-  the dead hooks are a symptom, and it is plan step 5 — substantial, and it
-  needs its own reviewers.
-- **Moving instruction content** (`SKILL.md`, `workflow.md`,
-  `workflow-config.md`) to `~/.claude/CLAUDE.md`. That is step 3b, and it
-  carries a real cost this change does not: rules stop being repo-portable.
-- **Re-vendoring to the four hosts.** Plan step 2 says publish, do not
-  re-vendor per change.
-- **Building the two deferred advisory prompts.** Recorded in the proposal;
-  not built here.
+- **Retargeting §02 from GSD vocabulary to OpenSpec.** Every §02 gate still
+  triggers on "a phase", `CONTEXT.md`, `*-PLAN.md`. §18 already retargeted
+  `plan-review` out of it. That staleness is the root cause of which these dead
+  hooks are symptoms, and it is plan step 5.
+- **Moving instruction content** to `~/.claude/CLAUDE.md`. That is step 3b and
+  carries a cost this change does not: rules stop being repo-portable.
+- **Re-vendoring to the four hosts.** Plan step 2 says publish, not re-vendor.
+- **Building the two deferred advisory prompts.**
 
 ## Decisions
 
-### Decision 1: Shim against the shared bin, not a package manager or symlink
+### Decision 1: Shim against the shared bin, not a symlink or a package
 
-**Chosen:** each project ships a shim resolving override → `~/.agenticapps/bin/`
-→ `<repo>/bin/`, then `exec`s.
+**Chosen:** override → `~/.agenticapps/bin/` → `<repo>/bin/`, then `exec`.
 
-*Alternative A — symlink each hook into `~/.agenticapps/bin/`.* Fewer moving
-parts and zero resolution logic. Rejected: a symlink into a home directory
-breaks on clone, breaks in CI, and breaks for any teammate, with no fail-open
-path — the hook simply errors. The shim degrades to "allow" instead.
+*Alternative — symlink into `~/.agenticapps/bin/`.* Zero resolution logic.
+Rejected: a home-directory symlink breaks on clone and in CI with no fail path
+— the hook simply errors.
 
-*Alternative B — publish the hooks as an npm/brew package the projects depend
-on.* Real versioning and a genuine install story. Rejected as the disease the
-plan names: it adds a second binding mechanism alongside the shared bin, and
-principle 3 says use the one that exists. It also reintroduces per-project
-version pinning, which is what re-vendoring already costs us.
+*Alternative — publish as an npm/brew package.* Real versioning. Rejected as
+the disease the plan names: a second binding mechanism alongside the shared
+bin, when principle 3 says use the one that exists, and it reintroduces
+per-project version pinning.
 
-The shared bin is chosen because it is already load-bearing, already proven by
-`openspec-change-gate.sh`, and already has an installer
-(`install-shared-artifact.sh`) with an arbiter that prevents an older host
-installer clobbering a newer copy.
+### Decision 2: Delete `design-shotgun-gate` — §02 binds a skill, not a hook
 
-### Decision 2: Repair `design-shotgun-gate`, do not delete it
+**Chosen:** delete.
 
-**Chosen:** the gate allows when `.planning/current-phase/` is absent, blocks
-when the directory exists but the sentinel does not.
+This reverses an earlier decision in this change to *repair* the hook, which
+rested on reading §02's "removing a gate is non-conformant" as covering any
+file bearing a gate's name. It does not. §02 binds `design-shotgun` to "a
+multi-variant design generation skill"; in this fleet that is gstack
+`/design-shotgun`, named in the host instruction file. The PreToolUse shell
+hook is a separate enforcement mechanism that shares the name.
 
-*Alternative — delete the hook.* This was the original proposal and the user
-approved it, before §02 was read. Rejected on reading §02 line 248: a host MUST
-bind every gate whose trigger can occur in its project type, and gates may be
-omitted only when the trigger *cannot* occur. `callbot` and `cparx` have real
-UIs, so the `design-shotgun` trigger can occur; omitting the binding there
-would be non-conformant.
+The reviewer caught this. The correction matters beyond one hook: it means a
+hook's *filename* is not evidence of a §02 binding, which is now a requirement
+in the spec delta so the same mistake is harder to repeat.
 
-The three-state behaviour is deliberate. Treating "directory absent" and
-"sentinel absent" identically is what created the bug: it conflated *the
-pre-flight has not run* with *there is no pre-flight mechanism at all*. Only
-the first is a reason to block.
+Deleting also dissolves a problem the repair created. The repair proposed a
+three-state rule — allow if `.planning/current-phase/` is absent, block if
+present without the sentinel. But since GSD's removal *no* repo can produce
+that sentinel, so any repo with a stale `current-phase/` directory would block
+forever. `claude-workflow` is in exactly that state today. The repair would
+have introduced the bug it was fixing, somewhere else.
 
-### Decision 3: Delete the two extension hooks outright
+### Decision 3: Delete the telemetry pair, do not relocate it
 
-`phase-sentinel` and `architecture-audit-check` are not in §02's gate list, so
-§02 line 259 makes them optional extensions. Both are permanently inert:
-`.planning/current-phase/checklist.md` and `.planning/audits/` exist in no repo
-in either family.
+`skill-router-log` writes into `.planning/`; `session-bootstrap` reads it back.
+`.planning/` is designated frozen archive — "never write to them". The
+violation is live: core's `.planning/` was written at 08:39 on 2026-07-29.
 
-*Alternative — shim them like the rest, for uniformity.* Rejected under plan
-principle 1: shimming installs shared machinery whose only job is to keep
-permanently-inert hooks alive. Deleting beats constructing.
+**Chosen:** delete both.
 
-Their *intent* is preserved as the two deferred advisory prompts in the
-proposal, which trade a sentinel-file check for a real trigger.
+*Alternative — relocate storage outside `.planning/` and keep the feature.*
+Preserves session-start context warm-up and keeps the existing bats tests
+meaningful. Rejected: the logs are gitignored in every repo and tracked in
+none, so nothing durable is being preserved; the only consumer of the log is
+the other hook; and relocating is more work than deleting for a feature whose
+whole output is ephemeral and local.
 
-### Decision 4: `dashboard`'s `normalize-claude-md` becomes canonical
+*Alternative — keep in place and delimit on read.* Rejected: it closes the
+injection path but leaves both hooks writing into a folder that is supposed to
+be frozen, so the policy contradiction survives for the next reader.
 
-Its version is strictly newer: it removes a fallback that injected a
-"Migration 0009 not yet applied" stub whenever `.claude/claude-md/workflow.md`
-was absent — a message that is now both false and stale, since that file was
-removed on 2026-07-26. `agents-task-viewer`'s 314-line third variant is
-diffed against it during rollout and any genuine addition is folded in rather
-than dropped.
+**On the injection risk specifically:** it was initially relayed as "a
+committed log line can inject into every session fleet-wide". That is false
+here — the logs are gitignored everywhere and tracked nowhere, so injection
+requires local filesystem write access, and anyone holding that can edit
+`CLAUDE.md` or the hooks directly. It is local-only, not a propagation vector.
+Deletion is justified by the policy violation and the low value, not by an
+overstated §14 risk.
+
+### Decision 4: Split the fail posture by hook class
+
+**Chosen:** `database-sentinel` fails closed; `normalize-claude-md` fails open.
+
+A uniform fail-open posture was the original proposal, by analogy with
+`openspec-change-gate.sh`. The analogy does not hold: the change gate fails
+open *because* the git pre-commit and CI floor still catch the commit. That
+floor covers the OpenSpec gate only. Nothing beneath `database-sentinel` checks
+destructive SQL or `.env` access, so failing open removes the control silently.
+
+The cost is real and accepted: on a machine where the installer has not run,
+edits to `.env` and `migrations/` are blocked until it does. The block is loud
+and names the fix; the alternative is quiet and does not.
+
+### Decision 5: `callbot`'s `database-sentinel` semantics are canonical
+
+Its `.env` matching is a wildcard (`.env|.env.*|*/.env|*/.env.*`) with an
+explicit `.env.example`/`.env.template` allowance; `dashboard` and `cparx`
+enumerate four specific suffixes and would miss `.env.secret` or any other
+novel name. `callbot` also handles `MultiEdit`, which the others omit.
+
+Reconciling by recency would have narrowed the protection. This is why the
+spec delta requires reconciliation to take the superset rather than the newest.
+
+### Decision 6: `agents-task-viewer` stays unregistered
+
+Its `normalize-claude-md.sh` carries an in-file note dated 2026-07-21 stating
+it is deliberately not wired into `settings.json`. It was initially miscounted
+as a drifted third version; the rollout would have re-registered it and undone
+a deliberate decision. It is shimmed like the others and stays unregistered.
 
 ## Risks / Trade-offs
 
-- **A shim is only as good as the install.** Until
-  `install-shared-artifact.sh` publishes the implementations, every shimmed
-  hook fails open and projects lose enforcement. Mitigated by ordering: publish
-  and verify before replacing any project copy. The pre-commit and CI floor
-  are unaffected throughout.
-- **Fail-open is a real posture choice.** A missing install silently disables
-  gates rather than announcing itself. Accepted because §18 already made this
-  trade for the change-gate for the same reason, and because the alternative —
-  bricking every edit on a machine that has not installed — is worse.
-- **`agents-task-viewer`'s variant may contain a genuine fix**, not just rot.
-  Mitigated by diffing rather than overwriting.
-- **Rules stop being fully repo-portable** for the hook layer specifically. A
-  teammate cloning `callbot` gets fail-open hooks until they run the installer.
-  This is the same bargain step 3b makes for instruction content, taken here
-  only for hooks, where the cost is lowest because the CI floor still binds.
+- **A shim is only as good as the install**, and `database-sentinel` now fails
+  closed. Mitigated by ordering: publish and verify before replacing any
+  project copy.
+- **Deleting the telemetry pair loses session-start context warm-up.** Accepted
+  — the data is ephemeral and gitignored, so nothing accumulates that anyone
+  could later want.
+- **Five deletions is a lot to do at once.** Mitigated by all five being
+  independently justified above, none being a §02 gate, and rollout proceeding
+  one repo at a time with verification between.
+- **`agents-task-viewer`'s 314-line variant may contain a real fix.** Mitigated
+  by diffing rather than overwriting.
 
 ## Migration Plan
 
-No migration document. Per the plan's decision on step 1, a migration would
-install machinery to delete machinery; projects are edited directly.
+No migration document — per the step 1 decision, a migration would install
+machinery to delete machinery. Projects are edited directly.
 
-Order matters, because the shims are inert until the implementations exist:
+Order matters, because shims are inert until the implementations exist and
+`database-sentinel` now blocks when unresolved:
 
-1. Land canonical implementations in core and publish to `~/.agenticapps/bin/`.
-2. Verify each published implementation behaves identically to the copy it
-   replaces, using the repo whose copy is canonical.
+1. Land the two canonical implementations in core.
+2. Publish both to `~/.agenticapps/bin/`, including the multi-artifact install
+   step, and verify each behaves identically to the copy it replaces.
 3. Only then replace project copies with shims, one repo at a time.
-4. Delete the two extension hooks and remove their `settings.json` entries.
+4. Delete the five hooks and their `settings.json` entries.
 
-Rollback is `git revert` per repo; the published implementations are additive
-and harmless if project copies remain.
+Rollback is `git revert` per repo; published implementations are additive and
+harmless if project copies remain.
 
 ## Open Questions
 
 - Does `agents-task-viewer`'s 314-line `normalize-claude-md` variant contain a
-  fix worth folding into canonical, or is it purely older? Resolved by diff
-  during task 2, not by assumption.
-- `settings.json` currently wires all eight hooks in every project. Removing
-  two entries is a per-project edit this change must make — confirm no project
-  references them elsewhere before deleting.
+  fix worth folding into canonical? Resolved by diff during task 1, not by
+  assumption.
+- Do the deleted hooks' bats tests cover anything still wanted? The telemetry
+  pair has its own tests; confirm they test only the deleted feature before
+  removing them.
