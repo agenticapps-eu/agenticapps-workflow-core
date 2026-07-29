@@ -57,9 +57,36 @@ where vendor banners were recorded as review prose.
 The lesson generalises: "the copy in the repo" and "the current implementation"
 were not the same file, and only reading both revealed which was which.
 
-### Decision 2: Default the floor to 1, keep the override
+### Decision 0: Fix §18 rather than conform to it
 
-**Chosen:** `MIN_REVIEWERS` defaults to 1; an explicit value wins.
+§18 currently mandates two different floors. Line 73's truth table and line 80
+say one reviewer; lines 146 and 174 say two. Spec 1.1.0 changed the truth table
+and wrote the rationale, and left the two prose clauses behind.
+
+**Chosen:** correct lines 146 and 174 to one, matching the truth table.
+
+*Alternative — conform the producer to the ≥2 clauses.* Rejected: it
+contradicts the truth table the gate implements, and reverses a decision §18
+argues for at length over fifteen lines.
+
+*Alternative — treat this as out of scope and file it separately.* Rejected as
+the more dangerous kind of tidiness. This change's entire premise is "the
+producer disagrees with the spec"; leaving the spec self-contradictory means
+the next reader cannot tell which half the producer was made to match. The
+reviewer that caught it was right that the change must own the spec edit.
+
+The gate binary already enforces ≥1, so no running enforcement changes. This
+aligns the text with behaviour that has been live since 1.1.0.
+
+### Decision 2: Default the floor to 1, keep the override, reject below 1
+
+**Chosen:** `MIN_REVIEWERS` defaults to 1; an explicit value of 1 or more wins;
+0, negatives and non-integers are usage errors.
+
+The existing guard rejects only empty and non-digit values, so `0` passes,
+`[ 0 -lt 0 ]` is false, and the producer publishes and exits 0 — announcing a
+floor it never evaluated. That is the same failure the comment directly above
+that guard was written to prevent, reintroduced one value to the left.
 
 *Alternative — default to 1 with no override.* Simpler surface. Rejected
 because §18 distinguishes a floor from a preference: the floor is one, but a
@@ -71,15 +98,52 @@ status quo, and it failed in practice on 2026-07-29: the operator did not know
 the override was needed until a review was already lost. A default that
 contradicts the spec is a trap, not a configuration.
 
-### Decision 3: Report failures rather than failing the run
+### Decision 3: Report failures into the artifact, not just stderr
 
-A run that met the floor SHALL succeed and name the vendors that did not
-return. Previously a shortfall against the *requested* count produced no
-artifact at all, which is what discarded gemini's completed review.
+A run that met the floor SHALL succeed, and `REVIEWS.md` itself SHALL record
+which vendors were requested, counted, excluded and failed. Previously a
+shortfall against the *requested* count produced no artifact at all, which is
+what discarded gemini's completed review.
 
-This keeps the missing opinions visible — `REVIEWS.md` says who reviewed, and
-the run output says who could not — without letting one slow vendor veto the
-whole result.
+*Alternative — report failures on stderr only,* as first proposed. Rejected on
+review: the terminal is gone by the time anyone reads an archived `REVIEWS.md`,
+so "two reviewers" cannot be distinguished from "two of five, three failed".
+The artifact would systematically overstate the scrutiny a change received.
+
+### Decision 4: A section counts only if it carries a verdict
+
+Counting any non-empty, exit-zero output as a review is what let opencode's
+"I'll fact-check this change before issuing a verdict" preamble count as one of
+three reviewers on this very change. At a floor of one, such a section alone
+would open the gate for a change nobody reviewed.
+
+**Chosen:** a section counts only with a parseable verdict; output without one
+is a failure with that reason. REQUEST-CHANGES counts — an objection is a
+review, and the gate reports objections separately.
+
+### Decision 5: Independence is structural, not environmental
+
+Self-exclusion currently rests on `OPENSPEC_GATE_SELF` defaulting to `claude`,
+which is wrong on every host except one. At a floor of two this was survivable;
+at a floor of one, a single self-review satisfies the gate entirely.
+
+**Chosen:** determine the running host and exclude it by rule; de-duplicate
+repeated vendors. The floor's whole claim is "at least one *independent*
+opinion" — without this, the word independent is unenforced.
+
+### Decision 6: Declare the egress boundary; defer screening
+
+The producer sends proposal, design and spec deltas to external vendor CLIs,
+which forward them off this machine, with no manifest and no screening. It also
+passes the prompt as a process argument, readable from the process table.
+
+**Chosen:** declare what is sent and to whom, treat invocation as consent, and
+pass the prompt by file. Secret/PII screening is deferred to its own change.
+
+*Alternative — full screening now.* Rejected on scope: it turns a conformance
+fix into a security feature and delays a floor repair that is losing reviews
+today. Declaring the boundary is what makes the deferral auditable instead of
+silent — the gap is now written down.
 
 ## Risks / Trade-offs
 
