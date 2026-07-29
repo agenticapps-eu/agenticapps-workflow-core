@@ -1,32 +1,42 @@
 ## Reviewer: gemini
-_generated 2026-07-29T07:30:40Z · timeout 600s_
+_generated 2026-07-29T08:00:44Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
 
-- **The definition of a "review" is incomplete.** The proposal hinges on counting sections with a "parseable verdict", but never defines what format is considered parseable. This is a new, critical requirement for the gate and should be specified exactly (e.g., case-insensitive `^VERDICT:\s*(APPROVE|REQUEST-CHANGES)$`). Without this, the rule is ambiguous.
-
-- **The self-exclusion mechanism is not specified.** The proposal correctly states that relying on `OPENSPEC_GATE_SELF` is fragile and opts to exclude the host's vendor "by rule". It does not, however, specify what that rule is or how the host vendor is determined, which is a critical detail for an independence guarantee.
-
-- **The change increases data exfiltration risk without mitigation.** By lowering the success threshold to one reviewer, the tool will now send prompts to third-party vendors more often, including in cases where it previously would have failed and sent nothing. While deferring a full secret-scanner is reasonable, the proposal should acknowledge this increased risk and clarify that invocation implies consent for *all requested vendors*, not just those that succeed.
-
-- **The rollback plan is incomplete.** It covers restoring the script, but omits reverting the corresponding breaking changes to spec §18, which would leave the spec and the (rolled-back) tool in a contradictory state.
+- The proposal to bind reviews to a content digest is a critical fix, but the spec delta needs to precisely define what "change artifacts" are included in the digest and the canonical method for calculating it. Without this, different tools could create or validate digests differently, undermining the guarantee.
+- The requirement for the caller to supply an "authoritative host identity" is also correct, but the mechanism for supplying it (e.g., environment variable, CLI flag) must be specified as part of the contract. The spec should define *how* this is provided, not just that it *shall be* provided.
+- The change correctly identifies that a "reviewer" need not have reviewed, but the proposed fix (requiring a verdict) does not fully address the issue of a non-committal review. A reviewer could simply provide a "VERDICT: APPROVE" without any rationale. The spec should consider requiring a minimum level of substance in the review itself, beyond just the verdict line.
+- The proposal defers PII/secret screening, which is a reasonable scoping decision. However, the documentation of the egress boundary should explicitly state that no screening is performed, and recommend that reviewers manually check for secrets before invoking the review tool. This makes the risk more explicit to the user at the point of action.
 
 ## Reviewer: codex
-_generated 2026-07-29T07:33:06Z · timeout 600s_
+_generated 2026-07-29T08:03:40Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
 
-- The OpenSpec delta contains only the new producer capability; the normative §18 changes exist only as proposal prose/tasks. Add an actual modified-capability delta or exact normative patch so validation and reviewers can assess the changed contract.
-- The gate still counts reviewer headings without requiring verdicts, while tasks harden only the producer. Hand-written, stale, or older-producer evidence can therefore pass. Update and version the gate, conformance harness, README, and host publication path.
-- “Determine the running host by rule” is undefined and impossible for one shared host-agnostic binary to infer reliably. Specify an authoritative identity input and fail closed when it is absent or invalid.
-- Task 7.3 does not fix process-table exposure: the producer already passes a file to `reviewer-cli.sh`, which reads it and passes the full prompt as a vendor CLI argument. The wrapper and its tests/version must change.
-- Reviews are not bound to the reviewed artifact revision. An amended change can retain an old `REVIEWS.md`, and a failed rerun deliberately leaves it untouched. Record content hashes and have the gate verify them, or define reliable invalidation.
-- The egress contract overstates its boundary: agentic vendor CLIs may inspect files beyond the prompt, and “invocation is consent” removes the existing explicit vendor×file confirmation. Document actual tool access, require affirmative consent, and address the untrusted third-party output ingress; deferring secret/PII screening does not make those guarantees true.
+- “Invoking host” is the wrong identity. CI or another agent may evaluate evidence produced by a different host; the artifact must bind the implementing/authoring host identity, with a closed vendor vocabulary. The producer delta also omits the proposal’s required fail-closed behavior for missing/invalid identity.
+- The digest contract is underspecified: no hash algorithm, canonical file ordering/framing, artifact-set definition, or handling of added/deleted files. `tasks.md` is notably omitted, so implementation tasks could change without invalidating reviews.
+- The verdict grammar does not match the shipped parser: it is not case-insensitive, not end-anchored, and does not delimit reviewer sections. Verdicts after another `##` section, conflicting verdicts, or suffixes such as `REQUEST-CHANGES-LATER` are unresolved bypass cases.
+- A sole `REQUEST-CHANGES` verdict opens the gate. That contradicts the workflow’s “amend, revalidate, and re-review before code” rule and turns the verdict into a syntactic presence check rather than an enforceable decision.
+- The floor contradiction is not fully repaired: §17 still explicitly requires ≥2 reviewers, while the CI workflow and gate README also retain ≥2/default-2 claims. Task 1.7 only says to grep; it does not require correcting every discovered conflict.
+- The migration scope is inconsistent: “one repo” and “do not touch four hosts” conflict with tasks requiring every host shim and the Claude installer to change. Removing the identity default will also fail-close existing CI/pre-commit callers unless they are migrated atomically. Rollback covers only the producer, not the gate, wrapper, spec, or shims.
+- The security boundary is misstated: agentic vendor CLIs can access beyond the repository, including home-directory/tool configuration data. Invocation-as-consent weakens the existing explicit vendor/file consent boundary, and the promised untrusted-output requirement appears only in prose/tasks—not in the capability delta. The wrapper requirements also conflict between “by file” and “stdin or file path.”
 
 ## Reviewer: opencode
-_generated 2026-07-29T07:35:02Z · timeout 600s_
+_generated 2026-07-29T08:09:02Z · timeout 600s_
 
-I'll verify the change's claims against the actual repo and installed files before issuing a verdict.
-Session handoff read (modified today). Line counts and version markers check out. Now verifying the §18 spec claims:
-The contradiction claim is verified (truth table says ≥1, lines ~146/174 say ≥2). Now checking the producer code, the change's own REVIEWS.md, and the resolver/installer claims:
+Verified the load-bearing claims against the repo before ruling: §18 does contradict itself (lines 73/80 say ≥1, lines 146/174 say ≥2), `gate/` is untracked, the installed producer is 227 lines with `MIN="${MIN_REVIEWERS:-2}"` and a guard that admits `0`, `reviewer-cli.sh` passes the prompt as argv (`claude -p "$prompt"`, `codex exec "$prompt"`), and the gate's `reviewer_count()` (headings) / `pending_rejections()` (verdicts) divergence is real. The motivating facts are accurate. The problems are inside the proposal's own design.
+
+VERDICT: REQUEST-CHANGES
+
+- **Decision 5 contradicts the change's own design.** Decision 5 says "determine the running host and exclude it by rule," but the What Changes section explicitly rejects that as "not implementable" and instead specifies caller-supplied identity with fail-closed. The two producer/gate requirements also disagree in wording: one says "determined by rule, not by an environment variable," the other makes the caller supply identity (which will in practice arrive via env var or flag). An implementer cannot tell which behavior is normative. Decision 5 was not rewritten after the design pivoted.
+- **Impact's "no running gate changes behaviour" is false.** Gate 1.5.0 adds three new enforcement terms — verdict-required counting, digest staleness, fail-closed host identity. Every existing `REVIEWS.md` lacks a digest and every host that doesn't supply identity will now block. The proposal's own scenario ("review predates digest recording → does not count") forces re-review of all in-flight changes, yet Impact claims pure text-alignment and Migration contains zero steps for the gate or wrapper rollout.
+- **Fail-closed identity conflicts with the "not touching the four hosts" non-goal.** The moment gate 1.5.0 lands on a host whose hooks don't supply the authoritative identity, that host's gate blocks everything. That is a mandatory cross-host coordinated change; the proposal explicitly disclaims it and gives no rollout ordering.
+- **Digest scope is undefined, and the obvious reading breaks implementation.** "Digest of the change artifacts" never enumerates the artifacts. The scenarios name proposal/design/spec-delta but not `tasks.md` — which is edited continuously during implementation (checkbox ticking). If tasks.md is in scope, every implementation step stales the review and the gate deadlocks; if out of scope, say so normatively. Also unstated: `REVIEWS.md` must exclude itself, and the digest algorithm/canonicalization (line endings, whitespace) is unspecified, so two conformant implementations can disagree.
+- **"Closed vocabulary" is never enumerated.** The verdict-format requirement hinges on a closed vocabulary but never lists it (APPROVE? APPROVE-WITH-COMMENTS?). A spec requirement whose conformance cannot be tested is not a requirement. Also unresolved: the scenario says a verdict "in a fenced block" must not count, but "anchored at line start" matches inside fences under any naive regex — the fence-exclusion mechanism is unspecified (the shipped awk parser's fence handling isn't referenced).
+- **The "hand-written REVIEWS.md" motivation is not fixed by the proposed mechanism.** The What Changes preamble argues hardening the producer alone is cosmetic because forged artifacts open the gate — then ships digest-binding, which detects drift but not forgery (the digest is computable by anyone from the same public artifacts). Either claim the narrower fix honestly or add an authenticity term; currently the rationale overclaims.
+- **Migration Plan covers only the producer.** No steps for: publishing gate 1.5.0 and reviewer-cli 1.2.0, updating their `reference-implementations/` entries, adding the `resolve-core-artifact.sh` mapping (mentioned in What Changes but absent from both the capability requirements and Migration), or the re-review wave forced by digest invalidation. Scope and execution plan don't match.
+- **Minor — "passed by file" vs "stdin or a file path."** What Changes permits stdin; the requirement mandates file. Pick one. Also: a fully-failed run writes nothing, so the "REVIEWS.md is self-contained" audit trail has a hole exactly where diagnostics matter most — at least state that failed runs leave no artifact by design.
+- **Accepted-but-flagged:** deferring secret/PII screening while the egress set now includes full proposal + design + spec deltas is a real exposure window; the deferral should name the follow-up change and an owner, not just "its own named change."
+
+The core diagnosis (spec self-contradiction, untracked producer, discarded partial reviews, `MIN=0` hole) is verified and correct — this needs a revision pass on Decision 5, digest scope, the vocabulary enumeration, and a real migration story for the gate/wrapper, not a rethink.
 

@@ -84,6 +84,16 @@ inject fleet-wide" is false, because the logs are gitignored.
 
 - **`design-shotgun-gate` blocks 204 design files today** in callbot and
   fbc-platform — every `.tsx`/`.css` edit.
+- **`database-sentinel` blocks every `migrations/` edit in callbot today.**
+  Line 59 requires `.planning/current-phase/migrations-approved`; callbot has
+  no `current-phase` directory. Same dead-GSD-sentinel mechanism, in a hook
+  the plan classified as healthy. The revision that named callbot's
+  implementation canonical would have **propagated this to all seven repos** —
+  caught by codex on the third review round, not by measurement.
+- **A verdict is not a review.** gemini returned a bare `VERDICT: APPROVE`
+  with no body on 2026-07-29T07:52:54Z and it counted toward the floor. The
+  planned "require a parseable verdict" fix would still count it, so that
+  requirement is necessary but not sufficient.
 - **§18 is self-contradictory.** Truth table + line 80 say ≥1; lines 146 and
   174 say ≥2. It is not satisfiable as written.
 - **The gate counts headings, not verdicts.** `reviewer_count()` matches
@@ -107,13 +117,43 @@ inject fleet-wide" is false, because the logs are gitignored.
 
 ## Next session: start here
 
-A re-review of **both** changes was running when this session ended
-(background task `bhuok8t90`). Read
-`openspec/changes/*/REVIEWS.md` first and address the verdicts. Then implement
-`track-and-conform-plan-review` **before** `shim-project-hooks` — it repairs
-the machinery that reviews everything else, and its task 9b.13 explicitly
-re-checks this branch's own two changes under gate 1.5.0, where both should
-read as stale.
+Round 3 of review is **complete and on disk**. `shim-project-hooks` has gemini
+APPROVE (bare, no body) and codex REQUEST-CHANGES; `track-and-conform-plan-review`
+has REQUEST-CHANGES from all three. **Neither change is ready to implement** —
+read both `REVIEWS.md` first.
+
+`shim-project-hooks` needs a fourth revision. codex's surviving objections,
+verified:
+
+1. A fail-closed `database-sentinel` shim **cannot** inspect the payload
+   without violating the change's own "behaviour-free shim" rule, so it would
+   block every matched `Bash`/`Edit`/`Write`/`MultiEdit` — not just `.env` and
+   migrations. **This is a real contradiction in the design and has no answer
+   yet.** It may force reconsidering the fail-closed decision.
+2. The canonical `database-sentinel` must drop the `migrations-approved`
+   clause (see defects above).
+3. `MultiEdit` needs `settings.json` matcher changes in six of seven repos.
+4. `<repo>/bin/<hook>.sh` in the resolution order contradicts "a project SHALL
+   NOT carry a copy" — internal inconsistency in the spec delta.
+5. "Not named in §02 ⇒ extension hook" is unsound: §02 says filenames are not
+   authoritative **in either direction**. Removal must be argued from the
+   documented host binding. (The `design-shotgun-gate` deletion is still
+   right, but needs this reasoning, not the filename argument.)
+6. The delta overreaches by requiring *every* project hook to be a shim; §02
+   permits project-local extension hooks. Scope it to fleet-shared hooks.
+7. "Security control" overclaims: `Bash` can write `.env` directly, `psql -f`
+   bypasses the regex, and the shared user-writable executable is a
+   fleet-wide tampering surface. Call it best-effort or state the boundary.
+
+Two codex claims were **checked and are false** — it said gemini praised the
+abandoned repair (gemini's section has no body at all) and that codex was
+self-reviewing (the implementing host is claude). Verify before acting on
+reviewer claims; roughly one in four has been wrong this session.
+
+Then implement `track-and-conform-plan-review` **before** `shim-project-hooks`
+— it repairs the machinery everything else is reviewed by, and its task 9b.13
+re-checks this branch's own changes under gate 1.5.0, where both should read
+as stale.
 
 ## Open questions
 
