@@ -20,7 +20,7 @@ Core's PR carries **spec 1.2.0**, which is what the other eleven implement.
 
 | Repo | PR | Repo | PR |
 |---|---|---|---|
-| **agenticapps-workflow-core** | branch pushed, **PR not yet opened** | agenticapps-roadmap | #9 |
+| **agenticapps-workflow-core** | **#46 — merge first** | agenticapps-roadmap | #9 |
 | claude-workflow | #107 | callbot | #97 |
 | codex-workflow | #32 | cparx | #108 |
 | opencode-workflow | #22 | fbc-platform | #102 |
@@ -106,11 +106,12 @@ bodies are detailed — read those rather than re-deriving.
 
 ## Next session: start here
 
-1. **Open core's PR.** Branch is pushed; the PR itself was never created. It is
-   the parent of the other eleven and should merge first.
-2. **Merge the 12.** They are independent. The four host PRs are the
-   substantive ones; the seven project PRs are near-identical 82-line
-   deletions.
+1. **Merge core #46 first** — it carries spec 1.2.0, which the other eleven
+   implement. Harnesses green at time of opening: change-gate 52/52,
+   resolver 13/13.
+2. **Then merge the eleven.** They are independent of each other. The four host
+   PRs are the substantive ones; the seven project PRs are near-identical
+   82-line deletions.
 3. **Then answer the plan's step 4 question: are codex / opencode / pi actually
    in daily use?** If not, archiving them removes three migration chains, three
    installers, three CI configs and three quarters of the propagation problem
