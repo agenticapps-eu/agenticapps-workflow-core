@@ -54,10 +54,9 @@ host implements identical behavior. It was validated end-to-end by the
 - **MUST** determine the **active change** — the open change directory
   under `changes/` (excluding `archive/`) that the edit belongs to.
 - **MUST** resolve two facts about the active change: whether
-  `openspec validate --all` passes, and whether the change carries a
-  `REVIEWS.md` with **at least two** independent reviewers (counted, per
-  the pilot, as `## Reviewer:` headings or host-equivalent reviewer
-  markers).
+  `openspec validate --all` passes, and how many independent reviewers
+  the change's `REVIEWS.md` carries (counted, per the pilot, as
+  `## Reviewer:` headings or host-equivalent reviewer markers).
 
 ### Decision (exit codes)
 
@@ -69,15 +68,39 @@ truth table is normative:
 |---|---|---|
 | No active change (edit outside any open change) | **allow** | `0` |
 | The edit targets an OpenSpec artifact (`openspec/**` — proposal, design, delta, tasks) | **allow (exempt)** | `0` |
-| Active change, `validate` green, **no** `REVIEWS.md` (or < 2 reviewers) | **block** | `2` |
+| Active change, `validate` green, **no** `REVIEWS.md` (zero reviewers) | **block** | `2` |
 | Active change, `validate` **fails** | **block** | `2` |
-| Active change, `validate` green **and** `REVIEWS.md` ≥ 2 reviewers | **allow** | `0` |
+| Active change, `validate` green **and** `REVIEWS.md` ≥ 1 reviewer | **allow** | `0` |
+| …with exactly 1 reviewer (below the preferred 2) | **allow + report** | `0` |
 | Documented escape hatch env var set (e.g. `GSD_SKIP_REVIEWS=1`) | **allow (override)** | `0` |
 | Malformed / unparseable stdin | **allow (fail-open)** | `0` |
 
 - **MUST** enforce **both** clauses to allow a code edit under an active
   change: `openspec validate --all` passes **and** `REVIEWS.md` carries
-  ≥ 2 independent reviewers. Either alone is a block.
+  **at least one** independent reviewer. Either alone is a block.
+- **SHOULD** carry **two or more** independent reviewers. Two remains the
+  target, and a host **MUST** report when a change is proceeding on one —
+  the difference between "reviewed by one" and "reviewed by two" must not
+  be invisible at the moment it is being relied on.
+- **MUST NOT** block on the count between the floor and the preference. A
+  single reviewer is a reportable condition, not a failure.
+
+  **Why the floor moved from two to one (spec 1.1.0).** The original ≥2 came
+  from ADR-0018's independence property, and the evidence for it is real:
+  across three reviewed changes in the 2026-07-28 fleet migration, the single
+  most consequential finding was *unique to one vendor every time* and not
+  predictable in advance — on one change the three reviewers' top findings had
+  zero overlap, and the one that mattered (a factually false premise, verified
+  against git history) came from the reviewer a smaller quorum might not have
+  run.
+
+  That argues two reviewers are **better**, which is why it stays a SHOULD. It
+  does not argue that one reviewer is worse than *none*, which is what a hard
+  ≥2 floor effectively enforced whenever a vendor was slow, rate-limited or
+  down. Blocking all work because the second of two opinions timed out trades a
+  large, certain cost against a small, uncertain one. The floor now sits where
+  the guarantee is real — no code without at least one independent opinion —
+  and the preference is carried by reporting rather than by refusal.
 - **MUST** exempt writes to the OpenSpec artifacts themselves — the
   agent has to be able to *author* the change (proposal, design, delta,
   tasks) and its `REVIEWS.md` while the gate is engaged.

@@ -70,7 +70,7 @@ A host claiming `full` conformance MUST:
    values; a host with no LLM prompt-building surface is trivially
    conformant and says so with a spec delta. Section 15 is wired per
    host but activated per repo: the host MUST ship the trigger wiring
-   and skip behavior; a repo without the §15.2 config block is
+   and skip behavior; a repo with no such block is
    skipped silently and remains conformant, no delta required.
 3. **Bind every applicable gate.** Section 02 enumerates 16 gates.
    For each gate whose trigger condition can occur in the host's
@@ -108,26 +108,6 @@ A host claiming `consumer-only` conformance MUST:
 3. Not assert authorship of any of the gates from section 02.
    (A consumer that authors gates is no longer consumer-only.)
 
-## Knowledge-capture checks (§15)
-
-A conformance review of a host claiming 0.7.0 applies three checks
-for §15; a consumer-only host has no ritual surface and skips all
-three.
-
-1. **Trigger wiring present in the host's ritual instructions.** The
-   host's SKILL.md (or equivalent) names the knowledge-capture write
-   as the final step of each of the three §15.1 rituals — session
-   handoff, plan completion, phase completion — after the ritual's
-   own artifact is committed.
-2. **Config block honored, path not hardcoded.** Repos opting in
-   carry the `knowledge_capture` block in `.planning/config.json` per
-   §15.2, and the host resolves the note path exclusively from that
-   block. A vault path literal inside host skill logic (checkable by
-   grep over the host repo) is non-conformant.
-3. **Graceful-skip behavior.** With the block absent, `enabled:
-   false`, or the note's parent folder missing, each ritual completes
-   normally with at most one informational line — no error, no
-   created folders, no empty note.
 
 ## Allowed extensions
 

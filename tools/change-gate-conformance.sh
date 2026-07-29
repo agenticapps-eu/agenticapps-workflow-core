@@ -375,9 +375,13 @@ score_gate() {
   rm -rf "$fx"
 
   echo "  ── D. Reviewer counting ──"
+  # These rows assert the COUNTING hardening, not the floor. 1.4.0 moved the
+  # default floor to 1, so they pin MIN_REVIEWERS=2 explicitly — otherwise a
+  # single valid reviewer allows and the row proves nothing about dedup or
+  # fence-skipping.
   # Two headings naming the SAME reviewer is one independent reviewer.
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" claude claude
-  run_row "duplicate reviewer counts once -> block" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row "duplicate reviewer counts once -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # A heading inside a fenced code block is an example, not a reviewer.
@@ -386,7 +390,7 @@ score_gate() {
     printf '## Reviewer: claude\n\nReal.\n\n'
     printf 'Template for reviewers to copy:\n\n```markdown\n## Reviewer: codex\n```\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "fenced example is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row "fenced example is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # A prose section header is not a reviewer. With the colon optional,
@@ -395,7 +399,7 @@ score_gate() {
   fx="$(make_fixture 0)"
   printf '## Reviewers\n\n## Reviewer: claude\n\nReal.\n' \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "prose '## Reviewers' is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row "prose '## Reviewers' is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # A `reviewers: [a, b]` YAML line carries no review content. If a fallback
@@ -404,13 +408,13 @@ score_gate() {
   fx="$(make_fixture 0)"
   printf '## Reviewer: claude\n\n## Reviewer: claude\n\nreviewers: [claude, claude]\n' \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row "YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"
   printf '## Reviewer: claude\n\n```yaml\nreviewers: [a, b]\n```\n' \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "fenced YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row "fenced YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   echo "  ── E. Self-review exclusion (OPENSPEC_GATE_SELF; advisory) ──"
@@ -418,7 +422,7 @@ score_gate() {
   # opinion. A gate that counts it disagrees with the §02 evidence verifier,
   # which rejects it — the ADR-0018 drift pattern, inside the tooling.
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi claude
-  OPENSPEC_GATE_SELF=pi run_row "self + 1 other = 1 independent -> block" 2 "$fx" "$(p_claude src/main.go)"
+  OPENSPEC_GATE_SELF=pi MIN_REVIEWERS=2 run_row "self + 1 other = 1 independent -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi claude codex
@@ -428,6 +432,32 @@ score_gate() {
   # Anchored: a reviewer whose name merely starts with the host's is not swallowed.
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi pilot-crew claude
   OPENSPEC_GATE_SELF=pi run_row "exclusion is anchored, not a prefix -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  echo "  ── E2. Reviewer floor vs preference (spec 1.1.0) ──"
+  # 1.4.0: MUST >= 1 (blocks), SHOULD >= 2 (reports). The gap must never block.
+  fx="$(make_fixture 0)"   # zero reviewers
+  run_row "0 reviewers -> block (the floor still bites)" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  run_row_stderr_has "1 reviewer -> ALLOW, and says 2 is preferred" 0 \
+    "2 preferred" "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" gemini codex
+  run_row_stderr_lacks "2 reviewers -> allow, no shortfall note" 0 \
+    "preferred" "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # The old hard floor stays available for a repo that wants it.
+  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  MIN_REVIEWERS=2 run_row "MIN_REVIEWERS=2 restores the old hard floor" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # Preference is reporting only — raising it must never turn into a block.
+  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" gemini codex
+  PREFERRED_REVIEWERS=5 run_row "raising PREFERRED alone never blocks" 0 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   echo "  ── F. Verdict reporting (quorum, not approval; advisory) ──"

@@ -1,3 +1,10 @@
+> **Superseded 2026-07-28.** Spec §15 was removed at spec 1.2.0 and the
+> knowledge-capture ritual retired fleet-wide. The OpenSpec archive
+> (`openspec/changes/archive/`) retains each change's proposal, design, delta
+> and review evidence permanently — the durable record §15's distilled note was
+> approximating. Notes already written to the operator's vault are left in
+> place; nothing reads or updates them. See ADR-0025.
+
 # ADR-0017: Knowledge capture into the Obsidian vault as a portable spec section
 
 **Status:** Accepted
