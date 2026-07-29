@@ -1,19 +1,42 @@
 ## Reviewer: gemini
-_generated 2026-07-29T07:52:54Z · timeout 600s_
+_generated 2026-07-29T12:04:56Z · timeout 600s_
 
 VERDICT: APPROVE
+- The decision to make shims fail open with a warning is a critical and correct reversal. The analysis showing a fail-closed posture would render repositories unusable is sound, and moving the guarantee to the installer is the right architectural trade-off.
+- The standard for deleting hooks — arguing from the spec's documented binding and evidence artifacts, not from a hook's filename — is a crucial clarification. It correctly identifies and resolves the ambiguity that led to keeping `design-shotgun-gate` in a previous revision.
+- The proposal is exceptionally thorough in identifying and addressing knock-on effects. Updating the `claude-workflow` scaffolder, migrating the `openspec-change-gate` shim to its own new rules, and updating `settings.json` matchers for `MultiEdit` are all examples of a comprehensive, non-leaky abstraction.
+- The analysis of `database-sentinel` is a model of clarity: accurately describing it as "best-effort defense in depth" rather than a security boundary, and removing its dead `migrations/` clause before canonizing it, both prevent future misuse and propagation of defects.
 
 ## Reviewer: codex
-_generated 2026-07-29T07:56:29Z · timeout 600s_
+_generated 2026-07-29T12:07:42Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
 
-- An unresolved fail-closed `database-sentinel` shim cannot inspect the payload without violating the “behavior-free shim” rule; it will block every matched `Bash`/`Edit`/`Write`/`MultiEdit`, not merely `.env` and migration edits as claimed.
-- The selected `callbot` implementation still contains the obsolete `.planning/current-phase/migrations-approved` check. No requirement or task removes it, so migration edits remain permanently blocked after GSD removal.
-- `MultiEdit` support is ineffective unless wiring changes too: six of seven `settings.json` matchers currently omit `MultiEdit`, while the tasks only reconcile implementation behavior.
-- `<repo>/bin/<hook>.sh` contradicts “a project SHALL NOT carry a copy.” If `<repo>` means the product repo, the fallback is forbidden; if it means the core/scaffolder checkout, the shim has no specified way to locate it.
-- “A hook not named in §02 is an extension” is false. §02 says bindings are host-specific and filenames are not authoritative in either direction. Removal must be based on the documented host binding, not name absence.
-- The delta overreaches by requiring every project hook to be a shim, which would prohibit legitimate project-local extension hooks that §02 explicitly permits. Scope it to fleet-shared workflow hooks.
-- The “security control” claim is too strong: Bash can write `.env` directly, indirect SQL such as `psql -f` bypasses the regex, and the shared user-writable executable creates a fleet-wide tampering blast radius. Define this as best-effort or specify integrity and coverage boundaries.
-- The on-disk `REVIEWS.md` is stale: Gemini praises the now-abandoned repair of `design-shotgun-gate`, and Codex is counted despite being the implementing host. The amended change needs fresh reviews from at least two eligible independent vendors.
+- The deletion rule contradicts itself: it permits deletion only when all three clauses hold, then forbids deletion when any one holds. Replace the latter with “if any clause does not hold.”
+- Two deletion scenarios ignore clause 3. “Shares a gate’s name” does not establish non-enforcement, and checking a non-normative sentinel could still indirectly enforce required evidence.
+- Fail-open applies to every shared hook, explicitly including `openspec-change-gate`. A missing install therefore bypasses §18 enforcement, despite “Modified Capabilities: None.” This needs reconciliation with §18 or a scoped exception.
+- “Loud warning” assumes stderr from an exit-0 hook is user-visible. The tasks only test that stderr is written, not that the supported host surfaces it; otherwise protection disappears silently.
+- “Authoritative in one place” is underspecified: core contains the maintained source while `~/.agenticapps/bin/` contains the executed copy. Checking only “present and executable” accepts stale or tampered code. Require provenance/freshness and atomic multi-artifact publication.
+- The shared writable implementation is an arbitrary-code execution concentration point, not merely a way to alter database enforcement. Compromise can propagate across all projects and hooks; the security discussion must cover this fleet-wide blast radius.
+- An invalid override has no defined exit result: it cannot fall through, but the fail-open scenario only covers “no override.” Specify that it warns and exits 0, or explicitly define another posture.
+- The change depends on a companion change to remove `OPENSPEC_GATE_SELF`, yet claims this change brings the gate shim into conformance. Encode landing order/dependency or make this change independently conformant.
+- Impact says `claude-workflow` is both one of nine touched repos and “untouched,” while later requiring substantial template/snapshot edits.
+- Deleting producers does not delete existing gitignored telemetry. Those local logs may retain repository paths or activity data; document retention and an optional cleanup path rather than equating “gitignored” with disposed.
+
+## Reviewer: opencode
+_generated 2026-07-29T12:14:07Z · timeout 600s_
+
+I checked the live change on disk (`openspec/changes/shim-project-hooks/`, tasks.md, REVIEWS.md) before ruling.
+
+VERDICT: REQUEST-CHANGES
+
+- **Likely-wrong factual premise under Decision 6 / Requirement "Registration matches the implementation's tool coverage" / tasks 4.1–4.7.** Claude Code's hook matcher semantics treat the `Edit` matcher as also matching `MultiEdit` (documented host behavior). If that holds, the claim that six repos' `Bash|Edit|Write` matchers "never deliver MultiEdit" is false, `callbot`'s explicit `|MultiEdit` is redundant rather than a superset, and the change prescribes a fleet-wide settings.json edit plus a normative spec requirement built on a wrong assumption. This must be verified against the host's hook docs (or empirically with a test hook) before the change ships a requirement and six repo edits premised on it.
+- **Invalid-override behavior is unspecified at the decision point.** The delta says an invalid override "SHALL report that specifically and SHALL NOT silently fall through" — but never says what happens next. Two readings, both bad: (a) it allows the tool call with no implementation running (silent loss of protection, worse than falling through), or (b) it exits non-zero and blocks every Bash/Edit/Write because someone typo'd an env var — the exact blast radius Decision 4 forbade. The scenario needs an explicit third state (report-and-allow is the only one consistent with the rest of the delta; say so).
+- **Decision 9 vs. task 4b.4 is internally inconsistent.** Decision 9 audits the change-gate shim as violating three requirements and says it is "brought into conformance here," but 4b.4 explicitly leaves the hardcoded-identity violation to the companion change — and the "identity is not hardcoded" rule doesn't even appear as a requirement in this delta (the shim contract *permits* "host self-identification"). Either the delta needs the requirement, or Decision 9's audit table overstates conformance achieved by this change.
+- **Fail-open is codified for the §18 change-gate without acknowledging what that means.** "A hook's class does not change this" brushes past the one hook whose entire function is blocking: on any unprovisioned machine, §18 plan-review enforcement becomes advisory. Today's shim already fails open silently, so this is not a regression — but the delta elevates it to the normative posture for *all* fleet-shared hooks including the compliance gate. At minimum record the accepted weakening; better, permit the gate's *implementation* (not the shim) to fail closed in CI (`--ci` mode), since there is no matcher-breadth argument against the implementation deciding its own posture.
+- **The "loud warning" channel is unverified.** The fail-open design rests on stderr being surfaced to the operator. For PreToolUse hooks exiting 0, Claude Code does not display stderr in the normal transcript. If the warning is invisible in practice, the mitigation in Decision 4 and the Risks section is much weaker than stated. Verify and adjust the claim (or the mechanism, e.g., exit-2-with-allow isn't available; consider SessionStart provisioning check).
+- **Missing scenario: the shim itself drifts.** The delta requires shims to be byte-identical across projects but specifies no propagation path when the *shim contract* changes (as it does in this very change — the gate shim must be edited in seven repos). One requirement/scenario covering shim versioning or update propagation closes the hole; right now the spec's "authoritative in one place" covers implementations but not the seven copies of the shim.
+- **Durable spec text embeds transient fleet state.** Several normative requirements carry one-time migration facts ("Six of the seven projects register…", "`callbot` lines 57–67", "removed 2026-07-28"). Once archived into `openspec/specs/`, these read as permanent truth about a fleet that will have moved on. Keep the requirements generic; move the forensic detail to design.md (where it belongs and is already well told).
+- **REVIEWS.md is stale per the change's own stated remedy.** The on-disk reviews (gemini 08:41, codex 08:44 REQUEST-CHANGES, and an opencode entry with no verdict — it trails off mid-verification) predate Decisions 9, 10, and 11 and the claude-workflow scope addition. The design commits to "re-reviewing after each revision"; this revision has not been re-reviewed, and the opencode entry lacks a verdict line entirely, so the §18 evidence for the *current* text is one approval plus one rejection of an older draft. Regenerate REVIEWS.md against the current text before apply.
+- **Minor:** tasks 2.1/2.7 cargo-cult "host self-identification" into shims for hooks that have no use for it, imitating a mechanism (`OPENSPEC_GATE_SELF`) the companion change is retiring — the two new shims should drop it. And 4.3 ships a shim file into `agents-task-viewer` that is deliberately never registered; either register-and-shim or don't ship the file, and record why.
 

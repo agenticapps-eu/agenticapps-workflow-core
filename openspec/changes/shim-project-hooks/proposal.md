@@ -33,8 +33,35 @@ already the binding mechanism.
 ## What Changes
 
 **Delete five hooks from all seven projects**, removing their `settings.json`
-entries. None is named in §02's normative gate list, so all are host-specific
-extension hooks that §02 permits but does not require:
+entries.
+
+The argument for each deletion is that **no §02 gate's documented binding names
+it, and none produces a §02 evidence artifact** — not that its filename is
+absent from §02's gate list. A reviewer was right that the earlier reasoning was
+unsound: §02 says a gate's binding is host-specific data living in the host
+instruction file, which makes filenames non-authoritative **in both
+directions**. A hook named after nothing in §02 could still be a gate's binding,
+and a hook named after a gate need not be. Each of the five is checked against
+what §02 actually binds:
+
+| §02 gate | Documented binding | Required evidence |
+|---|---|---|
+| `brainstorm-ui` | a brainstorming skill | ≥2 UI alternatives in CONTEXT.md |
+| `brainstorm-architecture` | a brainstorming/research skill | ≥2 architectural alternatives |
+| `design-shotgun` | a multi-variant design generation skill | ≥3 rendered variants referenced from CONTEXT.md / UI-SPEC.md |
+| `design-critique` | a designer-eye review skill | a critique document |
+| `plan-review` | a multi-AI plan-review skill + programmatic gate | `REVIEWS.md` |
+
+Every binding is a **skill named in the host instruction file**; the host's
+gate-to-skill map names `superpowers:brainstorming`, gstack `/design-shotgun`,
+`impeccable:critique` and `run-plan-review.sh`. None of the five hooks appears in
+it, and none writes any of the evidence artifacts above. `design-shotgun-gate.sh`
+is the closest call and still fails the test: it checks a sentinel file
+(`.planning/current-phase/design-shotgun-passed`), which is not §02's required
+evidence for that gate, so it was never that gate's enforcement either.
+
+On that basis all five are host-specific extension hooks, which §02 permits but
+does not require:
 
 - `phase-sentinel.sh` — gates on `.planning/current-phase/checklist.md`, which
   exists in no repo in either family. Permanently inert.
@@ -63,11 +90,39 @@ deleting the producers discards nothing durable.
   The enumerated four-suffix list in `dashboard` and `cparx` misses any novel
   suffix, which is precisely the case a secrets guard exists for.
 
-**Split the fail posture.** `database-sentinel` is a security control with no
-CI floor beneath it — §18's pre-commit and CI floor enforce the OpenSpec gate
-only, not destructive SQL or `.env` protection. Its shim therefore **fails
-closed**: if no implementation resolves, it blocks rather than silently
-dropping the protection. `normalize-claude-md` is cosmetic and **fails open**.
+  **Two corrections to that adoption**, both from review:
+
+  1. **The `migrations/` clause is dropped, not carried.** `callbot`'s copy
+     blocks every `migrations/` edit unless `.planning/current-phase/migrations-approved`
+     exists (line 59), and tells the operator to fix it with `/gsd-discuss-phase`
+     — a command removed on 2026-07-28. `callbot` has no `current-phase/`
+     directory, so **every migration edit in that repo is blocked today**. This
+     is the same dead-sentinel mechanism as `design-shotgun-gate`, in the hook
+     the earlier draft classified as healthy; naming this copy canonical without
+     the correction would have propagated a live blocking defect to all seven
+     repos. Its replacement is the deferred advisory database-review prompt,
+     already recorded below.
+  2. **`MultiEdit` needs a `settings.json` change, not just an implementation.**
+     Six of the seven repos register `database-sentinel` on `Bash|Edit|Write`;
+     only `callbot` includes `MultiEdit`. Adopting an implementation that
+     handles `MultiEdit` does nothing in a repo whose matcher never delivers it.
+     The rollout updates the matcher in the other six.
+
+**The fail posture is fail-open with a loud warning, for both hooks.** An
+earlier revision had `database-sentinel` fail **closed** on the reasoning that
+nothing backstops it. Review showed that does not work, and the numbers are
+unambiguous: the hook is registered on `Bash|Edit|Write` (`|MultiEdit` in
+`callbot`), so a shim that blocks when it cannot resolve an implementation
+blocks **every Bash command and every file edit in the repo** — not `.env` and
+`migrations/` as claimed. Narrowing that would require the shim to inspect the
+payload, which is precisely the behaviour the shim contract forbids and which
+would re-create the duplicated logic this change exists to remove.
+
+The guarantee moves to where it can be enforced without duplicating anything:
+the installer verifies both implementations are present and executable, and the
+rollout publishes and verifies **before** any project copy is replaced. An
+unresolvable shim warns on stderr and allows. Absence becomes a provisioning
+failure, caught once and visibly, rather than a per-tool-call outage.
 
 **Preserve `agents-task-viewer`'s opt-out.** Its `normalize-claude-md.sh` is
 **deliberately unregistered** — an in-file note dated 2026-07-21 says it must
@@ -77,9 +132,15 @@ remain so. It is shimmed like the others but stays out of that project's
 ## Capabilities
 
 ### New Capabilities
-- `project-hook-binding`: how a project binds a workflow hook — the shim
-  contract, its resolution order, the fail posture a hook takes by class, and
+- `project-hook-binding`: how a project binds a **fleet-shared** workflow hook —
+  the shim contract, its resolution order, what an unresolvable shim does, and
   the rule that a hook implementation is authoritative in exactly one place.
+
+  The capability governs hooks shared across projects. It does **not** require
+  every hook in a project to be a shim: §02 explicitly permits host-specific
+  extension hooks, and a project-local hook that exists in one repo has nothing
+  to drift against. An earlier revision required all of them, which would have
+  prohibited what §02 allows.
 
 ### Modified Capabilities
 <!-- None. §02's normative gate list is untouched: no gate is added, removed or
@@ -91,8 +152,9 @@ remain so. It is shimmed like the others but stays out of that project's
 
 ## Impact
 
-**Repos touched (8):** `agenticapps-workflow-core` (canonical implementations
-+ new capability spec), and the seven projects carrying hooks —
+**Repos touched (9):** `agenticapps-workflow-core` (canonical implementations
++ new capability spec), **`claude-workflow`** (see below), and the seven
+projects carrying hooks —
 `agenticapps-dashboard`, `agenticapps-roadmap`, `agents-task-viewer`,
 `callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`. `claude-workflow` and
 the other three hosts carry no `.claude/hooks/` and are untouched.
@@ -112,22 +174,83 @@ shims); 634 lines become roughly 138. Across seven projects that is about
 - Session-start no longer surfaces recent skill invocations, and skill
   invocations are no longer logged. This is the accepted cost of deleting the
   telemetry pair.
-- A machine without the shared install now **blocks** on `database-sentinel`
-  rather than silently losing `.env` and destructive-SQL protection.
+- `callbot` can edit `migrations/` again — blocked today by a sentinel no
+  surviving command writes.
+- Six projects gain `MultiEdit` coverage on `database-sentinel`, which their
+  matchers have never delivered.
+- A machine without the shared install loses `.env` and destructive-SQL
+  protection, and says so on stderr each time. It does not block.
+
+**What `database-sentinel` is, stated accurately.** It is **best-effort
+defence in depth**, not a security boundary, and the delta says so rather than
+calling it a security control. Its limits are specific and were named in review:
+
+- The `Bash` arm matches `DROP TABLE`, `TRUNCATE TABLE` and `DELETE FROM`
+  without a `WHERE`. It does not stop `Bash` writing `.env` directly, and
+  indirection such as `psql -f script.sql` never presents the SQL to the regex.
+- The implementation is a **user-writable file in a shared directory** executed
+  by seven projects. Anyone who can write it can change what all seven enforce.
+  That is a consequence of consolidation and the reason the change tracks the
+  implementation in core rather than leaving the shared copy authoritative.
+
+A control described accurately can be relied on correctly. Described as a
+security control with no floor beneath it, it invited the fail-closed posture
+that review then showed to be unworkable.
 
 **Rollout dependency:** shims are inert until `install-shared-artifact.sh` has
-published the implementations. Because `database-sentinel` fails closed, a
-project whose install has not run will block edits to `.env` and `migrations/`
-until it does — deliberate, and the reason publish-and-verify precedes any
-project edit.
+published the implementations. A project whose install has not run silently
+loses the protection, with a warning on each invocation — which is why
+publish-and-verify precedes any project edit, and why the installer gains an
+explicit verification step rather than relying on the hook to notice.
 
 **Install story:** `install-shared-artifact.sh` publishes one artifact per
 invocation, so provisioning both implementations needs an explicit
 multi-artifact step. Without it, "run the installer" does not actually provide
 them.
 
-**Not re-vendored to the four hosts.** Per plan step 2, host copies are updated
-when preparing another machine or a release, not per change.
+**`claude-workflow` must change, or the next scaffold undoes this.** It vendors
+all eight hooks **twice** — `templates/.claude/hooks/` and
+`setup/snapshot/hooks/` — plus the pre-change matchers in
+`setup/snapshot/claude-settings.json`. `/setup-agenticapps-workflow` on a new
+project would therefore recreate every deleted hook, both un-shimmed copies, and
+the `Bash|Edit|Write` matcher, blocking design files and migrations in the new
+project on day one. A reviewer found this; the earlier revision excluded the
+repo entirely.
+
+The scaffolder's templates and snapshot are updated to the post-change shape,
+and `migrations/check-snapshot-parity.sh` must stay green across the edit.
+
+**The change-gate shim is migrated too — it is not exempt.** Every project's
+`openspec-change-gate.sh` is a fleet-shared shim, so this change's own new rules
+apply to it, and it currently breaks three of them: it carries the
+`<repo>/bin/` fallback the resolution order now forbids, it fails open
+**silently** where the rule requires a report, and it hardcodes
+`OPENSPEC_GATE_SELF=claude`. Its header also states the `>= 2` floor, in all
+seven projects — a set of sites the companion change's enumeration missed
+because this change had classified the file as untouched.
+
+Listing it as "template — unchanged" while writing rules it violates is the
+kind of exemption that makes a rule advisory. It is brought into conformance
+here; the identity line is removed by the companion change, which retires
+`OPENSPEC_GATE_SELF` as an identity source, so the two changes must not both
+edit that line.
+
+**No workflow content is re-vendored to the four hosts.** Per plan step 2, host
+*workflow content* is updated when preparing another machine or a release, not
+per change. `claude-workflow` is nonetheless one of the nine repos touched, for
+the template and snapshot edits above: that work removes stale vendored hook
+copies rather than pushing new content out. An earlier revision listed the repo
+as touched and as untouched in the same section, which is the contradiction a
+reviewer flagged; the distinction is between re-vendoring content and deleting
+vendored content, and only the second happens here.
+
+**Local telemetry logs are not removed by deleting their producers.** The
+gitignored logs `skill-router-log` wrote already exist on developer machines and
+may contain repository paths and session activity. "Gitignored and untracked"
+means nothing durable is *added* to the repos; it does not mean the existing
+data is disposed of. The change documents where those files live and offers an
+optional cleanup step, rather than treating deletion of the writer as deletion
+of what it wrote.
 
 ## Deferred follow-ups
 

@@ -1,174 +1,138 @@
-# Session Handoff — 2026-07-29 (second session of the day)
+# Session Handoff — 2026-07-29 (third session of the day)
 
 ## The one thing to know
 
-**All 12 §15-removal PRs are merged.** Plan step 1 is done fleet-wide. Step 4 is
-answered: **keep all four hosts, do step 3 first.**
+Both open changes on `feat/step3-hook-shims-and-dead-gate-removal` went through
+**three revision rounds this session (4, 5, 6)**. Neither is implemented and
+**nothing is committed** — the entire session's output is uncommitted working
+tree. `openspec validate --all` is green on both.
 
-Work has moved to `feat/step3-hook-shims-and-dead-gate-removal` in core, which
-carries **two open OpenSpec changes**, both planned and reviewed, **neither
-implemented**. Read `openspec/changes/*/proposal.md` before anything else.
+The `REVIEWS.md` on disk for both changes is **round 5**, written against the
+pre-round-6 text. Under these changes' own proposed rule that evidence is stale.
+Round 6 has not been reviewed.
 
 ## Accomplished
 
-### The twelve PRs landed
+Round 4 → 5 → 6 revisions of `track-and-conform-plan-review` and
+`shim-project-hooks`, each round driven by `run-plan-review.sh` against gemini,
+codex and opencode at `REVIEW_TIMEOUT=600 MIN_REVIEWERS=1`.
 
-Core #46 first (spec 1.2.0), then claude-workflow #107, codex #32, opencode
-#22, pi #18, dashboard #83, roadmap #9, agents-task-viewer #14, fbc-platform
-#102, callbot #97, cparx #108, fx-signal-agent #117.
+### Defects found in my own drafts, by review
 
-- **callbot needed a real fix**: `pnpm format:check` failed on the four
-  OpenSpec markdown files its branch adds. Formatted (`914d24a`), CI green,
-  merged. That PR also carried an unrelated payload — the whole
-  `fix-sms-rate-limit-ordering` change, 386 new lines.
-- **cparx and fx-signal-agent were merged red, on the operator's call.** Both
-  fail on jobs `main` already fails (`frontend-contrast` Playwright timeouts;
-  `gitleaks` + `pnpm-audit`). Neither PR touches anything those jobs test.
+- **The digest set was stated three ways** (`specs/**/spec.md`,
+  `specs/**/*.md`, `specs/*/spec.md`). All three reviewers caught it. Now
+  `specs/**/*.md` everywhere — the glob `openspec status` already reports for
+  the spec artifact, so it adopts the tool's definition instead of a fourth.
+- **The trailer repeated the exact defect the change exists to fix** — specified
+  as "a trailer the gate can parse" while the digest was specified to the byte.
+  Now an HTML-comment block with named fields, duplicate-key and ordering rules.
+- **"Fail open with a loud warning" had no warning.** On exit 0 a PreToolUse
+  hook's stderr is discarded from the transcript. Verified against the host
+  docs. Fixed by exiting **1** — non-blocking, and the transcript shows the
+  first stderr line. This would have shipped silent protection loss.
+- **An unsafe assumption withdrawn**: that a `tasks.md` edit meaningful enough
+  to matter must also alter a bound artifact. gemini's counter-example ("add a
+  debug endpoint") contradicts nothing in a proposal. Now stated as a real gap
+  with an optional `tasks-digest` drift warning that does not block.
+- Reviewer sections bounded at `##`, not "any heading" — a vendor writing
+  `### Findings` would have had its verdict discarded and been recorded as
+  producing none.
+- Rollback was unexecutable: `install-shared-artifact.sh:148` refuses
+  downgrades. Needs an explicit opt-in downgrade path, now a capability
+  requirement rather than a task-list aside.
 
-### Core has an OpenSpec slot again
+### Verified facts that changed decisions
 
-`openspec init --tools claude`. This does **not** migrate `spec/`'s 19 sections
-into `openspec/specs/` — that remains the open question. Core's durable spec is
-still `spec/*.md`.
-
-### Two changes planned (commits 27233b3 → bafc5a4)
-
-**`shim-project-hooks`** — plan step 3a. Seven repos carry the same eight
-hooks (634 lines each). Measurement found five should not exist:
-
-| Hook | Fate |
-|---|---|
-| `phase-sentinel`, `architecture-audit-check` | delete — inert, gate on paths in no repo |
-| `design-shotgun-gate` | delete — fails closed on a sentinel GSD stopped writing |
-| `skill-router-log`, `session-bootstrap` | delete — write live data into frozen `.planning/` |
-| `normalize-claude-md` | shim, fail open — dashboard's version canonical |
-| `database-sentinel` | shim, **fail closed** — callbot's `.env` wildcard canonical |
-| `openspec-change-gate` | unchanged — already the template |
-
-8 hooks → 3 per project; 634 lines → ~138.
-
-**`track-and-conform-plan-review`** — the review pipeline. Grew from a
-one-file floor fix to **three shared-bin artifacts plus §18**, on the
-operator's explicit "one change covering the whole pipeline".
+- `AGENT_SELF:-claude` is in the **producer** (`run-plan-review.sh:68`); the
+  gate's `OPENSPEC_GATE_SELF` defaults to **empty** — no self-exclusion at all.
+  The previous handoff recorded only the first.
+- The producer **never sends `tasks.md`** to reviewers (`:101-102`). This
+  dissolved the digest-scope deadlock all three reviewers hit.
+- **Six of seven repos** matcher `database-sentinel` as `Bash|Edit|Write`; only
+  callbot has `MultiEdit`. That also sizes the fail-closed blast radius: every
+  Bash command and every file edit.
+- `callbot`'s `database-sentinel:59` blocks every `migrations/` edit on a dead
+  GSD sentinel and prints a remedy naming a command removed 2026-07-28.
+- `claude-workflow` vendors all eight hooks **twice** plus stale matchers — the
+  next scaffold would recreate everything this change deletes.
+- **CI already enforces ≥1.** `openspec-gate.ci.yml` runs the gate, which has
+  defaulted `MIN_REVIEWERS=1` since 1.4.0. I earlier told the operator the CI
+  floor would drop 2→1 and asked which they wanted; that premise was false. The
+  `≥2` lines in the workflow are stale comments.
 
 ## Decisions
 
-- **Keep all four hosts; step 3 before step 5.** Evidence: ~2,277 Claude
-  co-authored commits vs zero from codex/opencode/pi. codex (28) and opencode
-  (37) are heavy *reviewer* users, but that runs through `reviewer-cli.sh`, not
-  the host repos — gemini is the #1 reviewer with no host repo at all.
-- **Security hooks fail closed, cosmetic fail open.** §18's CI floor covers the
-  OpenSpec gate only; nothing else checks destructive SQL or `.env`.
-- **Reconcile by superset, not recency.** callbot's `.env` wildcard beats the
-  four-suffix enumeration in dashboard/cparx.
-- **Delete the telemetry pair rather than relocate it.** Logs are gitignored
-  everywhere, tracked nowhere; sole consumer is the other hook.
-- **Egress: document the boundary now, defer secret/PII screening** as a named
-  follow-up.
-
-## Two things I got wrong — both caught by review, not by me
-
-1. **§02 does not forbid deleting `design-shotgun-gate.sh`.** §02 binds
-   `design-shotgun` to the gstack *skill* (`SKILL.md:106`); the hook merely
-   shares the name. My "repair, don't delete" correction was a category error,
-   and the three-state repair I designed would have introduced the same
-   blocking bug in `claude-workflow`, which has a stale `current-phase/`.
-2. **`gate/run-plan-review.sh` is not the canonical source.** It is a 66-line
-   ancestor with no version marker. The real 227-line 1.0.0 lives **only** in
-   `~/.agenticapps/bin/`, tracked in no repo.
-
-I also relayed codex's injection claim uncritically — "a committed log line can
-inject fleet-wide" is false, because the logs are gitignored.
-
-## Defects found (all verified against code, none yet fixed)
-
-- **`design-shotgun-gate` blocks 204 design files today** in callbot and
-  fbc-platform — every `.tsx`/`.css` edit.
-- **`database-sentinel` blocks every `migrations/` edit in callbot today.**
-  Line 59 requires `.planning/current-phase/migrations-approved`; callbot has
-  no `current-phase` directory. Same dead-GSD-sentinel mechanism, in a hook
-  the plan classified as healthy. The revision that named callbot's
-  implementation canonical would have **propagated this to all seven repos** —
-  caught by codex on the third review round, not by measurement.
-- **A verdict is not a review.** gemini returned a bare `VERDICT: APPROVE`
-  with no body on 2026-07-29T07:52:54Z and it counted toward the floor. The
-  planned "require a parseable verdict" fix would still count it, so that
-  requirement is necessary but not sufficient.
-- **§18 is self-contradictory.** Truth table + line 80 say ≥1; lines 146 and
-  174 say ≥2. It is not satisfiable as written.
-- **The gate counts headings, not verdicts.** `reviewer_count()` matches
-  `## Reviewer`; `pending_rejections()` parses verdicts. A verdict-less section
-  counts. Demonstrated live — opencode counted three times this session while
-  returning no verdict.
-- **`MIN_REVIEWERS=0` is accepted**, publishing a `REVIEWS.md` whose floor was
-  never evaluated.
-- **`reviewer-cli.sh` passes the full prompt as argv** to all four vendor arms.
-- **Reviews are not bound to what they reviewed.** Both changes on this branch
-  were revised after review and still carry their old `REVIEWS.md`.
-- **Self-exclusion is guessable.** `OPENSPEC_GATE_SELF` defaults to `claude`,
-  wrong on every other host; at a floor of one, a self-review opens the gate.
+- **Rejections stay non-blocking**, per §18 and CLAUDE.md. codex asked three
+  times. The answer: digest-binding means amending in response to an objection
+  stales the review, so the only route past one is to not amend — which the gate
+  reports by name on every invocation. That log is the audit trail.
+- **The digest covers exactly what is transmitted.** Not `tasks.md` (never
+  sent, and binding it deadlocks the gate on ticked checkboxes).
+- **Identity moved out of the environment into the artifact.** The producer
+  requires it explicitly, records it; the gate reads it from `REVIEWS.md`. This
+  is what keeps "not touching the four hosts" true for the gate — and it is
+  *not* true of the producer, whose calling convention breaks.
+- **Substance required** to count a reviewer — closes the live bare-`APPROVE`.
+- **Both shims fail open**, reversing the fail-closed posture. Forced, not
+  preferred: matchers select tools, not paths.
+- **One floor everywhere** (operator's call) — already the state.
+- **`claude-workflow` is in scope** for both changes, for opposite reasons:
+  removing a vendored producer copy, and fixing templates/snapshot.
 
 ## Files modified
 
-- `openspec/` — new slot, two changes with proposal/design/specs/tasks/REVIEWS
-- `.claude/commands/opsx/`, `.claude/skills/openspec-*` — from `openspec init`
-- `factiv/callbot` — prettier formatting of four OpenSpec markdown files
-- Nothing else. **No implementation code has been written for either change.**
+- `openspec/changes/track-and-conform-plan-review/` — proposal, design, tasks,
+  both spec deltas, `REVIEWS.md` (round 5)
+- `openspec/changes/shim-project-hooks/` — proposal, design, tasks, spec delta,
+  `REVIEWS.md` (round 5)
+- `session-handoff.md` — this file
+- **No implementation code. No commits.**
 
 ## Next session: start here
 
-Round 3 of review is **complete and on disk**. `shim-project-hooks` has gemini
-APPROVE (bare, no body) and codex REQUEST-CHANGES; `track-and-conform-plan-review`
-has REQUEST-CHANGES from all three. **Neither change is ready to implement** —
-read both `REVIEWS.md` first.
+1. **Commit the two revisions first.** Three rounds of work sit uncommitted;
+   the branch is `feat/step3-hook-shims-and-dead-gate-removal`.
+2. **Run round 6** on both:
+   `REVIEW_TIMEOUT=600 MIN_REVIEWERS=1 ~/.agenticapps/bin/run-plan-review.sh <slug> gemini codex opencode`
+3. Then implement **`track-and-conform-plan-review` before `shim-project-hooks`**
+   — it repairs the machinery everything else is reviewed by, and its task 9b.19
+   re-checks this branch under gate 1.5.0.
 
-`shim-project-hooks` needs a fourth revision. codex's surviving objections,
-verified:
+Convergence signal: gemini has approved `shim-project-hooks` twice running, with
+substance both times. opencode called `track` an approve once its material items
+were fixed, which they now are. But every round so far has found at least one
+real defect, including a design-breaking one in round 5 — so do not skip round 6
+on the assumption it has settled.
 
-1. A fail-closed `database-sentinel` shim **cannot** inspect the payload
-   without violating the change's own "behaviour-free shim" rule, so it would
-   block every matched `Bash`/`Edit`/`Write`/`MultiEdit` — not just `.env` and
-   migrations. **This is a real contradiction in the design and has no answer
-   yet.** It may force reconsidering the fail-closed decision.
-2. The canonical `database-sentinel` must drop the `migrations-approved`
-   clause (see defects above).
-3. `MultiEdit` needs `settings.json` matcher changes in six of seven repos.
-4. `<repo>/bin/<hook>.sh` in the resolution order contradicts "a project SHALL
-   NOT carry a copy" — internal inconsistency in the spec delta.
-5. "Not named in §02 ⇒ extension hook" is unsound: §02 says filenames are not
-   authoritative **in either direction**. Removal must be argued from the
-   documented host binding. (The `design-shotgun-gate` deletion is still
-   right, but needs this reasoning, not the filename argument.)
-6. The delta overreaches by requiring *every* project hook to be a shim; §02
-   permits project-local extension hooks. Scope it to fleet-shared hooks.
-7. "Security control" overclaims: `Bash` can write `.env` directly, `psql -f`
-   bypasses the regex, and the shared user-writable executable is a
-   fleet-wide tampering surface. Call it best-effort or state the boundary.
+## Reviewer reliability — check before acting
 
-Two codex claims were **checked and are false** — it said gemini praised the
-abandoned repair (gemini's section has no body at all) and that codex was
-self-reviewing (the implementing host is claude). Verify before acting on
-reviewer claims; roughly one in four has been wrong this session.
+Roughly one claim in four has been wrong. This session:
 
-Then implement `track-and-conform-plan-review` **before** `shim-project-hooks`
-— it repairs the machinery everything else is reviewed by, and its task 9b.13
-re-checks this branch's own changes under gate 1.5.0, where both should read
-as stale.
+- opencode: "`Edit` matchers also match `MultiEdit`" — **false**, the host docs
+  say a letters-only matcher is an exact string comparison. Would have voided a
+  requirement and six repo edits.
+- codex: "codex is the implementing host, so its review is ineligible" —
+  **false**, twice (rounds 3 and 4). The implementing host is claude. Now
+  recorded in `shim-project-hooks/design.md` so round 7 does not re-litigate it.
+- opencode: `gate/README.md:30` states ≥2 — **not found**; lines 5 and 13 do.
+- opencode returned **no verdict at all** twice (rounds 2 and 4), and in round 4
+  claimed four repos "aren't on this machine" when they are under
+  `~/Sourcecode/factiv/`. Both are live evidence for `track`'s own
+  verdict-and-substance rule.
 
 ## Open questions
 
 - **Does core migrate `spec/`'s 19 sections into `openspec/specs/`?** Still
-  unanswered; the slot now exists, which changes nothing about the migration.
-- **§02 is written entirely in GSD vocabulary** — every gate triggers on "a
-  phase", `CONTEXT.md`, `*-PLAN.md`. §18 already retargeted `plan-review` out
-  of it. This is the root cause of which the dead hooks were symptoms, and it
-  is the substance of plan step 5.
-- **`gate/` is untracked in core** and only `run-plan-review.sh` is resolved by
-  the open change. Its other contents (`openspec-change-gate.sh`, `pre-commit`,
-  `hooks/`, `README.md`) still need a keep/track/delete call, as do the other
-  13 untracked items from the previous handoff.
-- **Deferred, recorded in proposals**: two optional advisory prompts
-  (architecture review on a big commit; database review when the DB is
-  touched), and secret/PII screening before review egress.
-- `fx-signal-agent` still has 2 gitleaks findings in history and a failing
-  supply-chain job on `main`; cparx's `frontend-contrast` fails on `main`.
+  unanswered, unchanged by this session.
+- **§02 is written in GSD vocabulary** — the root cause the dead hooks were
+  symptoms of, and the substance of plan step 5.
+- **`gate/` remains unclassified** apart from `run-plan-review.sh`, which
+  `track` deletes. Its README, gate copy, `pre-commit` and `hooks/` still need a
+  keep/track/delete call, as do the other untracked items at repo root.
+- **Does `MultiEdit` still exist as a host tool?** Absent from the current tool
+  reference and from this session's toolset. If gone, the six-repo matcher edit
+  is harmless but inert — verify before reporting it as protection gained.
+- **`screen-review-egress`** — deferred secret/PII screening, named and owned in
+  `track`'s proposal, not yet a change.
+- Vendor CLIs can **write and execute**, not only read. Declared, not mitigated;
+  a read-only sandbox is not attempted.

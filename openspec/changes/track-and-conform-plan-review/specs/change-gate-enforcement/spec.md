@@ -25,31 +25,111 @@ satisfiable, and "the tool is non-conformant" cannot be assessed against it.
 - **WHEN** a reader or host implementer looks up the required reviewer count
 - **THEN** every statement of it in the spec agrees
 
-### Requirement: A reviewer counts only with a verdict
+### Requirement: A reviewer counts only with a verdict and a body
 
 The gate SHALL count a reviewer section toward the floor only when that section
-carries a verdict. A section without one SHALL NOT count.
+carries exactly one verdict **and** at least one line of substance.
 
-The verdict format SHALL be: anchored at the start of a line, case-insensitive,
-optional surrounding markdown emphasis, the label `VERDICT:` followed by one
-value from a closed vocabulary. This matches the parser the gate already ships
-in `pending_rejections()`, so no existing well-formed `REVIEWS.md` is
-invalidated.
+**Section boundaries.** A reviewer section runs from its `## Reviewer:` heading
+to the next heading of **level 1 or 2** (`#` or `##`), or to end of file.
+Headings of level 3 or deeper are section content. Content outside every
+reviewer section SHALL NOT be attributed to any reviewer.
 
-The gate's counting and reporting SHALL use the same predicate. They diverge
-today: `reviewer_count()` matches headings while `pending_rejections()` parses
-verdicts — the exact failure the gate's own source warns of, "the gate counts
-one set of reviewers and reports on another".
+Bounding at "any level" — the previous wording — truncates a section at the
+first `### Findings` a vendor writes, which discards the verdict below it and
+records the reviewer as having produced none. Vendor interiors are carried
+verbatim by design, and reviewers are told the vocabulary, not the formatting,
+so subheadings are expected rather than exceptional. At a floor of one this
+would silently drop a complete review.
+
+**Timestamp line.** The producer writes exactly one line immediately after each
+`## Reviewer:` heading, of the form `_generated <UTC ISO-8601> · timeout <N>s_`.
+It is recognised by that shape, and it is not content for the substance rule.
+This grammar is stated because the substance rule excludes the line, and an
+exclusion whose target has no definition cannot be implemented — the same gap
+that made the trailer's format necessary, one field over.
+
+**Verdict grammar.** Outside fenced code blocks, a candidate line SHALL be
+normalised and then matched, and both steps are normative:
+
+1. **Normalise** — remove every `*` and `_` character from the line, then trim
+   leading and trailing whitespace and collapse internal whitespace runs to one
+   space.
+2. **Match** — case-insensitively, and anchored at both ends of the normalised
+   line: the label `VERDICT`, an optional space, a colon, an optional space, and
+   exactly one value from the closed vocabulary **`APPROVE`** or
+   **`REQUEST-CHANGES`**. Nothing else.
+
+Normalising emphasis away, rather than permitting it in named positions, is what
+makes the rule decidable. "Optional emphasis around the label or the value" —
+the previous wording — does not say whether `**VERDICT: REQUEST-CHANGES**`,
+`VERDICT: REQUEST-CHANGES**` or `VERDICT:** REQUEST-CHANGES` match, and a
+reviewer showed that two conformant parsers would answer differently now that
+end-anchoring is mandatory. Under the rule above all three match, and no parser
+has to enumerate placements. No vocabulary member contains `*` or `_`, so the
+normalisation cannot merge distinct values.
+
+The vocabulary is closed: a value outside it is not a verdict. Anchoring at the
+end of the normalised line is required so that a value with a suffix —
+`REQUEST-CHANGES-LATER` — does not match a bare vocabulary member.
+
+**Conflict.** Two verdict lines carrying different values make the section
+malformed: it SHALL NOT count, and SHALL be reported as malformed rather than
+silently resolved. Repetitions of the same value count once.
+
+**Substance.** A section SHALL additionally carry at least one non-blank line
+that is not its heading, its generation timestamp, its trailer, or a verdict
+line. A verdict with no body is not a review: on 2026-07-29T07:52:54Z a vendor
+returned a bare `VERDICT: APPROVE` with no body and it counted toward the floor.
+
+**One predicate.** The gate's counting and its reporting SHALL use the same
+predicate. They diverge today — `reviewer_count()` matches headings while
+`pending_rejections()` parses verdicts — which is the exact failure the gate's
+own source warns of: "the gate counts one set of reviewers and reports on
+another."
 
 #### Scenario: A section carries prose but no verdict
 
 - **WHEN** a reviewer section contains commentary and no verdict line
 - **THEN** it does not count toward the floor
 
+#### Scenario: A section carries a verdict but no body
+
+- **WHEN** a reviewer section contains a verdict line and no other content
+- **THEN** it does not count toward the floor, and is reported as carrying no
+  substance rather than as absent
+
 #### Scenario: A verdict carries markdown emphasis
 
-- **WHEN** a section's verdict is written `**VERDICT: REQUEST-CHANGES**`
-- **THEN** it counts, as the shipped parser already accepts
+- **WHEN** a section's verdict is written `**VERDICT: REQUEST-CHANGES**`,
+  `VERDICT: **REQUEST-CHANGES**`, `VERDICT:** REQUEST-CHANGES` or
+  `**VERDICT:** REQUEST-CHANGES`
+- **THEN** each counts, because emphasis is normalised away before matching
+  rather than permitted in enumerated positions
+
+#### Scenario: A verdict value carries a suffix
+
+- **WHEN** a section's verdict line reads `VERDICT: REQUEST-CHANGES-LATER`
+- **THEN** it is not a verdict, because the value is outside the closed
+  vocabulary and the match is anchored at the end of the line
+
+#### Scenario: A verdict is written in lower case
+
+- **WHEN** a section's verdict line reads `verdict: approve`
+- **THEN** it counts, because the match is case-insensitive
+
+#### Scenario: A section carries two different verdicts
+
+- **WHEN** a reviewer section contains both an APPROVE and a REQUEST-CHANGES
+  verdict line
+- **THEN** the section is malformed, does not count, and is reported as such
+
+#### Scenario: A verdict appears under a later non-reviewer heading
+
+- **WHEN** a verdict line appears under a heading that is not a `## Reviewer:`
+  heading, below a reviewer section
+- **THEN** it is not attributed to that reviewer and does not make the section
+  count
 
 #### Scenario: The verdict vocabulary is quoted mid-prose
 
@@ -65,38 +145,202 @@ outstanding rejections without blocking on them.
 An objection is a review. Discounting it would mean a change could be blocked
 for lack of reviewers precisely because a reviewer engaged with it.
 
+**Stated plainly: the reviewer count is a presence gate, not an approval gate.**
+No verdict value is required to proceed. A change may be implemented over an
+unresolved REQUEST-CHANGES, and nothing in this capability prevents it. A
+reviewer asked three times for this to be said outright rather than left to be
+inferred from the truth table, and the request is correct — a rule that reads
+like approval enforcement but is not will be relied on as though it were.
+
+Two things bound it. Amending a change in response to an objection invalidates
+the digest and forces a re-review, so the only route past an objection is to
+leave the change unamended. And the gate SHALL name each objecting reviewer in
+its report, on every invocation, for as long as the objection stands — so
+proceeding is a repeated, logged, attributable act rather than a silent one.
+That log is the audit trail; no separate acknowledgement artifact is required.
+
+Promoting a verdict to blocking is a §18 decision, not a gate decision, and is
+not made here.
+
 #### Scenario: The only reviewer requests changes
 
 - **WHEN** one reviewer returns REQUEST-CHANGES and no other reviewer counts
 - **THEN** the floor is met, the gate allows, and it reports the objection
 
+#### Scenario: The change is amended to address an objection
+
+- **WHEN** a reviewer returns REQUEST-CHANGES and the author edits a reviewed
+  artifact in response
+- **THEN** the digest no longer matches, the review no longer counts, and the
+  gate blocks until the amended change is reviewed again
+
 ### Requirement: Reviewers counted toward the floor are independent
 
-The gate SHALL exclude the invoking host's own vendor from the count, and SHALL
-count a repeated vendor once.
+The gate SHALL exclude the **implementing host's** own vendor from the count,
+and SHALL count a repeated vendor once.
 
-The invoking host's identity SHALL be supplied by the caller as an
-authoritative input. A single host-agnostic binary cannot infer which host
-invoked it, and a built-in default is correct on exactly one host.
+The implementing host is the host that authored the change under review. It is
+**not** the host running the gate: CI, a pre-commit hook, or a different agent
+routinely evaluates evidence some other host produced. An identity read from the
+evaluating process's environment therefore describes the wrong party.
 
-When that identity is absent or invalid, the gate SHALL count no reviewers —
-failing closed. Guessing would silently admit a self-review as the sole
-independent opinion.
+The gate SHALL read the implementing host's identity from `REVIEWS.md` itself,
+recorded there by the producer at the time the reviews were obtained. Each
+identity SHALL be one of the closed vendor vocabulary: `claude`, `codex`,
+`gemini`, `opencode`.
 
-#### Scenario: The host's own review is present
+**More than one host may be named**, and every named host SHALL be excluded. A
+change may be authored across a handoff or by several agents, and a single
+identity would then mark a genuine co-author as independent. Naming all of them
+costs nothing and removes that case.
 
-- **WHEN** `REVIEWS.md` contains a section from the invoking host's vendor
-- **THEN** it does not count toward the floor
+It does not remove the general one. The identity describes **agent** authorship
+only: a human editing the change directly is invisible to it, and the value is
+self-reported by whoever ran the producer. This narrows accidental self-review,
+which is the observed failure. It is not an authorship record and SHALL NOT be
+presented as one.
 
-#### Scenario: The host identity is not supplied
+**Independence here means a different CLI, not a different model.** The
+vocabulary names vendor CLIs, and a CLI is not a model: `opencode` can be
+configured to route to the same provider and model as the implementing host, in
+which case two counted "independent" reviewers are one model answering twice.
+The capability SHALL make that claim in its weaker, true form. Recording
+provider and model identity would strengthen it and is not attempted here — the
+CLIs do not report it uniformly — so the limitation is documented rather than
+closed.
 
-- **WHEN** the gate runs with no authoritative host identity
-- **THEN** it counts no reviewers and blocks, rather than assuming a default
+When a vendor is named as an implementing host **and** returns a review, that
+section SHALL be reported as excluded rather than silently dropped, so the
+exclusion is visible in the artifact that claims independence.
+
+When `REVIEWS.md` records no identity, or records one outside the vocabulary,
+the gate SHALL count no reviewers — failing closed. Guessing would silently
+admit a self-review as the sole independent opinion, and there is no default
+that is correct on more than one host.
+
+The gate SHALL NOT take this identity from an environment variable. Two sources
+for one fact is how the producer and the gate came to hold different answers:
+the producer defaults it to `claude`, correct on one host of four, while the
+gate defaults it to empty, applying no self-exclusion at all.
+
+This binds accidental self-review, which is the observed failure. It does not
+resist a deliberate one: the identity is self-reported by the producer and a
+hand-written `REVIEWS.md` may name any host.
+
+#### Scenario: The implementing host's own review is present
+
+- **WHEN** `REVIEWS.md` records an implementing host and contains a section from
+  that same vendor
+- **THEN** that section does not count toward the floor
+
+#### Scenario: The gate runs on a different host than produced the reviews
+
+- **WHEN** CI evaluates a `REVIEWS.md` produced on a developer's host
+- **THEN** self-exclusion applies to the host recorded in the artifact, not to
+  whatever is running the gate
+
+#### Scenario: The recorded identity is absent or unrecognised
+
+- **WHEN** `REVIEWS.md` carries no implementing-host identity, or one outside
+  the closed vocabulary
+- **THEN** the gate counts no reviewers and blocks, rather than assuming a
+  default
+
+#### Scenario: Several hosts are named
+
+- **WHEN** `REVIEWS.md` names two implementing hosts
+- **THEN** neither vendor's sections count toward the floor
 
 #### Scenario: A vendor appears twice
 
 - **WHEN** the same vendor has two sections
 - **THEN** it contributes at most one to the count
+
+#### Scenario: A vendor's two sections carry conflicting verdicts
+
+- **WHEN** one vendor has two well-formed sections, one APPROVE and one
+  REQUEST-CHANGES
+- **THEN** it contributes one to the count and the gate reports
+  REQUEST-CHANGES, because at a floor of one the report is the only signal and
+  discarding the objection would be the unsafe resolution
+
+### Requirement: The trailer has a grammar
+
+`REVIEWS.md` SHALL carry exactly one trailer, as the final content of the file,
+in this form:
+
+```
+<!-- openspec-review-trailer v1
+implementing-host: <vendor>[,<vendor>...]
+digest: sha256:<64 lowercase hex digits>
+producer-version: <semver>
+-->
+```
+
+- The opening and closing delimiters SHALL be exactly as shown.
+- Each field SHALL occupy one line, as a lowercase key, a colon, a single
+  space, and the value. The three keys above are REQUIRED and SHALL appear
+  **exactly once each**; a repeated required key makes the trailer malformed
+  rather than resolving to the first or last occurrence, because first-wins and
+  last-wins are both defensible and two parsers would split.
+- **Field order is not significant.** An unrecognised key SHALL be ignored
+  wherever it appears, so a later producer may add fields without invalidating
+  evidence for an older gate.
+- A fourth key, `tasks-digest`, MAY appear. It is informational — see the
+  advisory tasks-drift rule below — and its absence SHALL NOT invalidate the
+  trailer.
+- `implementing-host` SHALL list one or more vendors from the closed vocabulary,
+  comma-separated without spaces.
+- A file carrying no trailer, more than one trailer, a trailer that is not the
+  final content, or a trailer missing a required field SHALL count zero
+  reviewers. This fails closed: a malformed trailer is indistinguishable from
+  an absent one for the purpose it serves.
+- The trailer is an HTML comment so that it does not render, cannot be read as
+  reviewer prose, and is unambiguously delimited for the substance rule that
+  must exclude it.
+
+This requirement exists because the change that introduced the trailer specified
+it as "a trailer the gate can parse" — the same "parseable without a grammar"
+formulation that produced four divergent-parser defects and that this delta
+elsewhere specifies to the byte. A reviewer caught the repetition. A producer
+and a gate are two implementations; they need the grammar as much as any other
+pair would.
+
+#### Scenario: The trailer is well-formed
+
+- **WHEN** `REVIEWS.md` ends with a single trailer carrying all three required
+  fields
+- **THEN** the gate reads the implementing hosts, the digest and the producer
+  version from it
+
+#### Scenario: A required field is missing
+
+- **WHEN** the trailer omits `digest`, `implementing-host` or `producer-version`
+- **THEN** the gate counts zero reviewers and reports the trailer as malformed
+
+#### Scenario: Two trailers are present
+
+- **WHEN** `REVIEWS.md` carries more than one trailer block
+- **THEN** the gate counts zero reviewers rather than choosing between them
+
+#### Scenario: A later producer adds a field
+
+- **WHEN** a trailer carries a key the gate does not recognise, alongside all
+  required fields
+- **THEN** the unknown key is ignored and the review counts normally
+
+#### Scenario: A required key appears twice
+
+- **WHEN** a trailer carries two `digest` lines
+- **THEN** the trailer is malformed and the gate counts zero reviewers, rather
+  than choosing the first or the last
+
+#### Scenario: A vendor emits the trailer delimiter
+
+- **WHEN** a reviewer's response body contains the trailer's opening delimiter
+- **THEN** the producer rejects that response and records the vendor as failed,
+  because publishing it would produce a second trailer and invalidate the whole
+  artifact — a one-vendor denial of service on an otherwise good review set
 
 ### Requirement: A review is bound to what it reviewed
 
@@ -108,6 +352,91 @@ Without this, amending a change after review silently retains evidence for text
 nobody read. This is not hypothetical: during the session that wrote this
 requirement, two open changes were substantially revised after being reviewed,
 and both retained their prior `REVIEWS.md` with the gate unable to tell.
+
+**The digest SHALL cover exactly the artifacts transmitted to reviewers**, so
+that it invalidates evidence when and only when reviewed content changes. The
+computation SHALL be:
+
+- **Set** — `proposal.md`, `design.md`, and every `specs/**/*.md`, addressed
+  by path relative to the change directory and ordered bytewise under `LC_ALL=C`.
+  A file not present on disk is not in the digest, so deleting a spec delta
+  changes it. This set SHALL be identical to the set the producer transmits to
+  reviewers — one rule, stated once. An implementation whose prompt and digest
+  cover different files satisfies neither. The producer today globs
+  `specs/*/spec.md`, a single level; it is corrected to match, rather than the
+  digest being narrowed, because a nested spec delta is part of the change and
+  must be both reviewed and bound.
+- **Members** — regular files only. A symlink or non-regular file in the set
+  SHALL make the digest uncomputable, and the producer SHALL refuse to publish
+  rather than resolve it. Following a link would hash bytes from outside the
+  change directory while attesting to a path inside it.
+- **Canonicalisation** — CRLF sequences become LF; a trailing LF is appended if
+  absent. No other transformation: each additional rule is another place two
+  conformant implementations can disagree.
+- **Framing** — for each file in order: the byte length of the relative path in
+  decimal, LF, the path bytes, LF, the canonical content length in decimal, LF,
+  then the canonical bytes. **Both** path and content are length-prefixed: a
+  path may legally contain a newline, and framing only the content would let
+  such a path forge a record boundary.
+- **Algorithm** — SHA-256, rendered lowercase hex.
+
+**The prompt, the digest and the published file SHALL derive from one
+snapshot.** The producer SHALL capture the artifact set once, build the reviewer
+prompt and compute the digest from those captured bytes, and SHALL verify the
+artifacts are unchanged before publishing, refusing to publish if they are not.
+
+Without this the three are separate reads of a mutable tree: reviewers can
+receive one revision, the digest attest to a second, and the gate compare
+against a third, with every individual step conformant and the binding
+worthless.
+
+The pre-publication check is **best-effort drift detection, not a guarantee**:
+a write landing between the verification and the publication is not caught. It
+converts a silent, minutes-wide window into a narrow one, and SHALL be described
+that way rather than as atomicity.
+
+`tasks.md` SHALL NOT be in the digest, and `REVIEWS.md` SHALL NOT be in the
+digest. `tasks.md` is excluded because it is not sent to reviewers and because
+it is edited continuously during implementation — binding it would stale a
+review on every checked box and deadlock the gate. `REVIEWS.md` is excluded by
+construction: it carries the digest.
+
+The consequence SHALL be stated rather than discovered: a task list may change
+without invalidating a review.
+
+The previous revision justified that by asserting a task change altering what
+the change promises must also alter a bound artifact. **That assumption is
+unsafe and is withdrawn.** A reviewer supplied the counter-example: a task such
+as "add a debug endpoint" can be added post-review without contradicting a word
+of the proposal, design note or spec delta. The gap is real, and the reason for
+accepting it is deadlock avoidance, not an argument that nothing can slip
+through it.
+
+**Advisory tasks-drift detection.** The producer MAY record a `tasks-digest` in
+the trailer, computed over `tasks.md` by the same algorithm. When it is present
+and no longer matches, the gate SHALL report that the implementation plan has
+changed since review — and SHALL NOT block. This makes the blind spot visible at
+the point of use without staling a review on every ticked checkbox.
+
+A digest is used rather than a modification time because mtime does not survive
+a fresh clone or a branch checkout, and would warn constantly in CI while
+missing an in-place edit that preserved it.
+
+#### Scenario: The task list changes after review
+
+- **WHEN** `tasks.md` is edited after `REVIEWS.md` was written and a
+  `tasks-digest` was recorded
+- **THEN** the gate reports that the implementation plan has changed since
+  review, and allows the edit
+
+#### Scenario: The change has no design note
+
+- **WHEN** a change omits `design.md`
+- **THEN** it is absent from both the transmitted set and the digest, which
+  agree because they are one set; its absence is not an error
+
+A digest detects drift, not forgery. It is computable by anyone holding the same
+artifacts, so it SHALL NOT be described as evidence that a review is authentic.
 
 #### Scenario: A change is amended after review
 
@@ -121,9 +450,28 @@ and both retained their prior `REVIEWS.md` with the gate unable to tell.
 - **WHEN** the artifacts match the recorded digest
 - **THEN** the review counts normally
 
+#### Scenario: A spec delta file is deleted after review
+
+- **WHEN** a `specs/**/spec.md` present at review time is removed
+- **THEN** the digest no longer matches and the review does not count
+
+#### Scenario: Implementation ticks a checkbox in tasks.md
+
+- **WHEN** `tasks.md` is edited during implementation and no reviewed artifact
+  changes
+- **THEN** the digest still matches and the review continues to count
+
 #### Scenario: A review predates digest recording
 
 - **WHEN** `REVIEWS.md` carries no digest because it was written by an earlier
   producer
 - **THEN** the gate reports the review as unverifiable and does not count it,
   so old evidence cannot silently satisfy a new rule
+
+#### Scenario: The reasons for not counting are distinguished
+
+- **WHEN** the gate declines to count a change's reviews
+- **THEN** it reports which of these applies — no `REVIEWS.md`, a malformed or
+  absent trailer, a digest that no longer matches, or no section meeting the
+  verdict-and-substance rule — because the scheduled re-review wave is
+  debuggable only if "stale" is distinguishable from "absent"

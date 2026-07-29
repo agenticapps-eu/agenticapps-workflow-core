@@ -39,7 +39,17 @@ Something has now broken, in a different way: the floor drifted from the spec.
   here. `gate/`'s other contents (`openspec-change-gate.sh`, `pre-commit`,
   `hooks/`, `README.md`) duplicate tracked reference-implementations and need
   their own keep/track/delete call.
-- **Touching the four hosts.** Per plan step 2, publish rather than re-vendor.
+- **Re-vendoring workflow content to the four hosts.** Per plan step 2, publish
+  rather than re-vendor. This non-goal is about pushing content *out* to hosts.
+  It does not cover the one edit this change makes in `claude-workflow` —
+  repointing its installer away from a vendored producer copy and at core, which
+  *removes* vendored content. A reviewer read the non-goal as unqualified and
+  was right to: it was.
+  This non-goal is load-bearing and was violated by the previous revision, which
+  required every host's gate shim to export its own identity. Decision 5 now
+  carries the identity in the artifact instead, so no host file changes. If a
+  future revision reintroduces a per-host environment requirement, it has left
+  this non-goal and must say so.
 
 ## Decisions
 
@@ -121,29 +131,265 @@ would open the gate for a change nobody reviewed.
 is a failure with that reason. REQUEST-CHANGES counts — an objection is a
 review, and the gate reports objections separately.
 
-### Decision 5: Independence is structural, not environmental
+**A verdict alone is still not a review.** On 2026-07-29T07:52:54Z gemini
+returned a bare `VERDICT: APPROVE` with no body at all, and it counted. The
+verdict requirement as first written would count it again — necessary, not
+sufficient. A counted section therefore also SHALL carry at least one content
+line beyond its heading, timestamp, trailer and verdict.
 
-Self-exclusion currently rests on `OPENSPEC_GATE_SELF` defaulting to `claude`,
-which is wrong on every host except one. At a floor of two this was survivable;
-at a floor of one, a single self-review satisfies the gate entirely.
+*Trade-off:* a reviewer with genuinely nothing to add is discarded and must be
+re-run. Accepted — at a floor of one, a bare token from a vendor that engaged
+with nothing is indistinguishable from a vendor that read carefully and
+approved, and the gate must not treat them alike.
 
-**Chosen:** determine the running host and exclude it by rule; de-duplicate
-repeated vendors. The floor's whole claim is "at least one *independent*
-opinion" — without this, the word independent is unenforced.
+**Rejected — block on an unresolved REQUEST-CHANGES.** Raised twice by codex:
+that a rejection which opens the gate is a presence check, not a decision. §18
+decides otherwise deliberately, and the gate's own source records why — blocking
+on a verdict needs a re-review trigger, a staleness rule and an override path.
+Two of those three now exist (Decisions 7 and 8), but the answer to codex is
+narrower and does not need them: **once reviews are digest-bound, amending a
+change in response to an objection stales the review and forces a re-review.**
+The only way to proceed past an objection is to *not* amend — and that path is
+reported by the gate on every invocation, by name. The operator stepping over a
+recorded objection is a visible act, which is what §18 asks of it.
 
-### Decision 6: Declare the egress boundary; defer screening
+### Decision 5: Identity is recorded in the artifact, not read from the environment
 
-The producer sends proposal, design and spec deltas to external vendor CLIs,
-which forward them off this machine, with no manifest and no screening. It also
-passes the prompt as a process argument, readable from the process table.
+*This decision was rewritten after round 3. The previous text said "determine
+the running host and exclude it by rule" while the proposal said the caller
+supplies it — two different normative rules for one behaviour, which opencode
+correctly reported as unimplementable. Neither was right.*
 
-**Chosen:** declare what is sent and to whom, treat invocation as consent, and
-pass the prompt by file. Secret/PII screening is deferred to its own change.
+The situation on disk, verified rather than assumed:
+
+| Consumer | Identity source | Default | Effect of the default |
+|---|---|---|---|
+| `run-plan-review.sh:68` | `AGENT_SELF` | `claude` | wrong on three of four hosts |
+| `openspec-change-gate.sh:150,183` | `OPENSPEC_GATE_SELF` | *empty* | **no self-exclusion at all** |
+
+The producer's default is wrong; the gate's is absent. The handoff recorded only
+the first. At a floor of one, the gate as shipped will count a host's review of
+its own change as the sole independent opinion, on every host including this
+one.
+
+Both fixes were proposed as environment inputs, and codex's objection to that is
+decisive: **the evaluator is frequently not the producer.** CI, a pre-commit
+hook, or a different agent evaluates `REVIEWS.md` that some other host wrote.
+An environment variable describes the process reading the file, which is not the
+fact the rule needs. The fact needed is *who authored the change being
+reviewed*, and that is knowable only at production time.
+
+**Chosen:** the producer requires an explicit implementing-host identity, from a
+closed vocabulary (`claude` | `codex` | `gemini` | `opencode`), with **no
+default**; absent or unrecognised, it exits with a usage error and writes
+nothing. It records that identity in a trailer in `REVIEWS.md`. The gate reads
+the identity **from the trailer** and excludes that vendor's sections; a
+`REVIEWS.md` with no valid trailer is unverifiable and counts zero. Duplicate
+vendors count once.
+
+Three things fall out of this, all of them objections from round 3:
+
+- **No host file changes.** The gate needs no per-host environment, so the
+  "not touching the four hosts" non-goal holds — where the previous revision
+  contradicted it by requiring seven shim edits.
+- **No fail-closed flag day.** The previous design would have blocked every
+  existing CI and pre-commit caller the moment the identity default was removed.
+  Reading the trailer instead means an unmigrated caller behaves identically.
+- **`OPENSPEC_GATE_SELF` is retired as an identity source**, rather than being
+  given a better default. A second source of the same fact is how the producer
+  and gate came to disagree in the first place.
+
+*Alternative — infer the host from the runtime.* Rejected: one host-agnostic
+shell script has no reliable signal, and a wrong inference fails silently open,
+which is the failure being fixed.
+
+*Alternative — keep the environment variable and fix its default.* Rejected: it
+is unfixable by construction. There is no default that is correct on more than
+one host, and the gate's correct answer depends on the host that ran the
+producer, possibly weeks earlier on a different machine.
+
+### Decision 6: Declare the egress boundary honestly; defer screening
+
+*Also rewritten after round 3. The previous text claimed the prompt bounded the
+egress. It does not, and saying so was the more dangerous error — a reader would
+have concluded that keeping secrets out of the proposal kept them off the wire.*
+
+The vendors are **agentic CLIs**, not completion endpoints. They run with the
+operator's credentials and filesystem access and read whatever they judge
+relevant: the repository, the working tree, and configuration under `$HOME`
+including their own credential and tool-config files. The prompt is what the
+producer *hands* them; it is not a boundary. The real boundary is "what that
+vendor CLI can reach on this machine while running as this user."
+
+Three claims are corrected rather than deferred:
+
+- **What is sent** is named — proposal, design note and spec deltas — but named
+  as a *floor*, not a bound.
+- **Invocation is consent, scoped.** Naming a vendor consents to running that
+  vendor. It does not narrow what that vendor may read, and it must not be
+  written as though it did. The operator's consent act is vendor selection.
+- **Reviewer output is untrusted third-party input.** It is written verbatim
+  into `REVIEWS.md`, which agents later read as context. This is the same trust
+  boundary §14 governs, and it belongs in the capability rather than in prose —
+  the previous revision left it in the proposal and tasks only, where nothing
+  enforces it.
+
+**Chosen:** declare the boundary as above, state plainly that **no secret or PII
+screening is performed**, recommend the operator check before invoking, and
+require that change content never appear in any process's argv. Screening is
+deferred to a named follow-up change, `screen-review-egress`, owned by whoever
+implements this one.
 
 *Alternative — full screening now.* Rejected on scope: it turns a conformance
 fix into a security feature and delays a floor repair that is losing reviews
 today. Declaring the boundary is what makes the deferral auditable instead of
-silent — the gap is now written down.
+silent — the gap is now written down, and written down accurately.
+
+### Decision 7: The digest covers exactly the bytes that were reviewed
+
+All three reviewers rejected "a digest of the change artifacts" as
+unimplementable, and they were right: no algorithm, no canonicalisation, no
+artifact set. opencode found the trap in the obvious reading — if `tasks.md` is
+in scope, ticking a checkbox during implementation stales the review and the
+gate deadlocks; if it is out of scope, nothing said so.
+
+The deadlock dissolves against a fact neither the proposal nor any reviewer
+checked. `run-plan-review.sh:101-102` builds the prompt from **`proposal.md`,
+`design.md` and `specs/*/spec.md`**. `tasks.md` is never sent. Reviewers have
+never seen it.
+
+**Chosen:** the digest covers exactly the artifacts the producer transmits.
+Binding more than was reviewed would invalidate evidence over text nobody read;
+binding less would let reviewed text change unnoticed.
+
+The contract, stated so two implementations cannot disagree:
+
+- **Set:** `proposal.md`, `design.md`, and every `specs/**/*.md`, paths
+  relative to the change directory, sorted bytewise under `LC_ALL=C`. A file
+  absent from disk is absent from the digest — so deleting a spec delta changes
+  it, which is the required behaviour.
+
+  Round 5 caught this stated **three different ways** across the change:
+  `specs/**/spec.md` here and in the proposal, `specs/**/*.md` in the normative
+  requirement, `specs/*/spec.md` in the producer. All three reviewers flagged
+  it, and in a change whose thesis is that under-specification is the defect it
+  is the worst possible place to have one. The set is `specs/**/*.md`
+  everywhere, chosen because it is the glob `openspec status` already reports
+  for the change's spec artifact — adopting the tool's definition rather than
+  minting a fourth.
+- **Canonicalisation:** CRLF → LF; a trailing LF appended if missing. Nothing
+  else — no whitespace stripping, no Unicode normalisation. Every additional
+  rule is another place two implementations diverge.
+- **Framing:** per file, the relative path, LF, the canonical byte length in
+  decimal, LF, the canonical bytes. Length-prefixed so no path or content can
+  forge a boundary.
+- **Algorithm:** SHA-256, lowercase hex.
+- **`REVIEWS.md` is excluded by construction**, being outside the set. It cannot
+  be otherwise: it contains the digest.
+
+Two limits are stated in the spec rather than left for a reader to discover:
+
+- **`tasks.md` can change without invalidating a review.** That is a real hole
+  and it is the price of not deadlocking. It is bounded by the fact that a task
+  change which alters what the change *promises* must also appear in the
+  proposal, design or spec delta — all bound. A task change that alters nothing
+  promised is one nobody reviewed anyway.
+- **A digest detects drift, not forgery.** It is computable by anyone holding
+  the same public artifacts, so it cannot distinguish a real review from a
+  fabricated one. The previous revision's framing — that hardening the producer
+  alone was cosmetic because forged files open the gate — implied this mechanism
+  answered forgery. It does not. Authenticity would need a signature and is not
+  attempted here.
+
+### Decision 8: The verdict grammar is specified against the shipped parser
+
+"Parseable verdict" was not a contract. codex enumerated four bypasses in the
+regex the gate actually ships at `openspec-change-gate.sh:205`; all four
+reproduce:
+
+```
+cur != "" && /^[[:space:]]*[*_]*[[:space:]]*VERDICT[[:space:]]*:[[:space:]]*[*_]*[[:space:]]*REQUEST-CHANGES/
+```
+
+- **Not end-anchored** — `VERDICT: REQUEST-CHANGES-LATER` matches.
+- **Not case-insensitive** — awk regexes are not; `verdict: request-changes`
+  does not match, though the producer's own prompt does not require caps.
+- **No section delimiter** — `cur` is set at a `## Reviewer:` heading and
+  cleared at no other heading, so a verdict under an unrelated `##` section
+  later in the file is attributed to the last reviewer named above it.
+- **Conflicting verdicts are unresolved** — two verdict lines in one section
+  have no defined meaning.
+
+**Chosen:** specify the grammar, and specify resolution:
+
+- A reviewer section runs from its `## Reviewer:` heading to the next heading of
+  any level, or EOF.
+- Fenced code blocks are skipped (the shipped parser already does this, and this
+  is also what makes "quoted in a fenced block must not count" implementable —
+  it is fence tracking, not regex cleverness).
+- A verdict line matches, case-insensitively and **anchored at both ends**, the
+  label `VERDICT`, a colon, and one value from the closed vocabulary
+  **`APPROVE` | `REQUEST-CHANGES`**, with optional markdown emphasis around
+  either. Nothing else on the line.
+- Exactly one distinct verdict per section counts. **Two conflicting verdicts
+  make the section malformed** — not counted, reported as such. Repeats of the
+  same verdict are one.
+- A verdict outside every reviewer section is ignored.
+
+Widening the shipped regex would count things it counts today; narrowing it
+could discount an existing well-formed review. Both directions are checked by
+the migration against every `REVIEWS.md` in the repo.
+
+### Decision 9: Publish in dependency order, or every change blocks
+
+The previous revision's Migration Plan covered the producer alone. It ships
+three binaries and a spec edit, and two of them are coupled: **gate 1.5.0
+requires a trailer that only producer 1.1.0 writes.** Publishing the gate first
+blocks every change in every project until each is re-reviewed.
+
+**Chosen order:** spec §18 → producer 1.1.0 → re-review the in-flight changes →
+gate 1.5.0 → wrapper 1.2.0. The wrapper is last because it is independent: no
+other artifact reads its output format.
+
+The re-review wave is not a side effect to be discovered later. Every
+`REVIEWS.md` in existence predates the trailer, so **every one of them becomes
+unverifiable the moment gate 1.5.0 lands** — including the two on this branch,
+which is exactly the behaviour task 9b.13 tests for. It is scheduled, not
+tolerated.
+
+### Decision 10: Specify the trailer the way the digest is specified
+
+The round-4 reviews agreed on one finding above the others, and it is the
+uncomfortable kind: **this change specified the digest to the byte, argued at
+length that "parseable" without a grammar is what produced four parser defects,
+and then introduced the trailer as "a trailer the gate can parse."** Producer
+1.1.0 writes it; gate 1.5.0 reads it. Two implementations, no shared format —
+the same shape as the defect, in the mechanism built to fix it.
+
+Worse, two rules already depended on the missing grammar. The substance rule
+excludes "its generation timestamp" and "its trailer" from counting as body,
+and neither exclusion is implementable without a way to recognise those lines.
+
+**Chosen:** an HTML comment block, single, file-final, with named lowercase
+fields — specified in the capability alongside the digest. HTML comment because
+it does not render, cannot be mistaken for reviewer prose, and gives the
+substance rule an unambiguous span to exclude. Unknown fields are ignored so a
+later producer can extend it; missing required fields fail closed.
+
+Two further findings from the same round are folded into the digest contract
+rather than given their own decisions, because both are corrections to it:
+
+- **The digest and the prompt must come from one snapshot.** Nothing required
+  the bytes hashed to be the bytes sent, or either to be the bytes on disk at
+  publication. Three reads of a mutable tree, each conformant, can disagree.
+- **Length-frame the path, not only the content.** A path may contain a newline,
+  and framing only the content leaves the record boundary forgeable — the same
+  reasoning that put a length prefix on the content in the first place, applied
+  one field short.
+
+The general lesson is narrow and worth keeping: a change that fixes an
+under-specification is the most likely place to introduce another, because the
+new mechanism is the part nobody has had to implement twice yet.
 
 ## Risks / Trade-offs
 
@@ -160,23 +406,102 @@ silent — the gap is now written down.
   carries untracked material that looks authoritative. Narrowing the scope here
   is deliberate — classifying the rest requires per-file judgement that would
   swamp a conformance fix.
+- **Every existing `REVIEWS.md` becomes unverifiable** when gate 1.5.0 lands.
+  This is a one-time re-review wave across every project with an open change,
+  not just this repo. Decision 9 sequences it; it cannot be avoided without
+  grandfathering, and grandfathering would mean the new rule never applies to
+  the evidence that motivated it.
+- **Requiring substance discards a terse approval.** A vendor that approves in
+  one line must be re-run. Cheaper than the alternative it replaces, which was
+  counting a content-free token as an independent opinion.
+- **The identity trailer is self-reported.** A producer run can name any host,
+  and a hand-written `REVIEWS.md` can name a host that never ran. This narrows
+  accidental self-review, which is the observed failure; it does not resist a
+  deliberate one. Stated here so the requirement is not read as an authenticity
+  control.
 
 ## Migration Plan
 
-1. Add `reference-implementations/run-plan-review/` seeded from the installed
-   1.0.0, byte-identical, with README and install contract.
-2. Apply the floor and reporting changes; bump the marker to 1.1.0.
-3. Verify against the recorded failure: one vendor returning and two timing out
-   must now produce a written `REVIEWS.md`.
-4. Publish to `~/.agenticapps/bin/` through the existing install path.
-5. Delete `gate/run-plan-review.sh`.
+Ordered per Decision 9. Steps 3 and 4 are coupled — reversing them blocks every
+change in every project.
 
-Rollback: restore the 1.0.0 file from the reference implementation's history
-and republish. No project depends on the producer's internals — callers pass a
-slug and read `REVIEWS.md`.
+**Spec first**
+
+1. Correct §18 lines 146 and 174 to the one-reviewer floor; add the verdict,
+   substance, identity and digest terms; bump the spec version and record it in
+   `CHANGELOG.md`.
+2. Correct every other site that states a `≥2` floor, enumerated in `tasks.md`
+   §1.7 rather than left to a grep: `spec/17`, `spec/02`, both
+   `openspec-gate.ci.yml` copies, the change-gate README, the reviewer-cli
+   README and script comments, and the producer's own header.
+
+**Producer — must precede the gate**
+
+3. Add `reference-implementations/run-plan-review/`, seeded byte-identically
+   from the installed 1.0.0, with README and install contract.
+4. Apply the floor, reporting, identity and digest changes; bump to 1.1.0; add
+   the `resolve-core-artifact.sh` mapping; point the Claude installer at core
+   rather than its vendored copy; publish to `~/.agenticapps/bin/`.
+5. Verify against the recorded failure: one vendor returning and two timing out
+   must now produce a written `REVIEWS.md` carrying a trailer.
+
+**Re-review — before the gate, not after**
+
+6. **Inventory every active change across the whole fleet**, not just this
+   branch, and re-review each so it carries a 1.1.0 trailer. The previous
+   revision re-reviewed this repo's two changes and left every other project to
+   discover the incompatibility when the global gate landed and blocked it —
+   which is a flag day announced by an outage. The gate is shared; the migration
+   has to be too.
+7. Re-run the producer over both open changes on this branch.
+
+**Gate**
+
+8. Publish gate 1.5.0: verdict-and-substance counting, trailer-sourced identity,
+   digest staleness. Run the 52-case harness green.
+9. Confirm the re-reviewed changes read as current, and that **the
+   verdict-and-substance predicate alone** discounts no section that was
+   well-formed before. Note the qualifier: the previous revision said "confirm
+   every `REVIEWS.md` carrying a well-formed verdict still counts", which the
+   trailer rule makes impossible — every pre-1.1.0 file counts zero by design,
+   as the Impact section says. The two clauses contradicted each other; the
+   predicate check is the one that can actually run.
+
+**Wrapper — independent, last**
+
+9. Publish reviewer-cli 1.2.0 with the prompt out of argv on all four arms.
+
+**Rollback**, per artifact, in reverse dependency order:
+
+| Artifact | Rollback | Consequence |
+|---|---|---|
+| reviewer-cli 1.2.0 | republish 1.1.0 | prompts return to the process table |
+| gate 1.5.0 | republish 1.4.0 | trailers ignored; pre-trailer evidence counts again |
+| producer 1.1.0 | republish 1.0.0 from the reference implementation's history | floor returns to 2; trailers stop being written |
+| §18 | revert the commit | the section is self-contradictory again |
+
+Rolling back the producer while gate 1.5.0 is live blocks every change — the
+same coupling as the forward order, and the reason the table is ordered.
+
+**Every row of that table is currently unexecutable, and a reviewer caught it.**
+`install-shared-artifact.sh:148` refuses to overwrite a copy whose version
+marker is higher than the one being installed — the arbiter that exists to stop
+an older host installer clobbering a newer shared artifact. Rollback is exactly
+that operation performed deliberately, and the installer cannot tell the two
+apart.
+
+So rollback needs an explicit downgrade path: an opt-in flag that overrides the
+arbiter, logging what it replaced and with what. Without it "rollback: republish
+the previous version" is a plan that fails at the first command. The flag is
+part of this change rather than a follow-up, because a migration whose rollback
+does not run is not a migration with a rollback.
 
 ## Open Questions
 
-- Should the producer refuse to run when *every* requested vendor is the host's
-  own (`OPENSPEC_GATE_SELF`)? Out of scope here; reviewer-cli already ships all
-  vendor arms deliberately, and exclusion is documented as the producer's job.
+- Should the producer refuse to run when *every* requested vendor is the
+  implementing host's own? Out of scope here; reviewer-cli ships all vendor arms
+  deliberately, and exclusion is the producer's job. With identity now required
+  rather than defaulted, this case at least fails loudly instead of silently.
+- **`screen-review-egress`** — secret and PII screening before change content
+  reaches a vendor CLI. Named and deferred by Decision 6, owned by whoever
+  implements this change. Not an open question about *whether*, only about when.
