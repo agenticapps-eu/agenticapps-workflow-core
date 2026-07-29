@@ -1,141 +1,134 @@
-# Session Handoff — 2026-07-29
+# Session Handoff — 2026-07-29 (second session of the day)
 
 ## The one thing to know
 
-**Step 1 of `docs/PLAN-lightweight-fleet.md` is DONE and shipped as 12 PRs.**
-Knowledge capture (spec §15) is gone from all four hosts and all seven projects
-across the agenticapps and factiv families. A sweep of both families finds
-**zero remaining §15 surfaces**.
+**All 12 §15-removal PRs are merged.** Plan step 1 is done fleet-wide. Step 4 is
+answered: **keep all four hosts, do step 3 first.**
 
-All 12 PRs are **open, MERGEABLE, and unmerged**. Nothing has landed yet.
-
-Read `docs/PLAN-lightweight-fleet.md` before starting new work — it is biased
-toward deletion and says explicitly what NOT to build.
+Work has moved to `feat/step3-hook-shims-and-dead-gate-removal` in core, which
+carries **two open OpenSpec changes**, both planned and reviewed, **neither
+implemented**. Read `openspec/changes/*/proposal.md` before anything else.
 
 ## Accomplished
 
-### 12 PRs — merge core first
+### The twelve PRs landed
 
-Core's PR carries **spec 1.2.0**, which is what the other eleven implement.
+Core #46 first (spec 1.2.0), then claude-workflow #107, codex #32, opencode
+#22, pi #18, dashboard #83, roadmap #9, agents-task-viewer #14, fbc-platform
+#102, callbot #97, cparx #108, fx-signal-agent #117.
 
-| Repo | PR | Repo | PR |
-|---|---|---|---|
-| **agenticapps-workflow-core** | **#46 — merge first** | agenticapps-roadmap | #9 |
-| claude-workflow | #107 | callbot | #97 |
-| codex-workflow | #32 | cparx | #108 |
-| opencode-workflow | #22 | fbc-platform | #102 |
-| pi-agentic-apps-workflow | #18 | fx-signal-agent | #117 |
-| agenticapps-dashboard | #83 | agents-task-viewer | #14 |
+- **callbot needed a real fix**: `pnpm format:check` failed on the four
+  OpenSpec markdown files its branch adds. Formatted (`914d24a`), CI green,
+  merged. That PR also carried an unrelated payload — the whole
+  `fix-sms-rate-limit-ordering` change, 386 new lines.
+- **cparx and fx-signal-agent were merged red, on the operator's call.** Both
+  fail on jobs `main` already fails (`frontend-contrast` Playwright timeouts;
+  `gitleaks` + `pnpm-audit`). Neither PR touches anything those jobs test.
 
-Core is on `feat/spec-18-single-reviewer-floor` (8 commits, now tracking
-`origin`). Every other branch is `chore/remove-knowledge-capture`.
+### Core has an OpenSpec slot again
 
-**Test results after removal:** claude-workflow 220/2, codex 562/0, opencode
-126/0, pi 236/0. **claude-workflow's 2 failures are pre-existing** gate-vs-core
-drift rows — the host lags core's gate 1.4.0, expected per plan step 2, not
-caused by this work.
+`openspec init --tools claude`. This does **not** migrate `spec/`'s 19 sections
+into `openspec/specs/` — that remains the open question. Core's durable spec is
+still `spec/*.md`.
 
-### What made this non-mechanical
+### Two changes planned (commits 27233b3 → bafc5a4)
 
-- **`callbot` had a name collision.** `docs/decisions/0003-knowledge-capture.md`
-  is a **PRODUCT** ADR — the internal admin UI for capturing practice knowledge
-  (Supabase magic link, RLS, `admin.factiv.eu`). Nothing to do with §15. Left
-  alone, as was ADR-0012's "admin UI knowledge area". **Check content, never
-  filename.**
-- **`cparx` carried four copies** — the vendored skill, **two** full ritual
-  tails in one `AGENTS.md` (codex-host block *and* opencode-host block, 123
-  lines together), the config block, and `.opencode/workflow-config.md` prose.
-  Three hosts in parallel; the sharpest illustration of what the plan targets.
-- **`fbc-platform` was missing** from the earlier "6 projects" count entirely.
-- **Retired migration tests, not migrations.** Where a migration's *tests*
-  replayed against live templates that are now deleted, they could not be kept
-  green: claude `0025` (4 fixtures), codex `0007`/`0010` (~380 lines), opencode
-  `0005` (~120 lines). Each became a retirement check — doc retained as history
-  per §08, plus a guard that the payload cannot reappear. **`migrations/`
-  content itself is untouched everywhere.**
-- **opencode's parity guard got STRONGER.** It compared `.planning/config.json`
-  *modulo* `knowledge_capture` because that block's `note` held a resolved repo
-  name. With the block gone, nothing in the file is repo-specific — now
-  compared **in full**.
-- **Freshness probes rebased.** claude's setup Step 5 "not an old baseline"
-  check and parity block 7 keyed on the ritual tail's heading; they now key on
-  `## Verification Check (after a change is archived)`, an OpenSpec-era (3.0.0)
-  heading, so that check survives the deletion.
+**`shim-project-hooks`** — plan step 3a. Seven repos carry the same eight
+hooks (634 lines each). Measurement found five should not exist:
 
-### Deleted: the cPARX migration dry-run artifacts
+| Hook | Fate |
+|---|---|
+| `phase-sentinel`, `architecture-audit-check` | delete — inert, gate on paths in no repo |
+| `design-shotgun-gate` | delete — fails closed on a sentinel GSD stopped writing |
+| `skill-router-log`, `session-bootstrap` | delete — write live data into frozen `.planning/` |
+| `normalize-claude-md` | shim, fail open — dashboard's version canonical |
+| `database-sentinel` | shim, **fail closed** — callbot's `.env` wildcard canonical |
+| `openspec-change-gate` | unchanged — already the template |
 
-`openspec/` (33 files), `README-MIGRATION-DRYRUN.md` and `CAPABILITY-MAP.md`
-are **gone from core**. They were never core's spec — `openspec/project.md`
-line 3 said so itself: *"Reconstructed by a dry-run migration from `.planning/`
-(GSD). Not the live repo."* Contents were cPARX domain specs
-(`analysis-pipeline`, `eligibility-report`, `bonit-tsbericht`), a test corpus
-for judging migration fidelity. cPARX has its own live `openspec/` tree.
+8 hooks → 3 per project; 634 lines → ~138.
 
-**Core's real spec is `spec/`** — 19 tracked files, `00-overview` through
-`19-spec-vs-process-and-linear`. That is what commit `22d796a` edited to 1.2.0.
-
-They were untracked, so a temporary copy went to this session's scratchpad
-under `cparx-dryrun-backup/` — **that will not survive; treat them as gone.**
+**`track-and-conform-plan-review`** — the review pipeline. Grew from a
+one-file floor fix to **three shared-bin artifacts plus §18**, on the
+operator's explicit "one change covering the whole pipeline".
 
 ## Decisions
 
-- **No migration for any of this.** A migration would install machinery to
-  delete machinery. Installed projects were edited directly. No version bumps —
-  claude's snapshot VERSION stays 3.2.0 because nothing joined the chain.
-- **One gate bypass, operator-approved.** `callbot` was committed with
-  `GSD_SKIP_REVIEWS=1` because `fix-sms-rate-limit-ordering` carries 0/1
-  reviewers. `openspec validate --all` was green 13/13 and the commit touches
-  no product code. The gate logged it; disclosed in the commit body and PR #97.
-- **Hooks 4a/4b left alone** (`skill-router-log.sh`, `session-bootstrap.sh`).
-  They write to `.planning/skill-observations/` and so look like knowledge
-  capture, but are a separate feature with their own bats tests. The
-  observation logs were untracked + gitignored in codex, opencode and roadmap
-  (the durable half); files on disk left, since they regenerate.
-- **`docs/standards/gsd-binding-and-planning.md`** — only its §15 row was cut,
-  in claude/codex/opencode. **The whole document is stale** (GSD-era; GSD was
-  removed 2026-07-28). Retiring it belongs to plan step 5.
+- **Keep all four hosts; step 3 before step 5.** Evidence: ~2,277 Claude
+  co-authored commits vs zero from codex/opencode/pi. codex (28) and opencode
+  (37) are heavy *reviewer* users, but that runs through `reviewer-cli.sh`, not
+  the host repos — gemini is the #1 reviewer with no host repo at all.
+- **Security hooks fail closed, cosmetic fail open.** §18's CI floor covers the
+  OpenSpec gate only; nothing else checks destructive SQL or `.env`.
+- **Reconcile by superset, not recency.** callbot's `.env` wildcard beats the
+  four-suffix enumeration in dashboard/cparx.
+- **Delete the telemetry pair rather than relocate it.** Logs are gitignored
+  everywhere, tracked nowhere; sole consumer is the other hook.
+- **Egress: document the boundary now, defer secret/PII screening** as a named
+  follow-up.
+
+## Two things I got wrong — both caught by review, not by me
+
+1. **§02 does not forbid deleting `design-shotgun-gate.sh`.** §02 binds
+   `design-shotgun` to the gstack *skill* (`SKILL.md:106`); the hook merely
+   shares the name. My "repair, don't delete" correction was a category error,
+   and the three-state repair I designed would have introduced the same
+   blocking bug in `claude-workflow`, which has a stale `current-phase/`.
+2. **`gate/run-plan-review.sh` is not the canonical source.** It is a 66-line
+   ancestor with no version marker. The real 227-line 1.0.0 lives **only** in
+   `~/.agenticapps/bin/`, tracked in no repo.
+
+I also relayed codex's injection claim uncritically — "a committed log line can
+inject fleet-wide" is false, because the logs are gitignored.
+
+## Defects found (all verified against code, none yet fixed)
+
+- **`design-shotgun-gate` blocks 204 design files today** in callbot and
+  fbc-platform — every `.tsx`/`.css` edit.
+- **§18 is self-contradictory.** Truth table + line 80 say ≥1; lines 146 and
+  174 say ≥2. It is not satisfiable as written.
+- **The gate counts headings, not verdicts.** `reviewer_count()` matches
+  `## Reviewer`; `pending_rejections()` parses verdicts. A verdict-less section
+  counts. Demonstrated live — opencode counted three times this session while
+  returning no verdict.
+- **`MIN_REVIEWERS=0` is accepted**, publishing a `REVIEWS.md` whose floor was
+  never evaluated.
+- **`reviewer-cli.sh` passes the full prompt as argv** to all four vendor arms.
+- **Reviews are not bound to what they reviewed.** Both changes on this branch
+  were revised after review and still carry their old `REVIEWS.md`.
+- **Self-exclusion is guessable.** `OPENSPEC_GATE_SELF` defaults to `claude`,
+  wrong on every other host; at a floor of one, a self-review opens the gate.
 
 ## Files modified
 
-Per repo the shape repeats: the `## Knowledge Capture — Ritual Tail` section in
-the trigger skill, the `knowledge_capture` config block, the
-`config-knowledge-capture.json` / `obsidian-learnings-note.md` templates, the
-setup skill's seeding step and verify bullets, ENFORCEMENT-PLAN, the ADR
-(superseded, never deleted), and the migration-test retirements. The commit
-bodies are detailed — read those rather than re-deriving.
+- `openspec/` — new slot, two changes with proposal/design/specs/tasks/REVIEWS
+- `.claude/commands/opsx/`, `.claude/skills/openspec-*` — from `openspec init`
+- `factiv/callbot` — prettier formatting of four OpenSpec markdown files
+- Nothing else. **No implementation code has been written for either change.**
 
 ## Next session: start here
 
-1. **Merge core #46 first** — it carries spec 1.2.0, which the other eleven
-   implement. Harnesses green at time of opening: change-gate 52/52,
-   resolver 13/13.
-2. **Then merge the eleven.** They are independent of each other. The four host
-   PRs are the substantive ones; the seven project PRs are near-identical
-   82-line deletions.
-3. **Then answer the plan's step 4 question: are codex / opencode / pi actually
-   in daily use?** If not, archiving them removes three migration chains, three
-   installers, three CI configs and three quarters of the propagation problem
-   at a stroke, with no new machinery. **This answer changes how much of steps
-   3 and 5 is worth doing at all** — do not start either before deciding.
+A re-review of **both** changes was running when this session ended
+(background task `bhuok8t90`). Read
+`openspec/changes/*/REVIEWS.md` first and address the verdicts. Then implement
+`track-and-conform-plan-review` **before** `shim-project-hooks` — it repairs
+the machinery that reviews everything else, and its task 9b.13 explicitly
+re-checks this branch's own two changes under gate 1.5.0, where both should
+read as stale.
 
 ## Open questions
 
-- **14 untracked items remain in core** and were NOT classified: `.planning/`,
-  `gate/`, `prompts/`, `FORMAT-TEMPLATE.md`, `GATE-INVENTORY.md`,
-  `OPENSPEC-CLI-AND-MULTIHOST.md`, `SIMPLIFICATION-PLAN.md`,
-  `WORKFLOW-CHANGE.md`, `WORKFLOW-EXPLAINED.md`, `workflow.mmd`,
-  `workflow-diagram.mmd`, and four OpenSpec cheatsheet PDF/HTML files. None are
-  gitignored. Each needs a keep / track / delete call.
-- **Does core want its own OpenSpec slot?** Migrating `spec/`'s 19 sections
-  into `openspec/specs/` is real work, not a `git add`. Deleting the dry run
-  cleared the way but decided nothing.
-- `callbot`: `fix-sms-rate-limit-ordering` still has **no REVIEWS.md**;
-  `complete-operations-readiness` and `provision-sms-delivery` carry
-  unaddressed REQUEST-CHANGES from gemini, codex and opencode.
-- `fx-signal-agent`: **ten** open changes with unaddressed REQUEST-CHANGES —
-  the gate allows on quorum but NOTEs every one on every commit. Also still 2
-  gitleaks secrets in git history.
-- `agenticapps-roadmap`'s `retarget-sync-to-openspec` remains **paused**
-  pending the dashboard / agents-task-viewer rebuild.
-- `.pre-0034` SKILL.md backups sit untracked in all four factiv repos —
-  migration 0034 leftovers. Harmless; left alone.
+- **Does core migrate `spec/`'s 19 sections into `openspec/specs/`?** Still
+  unanswered; the slot now exists, which changes nothing about the migration.
+- **§02 is written entirely in GSD vocabulary** — every gate triggers on "a
+  phase", `CONTEXT.md`, `*-PLAN.md`. §18 already retargeted `plan-review` out
+  of it. This is the root cause of which the dead hooks were symptoms, and it
+  is the substance of plan step 5.
+- **`gate/` is untracked in core** and only `run-plan-review.sh` is resolved by
+  the open change. Its other contents (`openspec-change-gate.sh`, `pre-commit`,
+  `hooks/`, `README.md`) still need a keep/track/delete call, as do the other
+  13 untracked items from the previous handoff.
+- **Deferred, recorded in proposals**: two optional advisory prompts
+  (architecture review on a big commit; database review when the DB is
+  touched), and secret/PII screening before review egress.
+- `fx-signal-agent` still has 2 gitleaks findings in history and a failing
+  supply-chain job on `main`; cparx's `frontend-contrast` fails on `main`.
