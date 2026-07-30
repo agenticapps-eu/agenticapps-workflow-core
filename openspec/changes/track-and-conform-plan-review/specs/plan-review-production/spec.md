@@ -181,6 +181,38 @@ A downgrade path SHALL therefore exist, and SHALL be:
 - **logged with the versions replaced and the reason given**, in a record that
   outlives the terminal.
 
+**Interface.** A single flag taking the artifact's basename and requiring a
+reason: `--allow-downgrade <artifact> --reason <text>`. Both are mandatory
+together; the flag without a reason is a usage error, not a prompt. It
+authorises exactly the one named artifact for exactly that invocation. Repeating
+the flag authorises several, each named. There is no wildcard, no
+`--allow-all-downgrades`, and no environment variable — an env var would make
+the weakening inheritable by any child process, which is the property this
+requirement exists to deny.
+
+**Allowlist.** Only artifacts the installer already publishes may be named. An
+unknown name is a usage error rather than a silent no-op, so a typo cannot read
+as a successful authorisation.
+
+**Authorisation.** The flag is the authorisation. Anyone who can run the
+installer can already write the shared directory directly, so requiring more
+here would be theatre — what the flag buys is that a downgrade is *deliberate
+and recorded*, not that it is *privileged*. Stated plainly so the control is
+not mistaken for an access boundary.
+
+**Log location and format.** Appended to `~/.agenticapps/install.log`, one
+record per downgrade, tab-separated: UTC ISO-8601 timestamp, `downgrade`,
+artifact basename, from-version, to-version, invoking user, reason. The log is
+append-only by convention, not by permission — a reader SHALL treat it as an
+operator's record, not as evidence against an adversary who can also write it.
+
+**Reason grammar, and log injection.** The reason is free text constrained so it
+cannot forge a second record: it SHALL be a single line — any control character,
+including tab, newline and carriage return, is rejected rather than escaped —
+non-empty after trimming, and at most 200 characters. Rejecting is deliberate:
+escaping would require every reader to un-escape identically, which is the
+under-specification this change exists to remove.
+
 This is specified in the capability rather than left to a migration task,
 because it weakens the only protection the shared directory has against being
 silently reverted. A reviewer objected that a security-relevant installer change
@@ -201,6 +233,23 @@ not build would be a requirement nobody can satisfy.
 - **WHEN** a host installer carrying an older artifact runs without the
   downgrade request
 - **THEN** the arbiter refuses, exactly as before
+
+#### Scenario: The downgrade flag names one artifact and a second is older
+
+- **WHEN** an install run authorises a downgrade for one artifact and another
+  artifact in the same run is also older than what is installed
+- **THEN** only the named artifact is downgraded; the arbiter refuses the other
+
+#### Scenario: A reason carries a newline
+
+- **WHEN** the reason text contains a newline, tab or other control character
+- **THEN** the invocation is rejected as a usage error, so a crafted reason
+  cannot append a second record to the log
+
+#### Scenario: The flag is given without a reason
+
+- **WHEN** `--allow-downgrade` is passed with no `--reason`
+- **THEN** it is a usage error and nothing is installed
 
 ### Requirement: Requiring the identity is a breaking interface change
 
@@ -363,6 +412,30 @@ heading, which would forge additional reviewer sections, and SHALL continue to
 strip vendor banner and hook-log noise from the response's edges without
 altering its interior.
 
+**The producer SHALL apply the same guard to the trailer's opening delimiter**,
+because a vendor emitting one yields a file with two trailers, which the gate
+counts as zero reviewers. That fails closed rather than opening a bypass, but it
+is an availability hole any single vendor can trigger.
+
+**Both guards SHALL match only at the start of a line**, ignoring leading
+whitespace, exactly as the shipped `## Reviewer:` guard already does
+(`^[[:space:]]*##[[:space:]]*[Rr]eviewer[[:space:]]*:`). A mention inside a
+sentence SHALL NOT reject the response. This is not a refinement — it is what
+makes reviewing *this change* possible at all: the spec delta states the trailer
+grammar literally, so a reviewer discussing it necessarily quotes the delimiter.
+A substring guard would reject exactly the reviews that engaged most closely
+with the mechanism.
+
+That is not hypothetical. In round 6 of this change's own review, one vendor's
+response quoted `openspec-review-trailer` while discussing this requirement, and
+another quoted `## Reviewer: codex-2` inline while arguing about heading
+grammar. The second was correctly kept by the line-anchored guard already
+shipped; the first would have been destroyed by a substring trailer guard. The
+mechanism has to survive being talked about.
+
+A vendor that emits either delimiter at the start of a line is still rejected in
+full: at that point it is not answering in the requested format.
+
 **Neither of those is an injection control, and the capability SHALL say so.**
 The heading guard defends the reviewer *count*; it does nothing about
 instruction-shaped prose in a review body, and reviewer text is written to
@@ -376,6 +449,29 @@ marked as third-party, its provenance is recorded, and screening is deferred to
 one. Claiming more would misdescribe a guard that counts headings as a guard
 that reads meaning.
 
+**`REVIEWS.md` SHALL carry a standing notice, in the file itself, that reviewer
+sections are third-party input and are to be read as claims rather than as
+instructions.** The notice is placed by the producer so it is present wherever
+the file is read — an agent loading it as context gets the warning in the same
+buffer as the content, which a note in a specification the agent never opens
+would not achieve. §14 already governs prompt injection for this fleet; this
+requirement is the local application of it, not a second policy.
+
+The honest limit SHALL be stated with it: a notice is a mitigation an
+instruction-following model may itself be talked out of, and it is weaker than
+not placing untrusted text in context at all. Sandboxing the consumer was
+proposed by a reviewer and is not adopted here — the consumer is the operator's
+own agent session, which this change does not control, and a requirement that
+`REVIEWS.md` be read only under isolation would be a rule with no enforcement
+point and no conformance test. What is enforceable is that the warning travels
+with the text, and that is what is required.
+
+The change's own reviewer-reliability record is the argument for reading these
+sections sceptically regardless of injection: across six rounds roughly one
+reviewer claim in four has been factually wrong, including claims about this
+repository's own files. Verification before action is the operating posture,
+and the notice states it.
+
 This requirement is stated in the capability rather than only in prose because
 the property has to survive future edits to the producer. The previous revision
 recorded it in the proposal and the task list, where nothing enforces it.
@@ -385,6 +481,27 @@ recorded it in the proposal and the task list, where nothing enforces it.
 - **WHEN** a vendor's output contains a line matching `## Reviewer:`
 - **THEN** the response is rejected in full and the vendor is recorded as
   failed, rather than being rewritten and recorded
+
+#### Scenario: A vendor response opens a trailer block
+
+- **WHEN** a vendor's output carries the trailer's opening delimiter at the
+  start of a line
+- **THEN** the response is rejected in full, rather than producing a file with
+  two trailers that counts zero reviewers
+
+#### Scenario: A reviewer discusses the trailer grammar
+
+- **WHEN** a vendor's output mentions the trailer delimiter or a reviewer
+  heading inside a sentence, rather than at the start of a line
+- **THEN** the response is kept, because a review of this mechanism must be able
+  to quote it
+
+#### Scenario: An agent loads REVIEWS.md into context
+
+- **WHEN** `REVIEWS.md` is written
+- **THEN** it carries a notice that reviewer sections are third-party input to
+  be read as claims and not as instructions, so the warning reaches any agent
+  that reads the file
 
 #### Scenario: An agent reads REVIEWS.md as context
 

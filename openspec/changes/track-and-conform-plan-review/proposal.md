@@ -158,7 +158,7 @@ Three shared-bin artifacts and one spec section are involved:
   matches, a lower-case verdict does not, and a verdict under an unrelated `##`
   section is attributed to the reviewer above it. The delta fixes all three,
   enumerates the vocabulary (`APPROVE` | `REQUEST-CHANGES`), bounds a reviewer
-  section at the next heading of any level, and makes two conflicting verdicts
+  section at the next heading of level 1 or 2, and makes two conflicting verdicts
   a malformed section rather than an undefined one. Checked against every
   `REVIEWS.md` in the repo so no existing well-formed evidence is invalidated.
 
@@ -264,7 +264,7 @@ change; the rest is named in the open questions.
 whether lowering the CI floor was intended; a previous revision answered that it
 was, and that answer was wrong. `openspec-gate.ci.yml` runs
 `openspec-change-gate.sh --ci`, and that gate has defaulted `MIN_REVIEWERS=1`
-since 1.4.0 — so **CI already enforces one**, and the `>= 2` lines in the
+since **gate 1.4.0** — so **CI already enforces one**, and the `>= 2` lines in the
 workflow are stale comments describing enforcement that has not existed for two
 gate versions. The producer is the only artifact defaulting to 2, and CI never
 invokes the producer.
@@ -294,12 +294,17 @@ The non-goal is scoped to that in the design rather than left to be read as
 unqualified.
 
 **Spec version:** §18 changes meaning for any reader who trusted the ≥2
-clauses, so the spec version is bumped and the four hosts are informed at their
-next re-vendor.
+clauses, so `spec_version` in `spec/00-overview.md` goes **1.2.0 → 1.3.0** and
+the four hosts are informed at their next re-vendor. Minor, not major: the
+enforcement terms are added, and the floor text is corrected to match
+enforcement that already exists — no host that conformed to 1.2.0's *behaviour*
+becomes non-conformant, though evidence produced under it does become
+unverifiable (see below).
 
 **Running behaviour does change — the previous revision said otherwise and was
-wrong.** That claim was true only of the floor: the gate has enforced ≥1 since
-1.1.0, so the floor edit is text catching up with enforcement. But gate 1.5.0
+wrong.** That claim was true only of the floor: the gate has defaulted to ≥1
+since **gate 1.4.0**, so the floor edit is text catching up with enforcement.
+But gate 1.5.0
 adds three enforcement terms that did not exist —
 
 1. a section must carry a verdict **and** a body to count;

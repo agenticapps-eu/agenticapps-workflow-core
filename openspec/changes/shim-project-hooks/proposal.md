@@ -156,8 +156,17 @@ remain so. It is shimmed like the others but stays out of that project's
 + new capability spec), **`claude-workflow`** (see below), and the seven
 projects carrying hooks —
 `agenticapps-dashboard`, `agenticapps-roadmap`, `agents-task-viewer`,
-`callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`. `claude-workflow` and
-the other three hosts carry no `.claude/hooks/` and are untouched.
+`callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`.
+
+**`claude-workflow` is touched; the other three hosts are not.** No host carries
+a `.claude/hooks/` directory of its own, so none is touched *as a hook-carrying
+project*. `claude-workflow` is nonetheless in scope because it **scaffolds** the
+projects that do: it vendors all eight hooks twice, plus stale matchers, so
+leaving it alone means the next `/setup-agenticapps-workflow` recreates
+everything this change deletes. See the `claude-workflow` subsection below for
+the specific edits. A previous revision said in one sentence that it was among
+the nine touched repos and in the next that it was untouched; both readings were
+in the text at once.
 
 `agenticapps-dashboard-add-agent-board` is a git *worktree* of
 `agenticapps-dashboard` on another branch, not an eighth repo.

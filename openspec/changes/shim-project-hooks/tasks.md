@@ -3,6 +3,7 @@
 - [ ] 1.1 Create `reference-implementations/project-hooks/` with a README stating the shim contract, the two-candidate resolution order, the fail-open-and-warn rule, and `database-sentinel`'s coverage boundary
 - [ ] 1.2 Diff all three `normalize-claude-md.sh` variants; adopt `agenticapps-dashboard`'s as canonical and fold in any genuine addition from `agents-task-viewer`'s 314-line variant (resolves design open question 1)
 - [ ] 1.3 Diff all three `database-sentinel.sh` variants and reconcile to the superset: `callbot`'s `.env` wildcard plus its `.env.example`/`.env.template` allowance, plus `MultiEdit` handling
+- [ ] 1.3a Per behavioural difference found in 1.3, record which variant is canonical **and why** — the superset is the default, not an unconditional rule. Escalate rather than union any difference that traces to no live gate or stated policy, and preserve deliberate project-specific differences as documented opt-outs
 - [ ] 1.4 **Drop the `migrations/` clause** (`callbot` lines 57–67) from the canonical implementation — it gates on `.planning/current-phase/migrations-approved` and prints a remedy naming `/gsd-discuss-phase`, removed 2026-07-28
 - [ ] 1.5 Verify against `callbot` that a `migrations/` edit is blocked before the change and allowed after — the defect is live, so the fix is demonstrable, not theoretical
 - [ ] 1.6 Verify the reconciled `database-sentinel` still blocks `DROP`/`TRUNCATE TABLE` and `DELETE FROM` without a `WHERE`, unchanged
@@ -20,14 +21,22 @@
 - [ ] 2.5 Test that an explicit override wins over the shared install for both hooks
 - [ ] 2.6 `tdd="true"` — failing test: an override set to a missing or non-executable path reports that specifically, **allows the call, and exits 1** — it neither falls through to the shared install nor blocks
 - [ ] 2.7 Document each hook's override variable name alongside the hook, and state that the override is for testing and staged rollout rather than a production configuration
+- [ ] 2.7a Document the override in each hook's stated coverage boundary as a **kill switch**: pointing it at a non-existent path disables that hook on a healthy machine, which for the §18 gate is a one-variable bypass of review at the tool boundary
+- [ ] 2.7b `tdd="true"` — failing test: the override is honoured from the process environment only, and a value set in a project's own `.claude/settings.json` `env` block does not disable the hook. A cloned repo must not be able to switch off the gate that governs it
+- [ ] 2.9 **This change adopts its own contract rule:** stamp all three shims with the shim-contract version marker the delta requires, so a project running an older shim is detectable. The change that introduces the marker is the first that must carry it
+- [ ] 2.10 Per event class, verify the warning channel against the host docs before writing the shim — `PreToolUse` (gate, `database-sentinel`) and `PostToolUse` (`normalize-claude-md`) do not share exit semantics. Record the verified behaviour; do not reuse the `PreToolUse` exit-1 convention untested
 - [ ] 2.8 Confirm each shim is behaviour-free beyond resolution, self-identification and `exec` — in particular that it inspects no tool payload, which is what makes narrow blocking impossible and fail-open necessary
 
 ## 3. Publish and verify before touching any project
 
 - [ ] 3.1 Add a multi-artifact install step so both implementations can be provisioned in one invocation, rather than one artifact per call
 - [ ] 3.2 `tdd="true"` — failing test: the installer reports failure when a shimmed implementation is absent or not executable. This verification is where the guarantee lives now that shims fail open
-- [ ] 3.2a `tdd="true"` — failing test: the installer records provenance (version marker plus a content digest of what it published) and a later check reports an executed copy that has been hand-edited or replaced. "Present and executable" accepts stale and tampered code
-- [ ] 3.2b Make multi-artifact publication atomic, or ordered so no intermediate state leaves a project binding a hook whose implementation is absent
+- [ ] 3.2a `tdd="true"` — failing test: the installer writes a manifest beside the shared install directory with one row per artifact (path, version marker, `sha256` lowercase hex), and an on-demand check reports an executed copy that has been hand-edited or replaced. "Present and executable" accepts stale and tampered code
+- [ ] 3.2a-i Implement the manifest check as a conformance tool, not in any shim's hot path — no shim hashes its implementation before invocation
+- [ ] 3.2a-ii Report the manifest check (executed copy vs. what was published) separately from the stronger source check (executed copy vs. the maintained file in core, which requires core on the machine). Do not conflate them
+- [ ] 3.2a-iii Document the property as drift detection, not tamper-proofing: the manifest is unsigned and sits beside the artifact under the same ownership, so anyone who can alter the implementation can alter its row
+- [ ] 3.2b Make multi-artifact publication atomic: write to a temporary path in the target directory then `mv` into place, updating each artifact's manifest row in the same operation so file and manifest cannot disagree
+- [ ] 3.2c `tdd="true"` — failing test: killing the installer between two artifacts leaves no project binding a hook whose implementation is absent — each artifact is either complete with its manifest row or not present
 - [ ] 3.3 Publish both to `~/.agenticapps/bin/` and confirm they are present and executable
 - [ ] 3.4 Verify each published implementation behaves identically to the project copy it replaces, **apart from the dropped `migrations/` clause**, tested against the repo whose copy was canonical
 - [ ] 3.5 Verify the reconciled `database-sentinel` against a repo that previously used the enumerated `.env` list, confirming it now catches a novel suffix
@@ -37,6 +46,14 @@
 Each repo: replace two copies with shims, delete five hooks, remove all five from
 `settings.json`, and **add `MultiEdit` to the `database-sentinel` matcher** —
 required in every repo except `callbot`, which already has it.
+
+**`MultiEdit` appears to be inert on the current host.** Checked this session:
+it is absent from the host's tool list and no tool of that name can be
+resolved. The matcher edit is therefore forward-compatibility — it costs one
+word per repo and makes the registration match the implementation's coverage —
+**not protection gained today**. Task 4.8 settles this before any completion
+claim, and no report of this change SHALL describe it as closing a live gap
+unless 4.8 finds otherwise.
 
 - [ ] 4.1 `agenticapps-dashboard` — matcher `Bash|Edit|Write` → `Bash|Edit|Write|MultiEdit`
 - [ ] 4.2 `agenticapps-roadmap` — same matcher change
@@ -75,7 +92,7 @@ required in every repo except `callbot`, which already has it.
 - [ ] 5.0 For each of the five deletions, record the binding check that justifies it: name the §02 gates whose documented binding could plausibly be this hook, cite the host instruction file's actual binding, and confirm the hook writes none of that gate's required evidence. Filename absence is not the argument
 - [ ] 5.1 Confirm each surviving hook is byte-identical across all seven projects
 - [ ] 5.2 Confirm `~/.agenticapps/bin/` holds exactly one implementation per shimmed hook
-- [ ] 5.3 Confirm every project now carries exactly three hooks
+- [ ] 5.3 Confirm every project carries exactly the hooks its own registration calls for: three in six of the seven projects, and in `agents-task-viewer` either three (the `normalize-claude-md` shim present but unregistered) or two (no file at all) — whichever 4.3 decided and recorded. The 2026-07-21 opt-out forbids wiring that hook there; it does not mandate an unwired file. "Exactly three everywhere" was the previous wording and contradicts 4.3
 - [ ] 5.4 Confirm no hook writes to `.planning/` in any project
 - [ ] 5.5 Measure the net line change and record it against the proposal's ~3,470-line estimate
 - [ ] 5.6 Run `openspec validate --all` green

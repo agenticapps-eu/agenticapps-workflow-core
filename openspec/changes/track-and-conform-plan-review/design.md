@@ -86,7 +86,16 @@ the next reader cannot tell which half the producer was made to match. The
 reviewer that caught it was right that the change must own the spec edit.
 
 The gate binary already enforces ≥1, so no running enforcement changes. This
-aligns the text with behaviour that has been live since 1.1.0.
+aligns the text with behaviour that has been live since **spec 1.1.0**, which
+changed the truth table but updated only part of §18.
+
+**Two version namespaces are in play throughout this document and are always
+named.** `spec N.N.N` is this repo's `spec_version` (currently 1.2.0, in
+`spec/00-overview.md:4`). Artifact versions are named with their artifact —
+`gate 1.4.0`, `producer 1.0.0`, `reviewer-cli 1.1.0`. A bare version number is a
+defect in the text: the floor is described in one place as live "since 1.1.0"
+(spec) and in another as defaulted "since 1.4.0" (gate), and both are true of
+different things. That ambiguity is the same class this change faults §18 for.
 
 ### Decision 2: Default the floor to 1, keep the override, reject below 1
 
@@ -323,7 +332,12 @@ cur != "" && /^[[:space:]]*[*_]*[[:space:]]*VERDICT[[:space:]]*:[[:space:]]*[*_]
 **Chosen:** specify the grammar, and specify resolution:
 
 - A reviewer section runs from its `## Reviewer:` heading to the next heading of
-  any level, or EOF.
+  **level 1 or 2** (`#` or `##`), or EOF. Deeper headings (`###` and below) are
+  interior to the section. Bounding at *any* level was the previous wording and
+  is wrong: a vendor that writes `### Findings` and puts its verdict below it
+  would have the verdict excluded and be recorded as producing none. The
+  normative statement is in `specs/change-gate-enforcement/spec.md`; this line
+  restates it and must not diverge from it.
 - Fenced code blocks are skipped (the shipped parser already does this, and this
   is also what makes "quoted in a fenced block must not count" implementable —
   it is fence tracking, not regex cleverness).
@@ -422,8 +436,11 @@ new mechanism is the part nobody has had to implement twice yet.
 
 ## Migration Plan
 
-Ordered per Decision 9. Steps 3 and 4 are coupled — reversing them blocks every
-change in every project.
+Ordered per Decision 9. The load-bearing coupling is **step 4 before step 8** —
+gate 1.5.0 requires a trailer that only producer 1.1.0 writes, so publishing the
+gate first blocks every change in every project until each is re-reviewed.
+Steps 3 and 4 are merely sequential (seed the reference implementation, then
+modify and publish it); reversing those two blocks nothing.
 
 **Spec first**
 
@@ -458,7 +475,11 @@ change in every project.
 **Gate**
 
 8. Publish gate 1.5.0: verdict-and-substance counting, trailer-sourced identity,
-   digest staleness. Run the 52-case harness green.
+   digest staleness. Run `tools/change-gate-conformance.sh` green — every case
+   passing, none inconclusive, which is what the harness's own `TOTAL:` line
+   reports. (A previous revision cited a "52-case harness"; the harness states
+   no case count anywhere, so the number was unverifiable and is dropped rather
+   than guessed.)
 9. Confirm the re-reviewed changes read as current, and that **the
    verdict-and-substance predicate alone** discounts no section that was
    well-formed before. Note the qualifier: the previous revision said "confirm
@@ -469,7 +490,7 @@ change in every project.
 
 **Wrapper — independent, last**
 
-9. Publish reviewer-cli 1.2.0 with the prompt out of argv on all four arms.
+10. Publish reviewer-cli 1.2.0 with the prompt out of argv on all four arms.
 
 **Rollback**, per artifact, in reverse dependency order:
 

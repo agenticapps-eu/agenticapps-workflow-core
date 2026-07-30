@@ -15,7 +15,7 @@ every project.
 - [ ] 1.8 Correct **every** other site stating a ≥2 floor — not a grep-and-judge, a checklist. `spec/17:129`; `spec/02:100`; `reference-implementations/openspec-change-gate/README.md:44`; `.../openspec-change-gate/hooks/openspec-gate.ci.yml:4,33`; `reference-implementations/reviewer-cli/README.md:34,74,127`; `.../reviewer-cli/reviewer-cli.sh:29,43,59,146`; the producer header (`:22,27,38`)
 - [ ] 1.9 Re-grep after 1.8 for `≥ *2|>= *2|at least two|two independent|MIN_REVIEWERS` and confirm every survivor is either intentional prose about *preference* or inside `gate/`, which is classified separately
 - [ ] 1.10 Name, without correcting, the out-of-repo sites that will contradict until re-vendor: the `agentic-apps-workflow` skill and the operator's `CLAUDE.md`
-- [ ] 1.11 Bump the spec version and record the change in `CHANGELOG.md`
+- [ ] 1.11 Bump `spec_version` in `spec/00-overview.md:4` from `1.2.0` to `1.3.0` and record the change in `CHANGELOG.md`. Minor: enforcement terms are added and the floor text is corrected to match existing behaviour, so no host conformant to 1.2.0's behaviour becomes non-conformant
 
 ## 2. Establish the tracked source
 
@@ -85,7 +85,8 @@ every project.
 - [ ] 7b.4 `tdd="true"` — failing test: the trailer and the generation-timestamp line do not satisfy the substance rule for the section above them — the exclusions that were unimplementable before the grammar existed
 - [ ] 7b.5 Confirm producer and gate share one trailer grammar, tested by round-tripping a producer-written file through the gate's parser
 - [ ] 7b.6 `tdd="true"` — failing test: a duplicated required key makes the trailer malformed rather than resolving first-wins or last-wins
-- [ ] 7b.7 `tdd="true"` — failing test: a vendor response containing the trailer's opening delimiter is rejected and the vendor recorded as failed, so one vendor cannot invalidate the artifact
+- [ ] 7b.7 `tdd="true"` — failing test: a vendor response carrying the trailer's opening delimiter **at the start of a line** is rejected and the vendor recorded as failed, so one vendor cannot invalidate the artifact
+- [ ] 7b.7a `tdd="true"` — failing test: a vendor response mentioning the trailer delimiter or `## Reviewer:` **inside a sentence** is KEPT. Regression-test against round 6 of this change, where opencode's review quoted `openspec-review-trailer` inline and codex's quoted `## Reviewer: codex-2` inline — a substring guard would have destroyed the first. Match the anchoring the shipped forge guard already uses (`^[[:space:]]*…`)
 - [ ] 7b.8 `tdd="true"` — failing test: an optional `tasks-digest` that no longer matches produces a non-blocking report of implementation-plan drift, and its absence changes nothing
 - [ ] 7b.9 `tdd="true"` — failing test: a reviewer section containing a `### Findings` subheading keeps its verdict, because sections bound at headings of level ≤ 2
 - [ ] 7b.10 `tdd="true"` — failing test: the generation-timestamp line does not satisfy the substance rule, per its specified grammar
@@ -130,9 +131,15 @@ every project.
 - [ ] 9b.13 `tdd="true"` — failing test: the gate distinguishes and reports "no REVIEWS.md", "trailer absent or malformed", "digest mismatch — stale", and "no section with a verdict and a body" as separate reasons
 - [ ] 9b.14 `tdd="true"` — failing test: one vendor with two well-formed sections carrying conflicting verdicts contributes one to the count and is reported as REQUEST-CHANGES
 - [ ] 9b.15 `tdd="true"` — failing tests for the emphasis normalisation: `**VERDICT: REQUEST-CHANGES**`, `VERDICT: **REQUEST-CHANGES**`, `VERDICT:** REQUEST-CHANGES` and `**VERDICT:** REQUEST-CHANGES` all count
+- [ ] 9b.15a `tdd="true"` — failing tests for the timestamp grammar: `_generated 2026-07-29T12:04:50Z · timeout 600s_` is recognised and excluded from substance; a fractional-second or `+00:00` variant is not recognised as the producer's timestamp line
+- [ ] 9b.15b `tdd="true"` — failing test: the `·` separator is matched bytewise as `0xC2 0xB7` under `LC_ALL=C`, not via a locale-aware character class. Run the harness under `LC_ALL=C` explicitly
+- [ ] 9b.15c `tdd="true"` — failing test: a `## Reviewer: codex-2` heading does not count and is reported as an unrecognised reviewer; confirm this closes the exclusion bypass on a `codex`-authored change
+- [ ] 9b.15d `tdd="true"` — failing tests for malformed trailer values: a `digest` that is not `sha256:` + 64 lowercase hex, a non-semver `producer-version`, and `implementing-host: claude, codex` (space after comma) each count zero reviewers
+- [ ] 9b.15e `tdd="true"` — failing test: trailing blank lines after `-->` still count as the trailer being final content
+- [ ] 9b.15f Record the accepted normalisation consequence: `VERDICT: REQUEST-_CHANGES` normalises to a valid verdict. Confirm a manufactured verdict alone still fails the substance rule
 - [ ] 9b.16 Confirm the gate names every objecting reviewer on every invocation for as long as the objection stands — this report is the audit trail for proceeding past an objection
 - [ ] 9b.17 Run the shared predicate over every `REVIEWS.md` in the repo and confirm each well-formed one still counts — the change must not discount good evidence
-- [ ] 9b.18 Bump to 1.5.0, run the 52-case change-gate harness green, and publish
+- [ ] 9b.18 Bump to gate 1.5.0, run `tools/change-gate-conformance.sh` green — its `TOTAL:` line must report zero failed and zero inconclusive — and publish
 - [ ] 9b.19 Re-verify this branch's two changes under 1.5.0 — after 8b they carry trailers and MUST read as current; before 8b they MUST read as unverifiable. Test both directions.
 
 ## 9c. Fix the wrapper's process-table exposure (reviewer-cli.sh 1.1.0 → 1.2.0)
@@ -152,13 +159,19 @@ every project.
 - [ ] 9d.6 Document that vendor CLIs **write and execute** as well as read — an earlier revision described reading only, which leaves a reviewer CLI editing the change it reviews outside the model entirely
 - [ ] 9d.7 `tdd="true"` — failing test: the producer prints a stderr notice at invocation naming the vendors and stating that no screening is performed, since invocation alone is the consent act
 - [ ] 9d.8 Weaken the independence claim to "a different CLI": `opencode` may route to the implementing host's provider and model, so two counted reviewers can be one model twice
+- [ ] 9d.9 `tdd="true"` — failing test: the producer writes a standing notice into `REVIEWS.md` marking reviewer sections as third-party input to be read as claims, not instructions, so the warning reaches any agent that loads the file. Cite §14 as the governing policy rather than restating it
+- [ ] 9d.10 State the notice's honest limit alongside it: an instruction-following model can be talked out of a notice, and consumer sandboxing is not attempted because the consumer is the operator's own session, which this change does not control and cannot conformance-test
 - [ ] 9d.5 Record `screen-review-egress` as the named follow-up change, owned by whoever implements this one
 
 ## 10. Verify and record
 
 - [ ] 10.1 Run `openspec validate --all` green
 - [ ] 10.2 Run `openspec-change-gate.sh --ci` green
-- [ ] 10.3 `tdd="true"` — failing test: `install-shared-artifact.sh` refuses a downgrade today (`:148`), so add an explicit opt-in downgrade flag that overrides the arbiter and logs what it replaced. Without it every row of the rollback table fails at the first command
+- [ ] 10.3 `tdd="true"` — failing test: `install-shared-artifact.sh` refuses a downgrade today (`:148`), so add `--allow-downgrade <artifact> --reason <text>` — both mandatory together, scoped to the named artifact for that invocation only, no wildcard and no environment variable. Without it every row of the rollback table fails at the first command
+- [ ] 10.3a `tdd="true"` — failing test: an unknown artifact name is a usage error, not a silent no-op
+- [ ] 10.3b `tdd="true"` — failing test: authorising one artifact does not downgrade a second older artifact in the same run
+- [ ] 10.3c `tdd="true"` — failing test: a reason containing a newline, tab or other control character is rejected outright (not escaped), so it cannot forge a second log record; empty-after-trim and >200 chars are rejected too
+- [ ] 10.3d Append one tab-separated record per downgrade to `~/.agenticapps/install.log`: UTC ISO-8601, `downgrade`, artifact, from-version, to-version, user, reason. Document it as an operator's record, not evidence against an adversary who can also write it
 - [ ] 10.4 Rehearse rollback using that flag: republish producer 1.0.0 under a live 1.5.0 gate, confirm it blocks as the design predicts, then restore — the ordering claim must be tested, not asserted
 - [ ] 10.5 Stage-2 independent code review per §07
 - [ ] 10.6 Write the ADR: why the installed copy was promoted over the in-repo ancestor, the floor-vs-preference distinction, why identity moved into the artifact, and why the digest covers exactly what is transmitted

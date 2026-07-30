@@ -35,14 +35,37 @@ decides which.
 SHALL be checkable.** The tracked file in core is what maintainers edit; the
 copy under the shared install directory is what runs. Verifying only that the
 executed copy is present and executable accepts one that is stale, hand-edited
-or tampered with. The installer SHALL therefore record enough provenance — the
-version marker and a content digest of what it published — for a later check to
-establish that the executed copy is the maintained one.
+or tampered with. The installer SHALL therefore record enough provenance for a
+later check to establish that the executed copy is the one that was published:
+
+- **Hash contract** — `sha256`, computed over the file's exact bytes, recorded
+  lowercase hex. Same algorithm and encoding as the review digest, so one
+  vocabulary covers both.
+- **Location** — a manifest beside the shared install directory, written by the
+  installer, holding one row per published artifact: path, version marker,
+  digest.
+- **Trigger** — the check runs on demand (a conformance tool), not in the hook's
+  hot path. A shim SHALL NOT hash its implementation before every invocation.
+- **Comparison** — the check compares the executed copy against the manifest.
+  Comparing it against the *maintained source in core* is a separate, stronger
+  check that requires core to be present on the machine, and it SHALL be
+  reported separately rather than conflated with the manifest check.
+
+**This is drift detection, not tamper-proofing, and SHALL be described that
+way.** The manifest sits beside the executable it describes, is writable by the
+same user, and is not signed. Anyone able to alter the implementation can alter
+its recorded digest in the same breath. It catches accidental drift — a
+hand-edit, a stale copy, a half-finished install — and it catches an attacker
+who did not think to update the manifest. It does not establish authenticity,
+and no requirement here SHALL be read as claiming it does.
 
 **Publication of several implementations SHALL be atomic**, or ordered so that
 no intermediate state leaves a project binding a hook whose implementation is
 absent. Publishing one artifact per invocation with no grouping is how a
-partially provisioned machine arises.
+partially provisioned machine arises. Atomicity is per file — write to a
+temporary path in the same directory, then `mv` into place, which is atomic on
+a single filesystem — and the manifest row SHALL be updated in the same
+operation as the file it describes, so the two cannot disagree.
 
 This is the rule the current fleet violates: two hook implementations copied
 into seven projects produced three distinct versions of
@@ -67,6 +90,20 @@ into seven projects produced three distinct versions of
   installer published
 - **THEN** the check reports it, rather than reporting the hook as installed
   because a file of that name exists and is executable
+
+#### Scenario: The implementation and its manifest row are altered together
+
+- **WHEN** the executed copy is modified and its manifest digest is updated to
+  match
+- **THEN** the check passes, and this is a known and accepted limit of an
+  unsigned manifest beside the artifact it describes — the property claimed is
+  drift detection, not authenticity
+
+#### Scenario: Publication is interrupted partway
+
+- **WHEN** the installer is killed between publishing two implementations
+- **THEN** no project binds a hook whose implementation is absent: each file
+  either exists complete with its manifest row, or does not exist at all
 
 ### Requirement: The shim contract itself has a propagation path
 
@@ -125,6 +162,24 @@ is removed rather than clarified.
   state is named here.
 - It exists for **testing and staged rollout**. It is not a supported production
   configuration, and a machine relying on it has two implementations in play.
+- **It is a kill switch, and SHALL be documented as one.** Setting a hook's
+  override to a path that does not exist disables that hook on a machine whose
+  shared install is perfectly healthy: the shim reports an invalid override and
+  allows the call. For the §18 change gate that is a one-variable bypass of the
+  review requirement at the tool boundary. This follows from fail-open — the
+  alternative is blocking every `Bash`, `Edit` and `Write` in the project on a
+  typo'd variable — but it SHALL appear in the hook's stated coverage boundary
+  rather than only in this requirement, so an operator reading what the hook
+  protects also reads what turns it off.
+- **The variable SHALL be read from the process environment only.** A shim SHALL
+  NOT read its override out of any project-controlled file. The distinction
+  matters because the host's settings files can define environment variables for
+  hook processes: an override honoured from project configuration would let a
+  cloned repository disable its own change gate, with no operator action and
+  nothing on screen but the shim's own warning. No project in the fleet sets
+  `env` in `.claude/settings.json` today — verified across all seven — so this
+  requirement is closing the door before anyone walks through it, not describing
+  an existing breach.
 
 This does not weaken "authoritative in one place". That requirement is about
 what is *tracked and maintained* — one file that maintainers edit — not about
@@ -137,6 +192,13 @@ conflicting, which they will be unless the distinction is stated.
   regular file
 - **THEN** the shim reports that the override is invalid, and does not fall
   through to the shared install as though the override had not been set
+
+#### Scenario: A project's configuration tries to set the override
+
+- **WHEN** a repository's own `.claude/settings.json` defines the override
+  variable in its `env` block
+- **THEN** the shim does not honour it as an override, because a project cannot
+  be permitted to disable the gate that governs it
 
 #### Scenario: The shared install is present
 
@@ -160,6 +222,18 @@ a PreToolUse hook exiting 0 has its stdout written to the debug log and its
 stderr discarded from the transcript entirely; only a non-zero, non-blocking
 exit surfaces the first line of stderr to the operator. A shim exiting 0 with a
 warning on stderr therefore warns nobody.
+
+**This exit rule is established for `PreToolUse` and SHALL be re-established
+per event class, not assumed to generalise.** The three shimmed hooks are not
+all one class: the change gate and `database-sentinel` are `PreToolUse`,
+`normalize-claude-md` is `PostToolUse`. Host exit-code semantics differ by
+event — a `PostToolUse` hook has no call to block, and `SessionStart` output is
+injected as context rather than surfaced as a warning. A shim for an event class
+not yet covered here SHALL have its warning channel verified against the host
+docs for *that* event before the shim is written, and the verified behaviour
+recorded alongside this requirement. Reusing the `PreToolUse` exit convention
+untested is the same unverified-assumption failure that produced the exit-0
+defect above.
 
 This is not a detail of presentation. Fail-open is acceptable *because* the loss
 of protection is announced; an unannounced fail-open is silent protection loss,
@@ -269,12 +343,30 @@ requirement above had to withdraw.
 
 When copies of a hook have diverged, the canonical implementation SHALL be
 chosen by comparing behaviour, not by recency. Where variants differ in what
-they protect, the canonical implementation SHALL take the superset of
-protection.
+they protect, the superset of protection SHALL be the **default** choice.
 
 Choosing "the newest file" would have silently narrowed `.env` matching from a
 wildcard to a four-item enumeration, dropping protection for any suffix nobody
 enumerated.
+
+**The superset is a default, not an unconditional rule, and each difference
+SHALL be reviewed before it is adopted fleet-wide.** A broader variant can be
+broader because it is wrong: it may carry false positives that block legitimate
+edits, encode a policy true of one project and not its siblings, or check a
+sentinel that is reachable but obsolete. Unioning those across seven projects
+propagates one project's bug to all of them — the same fleet-wide-blast-radius
+argument this capability makes about the shared directory, applied to
+semantics. For each behavioural difference the reconciliation SHALL record
+which variant is canonical and why, and where a difference is deliberately
+project-specific it SHALL be preserved as a documented opt-out rather than
+dissolved into the union. `agents-task-viewer`'s `normalize-claude-md` opt-out
+of 2026-07-21 is the worked example: it is a difference that survives
+consolidation.
+
+A difference that cannot be justified either way is not resolved by taking the
+broader side; it is escalated to the operator, because adopting protection
+nobody can explain is how the dead GSD sentinels in this fleet survived as long
+as they did.
 
 #### Scenario: Variants differ in matched paths
 
@@ -287,6 +379,13 @@ enumerated.
 
 - **WHEN** one variant handles a tool (`MultiEdit`) the others omit
 - **THEN** the canonical implementation handles it
+
+#### Scenario: The broader variant is broader by mistake
+
+- **WHEN** one variant blocks a path the others allow, and the block cannot be
+  traced to a live gate or a stated project policy
+- **THEN** the difference is escalated rather than unioned in, because a
+  fleet-wide superset would propagate one project's false positive to all seven
 
 #### Scenario: A variant is deliberately inert
 

@@ -43,11 +43,26 @@ so subheadings are expected rather than exceptional. At a floor of one this
 would silently drop a complete review.
 
 **Timestamp line.** The producer writes exactly one line immediately after each
-`## Reviewer:` heading, of the form `_generated <UTC ISO-8601> · timeout <N>s_`.
-It is recognised by that shape, and it is not content for the substance rule.
-This grammar is stated because the substance rule excludes the line, and an
-exclusion whose target has no definition cannot be implemented — the same gap
-that made the trailer's format necessary, one field over.
+`## Reviewer:` heading, of the form `_generated <timestamp> · timeout <N>s_`.
+It is not content for the substance rule. This grammar is stated because the
+substance rule excludes the line, and an exclusion whose target has no
+definition cannot be implemented — the same gap that made the trailer's format
+necessary, one field over.
+
+"ISO-8601" is not a grammar: it admits `2026-07-29T12:04:50Z`,
+`2026-07-29T12:04:50.123+00:00` and `20260729T120450Z` alike. **One form is
+required** — `YYYY-MM-DDThh:mm:ssZ`, matching
+`[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z`: UTC, literal `Z`
+suffix, no fractional seconds, no offset notation. `<N>` is one or more decimal
+digits. This is the form the producer already emits, so no existing evidence is
+invalidated by pinning it.
+
+The separator is U+00B7 MIDDLE DOT, and the line is matched **bytewise under
+`LC_ALL=C`** — as its UTF-8 encoding `0xC2 0xB7`, not as a character class. A
+parser SHALL NOT depend on locale-aware regex to recognise it. The digest
+contract already mandates C-locale byte semantics; a multi-byte character
+matched under a character-class regex in that locale is a portability trap, and
+recognising this line is load-bearing for the substance rule.
 
 **Verdict grammar.** Outside fenced code blocks, a candidate line SHALL be
 normalised and then matched, and both steps are normative:
@@ -68,6 +83,17 @@ reviewer showed that two conformant parsers would answer differently now that
 end-anchoring is mandatory. Under the rule above all three match, and no parser
 has to enumerate placements. No vocabulary member contains `*` or `_`, so the
 normalisation cannot merge distinct values.
+
+**It can, however, manufacture one, and that is accepted deliberately.** The
+converse of "cannot merge" is not "cannot create": `VERDICT: REQUEST-_CHANGES`
+and `V*E*R*D*I*C*T: APPROVE` both normalise to valid verdicts. This is judged
+harmless and is stated rather than left for an implementer to discover. The
+input is a vendor's own summary line, not an adversary's; a vendor that writes
+`REQUEST-_CHANGES` meant `REQUEST-CHANGES`, and reading it as such is the right
+answer. The alternative — restricting stripping to balanced emphasis runs —
+reintroduces exactly the placement enumeration this rule removed, to defend
+against a typo whose only effect is to be understood correctly. A section still
+needs substance to count, so a manufactured verdict alone changes nothing.
 
 The vocabulary is closed: a value outside it is not a verdict. Anchoring at the
 end of the normalised line is required so that a value with a suffix —
@@ -189,6 +215,21 @@ recorded there by the producer at the time the reviews were obtained. Each
 identity SHALL be one of the closed vendor vocabulary: `claude`, `codex`,
 `gemini`, `opencode`.
 
+**The same closed vocabulary SHALL constrain the reviewer heading name.** A
+`## Reviewer:` heading naming anything else — `codex-2`, `gpt`, `anonymous` —
+SHALL NOT count, and SHALL be reported as an unrecognised reviewer rather than
+ignored. Without this the exclusion rule is defeated by spelling: the
+implementing host is excluded by name, so a section headed `codex-2` on a
+`codex`-authored change counts as an independent reviewer while being the
+implementing host's own output. The heading name and the identity value are
+compared **case-sensitively after trimming surrounding whitespace**, both being
+lowercase vocabulary members.
+
+This also bounds what the producer may write. The producer names sections from
+its own vendor list, which is the same vocabulary, so no legitimate section is
+lost; a name outside it means the file was edited by something other than the
+producer, which is exactly the case that should not silently count.
+
 **More than one host may be named**, and every named host SHALL be excluded. A
 change may be authored across a handoff or by several agents, and a single
 identity would then mark a genuine co-author as independent. Naming all of them
@@ -290,11 +331,28 @@ producer-version: <semver>
   advisory tasks-drift rule below — and its absence SHALL NOT invalidate the
   trailer.
 - `implementing-host` SHALL list one or more vendors from the closed vocabulary,
-  comma-separated without spaces.
+  separated by a single comma with **no surrounding whitespace**:
+  `claude,codex`, never `claude, codex`. Whitespace around a list element makes
+  the value malformed; it is not trimmed. Trimming and rejecting are both
+  defensible, so one is chosen and stated — a parser that trims and a parser
+  that rejects would disagree about the same file, which is the failure this
+  grammar exists to prevent. A value naming a vendor outside the closed
+  vocabulary is malformed on the same footing.
+- **A required field present but malformed SHALL be treated exactly as absent.**
+  A `digest` that does not match `sha256:` followed by 64 lowercase hex digits, a
+  `producer-version` that is not semver, an `implementing-host` violating the
+  list grammar — each makes the trailer malformed. Specifying only *missing*
+  fields left a parser free to accept a garbage value, which fails open in the
+  one place this requirement fails closed everywhere else.
+- **The trailer is the final content, with whitespace tolerance stated.** After
+  the closing `-->` the file SHALL contain at most whitespace: any number of
+  newlines, spaces or tabs, and a final newline is optional. Anything else means
+  the trailer is not final. Without this, a file differing only in a trailing
+  blank line is accepted by one parser and rejected by another.
 - A file carrying no trailer, more than one trailer, a trailer that is not the
-  final content, or a trailer missing a required field SHALL count zero
-  reviewers. This fails closed: a malformed trailer is indistinguishable from
-  an absent one for the purpose it serves.
+  final content, or a trailer with a required field missing **or malformed**
+  SHALL count zero reviewers. This fails closed: a malformed trailer is
+  indistinguishable from an absent one for the purpose it serves.
 - The trailer is an HTML comment so that it does not render, cannot be read as
   reviewer prose, and is unambiguously delimited for the substance rule that
   must exclude it.
@@ -317,6 +375,20 @@ pair would.
 
 - **WHEN** the trailer omits `digest`, `implementing-host` or `producer-version`
 - **THEN** the gate counts zero reviewers and reports the trailer as malformed
+
+#### Scenario: A required field carries a malformed value
+
+- **WHEN** `digest` is not `sha256:` plus 64 lowercase hex digits, or
+  `producer-version` is not semver, or `implementing-host` carries a space after
+  a comma or names a vendor outside the closed vocabulary
+- **THEN** the gate treats the field as absent: zero reviewers, reported as
+  malformed
+
+#### Scenario: The file ends with trailing blank lines
+
+- **WHEN** `REVIEWS.md` has one or more blank lines after the closing `-->`
+- **THEN** the trailer still counts as the final content, and the file is
+  treated identically to one ending immediately after `-->`
 
 #### Scenario: Two trailers are present
 
