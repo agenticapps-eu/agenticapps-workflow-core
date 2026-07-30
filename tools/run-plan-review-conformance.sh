@@ -28,6 +28,14 @@
 
 set -uo pipefail
 
+# A measurement tool must not inherit state from the thing it measures. An
+# operator who exported AGENT_SELF to run a real review, then ran this harness
+# in the same shell, would silently score the identity rows against their own
+# ambient value rather than the row's. The sibling gate harness clears
+# OPENSPEC_GATE_SELF for exactly this reason. Rows that need an identity set it
+# per-row, which is a command-scoped assignment and unaffected by this.
+unset AGENT_SELF
+
 pass=0
 fail=0
 inconclusive=0
@@ -160,6 +168,34 @@ run_row_file() { # $1=desc $2=predicate $3=fixture $4...=producer args
   fi
 }
 
+# Runs the producer and echoes the digest from the trailer it wrote. Empty if
+# the run refused to publish — which is itself a distinguishable result.
+digest_after() { # $1=fixture $2...=producer args
+  local fx="$1"; shift
+  (
+    cd "$fx/repo" || exit 99
+    PATH="$fx/stub:$PATH" REVIEWER_CLI="$fx/stub/reviewer-cli.sh" \
+      bash "$PRODUCER" "$@" >/dev/null 2>&1
+  )
+  awk '/^digest: /{print $2; exit}' "$fx/repo/$CHANGE_REL/REVIEWS.md" 2>/dev/null
+}
+
+assert_eq() { # $1=desc $2=a $3=b
+  if [ -n "$2" ] && [ "$2" = "$3" ]; then
+    echo "  PASS  $1"; pass=$((pass + 1))
+  else
+    echo "  FAIL  $1 — '$2' != '$3'"; fail=$((fail + 1))
+  fi
+}
+
+assert_ne() { # $1=desc $2=a $3=b
+  if [ -n "$2" ] && [ -n "$3" ] && [ "$2" != "$3" ]; then
+    echo "  PASS  $1"; pass=$((pass + 1))
+  else
+    echo "  FAIL  $1 — expected a difference; a='$2' b='$3'"; fail=$((fail + 1))
+  fi
+}
+
 # ── scoring ──────────────────────────────────────────────────────────────────
 score_producer() {
   # Absolute: every row `cd`s into the fixture repo before invoking, so a
@@ -179,23 +215,23 @@ score_producer() {
   WORK="$(make_fixture)"
   STUB_gemini=verdict STUB_codex=timeout STUB_opencode=timeout \
     run_row "one reviewer returns, two time out -> floor of 1 is met" \
-      0 "$WORK" add-thing gemini codex opencode
+      0 "$WORK" add-thing --implementing-host claude gemini codex opencode
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=verdict STUB_codex=timeout STUB_opencode=timeout \
     run_row_file "…and the surviving review IS written" \
-      "count:1" "$WORK" add-thing gemini codex opencode
+      "count:1" "$WORK" add-thing --implementing-host claude gemini codex opencode
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   MIN_REVIEWERS=0 run_row "MIN_REVIEWERS=0 is a usage error" \
-    2 "$WORK" add-thing gemini codex
+    2 "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   MIN_REVIEWERS=0 run_row_file "…and writes nothing" \
-    "absent" "$WORK" add-thing gemini codex
+    "absent" "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 
   # The sharp form of the zero-floor hole. With every reviewer failing, a floor
@@ -207,36 +243,36 @@ score_producer() {
   printf 'PRIOR-EVIDENCE\n' > "$WORK/repo/$CHANGE_REL/REVIEWS.md"
   MIN_REVIEWERS=0 STUB_gemini=timeout STUB_codex=timeout \
     run_row_file "a zero floor cannot publish empty evidence over a good file" \
-      "unchanged:PRIOR-EVIDENCE" "$WORK" add-thing gemini codex
+      "unchanged:PRIOR-EVIDENCE" "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   MIN_REVIEWERS=-1 run_row "a negative floor is a usage error" \
-    2 "$WORK" add-thing gemini codex
+    2 "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   MIN_REVIEWERS=two run_row "a non-integer floor is a usage error" \
-    2 "$WORK" add-thing gemini codex
+    2 "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   MIN_REVIEWERS=3 STUB_gemini=verdict STUB_codex=verdict STUB_opencode=timeout \
     run_row "an explicitly higher floor is still honoured" \
-      1 "$WORK" add-thing gemini codex opencode
+      1 "$WORK" add-thing --implementing-host claude gemini codex opencode
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=timeout STUB_codex=timeout STUB_opencode=timeout \
     run_row "zero successful reviewers exits non-zero" \
-      1 "$WORK" add-thing gemini codex opencode
+      1 "$WORK" add-thing --implementing-host claude gemini codex opencode
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   printf 'PRIOR-EVIDENCE\n' > "$WORK/repo/$CHANGE_REL/REVIEWS.md"
   STUB_gemini=timeout STUB_codex=timeout STUB_opencode=timeout \
     run_row_file "a failed run does not destroy earlier evidence" \
-      "unchanged:PRIOR-EVIDENCE" "$WORK" add-thing gemini codex opencode
+      "unchanged:PRIOR-EVIDENCE" "$WORK" add-thing --implementing-host claude gemini codex opencode
   rm -rf "$WORK"
 
   # ── B. Counting ────────────────────────────────────────────────────────────
@@ -248,49 +284,49 @@ score_producer() {
   WORK="$(make_fixture)"
   STUB_gemini=prose STUB_codex=verdict \
     run_row_file "prose with no verdict line does not count" \
-      "count:1" "$WORK" add-thing gemini codex
+      "count:1" "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=prose run_row "…and a lone verdictless vendor misses the floor" \
-    1 "$WORK" add-thing gemini
+    1 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   # Regression: opencode returned exactly this shape in round 2 of
   # track-and-conform-plan-review's own review and was counted.
   WORK="$(make_fixture)"
   STUB_opencode=prose run_row "regression: opencode round-2 verdictless output" \
-    1 "$WORK" add-thing opencode
+    1 "$WORK" add-thing --implementing-host claude opencode
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=verdict_only STUB_codex=verdict \
     run_row_file "a verdict with no body does not count" \
-      "count:1" "$WORK" add-thing gemini codex
+      "count:1" "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 
   # Regression: gemini's bare `VERDICT: APPROVE` of 2026-07-29T07:52:54Z on
   # shim-project-hooks counted toward the floor while carrying no body.
   WORK="$(make_fixture)"
   STUB_gemini=verdict_only run_row "regression: gemini's bare APPROVE of 2026-07-29" \
-    1 "$WORK" add-thing gemini
+    1 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=verdict_emph run_row "REQUEST-CHANGES with a body counts toward the floor" \
-    0 "$WORK" add-thing gemini
+    0 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=verdict_lower run_row "a lower-case verdict counts" \
-    0 "$WORK" add-thing gemini
+    0 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   # Sections bound at headings of level <= 2, so a vendor's own `### Findings`
   # subheading must not hide the verdict beneath it.
   WORK="$(make_fixture)"
   STUB_gemini=subheading run_row "a verdict below a '### Findings' subheading still counts" \
-    0 "$WORK" add-thing gemini
+    0 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   # ── F. Guards ──────────────────────────────────────────────────────────────
@@ -299,7 +335,7 @@ score_producer() {
 
   WORK="$(make_fixture)"
   STUB_gemini=forge run_row "a '## Reviewer:' heading at line start is rejected" \
-    1 "$WORK" add-thing gemini
+    1 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   # The anchoring rule. A substring guard would have destroyed opencode's own
@@ -308,17 +344,227 @@ score_producer() {
   # to survive being talked about.
   WORK="$(make_fixture)"
   STUB_gemini=forge_inline run_row "…but the same string inside a sentence is KEPT" \
-    0 "$WORK" add-thing gemini
+    0 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=trailer run_row "a trailer delimiter at line start is rejected" \
-    1 "$WORK" add-thing gemini
+    1 "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   WORK="$(make_fixture)"
   STUB_gemini=trailer_inline run_row "…but quoted inline it is KEPT (round-6 regression)" \
-    0 "$WORK" add-thing gemini
+    0 "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # ── C. Identity ────────────────────────────────────────────────────────────
+  # Declared, never defaulted. The shipped default is `claude`, which is wrong
+  # on three of the four hosts.
+  echo
+  echo "  C. Implementing-host identity"
+
+  WORK="$(make_fixture)"
+  run_row "no identity is a usage error" \
+    2 "$WORK" add-thing gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row_file "…and writes nothing" \
+    "absent" "$WORK" add-thing gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row "an identity outside the vocabulary is a usage error" \
+    2 "$WORK" add-thing --implementing-host gpt gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row "an empty identity is a usage error" \
+    2 "$WORK" add-thing --implementing-host "" gemini
+  rm -rf "$WORK"
+
+  # A space after the comma is malformed, matching the trailer's list grammar.
+  WORK="$(make_fixture)"
+  run_row "a space in the identity list is a usage error" \
+    2 "$WORK" add-thing --implementing-host "claude, codex" gemini
+  rm -rf "$WORK"
+
+  # The declared host is EXCLUDED, not failed — and the distinction is visible.
+  WORK="$(make_fixture)"
+  run_row "the declared host does not count toward the floor" \
+    1 "$WORK" add-thing --implementing-host gemini gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row_file "…and is recorded as excluded, not failed" \
+    "has:[Ee]xcluded" "$WORK" add-thing --implementing-host gemini gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  MIN_REVIEWERS=2 run_row "the same vendor named twice contributes at most one" \
+    1 "$WORK" add-thing --implementing-host claude gemini gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row "two implementing hosts are accepted, and both are excluded" \
+    1 "$WORK" add-thing --implementing-host gemini,codex gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row_file "the identity is recorded in the artifact" \
+    "has:implementing-host: claude" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # AGENT_SELF still works as an explicit input — it just has no default.
+  WORK="$(make_fixture)"
+  AGENT_SELF=gemini run_row "AGENT_SELF is honoured when set explicitly" \
+    1 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  # ── D. Record ──────────────────────────────────────────────────────────────
+  echo
+  echo "  D. REVIEWS.md is self-contained"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict STUB_codex=timeout STUB_opencode=absent \
+    run_row_file "the record names every requested vendor" \
+      "has:requested:.*gemini.*codex.*opencode" "$WORK" add-thing --implementing-host claude gemini codex opencode
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict STUB_codex=timeout \
+    run_row_file "a timeout is recorded with its reason" \
+      "has:codex: timed out" "$WORK" add-thing --implementing-host claude gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict STUB_codex=absent \
+    run_row_file "an absent CLI is distinguished from a timeout" \
+      "has:codex: CLI absent" "$WORK" add-thing --implementing-host claude gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict STUB_codex=prose \
+    run_row_file "a verdictless response is recorded as such" \
+      "has:codex: no verdict" "$WORK" add-thing --implementing-host claude gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict STUB_codex=verdict_only \
+    run_row_file "a bodyless verdict is recorded as such" \
+      "has:codex: no substance" "$WORK" add-thing --implementing-host claude gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row_file "the third-party-input notice travels with the text" \
+    "has:THIRD-PARTY INPUT" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # ── E. Digest ──────────────────────────────────────────────────────────────
+  echo
+  echo "  E. Digest binds the review to what was reviewed"
+
+  WORK="$(make_fixture)"
+  run_row_file "the trailer carries a well-formed digest" \
+    "has:^digest: sha256:[0-9a-f]{64}$" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row_file "…and a producer version" \
+    "has:^producer-version: [0-9]+\.[0-9]+\.[0-9]+$" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # tasks.md is deliberately OUT of the binding digest: binding it would stale a
+  # review on every ticked checkbox and deadlock the gate.
+  WORK="$(make_fixture)"
+  d1="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  printf '# Tasks\n\n- [x] 1.1 do it\n- [ ] 1.2 more\n' > "$WORK/repo/$CHANGE_REL/tasks.md"
+  d2="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  assert_eq "ticking a checkbox does NOT stale the review" "$d1" "$d2"
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  d1="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  rm -f "$WORK/repo/$CHANGE_REL/specs/thing/spec.md"
+  d2="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  assert_ne "deleting a spec delta DOES change the digest" "$d1" "$d2"
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  d1="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  printf '# Why\r\n\r\nBecause.\r\n' > "$WORK/repo/$CHANGE_REL/proposal.md"
+  d2="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  assert_eq "a CRLF-only difference does not change the digest" "$d1" "$d2"
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  d1="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  printf '# Why\n\nBecause.' > "$WORK/repo/$CHANGE_REL/proposal.md"   # no trailing LF
+  d2="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  assert_eq "a trailing-newline-only difference does not change it" "$d1" "$d2"
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  d1="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  printf '# Why\n\nBecause we changed our minds.\n' > "$WORK/repo/$CHANGE_REL/proposal.md"
+  d2="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  assert_ne "a real content change DOES change the digest" "$d1" "$d2"
+  rm -rf "$WORK"
+
+  # A symlink in the set makes the digest uncomputable: following it would hash
+  # bytes from outside the change while attesting to a path inside it.
+  WORK="$(make_fixture)"
+  printf 'secret\n' > "$WORK/outside-secret.md"
+  ln -sf "$WORK/outside-secret.md" "$WORK/repo/$CHANGE_REL/specs/thing/linked.md"
+  run_row "a symlink in the artifact set refuses to publish" \
+    2 "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # Framing defeats a path/content boundary forgery. A path may legally contain
+  # a newline; framing only the CONTENT would let such a path forge a record
+  # boundary so that two different file sets serialise identically.
+  WORK="$(make_fixture)"
+  d1="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  rm -rf "$WORK"
+  WORK="$(make_fixture)"
+  # A crafted name whose bytes replay a record header if boundaries are not framed.
+  printf 'x\n' > "$WORK/repo/$CHANGE_REL/specs/thing/$(printf 'a\nb').md" 2>/dev/null || true
+  d2="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  assert_ne "a newline-bearing path changes the digest (framing holds)" "$d1" "$d2"
+  rm -rf "$WORK"
+
+  # One snapshot drives prompt, digest and publication. A reviewer CLI is an
+  # agentic process that can WRITE — so a vendor editing the change it is
+  # reviewing is exactly the race this check exists for, not a hypothetical.
+  WORK="$(make_fixture)"
+  cat > "$WORK/stub/reviewer-cli.sh" <<'MSTUB'
+#!/usr/bin/env bash
+# Mutates the change mid-review, as an agentic CLI with write access can.
+printf '# Why\n\nEdited by the reviewer mid-run.\n' > openspec/changes/add-thing/proposal.md
+printf 'VERDICT: APPROVE\n\n- fine\n'
+MSTUB
+  chmod +x "$WORK/stub/reviewer-cli.sh"
+  run_row "an artifact mutated mid-review refuses to publish" \
+    2 "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # The prompt set and the digest set are ONE set. A nested spec file must
+  # reach the reviewers, not merely be bound.
+  WORK="$(make_fixture)"
+  mkdir -p "$WORK/repo/$CHANGE_REL/specs/thing/nested"
+  printf '# nested\n\nNESTED-SENTINEL\n' > "$WORK/repo/$CHANGE_REL/specs/thing/nested/spec.md"
+  cat > "$WORK/stub/reviewer-cli.sh" <<'PSTUB'
+#!/usr/bin/env bash
+# Echoes whether the sentinel reached the prompt file the producer handed over.
+if grep -q NESTED-SENTINEL "$2" 2>/dev/null; then
+  printf 'VERDICT: APPROVE\n\n- saw the nested spec\n'
+else
+  printf 'VERDICT: APPROVE\n\n- NESTED SPEC MISSING FROM PROMPT\n'
+fi
+PSTUB
+  chmod +x "$WORK/stub/reviewer-cli.sh"
+  run_row_file "a nested specs/**/*.md reaches the reviewers" \
+    "has:saw the nested spec" "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 }
 

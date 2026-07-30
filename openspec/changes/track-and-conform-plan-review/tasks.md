@@ -45,41 +45,41 @@ every project.
 
 ## 5. Require the implementing host, never default it
 
-- [ ] 5.1 `tdd="true"` — failing test: invoked with no implementing-host identity, the producer exits with a usage error and writes nothing
-- [ ] 5.2 `tdd="true"` — failing test: an identity outside `claude|codex|gemini|opencode` is a usage error
-- [ ] 5.3 `tdd="true"` — remove the `AGENT_SELF:-claude` default (`run-plan-review.sh:68`); require the identity explicitly; make both tests pass
-- [ ] 5.4 `tdd="true"` — failing test: the declared host's own vendor is recorded as excluded, not failed, and does not count
-- [ ] 5.5 `tdd="true"` — failing test: the same vendor named twice contributes at most one
-- [ ] 5.6 `tdd="true"` — failing test: two implementing hosts are accepted, recorded, and both excluded from the floor
+- [x] 5.1 `tdd="true"` — failing test: invoked with no implementing-host identity, the producer exits with a usage error and writes nothing
+- [x] 5.2 `tdd="true"` — failing test: an identity outside `claude|codex|gemini|opencode` is a usage error
+- [x] 5.3 `tdd="true"` — remove the `AGENT_SELF:-claude` default (`run-plan-review.sh:68`); require the identity explicitly; make both tests pass
+- [x] 5.4 `tdd="true"` — failing test: the declared host's own vendor is recorded as excluded, not failed, and does not count
+- [x] 5.5 `tdd="true"` — failing test: the same vendor named twice contributes at most one
+- [x] 5.6 `tdd="true"` — failing test: two implementing hosts are accepted, recorded, and both excluded from the floor
 - [ ] 5.7 Confirm no **gate** caller changes are needed — if any host shim must export an identity, Decision 5 has been violated
 - [ ] 5.8 **Inventory every producer caller** — grep core, the four hosts, the seven projects, `~/.agenticapps/bin/`, and the workflow skill for invocations of `run-plan-review.sh` — and migrate each to pass an identity. Removing the default is a breaking interface change; this is the migration
 - [ ] 5.9 Confirm an un-migrated caller fails with a usage error naming the missing input, not with a guessed host
 
 ## 6. Make REVIEWS.md self-contained
 
-- [ ] 6.1 `tdd="true"` — failing test: `REVIEWS.md` records requested, counted, excluded and failed vendors with reasons
-- [ ] 6.2 `tdd="true"` — failing test: `REVIEWS.md` carries a trailer with the implementing host, the digest, and the producer version
-- [ ] 6.3 `tdd="true"` — implement the record block and the trailer; make both tests pass
-- [ ] 6.4 Test that a failure reason distinguishes timeout, non-zero exit, no-verdict and no-substance
+- [x] 6.1 `tdd="true"` — failing test: `REVIEWS.md` records requested, counted, excluded and failed vendors with reasons
+- [x] 6.2 `tdd="true"` — failing test: `REVIEWS.md` carries a trailer with the implementing host, the digest, and the producer version
+- [x] 6.3 `tdd="true"` — implement the record block and the trailer; make both tests pass
+- [x] 6.4 Test that a failure reason distinguishes timeout, non-zero exit, no-verdict and no-substance
 - [ ] 6.5 Confirm the record and trailer survive the existing stdout sanitiser and do not trip the `## Reviewer:` forge guard
 - [ ] 6.6 Confirm the trailer is not parsed as a reviewer section, and does not itself satisfy the substance rule for the section above it
 
 ## 7. Compute the digest
 
-- [ ] 7.1 `tdd="true"` — failing test: the digest covers `proposal.md`, `design.md` and every `specs/**/*.md`, ordered `LC_ALL=C`, and nothing else
-- [ ] 7.2 `tdd="true"` — **widen the producer's prompt glob from `specs/*/spec.md` to `specs/**/*.md`** so the transmitted set and the digest set are the same set; failing test: a nested spec file reaches the reviewers
-- [ ] 7.3 `tdd="true"` — implement SHA-256 over the serialisation with **both** path and content length-framed; make the test pass
-- [ ] 7.4 `tdd="true"` — failing test: a change directory containing a path with an embedded newline produces a distinct digest from the crafted collision the unframed-path form would allow
-- [ ] 7.5 `tdd="true"` — failing test: a symlink in the artifact set makes the digest uncomputable and the producer refuses to publish
-- [ ] 7.6 `tdd="true"` — failing test: prompt, digest and published file derive from one snapshot — mutate an artifact between prompt construction and publication and confirm the producer refuses rather than publishing a digest for bytes nobody reviewed
-- [ ] 7.7 Test that editing `tasks.md` does **not** change the digest, and that ticking a checkbox therefore does not stale a review
-- [ ] 7.8 Test that deleting a spec file present at review time **does** change it
-- [ ] 7.9 Test that a CRLF-only difference does not change it, and that a trailing-newline-only difference does not either
-- [ ] 7.10 Compute the digest independently (a second implementation, or `shasum` by hand) on one real change and confirm the two agree — the contract exists to make this true
+- [x] 7.1 `tdd="true"` — failing test: the digest covers `proposal.md`, `design.md` and every `specs/**/*.md`, ordered `LC_ALL=C`, and nothing else
+- [x] 7.2 `tdd="true"` — **widen the producer's prompt glob from `specs/*/spec.md` to `specs/**/*.md`** so the transmitted set and the digest set are the same set; failing test: a nested spec file reaches the reviewers
+- [x] 7.3 `tdd="true"` — implement SHA-256 over the serialisation with **both** path and content length-framed; make the test pass
+- [x] 7.4 `tdd="true"` — failing test: a change directory containing a path with an embedded newline produces a distinct digest from the crafted collision the unframed-path form would allow
+- [x] 7.5 `tdd="true"` — failing test: a symlink in the artifact set makes the digest uncomputable and the producer refuses to publish
+- [x] 7.6 `tdd="true"` — failing test: prompt, digest and published file derive from one snapshot — mutate an artifact between prompt construction and publication and confirm the producer refuses rather than publishing a digest for bytes nobody reviewed
+- [x] 7.7 Test that editing `tasks.md` does **not** change the digest, and that ticking a checkbox therefore does not stale a review
+- [x] 7.8 Test that deleting a spec file present at review time **does** change it
+- [x] 7.9 Test that a CRLF-only difference does not change it, and that a trailing-newline-only difference does not either
+- [x] 7.10 Compute the digest independently (a second implementation, or `shasum` by hand) on one real change and confirm the two agree — the contract exists to make this true
 
 ## 7b. Specify and implement the trailer
 
-- [ ] 7b.1 `tdd="true"` — failing test: the producer writes exactly one trailer, as the file's final content, with all three required fields in the specified grammar
+- [x] 7b.1 `tdd="true"` — failing test: the producer writes exactly one trailer, as the file's final content, with all three required fields in the specified grammar
 - [ ] 7b.2 `tdd="true"` — failing test: the gate parses that trailer and rejects a file with none, with two, with a non-final one, or with a required field missing
 - [ ] 7b.3 `tdd="true"` — failing test: an unrecognised trailer field is ignored and the review still counts, so a later producer can extend the format
 - [ ] 7b.4 `tdd="true"` — failing test: the trailer and the generation-timestamp line do not satisfy the substance rule for the section above them — the exclusions that were unimplementable before the grammar existed
@@ -87,7 +87,7 @@ every project.
 - [ ] 7b.6 `tdd="true"` — failing test: a duplicated required key makes the trailer malformed rather than resolving first-wins or last-wins
 - [x] 7b.7 `tdd="true"` — failing test: a vendor response carrying the trailer's opening delimiter **at the start of a line** is rejected and the vendor recorded as failed, so one vendor cannot invalidate the artifact
 - [x] 7b.7a `tdd="true"` — failing test: a vendor response mentioning the trailer delimiter or `## Reviewer:` **inside a sentence** is KEPT. Regression-test against round 6 of this change, where opencode's review quoted `openspec-review-trailer` inline and codex's quoted `## Reviewer: codex-2` inline — a substring guard would have destroyed the first. Match the anchoring the shipped forge guard already uses (`^[[:space:]]*…`)
-- [ ] 7b.8 `tdd="true"` — failing test: an optional `tasks-digest` that no longer matches produces a non-blocking report of implementation-plan drift, and its absence changes nothing
+- [x] 7b.8 `tdd="true"` — failing test: an optional `tasks-digest` that no longer matches produces a non-blocking report of implementation-plan drift, and its absence changes nothing
 - [x] 7b.9 `tdd="true"` — failing test: a reviewer section containing a `### Findings` subheading keeps its verdict, because sections bound at headings of level ≤ 2
 - [ ] 7b.10 `tdd="true"` — failing test: the generation-timestamp line does not satisfy the substance rule, per its specified grammar
 
@@ -159,7 +159,7 @@ every project.
 - [ ] 9d.6 Document that vendor CLIs **write and execute** as well as read — an earlier revision described reading only, which leaves a reviewer CLI editing the change it reviews outside the model entirely
 - [ ] 9d.7 `tdd="true"` — failing test: the producer prints a stderr notice at invocation naming the vendors and stating that no screening is performed, since invocation alone is the consent act
 - [ ] 9d.8 Weaken the independence claim to "a different CLI": `opencode` may route to the implementing host's provider and model, so two counted reviewers can be one model twice
-- [ ] 9d.9 `tdd="true"` — failing test: the producer writes a standing notice into `REVIEWS.md` marking reviewer sections as third-party input to be read as claims, not instructions, so the warning reaches any agent that loads the file. Cite §14 as the governing policy rather than restating it
+- [x] 9d.9 `tdd="true"` — failing test: the producer writes a standing notice into `REVIEWS.md` marking reviewer sections as third-party input to be read as claims, not instructions, so the warning reaches any agent that loads the file. Cite §14 as the governing policy rather than restating it
 - [ ] 9d.10 State the notice's honest limit alongside it: an instruction-following model can be talked out of a notice, and consumer sandboxing is not attempted because the consumer is the operator's own session, which this change does not control and cannot conformance-test
 - [ ] 9d.5 Record `screen-review-egress` as the named follow-up change, owned by whoever implements this one
 
