@@ -19,10 +19,10 @@ every project.
 
 ## 2. Establish the tracked source
 
-- [ ] 2.1 Create `reference-implementations/run-plan-review/` and seed `run-plan-review.sh` byte-identically from `~/.agenticapps/bin/run-plan-review.sh` (227 lines, marker 1.0.0)
-- [ ] 2.2 Verify byte-identity against the installed copy before any edit, so the baseline is provably the running implementation
-- [ ] 2.3 Write the README: purpose, install contract, version-marker rule, relationship to `reviewer-cli.sh`, and the egress boundary as Decision 6 states it
-- [ ] 2.4 Confirm the layout matches the sibling artifacts (`openspec-change-gate/`, `reviewer-cli/`, `shared-install/`)
+- [x] 2.1 Create `reference-implementations/run-plan-review/` and seed `run-plan-review.sh` byte-identically from `~/.agenticapps/bin/run-plan-review.sh` (227 lines, marker 1.0.0)
+- [x] 2.2 Verify byte-identity against the installed copy before any edit, so the baseline is provably the running implementation
+- [x] 2.3 Write the README: purpose, install contract, version-marker rule, relationship to `reviewer-cli.sh`, and the egress boundary as Decision 6 states it
+- [x] 2.4 Confirm the layout matches the sibling artifacts (`openspec-change-gate/`, `reviewer-cli/`, `shared-install/`)
 
 ## 3. Conform the floor
 

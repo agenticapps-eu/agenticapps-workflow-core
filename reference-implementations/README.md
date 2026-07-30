@@ -8,13 +8,21 @@ Host repos that adopt (or will adopt) the AgenticApps workflow spec — and, as 
 | Directory | Satisfies | Conformance |
 |---|---|---|
 | [`openspec-change-gate/`](openspec-change-gate/) | [§18](../spec/18-retargeted-change-gate.md) | `tools/change-gate-conformance.sh` — 37/37 |
-| [`reviewer-cli/`](reviewer-cli/) | [§18](../spec/18-retargeted-change-gate.md) (review production) | `tools/reviewer-cli-conformance.sh` — 14/14 |
+| [`run-plan-review/`](run-plan-review/) | [§18](../spec/18-retargeted-change-gate.md) (review production) | `tools/run-plan-review-conformance.sh` |
+| [`reviewer-cli/`](reviewer-cli/) | [§18](../spec/18-retargeted-change-gate.md) (vendor dispatch) | `tools/reviewer-cli-conformance.sh` — 14/14 |
 | [`shared-install/`](shared-install/) | the shared-path install contract | `tools/shared-install-conformance.sh` — 12/12 |
 
-The gate **consumes** review evidence; `reviewer-cli` **produces** it. Both
-install to the shared `~/.agenticapps/bin/`, and both therefore carry a version
-marker that installers MUST arbitrate on — `# gate-version:` and
-`# reviewer-cli-version:` respectively. An unmarked file is `0.0.0`.
+The gate **consumes** review evidence; `run-plan-review` **produces** it, calling
+`reviewer-cli` once per vendor for dispatch. All three install to the shared
+`~/.agenticapps/bin/`, and all three therefore carry a version marker that
+installers MUST arbitrate on — `# gate-version:`, `# run-plan-review-version:`
+and `# reviewer-cli-version:` respectively. An unmarked file is `0.0.0`.
+
+`run-plan-review/` was tracked last, in 2026-07. Until then the producer was
+maintained only as an installed artifact while a 66-line ancestor sat in this
+repo at `gate/run-plan-review.sh` — 161 lines behind the 227-line copy that
+actually ran. Seeding this directory byte-identically from `~/.agenticapps/bin/`
+is what makes the tracked baseline provably the running implementation.
 
 `shared-install/` is **how** that arbitration must be performed. Refusing to
 downgrade is necessary and not sufficient: the compare and the write have to be
