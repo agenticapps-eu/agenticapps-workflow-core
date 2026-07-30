@@ -95,10 +95,10 @@ every project.
 
 - [x] 8.1 Confirm the sanitiser, forge guard, and 3/4/5 exit-code reporting are unmodified by diffing against the 2.2 baseline
 - [x] 8.2 Bump the version marker to 1.1.0 with a header changelog note, following the existing marker convention
-- [ ] 8.3 Add the `resolve-core-artifact.sh` mapping for `bin/run-plan-review.sh`
+- [x] 8.3 Add the `resolve-core-artifact.sh` mapping for `bin/run-plan-review.sh`
 - [ ] 8.4 Point the Claude installer at core rather than its vendored 1.0.0 copy, so core is the operational source of truth
-- [ ] 8.5 Publish to `~/.agenticapps/bin/`; verify it reports 1.1.0 and that the arbiter refuses a simulated older-version overwrite
-- [ ] 8.6 Reproduce the 2026-07-29 failure end-to-end: three vendors, short timeout, single survivor now yields a written `REVIEWS.md` carrying a trailer
+- [x] 8.5 Publish to `~/.agenticapps/bin/`; verify it reports 1.1.0 and that the arbiter refuses a simulated older-version overwrite
+- [x] 8.6 Reproduce the 2026-07-29 failure end-to-end: three vendors, short timeout, single survivor now yields a written `REVIEWS.md` carrying a trailer
 
 ## 8b. Re-review the in-flight changes — between producer and gate
 
