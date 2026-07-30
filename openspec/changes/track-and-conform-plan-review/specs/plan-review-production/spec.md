@@ -111,10 +111,31 @@ counted too. With the floor at one, either alone opens the gate.
 ### Requirement: The implementing host is declared, never defaulted
 
 The producer SHALL require the implementing host's identity as an explicit
-input, from the closed vendor vocabulary `claude` | `codex` | `gemini` |
-`opencode`. It SHALL NOT supply a default. When the identity is absent or
-outside the vocabulary, the producer SHALL exit with a usage error and write
-nothing.
+input, supplied as `--implementing-host <vendor>[,<vendor>...]`. It SHALL NOT
+supply a default. When the identity is absent or outside the vocabulary, the
+producer SHALL exit with a usage error and write nothing. An implementation MAY
+additionally honour an environment variable, but SHALL NOT give it a default
+value.
+
+**The vocabulary is `claude` | `codex` | `gemini` | `opencode` | `pi` — the
+UNION of hosts and reviewer vendors, which are not the same set.**
+
+| set | members |
+|---|---|
+| hosts that author changes | `claude` · `codex` · `opencode` · `pi` |
+| vendors with a reviewer arm | `claude` · `codex` · `gemini` · `opencode` |
+
+`pi` is a host with no reviewer arm; `gemini` is a reviewer vendor that is not
+a host. A previous revision of this requirement named the reviewer set alone,
+which would have **locked `pi` out of the workflow entirely**: the producer
+refuses the identity, and a hand-written trailer reads as malformed, so the
+gate counts zero reviewers on every pi-authored change, permanently. One of the
+four hosts, blocked outright, by a vocabulary that looked obviously right.
+
+Naming a host that has no reviewer arm excludes nothing — there is no `pi`
+review to discount — which is correct and costs nothing. Six review rounds
+across three vendors did not catch this; the conformance harness did, on the
+first run that seeded `implementing-host: pi`.
 
 The implementing host's own vendor SHALL NOT count toward the floor, and a
 vendor named more than once SHALL count once. At a floor of one, this is what
@@ -202,7 +223,16 @@ not mistaken for an access boundary.
 
 **Log location and format.** Appended to `~/.agenticapps/install.log`, one
 record per downgrade, tab-separated: UTC ISO-8601 timestamp, `downgrade`,
-artifact basename, from-version, to-version, invoking user, reason. The log is
+artifact basename, from-version, to-version, invoking user, reason.
+
+**The log write SHALL precede and gate the replacement.** If the record cannot
+be appended, the downgrade SHALL NOT proceed and the installer SHALL exit
+non-zero. Writing the artifact first and the log second loses the audit record
+in exactly the case it exists for — a full disk, a read-only home, a
+permissions error — and leaves a silently downgraded shared binary behind. A
+reviewer raised this in round 7; ordering is cheaper than any transactional
+scheme and gives the same guarantee, since a logged downgrade that then fails
+to install is a harmless over-record rather than a missing one. The log is
 append-only by convention, not by permission — a reader SHALL treat it as an
 operator's record, not as evidence against an adversary who can also write it.
 
@@ -417,10 +447,25 @@ because a vendor emitting one yields a file with two trailers, which the gate
 counts as zero reviewers. That fails closed rather than opening a bypass, but it
 is an availability hole any single vendor can trigger.
 
-**Both guards SHALL match only at the start of a line**, ignoring leading
-whitespace, exactly as the shipped `## Reviewer:` guard already does
-(`^[[:space:]]*##[[:space:]]*[Rr]eviewer[[:space:]]*:`). A mention inside a
-sentence SHALL NOT reject the response. This is not a refinement — it is what
+**The trailer's opening delimiter** means, exactly: optional leading
+whitespace, then `<!--`, then optional whitespace, then the literal
+`openspec-review-trailer`. Not bare `<!--` — under that reading any vendor
+emitting any HTML comment at line start would be rejected in full. The three
+readings a reviewer identified (full first line, this prefix, bare `<!--`) are
+all defensible, so one is chosen and written down.
+
+**Both guards SHALL match only at the start of a line, ignoring leading
+whitespace, AND only outside fenced code blocks.** A mention inside a sentence
+SHALL NOT reject the response, and neither SHALL a quotation inside a fence.
+
+Line-anchoring alone is insufficient, and the first implementation proved it.
+The natural way to quote a multi-line grammar is a fenced block — it is how
+this change's own documents present the trailer — and inside a fence the
+delimiter necessarily begins a line. A line-anchored, fence-blind guard
+therefore rejects in full precisely the reviews that engage most closely with
+the mechanism. The verdict grammar already skips fenced blocks for exactly
+this reason; the guards adopt the same rule, so there is one notion of
+"quoted, not emitted" rather than two. This is not a refinement — it is what
 makes reviewing *this change* possible at all: the spec delta states the trailer
 grammar literally, so a reviewer discussing it necessarily quotes the delimiter.
 A substring guard would reject exactly the reviews that engaged most closely
@@ -488,6 +533,13 @@ recorded it in the proposal and the task list, where nothing enforces it.
   start of a line
 - **THEN** the response is rejected in full, rather than producing a file with
   two trailers that counts zero reviewers
+
+#### Scenario: A reviewer quotes the grammar in a fenced block
+
+- **WHEN** a vendor's output contains the trailer delimiter or a reviewer
+  heading at the start of a line **inside a fenced code block**
+- **THEN** the response is kept, because a fence marks quotation rather than
+  emission — this is the ordinary way to quote a multi-line grammar
 
 #### Scenario: A reviewer discusses the trailer grammar
 

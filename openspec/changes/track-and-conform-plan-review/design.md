@@ -289,9 +289,24 @@ The contract, stated so two implementations cannot disagree:
 - **Canonicalisation:** CRLF → LF; a trailing LF appended if missing. Nothing
   else — no whitespace stripping, no Unicode normalisation. Every additional
   rule is another place two implementations diverge.
-- **Framing:** per file, the relative path, LF, the canonical byte length in
-  decimal, LF, the canonical bytes. Length-prefixed so no path or content can
-  forge a boundary.
+- **Framing:** per file, the byte length of the relative path in decimal, LF,
+  the path bytes, LF, the canonical content length in decimal, LF, then the
+  canonical bytes. **Both** path and content are length-prefixed.
+
+  This bullet previously framed only the content, while the normative
+  requirement framed both — so a producer built from this decision and a gate
+  built from the requirement computed different digests for identical input.
+  Two conformant implementations disagreeing, in the one mechanism this change
+  specified to the byte precisely to prevent that. A reviewer caught it in
+  round 7. The requirement's form is authoritative and is now restated here
+  verbatim rather than paraphrased, because paraphrase is what drifted.
+- **Enumeration:** the set is gathered and ordered **NUL-delimited**, never
+  line-delimited. A path may legally contain a newline; a line-based pipeline
+  splits `specs/x/a<LF>b.md` into two paths that do not exist, so the file
+  silently leaves the set — or the digest is refused for a wrong reason.
+  Framing the record boundaries is pointless if the boundary is already lost
+  on the way in. This was a live defect in the first implementation, found by
+  its own harness row.
 - **Algorithm:** SHA-256, lowercase hex.
 - **`REVIEWS.md` is excluded by construction**, being outside the set. It cannot
   be otherwise: it contains the digest.

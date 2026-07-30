@@ -333,10 +333,31 @@ entry; the producer additionally gets a `resolve-core-artifact.sh` mapping and
 the Claude installer is repointed at core rather than its vendored copy. The
 version arbiter prevents an older host installer from reverting any of them.
 
-**Behaviour change:** a review run yielding one reviewer now writes
-`REVIEWS.md` and succeeds, where before it wrote nothing and failed. This is
-strictly more permissive, and it is the behaviour §18 specifies. Runs already
-yielding two or more reviewers are unaffected.
+**Behaviour change:** a review run yielding one **counted** reviewer now
+writes `REVIEWS.md` and succeeds, where before it wrote nothing and failed.
+Runs already yielding two or more counted reviewers are unaffected.
+
+"Counted" is load-bearing and the earlier phrasing dropped it. A run yielding
+one reviewer still writes nothing when that reviewer is the declared
+implementing host (excluded), returns a verdict with no body, returns a body
+with no verdict, or trips a structural guard. The capability requirements are
+careful about this; this summary was not, and a skimming reader carries away
+the summary.
+
+**The change is more permissive in one direction and stricter in the other.**
+The floor drops, so runs that previously failed now succeed. But counting
+tightens — verdict, substance, identity and digest are all new conditions — so
+some runs that previously succeeded now fail. Both are intended; neither is
+"strictly more permissive".
+
+**A known gap, not a fixed one:** when an *explicitly raised* floor is missed,
+completed reviews are still discarded. `MIN_REVIEWERS=2` with one good review
+writes nothing, exactly as before. The stated goal was to stop discarding
+completed reviews, and it is met only for the default floor — the case that
+actually bit on 2026-07-29. Preserving evidence from a failed run would need
+somewhere to put it that the gate does not read as satisfying the floor, which
+is a larger change than this one. A reviewer identified the overclaim in round
+7; the goal is narrowed here rather than the gap being papered over.
 
 **Risk of the permissive direction:** a single reviewer is a weaker signal than
 three. §18 argues this explicitly and accepts it — the floor sits "where the

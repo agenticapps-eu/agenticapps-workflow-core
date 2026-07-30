@@ -103,9 +103,26 @@ end of the normalised line is required so that a value with a suffix —
 malformed: it SHALL NOT count, and SHALL be reported as malformed rather than
 silently resolved. Repetitions of the same value count once.
 
+**Producer-authored blocks are placed, not floated.** `REVIEWS.md` carries
+three producer-authored regions besides the reviewer sections: the
+third-party-input notice, the coverage record (requested / counted / excluded /
+failed), and the trailer. The notice and the record SHALL precede the **first**
+`## Reviewer:` heading; the trailer SHALL be the file's final content.
+
+Placement is normative because the section rule runs a section to the next
+level-1/2 heading **or EOF**, and none of these blocks is a heading. Placed
+after the last reviewer section they would be *interior to it* — and the
+substance rule would then count producer-authored lines as that reviewer's
+body, so a bare `VERDICT: APPROVE` followed by a notice would acquire
+substance and count. That is the 2026-07-29T07:52:54Z hole reopened through
+the back door, by the very machinery built to close it. A reviewer identified
+this in round 7.
+
 **Substance.** A section SHALL additionally carry at least one non-blank line
-that is not its heading, its generation timestamp, its trailer, or a verdict
-line. A verdict with no body is not a review: on 2026-07-29T07:52:54Z a vendor
+that is not its heading, its generation timestamp, its trailer, a verdict
+line, or any producer-authored block named above. The exclusion is by
+construction as well as by rule: with the notice and record before the first
+section, no section can contain them. A verdict with no body is not a review: on 2026-07-29T07:52:54Z a vendor
 returned a bare `VERDICT: APPROVE` with no body and it counted toward the floor.
 
 **One predicate.** The gate's counting and its reporting SHALL use the same
@@ -212,10 +229,15 @@ evaluating process's environment therefore describes the wrong party.
 
 The gate SHALL read the implementing host's identity from `REVIEWS.md` itself,
 recorded there by the producer at the time the reviews were obtained. Each
-identity SHALL be one of the closed vendor vocabulary: `claude`, `codex`,
-`gemini`, `opencode`.
+identity SHALL be one of `claude`, `codex`, `gemini`, `opencode`, `pi` — the
+union of hosts and reviewer vendors. `pi` is a host with no reviewer arm and
+MUST be accepted, or every pi-authored change reads as malformed and counts
+zero reviewers forever.
 
-**The same closed vocabulary SHALL constrain the reviewer heading name.** A
+**The reviewer heading name SHALL be constrained to the vendors that can
+actually produce a review** — `claude`, `codex`, `gemini`, `opencode`. This is
+the narrower set: a `## Reviewer: pi` section cannot exist, because there is no
+pi reviewer arm to write one. A
 `## Reviewer:` heading naming anything else — `codex-2`, `gpt`, `anonymous` —
 SHALL NOT count, and SHALL be reported as an unrecognised reviewer rather than
 ignored. Without this the exclusion rule is defeated by spelling: the
@@ -329,7 +351,13 @@ producer-version: <semver>
   evidence for an older gate.
 - A fourth key, `tasks-digest`, MAY appear. It is informational — see the
   advisory tasks-drift rule below — and its absence SHALL NOT invalidate the
-  trailer.
+  trailer. If present it SHALL appear **exactly once**, on the same footing as
+  the required keys: two `tasks-digest` lines make the trailer malformed rather
+  than resolving first-wins or last-wins. Leaving repetition undefined for the
+  one optional field is the same parser-divergence hole this grammar closes
+  everywhere else. Its value SHALL match the `sha256:<64 lowercase hex>` form
+  or the trailer is malformed; `absent` is also accepted, and means the
+  producer found no `tasks.md`.
 - `implementing-host` SHALL list one or more vendors from the closed vocabulary,
   separated by a single comma with **no surrounding whitespace**:
   `claude,codex`, never `claude, codex`. Whitespace around a list element makes
@@ -407,6 +435,12 @@ pair would.
 - **THEN** the trailer is malformed and the gate counts zero reviewers, rather
   than choosing the first or the last
 
+#### Scenario: A bare verdict is followed by a producer-authored block
+
+- **WHEN** a section carries a verdict line and no body, and a producer-authored
+  notice, record or trailer appears later in the file
+- **THEN** the section still fails the substance rule and does not count
+
 #### Scenario: A vendor emits the trailer delimiter
 
 - **WHEN** a reviewer's response body contains the trailer's opening delimiter
@@ -438,6 +472,14 @@ computation SHALL be:
   `specs/*/spec.md`, a single level; it is corrected to match, rather than the
   digest being narrowed, because a nested spec delta is part of the change and
   must be both reviewed and bound.
+- **Enumeration** — the set SHALL be gathered and ordered with **NUL**
+  delimiters, never line delimiters. A path may legally contain a newline, and
+  a line-based pipeline splits such a path into two paths that do not exist:
+  the file silently leaves the set, or the digest is refused for a wrong
+  reason. Framing record boundaries is worthless if the boundary is lost
+  during enumeration. `**` is not delegated to a shell glob — shells differ on
+  `**`, zero-level matches and dotfiles — but defined as: every `*.md` at any
+  depth under `specs/`, found by directory traversal.
 - **Members** — regular files only. A symlink or non-regular file in the set
   SHALL make the digest uncomputable, and the producer SHALL refuse to publish
   rather than resolve it. Following a link would hash bytes from outside the
@@ -524,7 +566,7 @@ artifacts, so it SHALL NOT be described as evidence that a review is authentic.
 
 #### Scenario: A spec delta file is deleted after review
 
-- **WHEN** a `specs/**/spec.md` present at review time is removed
+- **WHEN** a `specs/**/*.md` present at review time is removed
 - **THEN** the digest no longer matches and the review does not count
 
 #### Scenario: Implementation ticks a checkbox in tasks.md

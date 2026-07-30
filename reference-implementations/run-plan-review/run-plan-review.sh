@@ -210,6 +210,30 @@ REVIEWER_CLI="${REVIEWER_CLI:-${HOME:-}/.agenticapps/bin/reviewer-cli.sh}"
   exit 2
 }
 
+# True when the body EMITS a line matching $1 — at the start of a line and
+# OUTSIDE any fenced code block. Both structural guards use it.
+#
+# Fence awareness is the whole point, and it was missing at first. Anchoring at
+# line start already let a reviewer MENTION `## Reviewer:` or the trailer
+# delimiter inside a sentence. But the natural way to quote a multi-line
+# grammar is a fenced block — which is exactly how this change's own documents
+# present it — and there the delimiter necessarily sits at the start of a line.
+# The guard therefore rejected, in full, precisely the reviews that engaged
+# most closely with the mechanism. Round 7 caught it after round 6 had already
+# established the principle: the mechanism has to survive being talked about,
+# in the format people actually talk in.
+#
+# A fence is an unambiguous "this is quoted, not emitted" marker, and the
+# verdict grammar already skips fenced blocks for the same reason. One rule.
+emits_outside_fence() { # $1 = ERE ; body on stdin ; exit 0 if emitted
+  LC_ALL=C awk -v pat="$1" '
+    /^[[:space:]]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    $0 ~ pat { found = 1; exit }
+    END { exit(found ? 0 : 1) }
+  '
+}
+
 # ── the verdict-and-substance predicate ──────────────────────────────────────
 # THE SAME RULE THE GATE APPLIES. A section this counts must be one the gate
 # counts; if the two drift, the producer publishes evidence its own verifier
@@ -531,7 +555,7 @@ for r in "${REVIEWERS[@]}"; do
   # captured stdout, which no amount of gate-side hardening can see.
   # Refuse the whole response rather than rewriting it: a reviewer emitting
   # section headings is not answering in the format we asked for.
-  if printf '%s' "$resp" | grep -qE '^[[:space:]]*##[[:space:]]*[Rr]eviewer[[:space:]]*:'; then
+  if printf '%s' "$resp" | emits_outside_fence '^[[:space:]]*##[[:space:]]*[Rr]eviewer[[:space:]]*:'; then
     echo "  (rejected $r: response contains a '## Reviewer:' heading — would forge reviewers; not counted)" >&2
     FAILED+=("$r: response forged a reviewer heading")
     continue
@@ -549,7 +573,7 @@ for r in "${REVIEWERS[@]}"; do
   # inline while arguing this very point. A substring guard would have destroyed
   # the review that found the problem. The mechanism has to survive being
   # talked about.
-  if printf '%s' "$resp" | grep -qE '^[[:space:]]*<!--[[:space:]]*openspec-review-trailer'; then
+  if printf '%s' "$resp" | emits_outside_fence '^[[:space:]]*<!--[[:space:]]*openspec-review-trailer'; then
     echo "  (rejected $r: response opens a review trailer — would invalidate the artifact; not counted)" >&2
     FAILED+=("$r: response opened a review trailer")
     continue
