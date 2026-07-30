@@ -26,12 +26,12 @@ every project.
 
 ## 3. Conform the floor
 
-- [ ] 3.1 `tdd="true"` — failing test: one reviewer returns, two time out, `REVIEWS.md` must be written with the one review
-- [ ] 3.2 `tdd="true"` — change the `MIN_REVIEWERS` default from 2 to 1 and make the test pass
-- [ ] 3.3 `tdd="true"` — failing test: `MIN_REVIEWERS=0` must exit with a usage error and write nothing
-- [ ] 3.4 `tdd="true"` — reject 0, negatives and non-integers; make the test pass
-- [ ] 3.5 Test that an explicitly set higher floor is still honoured
-- [ ] 3.6 Test that zero successful reviewers still writes nothing and exits non-zero
+- [x] 3.1 `tdd="true"` — failing test: one reviewer returns, two time out, `REVIEWS.md` must be written with the one review
+- [x] 3.2 `tdd="true"` — change the `MIN_REVIEWERS` default from 2 to 1 and make the test pass
+- [x] 3.3 `tdd="true"` — failing test: `MIN_REVIEWERS=0` must exit with a usage error and write nothing
+- [x] 3.4 `tdd="true"` — reject 0, negatives and non-integers; make the test pass
+- [x] 3.5 Test that an explicitly set higher floor is still honoured
+- [x] 3.6 Test that zero successful reviewers still writes nothing and exits non-zero
 
 ## 4. Count only real reviews
 

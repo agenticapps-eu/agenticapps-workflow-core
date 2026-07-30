@@ -68,6 +68,36 @@ TIMEOUT="${REVIEW_TIMEOUT:-180}"                 # seconds per reviewer
 SELF="${AGENT_SELF:-claude}"                     # this host IS claude — exclude it by default
 REVIEWERS=("$@"); [ ${#REVIEWERS[@]} -gt 0 ] || REVIEWERS=(gemini codex claude opencode)
 
+# A non-numeric MIN_REVIEWERS makes `[ "$count" -lt "$MIN" ]` an error, not a
+# comparison: bash prints "integer expression expected", the `if` reads false,
+# and the script falls through to publish and exit 0 — announcing that the
+# floor was met when it was never evaluated.
+#
+# The floor DEFAULTS TO ONE, matching §18's truth table and the gate, which has
+# defaulted to 1 since gate 1.4.0. A default of 2 here meant the producer and
+# the verifier disagreed about the same rule: on 2026-07-29 one vendor returned
+# and two timed out, and this script discarded the surviving review and wrote
+# nothing — evidence the gate would have accepted, thrown away by its producer.
+# One floor, stated once. An explicit MIN_REVIEWERS still wins.
+MIN="${MIN_REVIEWERS:-1}"
+# ZERO IS REJECTED, not merely defaulted away. The previous guard passed `0`,
+# and a floor of zero is not a lax policy — it is a live evidence-destroying
+# bug: with every reviewer failing, `count` is 0, `0 -lt 0` is false, and the
+# script publishes a ZERO-BYTE REVIEWS.md over whatever was there, reports
+# "wrote 0 reviewer section(s)" and exits 0. The gate then reads an empty
+# artifact where a real review used to be. A floor is a floor; below one there
+# is no review to have.
+case "$MIN" in
+  ''|*[!0-9]*) echo "MIN_REVIEWERS must be a positive integer, got '$MIN'" >&2; exit 2 ;;
+  0)           echo "MIN_REVIEWERS must be at least 1, got '0' — a floor of zero publishes empty evidence" >&2; exit 2 ;;
+esac
+
+# Validated HERE, before the first vendor is invoked, not after the loop.
+# Invoking the producer is the egress act: it hands the change to third-party
+# agentic CLIs. Discovering a malformed floor afterwards means the artifacts
+# have already left the machine for a run whose result was never usable.
+# Reject a bad invocation before anything is sent.
+
 # Vendor dispatch, the stdin pin, and the wall-clock bound all live in
 # reviewer-cli.sh — core's reference implementation, vendored at
 # `# reviewer-cli-version: 1.0.0` and scored by tools/reviewer-cli-conformance.sh.
@@ -204,15 +234,6 @@ for r in "${REVIEWERS[@]}"; do
   } >> "$TMP"
   count=$((count+1))
 done
-
-# A non-numeric MIN_REVIEWERS makes `[ "$count" -lt "$MIN" ]` an error, not a
-# comparison: bash prints "integer expression expected", the `if` reads false,
-# and the script falls through to publish and exit 0 — announcing that the
-# >=2-reviewer floor was met when it was never evaluated. Validate it first.
-MIN="${MIN_REVIEWERS:-2}"
-case "$MIN" in
-  ''|*[!0-9]*) echo "MIN_REVIEWERS must be a non-negative integer, got '$MIN'" >&2; exit 2 ;;
-esac
 
 if [ "$count" -lt "$MIN" ]; then
   echo "only $count reviewer(s) produced output (need $MIN) — ${OUT#"$ROOT"/} left unchanged." >&2
