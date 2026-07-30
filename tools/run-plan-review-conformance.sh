@@ -196,6 +196,23 @@ assert_ne() { # $1=desc $2=a $3=b
   fi
 }
 
+# Asserts the producer's stderr contains a marker. The egress notice is the
+# only user-facing statement of what left the machine, so it is scored.
+run_row_stderr_has() { # $1=desc $2=marker $3=fixture $4...=producer args
+  local desc="$1" marker="$2" fx="$3"; shift 3
+  local err
+  err="$(
+    cd "$fx/repo" || exit 99
+    PATH="$fx/stub:$PATH" REVIEWER_CLI="$fx/stub/reviewer-cli.sh" \
+      bash "$PRODUCER" "$@" 2>&1 >/dev/null
+  )"
+  if printf '%s' "$err" | grep -qF "$marker"; then
+    echo "  PASS  $desc"; pass=$((pass + 1))
+  else
+    echo "  FAIL  $desc — stderr lacked '$marker'"; fail=$((fail + 1))
+  fi
+}
+
 # ── scoring ──────────────────────────────────────────────────────────────────
 score_producer() {
   # Absolute: every row `cd`s into the fixture repo before invoking, so a
@@ -546,6 +563,25 @@ MSTUB
   chmod +x "$WORK/stub/reviewer-cli.sh"
   run_row "an artifact mutated mid-review refuses to publish" \
     2 "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # ── G. Egress notice ───────────────────────────────────────────────────────
+  echo
+  echo "  G. Egress notice at invocation"
+
+  WORK="$(make_fixture)"
+  run_row_stderr_has "the notice names the vendors it is sending to" \
+    "review egress notice" "$WORK" add-thing --implementing-host claude gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row_stderr_has "…and states that no screening is performed" \
+    "No secret or PII" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  run_row_stderr_has "…and that the CLIs write and execute, not only read" \
+    "write and execute" "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
   # The prompt set and the digest set are ONE set. A nested spec file must

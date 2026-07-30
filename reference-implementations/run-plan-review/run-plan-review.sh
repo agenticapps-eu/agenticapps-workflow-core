@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-plan-review-version: 1.0.0
+# run-plan-review-version: 1.1.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. Installers MUST refuse to overwrite a higher
@@ -14,28 +14,41 @@
 # has broken yet only because no sibling host ships a producer to overwrite it
 # with; that is luck, not design.
 #
+#   1.1.0 — BREAKING: --implementing-host is required and has no default.
+#           An un-migrated caller now fails with a usage error naming the
+#           missing input rather than silently assuming `claude`.
+#           * floor defaults to 1, matching §18 and the gate; 0 is rejected
+#             (it published zero-byte evidence over good files and exited 0)
+#           * a section counts only with a verdict AND a body, by a predicate
+#             shared byte-for-byte with the gate
+#           * REVIEWS.md records requested/counted/excluded/failed with reasons,
+#             carries a third-party-input notice, and ends with a trailer
+#             holding the implementing host, a digest and this version
+#           * the digest binds the review to the reviewed bytes; the prompt set
+#             and the digest set are one set (`specs/**/*.md`)
 #   1.0.0 — first marked version. Carries the stdout sanitiser (vendor banners
 #           and session-hook logs were landing in REVIEWS.md as review prose),
 #           the `## Reviewer:` forge guard, and per-code reporting of
 #           reviewer-cli 1.1.0's 3/4/5 exits.
 #
-# run-plan-review.sh — drive >=2 other-vendor agent CLIs to adversarially review an
+# run-plan-review.sh — drive other-vendor agent CLIs to adversarially review an
 # active OpenSpec change and write changes/<slug>/REVIEWS.md. Retarget of ADR-0018.
 #
 # This is the REVIEW PRODUCER. The §18 change-gate (openspec-change-gate.sh) is the
 # VERIFIER: it refuses code edits until this script has written REVIEWS.md with
-# >= MIN_REVIEWERS (default 2) `## Reviewer:` sections and `openspec validate --all`
-# is green. Producer and verifier are deliberately separate processes.
+# >= MIN_REVIEWERS sections carrying a verdict and a body, a trailer whose digest
+# still matches the change, and `openspec validate --all` green. Producer and
+# verifier are deliberately separate processes that share one predicate.
 #
-# Usage: run-plan-review.sh <change-slug> [reviewer1 reviewer2 ...]
-#   default reviewers tried (any that are installed, excluding the implementing agent):
+# Usage: run-plan-review.sh <change-slug> --implementing-host <vendor>[,<vendor>...] [reviewers...]
+#   default reviewers tried (any that are installed, excluding the implementing host):
 #     gemini, codex, claude, opencode
 #
 # Env:
-#   AGENT_SELF        implementing agent to exclude (default `claude` on this host, so
-#                     the >=2 reviewers are always OTHER vendors — the ADR-0018 property)
+#   AGENT_SELF        implementing host, if not passed as --implementing-host.
+#                     NO DEFAULT — absent or unrecognised is a usage error.
 #   REVIEW_TIMEOUT    hard wall-clock cap per reviewer, seconds (default 180)
-#   MIN_REVIEWERS     reviewers required for a non-warning exit (default 2)
+#   MIN_REVIEWERS     reviewers required for a non-warning exit (default 1, min 1)
 #   REVIEWER_CLI      override the wrapper path (default: the shared install, then bin/)
 #
 # Pilot friction #3 — a reviewer CLI that reads stdin and hangs — is fixed in
@@ -375,6 +388,22 @@ PROMPT="$INSTRUCT
 
 --- CHANGE: $SLUG ---
 $CONTEXT"
+
+# The egress notice, at invocation, on stderr — because invoking this script IS
+# the consent act. There is no confirmation prompt: the producer runs
+# unattended in CI and from hooks, and a prompt there would either hang or be
+# auto-answered, which is worse than no prompt at all. What is achievable is
+# that the operator is never surprised about what left the machine, so the
+# boundary is stated every time rather than documented once in a README nobody
+# rereads.
+{
+  echo "── review egress notice"
+  echo "   sending: $SLUG's proposal, design and spec deltas"
+  echo "   to:      ${REVIEWERS[*]}"
+  echo "   These are agentic CLIs running with your credentials. They can read"
+  echo "   beyond this change, and they can write and execute. No secret or PII"
+  echo "   screening is performed in either direction."
+} >&2
 
 OUT="$CHANGE_DIR/REVIEWS.md"
 # Accumulate into a temp file and only publish at the end. A partial run must not

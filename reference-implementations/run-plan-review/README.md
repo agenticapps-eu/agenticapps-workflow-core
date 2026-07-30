@@ -27,7 +27,7 @@ rule the hard way.
 
 | | |
 |---|---|
-| Invocation | `run-plan-review.sh <change-slug> [reviewer...]` |
+| Invocation | `run-plan-review.sh <change-slug> --implementing-host <vendor>[,<vendor>...] [reviewer...]` |
 | Vendors | `claude` · `gemini` · `opencode` · `codex` |
 | Reviewer dispatch | delegated to `reviewer-cli.sh` — never reimplemented here |
 | Output | `openspec/changes/<slug>/REVIEWS.md`, plus progress on stderr |
@@ -43,14 +43,35 @@ an arbitrary file. A symlinked change directory is refused for the same reason.
 |---|---|
 | `0` | the floor was met; `REVIEWS.md` was written |
 | `1` | fewer reviewers succeeded than the floor requires |
-| `2` | usage error — bad slug, no such change, missing required input |
+| `2` | usage error — bad slug, no such change, missing/invalid implementing host, bad floor, uncomputable digest, or the change moved mid-review |
+
+## The implementing host is required
+
+`--implementing-host` has **no default**, and that is the point. The removed
+default was `claude`: right on one of the four hosts and wrong on the other
+three, so a codex-authored change reviewed on a codex host counted codex as an
+independent reviewer. The gate's own default was empty, applying no exclusion
+at all — two artifacts, two different wrong answers, neither visible in the
+evidence.
+
+Several vendors may be named for a change authored across a handoff:
+`--implementing-host claude,codex`. The list grammar is the trailer's — a bare
+comma, no whitespace. `claude, codex` is a usage error rather than trimmed,
+because a producer that trimmed and a gate that rejected would disagree about
+the same file.
+
+An invocation that omits it fails with a usage error naming the missing input.
+No caller in the fleet scripts this command (see the change's
+`CALLER-INVENTORY.md`), so the breakage surfaces interactively, where it can be
+read and fixed.
 
 ## Environment
 
 | Var | Meaning |
 |---|---|
 | `REVIEW_TIMEOUT` | hard wall-clock cap per reviewer, seconds (default `180`) |
-| `MIN_REVIEWERS` | reviewers required for a non-warning exit |
+| `MIN_REVIEWERS` | reviewers required for a non-warning exit (default `1`, minimum `1`) |
+| `AGENT_SELF` | implementing host, if not passed as `--implementing-host`. **No default.** |
 | `REVIEWER_CLI` | override the wrapper path (default: shared install, then `bin/`) |
 
 ## The version marker

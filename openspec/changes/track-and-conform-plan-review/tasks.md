@@ -51,9 +51,9 @@ every project.
 - [x] 5.4 `tdd="true"` — failing test: the declared host's own vendor is recorded as excluded, not failed, and does not count
 - [x] 5.5 `tdd="true"` — failing test: the same vendor named twice contributes at most one
 - [x] 5.6 `tdd="true"` — failing test: two implementing hosts are accepted, recorded, and both excluded from the floor
-- [ ] 5.7 Confirm no **gate** caller changes are needed — if any host shim must export an identity, Decision 5 has been violated
-- [ ] 5.8 **Inventory every producer caller** — grep core, the four hosts, the seven projects, `~/.agenticapps/bin/`, and the workflow skill for invocations of `run-plan-review.sh` — and migrate each to pass an identity. Removing the default is a breaking interface change; this is the migration
-- [ ] 5.9 Confirm an un-migrated caller fails with a usage error naming the missing input, not with a guessed host
+- [x] 5.7 Confirm no **gate** caller changes are needed — if any host shim must export an identity, Decision 5 has been violated
+- [x] 5.8 **Inventory every producer caller** — grep core, the four hosts, the seven projects, `~/.agenticapps/bin/`, and the workflow skill for invocations of `run-plan-review.sh` — and migrate each to pass an identity. Removing the default is a breaking interface change; this is the migration
+- [x] 5.9 Confirm an un-migrated caller fails with a usage error naming the missing input, not with a guessed host
 
 ## 6. Make REVIEWS.md self-contained
 
@@ -61,8 +61,8 @@ every project.
 - [x] 6.2 `tdd="true"` — failing test: `REVIEWS.md` carries a trailer with the implementing host, the digest, and the producer version
 - [x] 6.3 `tdd="true"` — implement the record block and the trailer; make both tests pass
 - [x] 6.4 Test that a failure reason distinguishes timeout, non-zero exit, no-verdict and no-substance
-- [ ] 6.5 Confirm the record and trailer survive the existing stdout sanitiser and do not trip the `## Reviewer:` forge guard
-- [ ] 6.6 Confirm the trailer is not parsed as a reviewer section, and does not itself satisfy the substance rule for the section above it
+- [x] 6.5 Confirm the record and trailer survive the existing stdout sanitiser and do not trip the `## Reviewer:` forge guard
+- [x] 6.6 Confirm the trailer is not parsed as a reviewer section, and does not itself satisfy the substance rule for the section above it
 
 ## 7. Compute the digest
 
@@ -93,8 +93,8 @@ every project.
 
 ## 8. Publish the producer — before the gate
 
-- [ ] 8.1 Confirm the sanitiser, forge guard, and 3/4/5 exit-code reporting are unmodified by diffing against the 2.2 baseline
-- [ ] 8.2 Bump the version marker to 1.1.0 with a header changelog note, following the existing marker convention
+- [x] 8.1 Confirm the sanitiser, forge guard, and 3/4/5 exit-code reporting are unmodified by diffing against the 2.2 baseline
+- [x] 8.2 Bump the version marker to 1.1.0 with a header changelog note, following the existing marker convention
 - [ ] 8.3 Add the `resolve-core-artifact.sh` mapping for `bin/run-plan-review.sh`
 - [ ] 8.4 Point the Claude installer at core rather than its vendored 1.0.0 copy, so core is the operational source of truth
 - [ ] 8.5 Publish to `~/.agenticapps/bin/`; verify it reports 1.1.0 and that the arbiter refuses a simulated older-version overwrite
@@ -152,15 +152,15 @@ every project.
 
 ## 9d. Correct the egress documentation
 
-- [ ] 9d.1 Document that vendor CLIs are agentic and run with the operator's credentials — the boundary is what they can reach on this machine as this user, not the prompt and not the repository
-- [ ] 9d.2 Document consent as scoped to vendor selection, not to a file set the producer does not control
+- [x] 9d.1 Document that vendor CLIs are agentic and run with the operator's credentials — the boundary is what they can reach on this machine as this user, not the prompt and not the repository
+- [x] 9d.2 Document consent as scoped to vendor selection, not to a file set the producer does not control
 - [ ] 9d.3 Confirm the untrusted-reviewer-output requirement is in the capability delta, not only in prose — it was prose-only in the previous revision
-- [ ] 9d.4 State that no secret or PII screening is performed, and recommend checking before invoking
-- [ ] 9d.6 Document that vendor CLIs **write and execute** as well as read — an earlier revision described reading only, which leaves a reviewer CLI editing the change it reviews outside the model entirely
-- [ ] 9d.7 `tdd="true"` — failing test: the producer prints a stderr notice at invocation naming the vendors and stating that no screening is performed, since invocation alone is the consent act
+- [x] 9d.4 State that no secret or PII screening is performed, and recommend checking before invoking
+- [x] 9d.6 Document that vendor CLIs **write and execute** as well as read — an earlier revision described reading only, which leaves a reviewer CLI editing the change it reviews outside the model entirely
+- [x] 9d.7 `tdd="true"` — failing test: the producer prints a stderr notice at invocation naming the vendors and stating that no screening is performed, since invocation alone is the consent act
 - [ ] 9d.8 Weaken the independence claim to "a different CLI": `opencode` may route to the implementing host's provider and model, so two counted reviewers can be one model twice
 - [x] 9d.9 `tdd="true"` — failing test: the producer writes a standing notice into `REVIEWS.md` marking reviewer sections as third-party input to be read as claims, not instructions, so the warning reaches any agent that loads the file. Cite §14 as the governing policy rather than restating it
-- [ ] 9d.10 State the notice's honest limit alongside it: an instruction-following model can be talked out of a notice, and consumer sandboxing is not attempted because the consumer is the operator's own session, which this change does not control and cannot conformance-test
+- [x] 9d.10 State the notice's honest limit alongside it: an instruction-following model can be talked out of a notice, and consumer sandboxing is not attempted because the consumer is the operator's own session, which this change does not control and cannot conformance-test
 - [ ] 9d.5 Record `screen-review-egress` as the named follow-up change, owned by whoever implements this one
 
 ## 10. Verify and record
