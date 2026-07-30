@@ -238,6 +238,88 @@ score_producer() {
     run_row_file "a failed run does not destroy earlier evidence" \
       "unchanged:PRIOR-EVIDENCE" "$WORK" add-thing gemini codex opencode
   rm -rf "$WORK"
+
+  # ── B. Counting ────────────────────────────────────────────────────────────
+  # A heading is not a review. Both halves of this were observed in production
+  # on this repo's own changes, which is why both are regression rows.
+  echo
+  echo "  B. Counting — verdict and substance"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=prose STUB_codex=verdict \
+    run_row_file "prose with no verdict line does not count" \
+      "count:1" "$WORK" add-thing gemini codex
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=prose run_row "…and a lone verdictless vendor misses the floor" \
+    1 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  # Regression: opencode returned exactly this shape in round 2 of
+  # track-and-conform-plan-review's own review and was counted.
+  WORK="$(make_fixture)"
+  STUB_opencode=prose run_row "regression: opencode round-2 verdictless output" \
+    1 "$WORK" add-thing opencode
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict_only STUB_codex=verdict \
+    run_row_file "a verdict with no body does not count" \
+      "count:1" "$WORK" add-thing gemini codex
+  rm -rf "$WORK"
+
+  # Regression: gemini's bare `VERDICT: APPROVE` of 2026-07-29T07:52:54Z on
+  # shim-project-hooks counted toward the floor while carrying no body.
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict_only run_row "regression: gemini's bare APPROVE of 2026-07-29" \
+    1 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict_emph run_row "REQUEST-CHANGES with a body counts toward the floor" \
+    0 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=verdict_lower run_row "a lower-case verdict counts" \
+    0 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  # Sections bound at headings of level <= 2, so a vendor's own `### Findings`
+  # subheading must not hide the verdict beneath it.
+  WORK="$(make_fixture)"
+  STUB_gemini=subheading run_row "a verdict below a '### Findings' subheading still counts" \
+    0 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  # ── F. Guards ──────────────────────────────────────────────────────────────
+  echo
+  echo "  F. Forge and trailer guards"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=forge run_row "a '## Reviewer:' heading at line start is rejected" \
+    1 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  # The anchoring rule. A substring guard would have destroyed opencode's own
+  # round-6 review of this change, which quoted the trailer delimiter inline,
+  # and codex's, which quoted `## Reviewer: codex-2` inline. The mechanism has
+  # to survive being talked about.
+  WORK="$(make_fixture)"
+  STUB_gemini=forge_inline run_row "…but the same string inside a sentence is KEPT" \
+    0 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=trailer run_row "a trailer delimiter at line start is rejected" \
+    1 "$WORK" add-thing gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=trailer_inline run_row "…but quoted inline it is KEPT (round-6 regression)" \
+    0 "$WORK" add-thing gemini
+  rm -rf "$WORK"
 }
 
 # ── entry point ──────────────────────────────────────────────────────────────

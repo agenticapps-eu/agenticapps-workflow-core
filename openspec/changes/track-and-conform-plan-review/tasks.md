@@ -35,12 +35,12 @@ every project.
 
 ## 4. Count only real reviews
 
-- [ ] 4.1 `tdd="true"` — failing test: a vendor returning prose with no verdict must not count, and must be reported as failed with reason "no verdict"
-- [ ] 4.2 `tdd="true"` — failing test: a vendor returning **only** a verdict line must not count, and must be reported as failed with reason "no substance"
-- [ ] 4.3 `tdd="true"` — implement the shared verdict-and-substance predicate; make both tests pass
-- [ ] 4.4 Test that a REQUEST-CHANGES verdict with a body does count toward the floor
-- [ ] 4.5 Regression-test the exact opencode output from this change's own round-2 review, which counted while carrying no verdict
-- [ ] 4.6 Regression-test gemini's bare `VERDICT: APPROVE` of 2026-07-29T07:52:54Z on `shim-project-hooks`, which counted while carrying no body
+- [x] 4.1 `tdd="true"` — failing test: a vendor returning prose with no verdict must not count, and must be reported as failed with reason "no verdict"
+- [x] 4.2 `tdd="true"` — failing test: a vendor returning **only** a verdict line must not count, and must be reported as failed with reason "no substance"
+- [x] 4.3 `tdd="true"` — implement the shared verdict-and-substance predicate; make both tests pass
+- [x] 4.4 Test that a REQUEST-CHANGES verdict with a body does count toward the floor
+- [x] 4.5 Regression-test the exact opencode output from this change's own round-2 review, which counted while carrying no verdict
+- [x] 4.6 Regression-test gemini's bare `VERDICT: APPROVE` of 2026-07-29T07:52:54Z on `shim-project-hooks`, which counted while carrying no body
 - [ ] 4.7 Confirm the producer's predicate and the gate's predicate are the same rule — a section the producer counts must be one the gate counts
 
 ## 5. Require the implementing host, never default it
@@ -85,10 +85,10 @@ every project.
 - [ ] 7b.4 `tdd="true"` — failing test: the trailer and the generation-timestamp line do not satisfy the substance rule for the section above them — the exclusions that were unimplementable before the grammar existed
 - [ ] 7b.5 Confirm producer and gate share one trailer grammar, tested by round-tripping a producer-written file through the gate's parser
 - [ ] 7b.6 `tdd="true"` — failing test: a duplicated required key makes the trailer malformed rather than resolving first-wins or last-wins
-- [ ] 7b.7 `tdd="true"` — failing test: a vendor response carrying the trailer's opening delimiter **at the start of a line** is rejected and the vendor recorded as failed, so one vendor cannot invalidate the artifact
-- [ ] 7b.7a `tdd="true"` — failing test: a vendor response mentioning the trailer delimiter or `## Reviewer:` **inside a sentence** is KEPT. Regression-test against round 6 of this change, where opencode's review quoted `openspec-review-trailer` inline and codex's quoted `## Reviewer: codex-2` inline — a substring guard would have destroyed the first. Match the anchoring the shipped forge guard already uses (`^[[:space:]]*…`)
+- [x] 7b.7 `tdd="true"` — failing test: a vendor response carrying the trailer's opening delimiter **at the start of a line** is rejected and the vendor recorded as failed, so one vendor cannot invalidate the artifact
+- [x] 7b.7a `tdd="true"` — failing test: a vendor response mentioning the trailer delimiter or `## Reviewer:` **inside a sentence** is KEPT. Regression-test against round 6 of this change, where opencode's review quoted `openspec-review-trailer` inline and codex's quoted `## Reviewer: codex-2` inline — a substring guard would have destroyed the first. Match the anchoring the shipped forge guard already uses (`^[[:space:]]*…`)
 - [ ] 7b.8 `tdd="true"` — failing test: an optional `tasks-digest` that no longer matches produces a non-blocking report of implementation-plan drift, and its absence changes nothing
-- [ ] 7b.9 `tdd="true"` — failing test: a reviewer section containing a `### Findings` subheading keeps its verdict, because sections bound at headings of level ≤ 2
+- [x] 7b.9 `tdd="true"` — failing test: a reviewer section containing a `### Findings` subheading keeps its verdict, because sections bound at headings of level ≤ 2
 - [ ] 7b.10 `tdd="true"` — failing test: the generation-timestamp line does not satisfy the substance rule, per its specified grammar
 
 ## 8. Publish the producer — before the gate

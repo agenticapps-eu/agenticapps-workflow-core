@@ -121,6 +121,67 @@ REVIEWER_CLI="${REVIEWER_CLI:-${HOME:-}/.agenticapps/bin/reviewer-cli.sh}"
   exit 2
 }
 
+# ── the verdict-and-substance predicate ──────────────────────────────────────
+# THE SAME RULE THE GATE APPLIES. A section this counts must be one the gate
+# counts; if the two drift, the producer publishes evidence its own verifier
+# rejects, which is the defect class this whole change exists to close. The
+# gate carries a byte-identical copy of this awk program under the marker
+# `shared-predicate v1`. Change both together or neither.
+#
+# Reads a review body on stdin. Prints one token and exits 0 when the body is a
+# review; prints a reason token and exits 1 when it is not:
+#   ok:APPROVE | ok:REQUEST-CHANGES
+#   no-verdict | no-substance | conflicting-verdicts
+#
+# A verdict alone is not a review, and a body alone is not a verdict. Both
+# halves were observed counting in production on this repo's own changes.
+classify_review() {
+  LC_ALL=C awk '
+    # shared-predicate v1
+    function norm(s) {
+      gsub(/[*_]/, "", s)                       # emphasis is removed, not placed
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      gsub(/[[:space:]]+/, " ", s)
+      return s
+    }
+    BEGIN { fence = 0; verdict = ""; conflict = 0; substance = 0 }
+    # Fenced blocks are skipped entirely: a verdict quoted in an example is not
+    # a verdict, and this is what makes that rule implementable — fence
+    # tracking, not regex cleverness.
+    /^[[:space:]]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    {
+      raw = $0
+      n = norm(raw)
+      if (n == "") next                                  # blank
+      # The producer'"'"'s own generation-timestamp line, by its exact shape.
+      if (raw ~ /^[[:space:]]*_generated .* timeout [0-9]+s_[[:space:]]*$/) next
+      # Trailer block, opening delimiter through closing.
+      if (raw ~ /^[[:space:]]*<!--[[:space:]]*openspec-review-trailer/) { intrailer = 1; next }
+      if (intrailer) { if (raw ~ /-->/) intrailer = 0; next }
+      # Any markdown heading. The reviewer heading is the section label, not
+      # its content; a vendor'"'"'s own subheadings are interior but are still
+      # structure rather than substance.
+      if (raw ~ /^[[:space:]]*#{1,6}[[:space:]]/) next
+
+      lower = tolower(n)
+      if (lower ~ /^verdict[[:space:]]*:[[:space:]]*(approve|request-changes)$/) {
+        v = (lower ~ /approve/) ? "APPROVE" : "REQUEST-CHANGES"
+        if (verdict != "" && verdict != v) conflict = 1
+        verdict = v
+        next                                             # a verdict is not substance
+      }
+      substance = 1
+    }
+    END {
+      if (conflict)        { print "conflicting-verdicts"; exit 1 }
+      if (verdict == "")   { print "no-verdict";           exit 1 }
+      if (!substance)      { print "no-substance";         exit 1 }
+      print "ok:" verdict
+    }
+  '
+}
+
 # Assemble the review prompt from the change artifacts.
 read -r -d '' INSTRUCT <<EOF || true
 You are an adversarial reviewer. Review this OpenSpec change for correctness, missing
@@ -225,6 +286,44 @@ for r in "${REVIEWERS[@]}"; do
     echo "  (rejected $r: response contains a '## Reviewer:' heading — would forge reviewers; not counted)" >&2
     continue
   fi
+
+  # Same guard, same anchoring, for the trailer's opening delimiter. A vendor
+  # emitting one yields a file with TWO trailers, which the gate reads as zero
+  # reviewers — fail-closed, but an availability hole any single vendor can
+  # trigger.
+  #
+  # ANCHORED AT LINE START, exactly like the guard above, and that is
+  # load-bearing rather than tidy: the spec delta states this trailer grammar
+  # literally, so a reviewer discussing it necessarily quotes the delimiter. In
+  # round 6 of this change's own review, opencode quoted `openspec-review-trailer`
+  # inline while arguing this very point. A substring guard would have destroyed
+  # the review that found the problem. The mechanism has to survive being
+  # talked about.
+  if printf '%s' "$resp" | grep -qE '^[[:space:]]*<!--[[:space:]]*openspec-review-trailer'; then
+    echo "  (rejected $r: response opens a review trailer — would invalidate the artifact; not counted)" >&2
+    continue
+  fi
+
+  # A heading is not a review. Reject a response that carries no verdict, or a
+  # verdict with nothing under it, BEFORE it is written and counted — the
+  # producer and the gate apply one predicate, so evidence this publishes is
+  # evidence the gate accepts.
+  verdict_class="$(printf '%s' "$resp" | classify_review)"
+  case "$verdict_class" in
+    ok:*) ;;
+    no-verdict)
+      echo "  (rejected $r: no verdict line — a review states APPROVE or REQUEST-CHANGES; not counted)" >&2
+      continue ;;
+    no-substance)
+      echo "  (rejected $r: verdict with no body — a verdict alone is not a review; not counted)" >&2
+      continue ;;
+    conflicting-verdicts)
+      echo "  (rejected $r: two conflicting verdicts — malformed; not counted)" >&2
+      continue ;;
+    *)
+      echo "  (rejected $r: unclassifiable response '$verdict_class'; not counted)" >&2
+      continue ;;
+  esac
 
   {
     echo "## Reviewer: $r"
