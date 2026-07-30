@@ -1,0 +1,24 @@
+%%{init: {"look":"handDrawn","theme":"base","themeVariables":{"fontFamily":"Comic Sans MS, Segoe Print, cursive","fontSize":"16px","lineColor":"#555"}}}%%
+flowchart TB
+    L["Linear issue&nbsp;&nbsp;·&nbsp;&nbsp;roadmap / priority"]:::linear
+    P["1 · propose&nbsp;&nbsp;—&nbsp;&nbsp;openspec new change (/opsx:propose)<br/>proposal + design + SPEC DELTA + tasks"]:::spec
+    V["2 · validate&nbsp;&nbsp;—&nbsp;&nbsp;openspec validate --all<br/>(every requirement has a scenario)"]:::spec
+    PR["2b · plan-review&nbsp;&nbsp;—&nbsp;&nbsp;≥2 AI adversarially review the delta → REVIEWS.md"]:::gate
+    H{{"hook + CI — no code edits until validate GREEN and REVIEWS ≥ 2"}}:::hook
+    B["3 · build&nbsp;&nbsp;—&nbsp;&nbsp;/opsx:apply + Superpowers: writing-plans → TDD (RED → GREEN)"]:::exec
+    CR["4 · code-review&nbsp;&nbsp;—&nbsp;&nbsp;independent reviewer of the DIFF"]:::exec
+    VER["5 · verification&nbsp;&nbsp;—&nbsp;&nbsp;diff satisfies tasks + spec delta"]:::exec
+    AR["6 · archive&nbsp;&nbsp;—&nbsp;&nbsp;openspec archive -y (/opsx:archive)<br/>fold delta into specs/ (now current truth)"]:::spec
+    SH["7 · ship&nbsp;&nbsp;—&nbsp;&nbsp;commit · PR · changelog · version · close Linear&nbsp;&nbsp;↻"]:::ship
+    COND(["conditional gates by what the change touches:&nbsp; security always · db-sentinel if SQL/RLS · design + qa if UI"]):::cond
+
+    L --> P --> V --> PR --> H --> B --> CR --> VER --> AR --> SH
+    B -.-> COND
+
+    classDef spec fill:#e8f0ff,stroke:#3b6ea5,stroke-width:2px,color:#12314f;
+    classDef exec fill:#e8f8ee,stroke:#2f9e5f,stroke-width:2px,color:#0f3d24;
+    classDef linear fill:#fff4e0,stroke:#d08a1d,stroke-width:2px,color:#5c3a06;
+    classDef gate fill:#fdeaea,stroke:#c0392b,stroke-width:2px,color:#5c1a13;
+    classDef hook fill:#f3e8fc,stroke:#8e44ad,stroke-width:2px,color:#3d1a52;
+    classDef ship fill:#eafaf6,stroke:#16a085,stroke-width:2px,color:#0c4b3e;
+    classDef cond fill:#fff9d6,stroke:#b8a11a,stroke-width:1.5px,color:#4d4207,font-size:13px;

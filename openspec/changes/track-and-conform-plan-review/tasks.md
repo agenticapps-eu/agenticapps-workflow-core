@@ -110,9 +110,9 @@ every project.
 
 ## 9. Retire the ancestor
 
-- [ ] 9.1 Confirm nothing references `gate/run-plan-review.sh` — grep core, the four hosts, and the seven projects
-- [ ] 9.2 Delete `gate/run-plan-review.sh`
-- [ ] 9.3 Record in the handoff that `gate/`'s remaining contents are still unclassified, so the open question is not silently closed
+- [x] 9.1 Confirm nothing references `gate/run-plan-review.sh` — grep core, the four hosts, and the seven projects
+- [x] 9.2 Delete `gate/run-plan-review.sh`
+- [x] 9.3 Record in the handoff that `gate/`'s remaining contents are still unclassified, so the open question is not silently closed
 
 ## 9b. Harden the gate (openspec-change-gate.sh 1.4.0 → 1.5.0)
 
@@ -154,24 +154,24 @@ every project.
 
 - [x] 9d.1 Document that vendor CLIs are agentic and run with the operator's credentials — the boundary is what they can reach on this machine as this user, not the prompt and not the repository
 - [x] 9d.2 Document consent as scoped to vendor selection, not to a file set the producer does not control
-- [ ] 9d.3 Confirm the untrusted-reviewer-output requirement is in the capability delta, not only in prose — it was prose-only in the previous revision
+- [x] 9d.3 Confirm the untrusted-reviewer-output requirement is in the capability delta, not only in prose — it was prose-only in the previous revision
 - [x] 9d.4 State that no secret or PII screening is performed, and recommend checking before invoking
 - [x] 9d.6 Document that vendor CLIs **write and execute** as well as read — an earlier revision described reading only, which leaves a reviewer CLI editing the change it reviews outside the model entirely
 - [x] 9d.7 `tdd="true"` — failing test: the producer prints a stderr notice at invocation naming the vendors and stating that no screening is performed, since invocation alone is the consent act
-- [ ] 9d.8 Weaken the independence claim to "a different CLI": `opencode` may route to the implementing host's provider and model, so two counted reviewers can be one model twice
+- [x] 9d.8 Weaken the independence claim to "a different CLI": `opencode` may route to the implementing host's provider and model, so two counted reviewers can be one model twice
 - [x] 9d.9 `tdd="true"` — failing test: the producer writes a standing notice into `REVIEWS.md` marking reviewer sections as third-party input to be read as claims, not instructions, so the warning reaches any agent that loads the file. Cite §14 as the governing policy rather than restating it
 - [x] 9d.10 State the notice's honest limit alongside it: an instruction-following model can be talked out of a notice, and consumer sandboxing is not attempted because the consumer is the operator's own session, which this change does not control and cannot conformance-test
-- [ ] 9d.5 Record `screen-review-egress` as the named follow-up change, owned by whoever implements this one
+- [x] 9d.5 Record `screen-review-egress` as the named follow-up change, owned by whoever implements this one
 
 ## 10. Verify and record
 
 - [ ] 10.1 Run `openspec validate --all` green
 - [ ] 10.2 Run `openspec-change-gate.sh --ci` green
-- [ ] 10.3 `tdd="true"` — failing test: `install-shared-artifact.sh` refuses a downgrade today (`:148`), so add `--allow-downgrade <artifact> --reason <text>` — both mandatory together, scoped to the named artifact for that invocation only, no wildcard and no environment variable. Without it every row of the rollback table fails at the first command
-- [ ] 10.3a `tdd="true"` — failing test: an unknown artifact name is a usage error, not a silent no-op
-- [ ] 10.3b `tdd="true"` — failing test: authorising one artifact does not downgrade a second older artifact in the same run
-- [ ] 10.3c `tdd="true"` — failing test: a reason containing a newline, tab or other control character is rejected outright (not escaped), so it cannot forge a second log record; empty-after-trim and >200 chars are rejected too
-- [ ] 10.3d Append one tab-separated record per downgrade to `~/.agenticapps/install.log`: UTC ISO-8601, `downgrade`, artifact, from-version, to-version, user, reason. Document it as an operator's record, not evidence against an adversary who can also write it
-- [ ] 10.4 Rehearse rollback using that flag: republish producer 1.0.0 under a live 1.5.0 gate, confirm it blocks as the design predicts, then restore — the ordering claim must be tested, not asserted
+- [x] 10.3 `tdd="true"` — failing test: `install-shared-artifact.sh` refuses a downgrade today (`:148`), so add `--allow-downgrade <artifact> --reason <text>` — both mandatory together, scoped to the named artifact for that invocation only, no wildcard and no environment variable. Without it every row of the rollback table fails at the first command
+- [x] 10.3a `tdd="true"` — failing test: an unknown artifact name is a usage error, not a silent no-op
+- [x] 10.3b `tdd="true"` — failing test: authorising one artifact does not downgrade a second older artifact in the same run
+- [x] 10.3c `tdd="true"` — failing test: a reason containing a newline, tab or other control character is rejected outright (not escaped), so it cannot forge a second log record; empty-after-trim and >200 chars are rejected too
+- [x] 10.3d Append one tab-separated record per downgrade to `~/.agenticapps/install.log`: UTC ISO-8601, `downgrade`, artifact, from-version, to-version, user, reason. Document it as an operator's record, not evidence against an adversary who can also write it
+- [x] 10.4 Rehearse rollback using that flag: republish producer 1.0.0 under a live 1.5.0 gate, confirm it blocks as the design predicts, then restore — the ordering claim must be tested, not asserted
 - [ ] 10.5 Stage-2 independent code review per §07
 - [ ] 10.6 Write the ADR: why the installed copy was promoted over the in-repo ancestor, the floor-vs-preference distinction, why identity moved into the artifact, and why the digest covers exactly what is transmitted

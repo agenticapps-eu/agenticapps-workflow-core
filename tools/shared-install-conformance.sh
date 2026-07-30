@@ -174,6 +174,53 @@ leftovers="$(find "$(dirname "$dst")" -name '*.tmp.*' 2>/dev/null | wc -l | tr -
   && ok "installed file is complete and executable" \
   || bad "installed file is not complete/executable"
 
+# ── E. Opt-in downgrade ──────────────────────────────────────────────────────
+# The arbiter refusing downgrades is correct and makes every rollback row in a
+# migration plan unexecutable. The escape is deliberate, scoped, and logged —
+# and the log write must PRECEDE the replacement, or the audit record is lost
+# in exactly the case it exists for.
+echo "  ── E. Opt-in downgrade ──"
+E="$W/dg"; mkdir -p "$E"
+LOG="$E/install.log"
+artifact 1.2.0 "$E/new.sh"; artifact 1.1.0 "$E/old.sh"
+
+run_dg() { # remaining args appended to the invocation
+  AGENTICAPPS_INSTALL_LOG="$LOG" bash "$INSTALLER" "$@" 2>&1
+}
+
+# baseline: 1.2.0 installed
+bash "$INSTALLER" "$E/new.sh" "$E/dst.sh" "$KEY" >/dev/null 2>&1
+
+run_dg "$E/old.sh" "$E/dst.sh" "$KEY" >/dev/null 2>&1
+[ "$(installed_version "$E/dst.sh")" = "1.2.0" ]   && ok "without the flag, a downgrade is still refused"   || bad "downgrade happened without the flag"
+
+out="$(run_dg "$E/old.sh" "$E/dst.sh" "$KEY" --allow-downgrade dst.sh)"
+[ "$(installed_version "$E/dst.sh")" = "1.2.0" ]   && ok "the flag alone, without a reason, is refused"   || bad "downgraded with no reason given"
+
+out="$(run_dg "$E/old.sh" "$E/dst.sh" "$KEY" --allow-downgrade wrong.sh --reason "rollback")"
+[ "$(installed_version "$E/dst.sh")" = "1.2.0" ]   && ok "naming a different artifact does not authorise this one"   || bad "an unrelated artifact name authorised the downgrade"
+
+out="$(run_dg "$E/old.sh" "$E/dst.sh" "$KEY" --allow-downgrade dst.sh --reason "$(printf 'a\nfake\trecord')")"
+[ "$(installed_version "$E/dst.sh")" = "1.2.0" ]   && ok "a reason containing control characters is refused outright"   || bad "a control-character reason was accepted"
+
+out="$(run_dg "$E/old.sh" "$E/dst.sh" "$KEY" --allow-downgrade dst.sh --reason "gate 1.5.0 rollback per migration plan")"
+[ "$(installed_version "$E/dst.sh")" = "1.1.0" ]   && ok "an authorised, reasoned downgrade proceeds"   || bad "authorised downgrade did not happen (got $(installed_version "$E/dst.sh"))"
+
+grep -q 'downgrade' "$LOG" 2>/dev/null   && ok "the downgrade is recorded in the install log"   || bad "no log record was written"
+
+[ "$(awk -F'\t' '/downgrade/{print NF}' "$LOG" | head -1)" = "7" ]   && ok "the record carries all seven tab-separated fields"   || bad "log record field count is $(awk -F'\t' '/downgrade/{print NF}' "$LOG" | head -1), expected 7"
+
+# The log write gates the replacement: an unwritable log must abort BEFORE the
+# artifact is replaced, or a silently downgraded binary outlives its record.
+artifact 1.2.0 "$E/dst2.sh"
+mkdir -p "$E/nowhere" && chmod 500 "$E/nowhere"
+AGENTICAPPS_INSTALL_LOG="$E/nowhere/x.log" bash "$INSTALLER" "$E/old.sh" "$E/dst2.sh" "$KEY" \
+  --allow-downgrade dst2.sh --reason "log should fail" >/dev/null 2>&1
+[ "$(installed_version "$E/dst2.sh")" = "1.2.0" ] \
+  && ok "an unwritable log aborts before the artifact is replaced" \
+  || bad "artifact was downgraded despite the audit record failing"
+chmod 700 "$E/nowhere" 2>/dev/null
+
 echo
 echo "═══ TOTAL: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
