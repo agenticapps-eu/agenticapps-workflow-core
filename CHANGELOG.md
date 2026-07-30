@@ -345,6 +345,50 @@ normative spec text. No host's conformance claim is altered *by this repo*.
   pins that the dashboard (a genuine consumer) is never scored, and now also pins
   that pi *is*. 18/18 tests pass.
 
+## [1.3.0] — 2026-07-30
+
+**Minor — §18 gains the counting terms the gate needed, and stops
+contradicting itself about the reviewer floor.**
+
+**Conformance impact.** A host conformant to 1.2.0's *behaviour* stays
+conformant: the floor text is corrected to match enforcement that already
+existed, and the new terms are additive. But **evidence produced under 1.2.0
+becomes unverifiable** — every existing `REVIEWS.md` predates the trailer, so a
+gate implementing 1.3.0 counts zero reviewers until each change is re-reviewed.
+That wave is scheduled, not discovered: publish the producer, re-review, then
+publish the gate.
+
+### Fixed
+
+- **§18 mandated ≥1 and ≥2 simultaneously.** The truth table (line 73) and the
+  rationale said one; line 146 and line 174 still said two, so the section was
+  not satisfiable as written and "the producer is non-conformant" was only half
+  true. Both are corrected to the one-reviewer floor. The same stale floor is
+  corrected in §17, §02, the CI workflow, the reviewer-cli README and its script
+  header. Statements of *preference* (SHOULD ≥ 2) and the historical note on why
+  the floor moved are deliberately left.
+
+### Added
+
+- **A verdict term in the truth table.** The reference gate's own source recorded
+  that "§18's truth table has no verdict term, so a gate that blocked on this
+  would be non-conformant" — accurate against the previous text, and the reason
+  a heading with no review counted. A section is counted only with **a verdict
+  and a body**; the vocabulary is closed and the grammar is specified to the
+  byte. Both failure halves were observed in production: a bare
+  `VERDICT: APPROVE` with no body on 2026-07-29T07:52:54Z, and a verdictless
+  preamble the same week.
+- **Recorded implementing-host identity**, read from the artifact rather than
+  the evaluating process's environment — CI and pre-commit hooks routinely
+  evaluate evidence some other host produced, so an environment-derived identity
+  names the wrong party. Missing or unrecognised counts zero. Independence is
+  claimed as *a different CLI*, not a different model.
+- **A digest binding a review to what was reviewed.** An amended change
+  previously kept its old `REVIEWS.md` with the gate unable to tell — a hole
+  walked through twice in one session. Stated as drift detection, **not**
+  authenticity: it is computable by anyone holding the same artifacts and does
+  not resist forgery.
+
 ## [1.0.0] — 2026-07-24
 
 **Major release — the first. Breaking: the GSD-engine front end is replaced

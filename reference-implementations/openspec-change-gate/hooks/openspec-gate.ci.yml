@@ -1,7 +1,8 @@
 # .github/workflows/openspec-gate.yml
 #
 # The agent-agnostic enforcement floor in CI (spec §18): every active change must
-# validate and carry >= 2 independent reviewers before code merges. This is the
+# validate and carry >= 1 counted independent reviewer before code merges (2 is
+# preferred and reported, not enforced). This is the
 # one surface no local configuration can bypass — a developer can pass
 # --no-verify to the pre-commit hook, and a PreToolUse hook cannot gate the
 # session that installed it.
@@ -30,4 +31,4 @@ jobs:
         run: bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
       - name: Run the change gate
         run: bash bin/openspec-change-gate.sh --ci
-        # exit 0 = all active changes validate and carry >=2 reviewers; exit 1 = block the PR.
+        # exit 0 = all active changes validate and carry >=1 counted reviewer; exit 1 = block the PR.

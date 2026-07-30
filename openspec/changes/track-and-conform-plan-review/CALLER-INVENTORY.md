@@ -56,3 +56,19 @@ is additionally frozen GSD history that must not be written to.
 
 `pi-agentic-apps-workflow` and `codex-workflow` carry no usage-stating line —
 verified, not assumed.
+
+## Out-of-repo sites that contradict until re-vendor (task 1.10)
+
+Named, not corrected — they live outside this repo and are refreshed when each
+host re-vendors. Listing them means the contradiction is known rather than
+discovered:
+
+| Site | What it still says |
+|---|---|
+| `~/.claude/skills/agenticapps-workflow/SKILL.md` | "≥2 independent other-vendor reviewers" as the gate's floor |
+| `~/.claude/CLAUDE.md` (operator's global) | "`REVIEWS.md` carries ≥2 other-vendor reviewers" |
+| `claude-workflow` templates + snapshot | `run-plan-review.sh {slug} -> REVIEWS.md (>= 2 reviewers)` |
+| seven projects' `.claude/workflow-config.md` | the same diagram line, scaffolded |
+
+The operator's `CLAUDE.md` is the one that matters day to day: it is loaded
+every session and states a floor the gate has not enforced since gate 1.4.0.

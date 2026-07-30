@@ -26,7 +26,7 @@
 # reviewer-cli.sh — defensive wrapper for an external-vendor reviewer CLI (§18).
 #
 # The §18 change-gate requires the active change to carry independent multi-AI
-# review (>= 2 DISTINCT external vendors) in REVIEWS.md before any code edit.
+# review (>= 1 counted external vendor; 2 preferred) in REVIEWS.md before any code edit.
 # The review *producer* — each host's `openspec-change-review` skill — calls
 # this wrapper once per vendor to run the actual CLI.
 #
@@ -40,7 +40,7 @@
 # Usage:
 #   reviewer-cli.sh <vendor> <prompt-file>
 #     <vendor>       claude | gemini | opencode | codex
-#                    (>= 2 DISTINCT vendors required by §18)
+#                    (>= 1 counted vendor required by §18; 2 preferred)
 #     <prompt-file>  path to a file holding the full review prompt
 #
 # Env:

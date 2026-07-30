@@ -97,7 +97,7 @@ evidence artifact**, and **binding guidance**.
   has already been executed (a `*-SUMMARY.md` artifact exists — see
   grandfather rule below).
 - **Required evidence artifact**: a per-phase `REVIEWS.md` containing
-  independent plan review from at least two external AI reviewers
+  independent plan review from at least one external AI reviewer (two preferred)
   (adversarial review of the plan before any code is written).
 - **Binding guidance**: hosts bind a multi-AI plan-review skill and
   SHOULD enforce it with a programmatic gate. The enforcing gate MUST

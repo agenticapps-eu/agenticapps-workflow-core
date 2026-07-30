@@ -5,17 +5,17 @@ every project.
 
 ## 1. Repair and extend §18
 
-- [ ] 1.1 Correct `spec/18-retargeted-change-gate.md` line 146 ("the ≥2-reviewer requirement") to the one-reviewer floor
-- [ ] 1.2 Correct line 174 ("`REVIEWS.md` ≥ 2 reviewers for edits under an active change") to ≥ 1
-- [ ] 1.3 Add a **verdict term to the truth table** — required before the gate may count on verdicts, since the gate's source records that blocking on a verdict is non-conformant while the table lacks one
-- [ ] 1.4 Specify the verdict grammar exactly: section-bounded, fence-skipped, case-insensitive, anchored at **both** ends, optional markdown emphasis, closed vocabulary `APPROVE|REQUEST-CHANGES`, conflicting verdicts malformed
-- [ ] 1.5 Add the substance rule: a counted section carries at least one content line beyond heading, timestamp, trailer and verdict
-- [ ] 1.6 Add: the implementing host's vendor never counts, duplicates count once, the identity is recorded in `REVIEWS.md` and read from there, and an absent or unrecognised identity counts zero
-- [ ] 1.7 Add: a review is bound to a digest of the artifacts reviewed; a stale or digest-less review does not count
-- [ ] 1.8 Correct **every** other site stating a ≥2 floor — not a grep-and-judge, a checklist. `spec/17:129`; `spec/02:100`; `reference-implementations/openspec-change-gate/README.md:44`; `.../openspec-change-gate/hooks/openspec-gate.ci.yml:4,33`; `reference-implementations/reviewer-cli/README.md:34,74,127`; `.../reviewer-cli/reviewer-cli.sh:29,43,59,146`; the producer header (`:22,27,38`)
-- [ ] 1.9 Re-grep after 1.8 for `≥ *2|>= *2|at least two|two independent|MIN_REVIEWERS` and confirm every survivor is either intentional prose about *preference* or inside `gate/`, which is classified separately
-- [ ] 1.10 Name, without correcting, the out-of-repo sites that will contradict until re-vendor: the `agentic-apps-workflow` skill and the operator's `CLAUDE.md`
-- [ ] 1.11 Bump `spec_version` in `spec/00-overview.md:4` from `1.2.0` to `1.3.0` and record the change in `CHANGELOG.md`. Minor: enforcement terms are added and the floor text is corrected to match existing behaviour, so no host conformant to 1.2.0's behaviour becomes non-conformant
+- [x] 1.1 Correct `spec/18-retargeted-change-gate.md` line 146 ("the ≥2-reviewer requirement") to the one-reviewer floor
+- [x] 1.2 Correct line 174 ("`REVIEWS.md` ≥ 2 reviewers for edits under an active change") to ≥ 1
+- [x] 1.3 Add a **verdict term to the truth table** — required before the gate may count on verdicts, since the gate's source records that blocking on a verdict is non-conformant while the table lacks one
+- [x] 1.4 Specify the verdict grammar exactly: section-bounded, fence-skipped, case-insensitive, anchored at **both** ends, optional markdown emphasis, closed vocabulary `APPROVE|REQUEST-CHANGES`, conflicting verdicts malformed
+- [x] 1.5 Add the substance rule: a counted section carries at least one content line beyond heading, timestamp, trailer and verdict
+- [x] 1.6 Add: the implementing host's vendor never counts, duplicates count once, the identity is recorded in `REVIEWS.md` and read from there, and an absent or unrecognised identity counts zero
+- [x] 1.7 Add: a review is bound to a digest of the artifacts reviewed; a stale or digest-less review does not count
+- [x] 1.8 Correct **every** other site stating a ≥2 floor — not a grep-and-judge, a checklist. `spec/17:129`; `spec/02:100`; `reference-implementations/openspec-change-gate/README.md:44`; `.../openspec-change-gate/hooks/openspec-gate.ci.yml:4,33`; `reference-implementations/reviewer-cli/README.md:34,74,127`; `.../reviewer-cli/reviewer-cli.sh:29,43,59,146`; the producer header (`:22,27,38`)
+- [x] 1.9 Re-grep after 1.8 for `≥ *2|>= *2|at least two|two independent|MIN_REVIEWERS` and confirm every survivor is either intentional prose about *preference* or inside `gate/`, which is classified separately
+- [x] 1.10 Name, without correcting, the out-of-repo sites that will contradict until re-vendor: the `agentic-apps-workflow` skill and the operator's `CLAUDE.md`
+- [x] 1.11 Bump `spec_version` in `spec/00-overview.md:4` from `1.2.0` to `1.3.0` and record the change in `CHANGELOG.md`. Minor: enforcement terms are added and the floor text is corrected to match existing behaviour, so no host conformant to 1.2.0's behaviour becomes non-conformant
 
 ## 2. Establish the tracked source
 
@@ -103,10 +103,10 @@ every project.
 ## 8b. Re-review the in-flight changes — between producer and gate
 
 - [ ] 8b.1 **Inventory every active change across the fleet** — core, the four hosts, the seven projects — not just this branch. The gate is global; a project discovering the trailer requirement when the new gate blocks it is a flag day announced by an outage
-- [ ] 8b.2 Re-run the producer over `track-and-conform-plan-review` so it carries a 1.1.0 trailer for its current text
-- [ ] 8b.3 Re-run it over `shim-project-hooks` likewise, once that change's own revision has settled
+- [x] 8b.2 Re-run the producer over `track-and-conform-plan-review` so it carries a 1.1.0 trailer for its current text
+- [x] 8b.3 Re-run it over `shim-project-hooks` likewise, once that change's own revision has settled
 - [ ] 8b.4 Re-review every other active change the inventory found, or record explicitly which are accepted as blocked and why
-- [ ] 8b.5 Confirm each new `REVIEWS.md` satisfies verdict, substance, identity and digest before the gate that requires them exists
+- [x] 8b.5 Confirm each new `REVIEWS.md` satisfies verdict, substance, identity and digest before the gate that requires them exists
 
 ## 9. Retire the ancestor
 

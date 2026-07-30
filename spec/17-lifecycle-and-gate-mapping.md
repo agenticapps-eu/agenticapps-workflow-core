@@ -126,7 +126,7 @@ lifecycle. Three fates:
 - **GIVEN** an open change with a validated spec delta but no code yet
 - **WHEN** the agent attempts to edit a source file
 - **THEN** the change-gate (§18) blocks the edit until the change carries
-  `REVIEWS.md` with ≥2 independent reviewers and `openspec validate
+  `REVIEWS.md` with ≥1 counted independent reviewer (2 preferred) and `openspec validate
   --all` is green — collapsing plan-review and spec-review into one
   pre-code stage.
 
