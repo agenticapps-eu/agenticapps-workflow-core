@@ -140,15 +140,15 @@ every project.
 - [ ] 9b.16 Confirm the gate names every objecting reviewer on every invocation for as long as the objection stands — this report is the audit trail for proceeding past an objection
 - [ ] 9b.17 Run the shared predicate over every `REVIEWS.md` in the repo and confirm each well-formed one still counts — the change must not discount good evidence
 - [ ] 9b.18 Bump to gate 1.5.0, run `tools/change-gate-conformance.sh` green — its `TOTAL:` line must report zero failed and zero inconclusive — and publish
-- [ ] 9b.19 Re-verify this branch's two changes under 1.5.0 — after 8b they carry trailers and MUST read as current; before 8b they MUST read as unverifiable. Test both directions.
+- [x] 9b.19 Re-verify this branch's two changes under 1.5.0 — after 8b they carry trailers and MUST read as current; before 8b they MUST read as unverifiable. Test both directions.
 
 ## 9c. Fix the wrapper's process-table exposure (reviewer-cli.sh 1.1.0 → 1.2.0)
 
-- [ ] 9c.1 `tdd="true"` — failing test: the prompt must not appear in the process table for any of the four vendor arms
-- [ ] 9c.2 `tdd="true"` — deliver the prompt by file path or stdin per arm, never as argv; make the test pass for all four
-- [ ] 9c.3 Verify `codex exec` still works — its arm carries a pin because it hangs reading stdin (pilot friction #3); that arm takes a file path
-- [ ] 9c.4 Confirm the 3/4/5 exit-code contract and the timeout wrapper are unchanged
-- [ ] 9c.5 Bump to 1.2.0, publish, and confirm the arbiter refuses an older overwrite
+- [x] 9c.1 `tdd="true"` — failing test: the prompt must not appear in the process table for any of the four vendor arms
+- [x] 9c.2 `tdd="true"` — deliver the prompt by file path or stdin per arm, never as argv; make the test pass for all four
+- [x] 9c.3 Verify `codex exec` still works — its arm carries a pin because it hangs reading stdin (pilot friction #3); that arm takes a file path
+- [x] 9c.4 Confirm the 3/4/5 exit-code contract and the timeout wrapper are unchanged
+- [x] 9c.5 Bump to 1.2.0, publish, and confirm the arbiter refuses an older overwrite
 
 ## 9d. Correct the egress documentation
 

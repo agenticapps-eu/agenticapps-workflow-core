@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gate-version: 1.4.0
+# gate-version: 1.5.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. That path is written by claude / codex /
@@ -7,6 +7,28 @@
 # a host still vendoring an older copy silently republishes it over a newer one
 # and reverts the fix for every agent on the machine. Installers MUST refuse to
 # overwrite a higher version. Bump this whenever the gate's behaviour changes.
+#   1.5.0 — counts REVIEWS a reviewer actually wrote, and binds it to what was
+#           reviewed. Implements spec 1.3.0 §18's new counting terms.
+#           * a section counts only with a VERDICT and a BODY. Both failure
+#             halves were live: a bare `VERDICT: APPROVE` with no body counted
+#             on 2026-07-29T07:52:54Z, and a verdictless preamble counted the
+#             same week
+#           * reviewer_count() and pending_rejections() now share ONE parse.
+#             They previously mirrored each other by hand under a comment
+#             warning that divergence would mean the gate counts one set of
+#             reviewers and reports on another
+#           * sections bound at headings of LEVEL 1 OR 2, so a vendor's own
+#             `### Findings` no longer truncates the section above its verdict
+#           * the implementing host is read from the artifact's trailer, not
+#             from OPENSPEC_GATE_SELF. CI and pre-commit hooks evaluate evidence
+#             other hosts produced, so an environment identity names the wrong
+#             party. Vocabulary is the UNION of hosts and reviewer vendors —
+#             `pi` is a host with no reviewer arm and must still be nameable
+#           * a digest binds the review to the reviewed bytes; a stale or
+#             unverifiable artifact counts ZERO reviewers, fail-closed
+#           BREAKING for evidence: every REVIEWS.md written before producer
+#           1.1.0 lacks a trailer and counts zero. Re-review before publishing
+#           this, or every active change in the fleet blocks at once.
 #   1.4.0 — reviewer FLOOR drops to 1; 2 becomes a reported preference.
 #           Implements spec 1.1.0 §18 (MUST >= 1, SHOULD >= 2). A hard floor of
 #           two blocked all work whenever the second vendor was slow, rate
