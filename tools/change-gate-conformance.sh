@@ -603,6 +603,112 @@ score_gate() {
     "NOTE" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
+  # ── F. Evidence integrity (gate 1.5.0) ─────────────────────────────────────
+  # Spec 1.3.0 §18's counting terms, asserted at the GATE. The producer harness
+  # scores the same rules on the writing side; these score the reading side,
+  # because the two are separate processes and only agreement makes the
+  # artifact between them meaningful.
+  echo "  ── F. Evidence integrity (spec 1.3.0 terms) ──"
+
+  # A verdict with no body. Live on 2026-07-29T07:52:54Z.
+  fx="$(make_fixture 0)"
+  { printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n'
+    printf '## Reviewer: codex\n\nVERDICT: APPROVE\n\n'; } \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  run_row "verdicts with no body count zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # Conflicting verdicts in one section are malformed, not silently resolved.
+  fx="$(make_fixture 0)"
+  { printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n- fine\n\n'
+    printf '## Reviewer: codex\n\nVERDICT: APPROVE\n\n- ok\n\nVERDICT: REQUEST-CHANGES\n\n- not ok\n\n'; } \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  MIN_REVIEWERS=2 run_row "a section with conflicting verdicts does not count" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # A vendor's own subheading must not truncate the section above its verdict.
+  fx="$(make_fixture 0)"
+  { printf '## Reviewer: gemini\n\n### Findings\n\nVERDICT: REQUEST-CHANGES\n\n- a real issue\n\n'; } \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  run_row "a verdict below '### Findings' still counts -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # An arbitrary reviewer name evades exclusion if names are not closed.
+  fx="$(make_fixture 0)"
+  { printf '## Reviewer: codex-2\n\nVERDICT: APPROVE\n\n- looks fine\n\n'; } \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing" codex
+  run_row "an unrecognised reviewer name does not count -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # Trailer: absent, duplicated, non-final, and malformed VALUES all fail closed.
+  fx="$(make_fixture 0)"
+  { printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n- fine\n\n'; } \
+    > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "no trailer counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  run_row "two trailers count zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  printf 'trailing prose after the trailer\n' >> "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "a non-final trailer counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  printf '\n\n  \n' >> "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "trailing blank lines still count as final -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  sed -i.bak 's/^digest: sha256:.*/digest: sha256:NOTHEX/' "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "a malformed digest VALUE counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  sed -i.bak 's/^producer-version: .*/producer-version: one/' "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "a non-semver producer-version counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  sed -i.bak 's/^implementing-host: .*/implementing-host: claude, codex/' "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "a space in the host list counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # `pi` is a host with no reviewer arm and MUST be nameable, or one of the four
+  # hosts can never produce countable evidence.
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  sed -i.bak 's/^implementing-host: .*/implementing-host: pi/' "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  run_row "'pi' is a valid implementing host -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # Staleness: the review must stop counting when the artifacts move.
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  printf 'amended after review\n' >> "$fx/repo/openspec/changes/add-thing/proposal.md"
+  run_row "an amended change stales its review -> block" 2 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # …but ticking a checkbox must not, or implementation deadlocks the gate.
+  fx="$(make_fixture 0)"
+  reviewers "$fx/repo/openspec/changes/add-thing" gemini
+  printf '# Tasks\n\n- [x] 1.1 done\n' > "$fx/repo/openspec/changes/add-thing/tasks.md"
+  run_row "ticking a checkbox does not stale the review -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
   local pd=$((pass - p0)) fd=$((fail - f0)) idd=$((inconclusive - i0))
   echo "  ── $pd passed, $fd failed, $idd inconclusive of $((pd + fd + idd)) rows"
 }

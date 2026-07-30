@@ -41,7 +41,7 @@ every project.
 - [x] 4.4 Test that a REQUEST-CHANGES verdict with a body does count toward the floor
 - [x] 4.5 Regression-test the exact opencode output from this change's own round-2 review, which counted while carrying no verdict
 - [x] 4.6 Regression-test gemini's bare `VERDICT: APPROVE` of 2026-07-29T07:52:54Z on `shim-project-hooks`, which counted while carrying no body
-- [ ] 4.7 Confirm the producer's predicate and the gate's predicate are the same rule — a section the producer counts must be one the gate counts
+- [x] 4.7 Confirm the producer's predicate and the gate's predicate are the same rule — a section the producer counts must be one the gate counts
 
 ## 5. Require the implementing host, never default it
 
@@ -80,16 +80,16 @@ every project.
 ## 7b. Specify and implement the trailer
 
 - [x] 7b.1 `tdd="true"` — failing test: the producer writes exactly one trailer, as the file's final content, with all three required fields in the specified grammar
-- [ ] 7b.2 `tdd="true"` — failing test: the gate parses that trailer and rejects a file with none, with two, with a non-final one, or with a required field missing
-- [ ] 7b.3 `tdd="true"` — failing test: an unrecognised trailer field is ignored and the review still counts, so a later producer can extend the format
-- [ ] 7b.4 `tdd="true"` — failing test: the trailer and the generation-timestamp line do not satisfy the substance rule for the section above them — the exclusions that were unimplementable before the grammar existed
-- [ ] 7b.5 Confirm producer and gate share one trailer grammar, tested by round-tripping a producer-written file through the gate's parser
-- [ ] 7b.6 `tdd="true"` — failing test: a duplicated required key makes the trailer malformed rather than resolving first-wins or last-wins
+- [x] 7b.2 `tdd="true"` — failing test: the gate parses that trailer and rejects a file with none, with two, with a non-final one, or with a required field missing
+- [x] 7b.3 `tdd="true"` — failing test: an unrecognised trailer field is ignored and the review still counts, so a later producer can extend the format
+- [x] 7b.4 `tdd="true"` — failing test: the trailer and the generation-timestamp line do not satisfy the substance rule for the section above them — the exclusions that were unimplementable before the grammar existed
+- [x] 7b.5 Confirm producer and gate share one trailer grammar, tested by round-tripping a producer-written file through the gate's parser
+- [x] 7b.6 `tdd="true"` — failing test: a duplicated required key makes the trailer malformed rather than resolving first-wins or last-wins
 - [x] 7b.7 `tdd="true"` — failing test: a vendor response carrying the trailer's opening delimiter **at the start of a line** is rejected and the vendor recorded as failed, so one vendor cannot invalidate the artifact
 - [x] 7b.7a `tdd="true"` — failing test: a vendor response mentioning the trailer delimiter or `## Reviewer:` **inside a sentence** is KEPT. Regression-test against round 6 of this change, where opencode's review quoted `openspec-review-trailer` inline and codex's quoted `## Reviewer: codex-2` inline — a substring guard would have destroyed the first. Match the anchoring the shipped forge guard already uses (`^[[:space:]]*…`)
 - [x] 7b.8 `tdd="true"` — failing test: an optional `tasks-digest` that no longer matches produces a non-blocking report of implementation-plan drift, and its absence changes nothing
 - [x] 7b.9 `tdd="true"` — failing test: a reviewer section containing a `### Findings` subheading keeps its verdict, because sections bound at headings of level ≤ 2
-- [ ] 7b.10 `tdd="true"` — failing test: the generation-timestamp line does not satisfy the substance rule, per its specified grammar
+- [x] 7b.10 `tdd="true"` — failing test: the generation-timestamp line does not satisfy the substance rule, per its specified grammar
 
 ## 8. Publish the producer — before the gate
 
@@ -116,29 +116,29 @@ every project.
 
 ## 9b. Harden the gate (openspec-change-gate.sh 1.4.0 → 1.5.0)
 
-- [ ] 9b.1 `tdd="true"` — failing test: a `REVIEWS.md` section with a heading and no verdict must not count toward the floor
-- [ ] 9b.2 `tdd="true"` — failing test: a section with a verdict and no body must not count
-- [ ] 9b.3 `tdd="true"` — make `reviewer_count()` and `pending_rejections()` share one verdict-and-substance predicate; make both tests pass
-- [ ] 9b.4 `tdd="true"` — failing tests for each shipped-regex bypass: `REQUEST-CHANGES-LATER` must not match; `verdict: approve` must match; a verdict under a later non-reviewer `##` must not attribute to the reviewer above it
-- [ ] 9b.5 `tdd="true"` — failing test: two conflicting verdicts in one section make it malformed, uncounted and reported
-- [ ] 9b.6 Verify both functions still skip fenced blocks, per the existing comments
-- [ ] 9b.7 `tdd="true"` — failing test: with no implementing-host identity in `REVIEWS.md`, the gate counts zero reviewers and blocks
-- [ ] 9b.8 `tdd="true"` — read the identity from the artifact's trailer; retire `OPENSPEC_GATE_SELF` as an identity source; make the test pass
-- [ ] 9b.9 Test that a `REVIEWS.md` produced on one host and evaluated on another excludes the **recorded** host, not the running one
-- [ ] 9b.10 `tdd="true"` — failing test: a change amended after review is detected as stale and does not count
-- [ ] 9b.11 `tdd="true"` — implement digest verification against the §7 contract; make the test pass
-- [ ] 9b.12 `tdd="true"` — failing test: a `REVIEWS.md` with no digest is reported unverifiable and does not count
-- [ ] 9b.13 `tdd="true"` — failing test: the gate distinguishes and reports "no REVIEWS.md", "trailer absent or malformed", "digest mismatch — stale", and "no section with a verdict and a body" as separate reasons
-- [ ] 9b.14 `tdd="true"` — failing test: one vendor with two well-formed sections carrying conflicting verdicts contributes one to the count and is reported as REQUEST-CHANGES
-- [ ] 9b.15 `tdd="true"` — failing tests for the emphasis normalisation: `**VERDICT: REQUEST-CHANGES**`, `VERDICT: **REQUEST-CHANGES**`, `VERDICT:** REQUEST-CHANGES` and `**VERDICT:** REQUEST-CHANGES` all count
-- [ ] 9b.15a `tdd="true"` — failing tests for the timestamp grammar: `_generated 2026-07-29T12:04:50Z · timeout 600s_` is recognised and excluded from substance; a fractional-second or `+00:00` variant is not recognised as the producer's timestamp line
-- [ ] 9b.15b `tdd="true"` — failing test: the `·` separator is matched bytewise as `0xC2 0xB7` under `LC_ALL=C`, not via a locale-aware character class. Run the harness under `LC_ALL=C` explicitly
-- [ ] 9b.15c `tdd="true"` — failing test: a `## Reviewer: codex-2` heading does not count and is reported as an unrecognised reviewer; confirm this closes the exclusion bypass on a `codex`-authored change
-- [ ] 9b.15d `tdd="true"` — failing tests for malformed trailer values: a `digest` that is not `sha256:` + 64 lowercase hex, a non-semver `producer-version`, and `implementing-host: claude, codex` (space after comma) each count zero reviewers
-- [ ] 9b.15e `tdd="true"` — failing test: trailing blank lines after `-->` still count as the trailer being final content
-- [ ] 9b.15f Record the accepted normalisation consequence: `VERDICT: REQUEST-_CHANGES` normalises to a valid verdict. Confirm a manufactured verdict alone still fails the substance rule
-- [ ] 9b.16 Confirm the gate names every objecting reviewer on every invocation for as long as the objection stands — this report is the audit trail for proceeding past an objection
-- [ ] 9b.17 Run the shared predicate over every `REVIEWS.md` in the repo and confirm each well-formed one still counts — the change must not discount good evidence
+- [x] 9b.1 `tdd="true"` — failing test: a `REVIEWS.md` section with a heading and no verdict must not count toward the floor
+- [x] 9b.2 `tdd="true"` — failing test: a section with a verdict and no body must not count
+- [x] 9b.3 `tdd="true"` — make `reviewer_count()` and `pending_rejections()` share one verdict-and-substance predicate; make both tests pass
+- [x] 9b.4 `tdd="true"` — failing tests for each shipped-regex bypass: `REQUEST-CHANGES-LATER` must not match; `verdict: approve` must match; a verdict under a later non-reviewer `##` must not attribute to the reviewer above it
+- [x] 9b.5 `tdd="true"` — failing test: two conflicting verdicts in one section make it malformed, uncounted and reported
+- [x] 9b.6 Verify both functions still skip fenced blocks, per the existing comments
+- [x] 9b.7 `tdd="true"` — failing test: with no implementing-host identity in `REVIEWS.md`, the gate counts zero reviewers and blocks
+- [x] 9b.8 `tdd="true"` — read the identity from the artifact's trailer; retire `OPENSPEC_GATE_SELF` as an identity source; make the test pass
+- [x] 9b.9 Test that a `REVIEWS.md` produced on one host and evaluated on another excludes the **recorded** host, not the running one
+- [x] 9b.10 `tdd="true"` — failing test: a change amended after review is detected as stale and does not count
+- [x] 9b.11 `tdd="true"` — implement digest verification against the §7 contract; make the test pass
+- [x] 9b.12 `tdd="true"` — failing test: a `REVIEWS.md` with no digest is reported unverifiable and does not count
+- [x] 9b.13 `tdd="true"` — failing test: the gate distinguishes and reports "no REVIEWS.md", "trailer absent or malformed", "digest mismatch — stale", and "no section with a verdict and a body" as separate reasons
+- [x] 9b.14 `tdd="true"` — failing test: one vendor with two well-formed sections carrying conflicting verdicts contributes one to the count and is reported as REQUEST-CHANGES
+- [x] 9b.15 `tdd="true"` — failing tests for the emphasis normalisation: `**VERDICT: REQUEST-CHANGES**`, `VERDICT: **REQUEST-CHANGES**`, `VERDICT:** REQUEST-CHANGES` and `**VERDICT:** REQUEST-CHANGES` all count
+- [x] 9b.15a `tdd="true"` — failing tests for the timestamp grammar: `_generated 2026-07-29T12:04:50Z · timeout 600s_` is recognised and excluded from substance; a fractional-second or `+00:00` variant is not recognised as the producer's timestamp line
+- [x] 9b.15b `tdd="true"` — failing test: the `·` separator is matched bytewise as `0xC2 0xB7` under `LC_ALL=C`, not via a locale-aware character class. Run the harness under `LC_ALL=C` explicitly
+- [x] 9b.15c `tdd="true"` — failing test: a `## Reviewer: codex-2` heading does not count and is reported as an unrecognised reviewer; confirm this closes the exclusion bypass on a `codex`-authored change
+- [x] 9b.15d `tdd="true"` — failing tests for malformed trailer values: a `digest` that is not `sha256:` + 64 lowercase hex, a non-semver `producer-version`, and `implementing-host: claude, codex` (space after comma) each count zero reviewers
+- [x] 9b.15e `tdd="true"` — failing test: trailing blank lines after `-->` still count as the trailer being final content
+- [x] 9b.15f Record the accepted normalisation consequence: `VERDICT: REQUEST-_CHANGES` normalises to a valid verdict. Confirm a manufactured verdict alone still fails the substance rule
+- [x] 9b.16 Confirm the gate names every objecting reviewer on every invocation for as long as the objection stands — this report is the audit trail for proceeding past an objection
+- [x] 9b.17 Run the shared predicate over every `REVIEWS.md` in the repo and confirm each well-formed one still counts — the change must not discount good evidence
 - [ ] 9b.18 Bump to gate 1.5.0, run `tools/change-gate-conformance.sh` green — its `TOTAL:` line must report zero failed and zero inconclusive — and publish
 - [x] 9b.19 Re-verify this branch's two changes under 1.5.0 — after 8b they carry trailers and MUST read as current; before 8b they MUST read as unverifiable. Test both directions.
 
@@ -174,4 +174,4 @@ every project.
 - [x] 10.3d Append one tab-separated record per downgrade to `~/.agenticapps/install.log`: UTC ISO-8601, `downgrade`, artifact, from-version, to-version, user, reason. Document it as an operator's record, not evidence against an adversary who can also write it
 - [x] 10.4 Rehearse rollback using that flag: republish producer 1.0.0 under a live 1.5.0 gate, confirm it blocks as the design predicts, then restore — the ordering claim must be tested, not asserted
 - [ ] 10.5 Stage-2 independent code review per §07
-- [ ] 10.6 Write the ADR: why the installed copy was promoted over the in-repo ancestor, the floor-vs-preference distinction, why identity moved into the artifact, and why the digest covers exactly what is transmitted
+- [x] 10.6 Write the ADR: why the installed copy was promoted over the in-repo ancestor, the floor-vs-preference distinction, why identity moved into the artifact, and why the digest covers exactly what is transmitted
