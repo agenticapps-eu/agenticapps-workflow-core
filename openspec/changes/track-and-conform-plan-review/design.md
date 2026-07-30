@@ -27,7 +27,12 @@ Something has now broken, in a different way: the floor drifted from the spec.
 
 - Give the producer a tracked home so it can be reviewed, diffed and recovered.
 - Make its default floor match §18.
-- Stop discarding completed reviews.
+- Stop discarding completed reviews **at the default floor**. Reviews are still
+  discarded when an explicitly raised floor is missed (`MIN_REVIEWERS=2` with one
+  good review writes nothing), because there is nowhere to put partial evidence
+  that the gate would not read as satisfying the floor. The case that actually
+  bit on 2026-07-29 is closed; the general case is not, and the goal says so
+  rather than claiming both.
 
 **Non-Goals**
 

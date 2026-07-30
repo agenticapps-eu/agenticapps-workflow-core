@@ -1,136 +1,118 @@
-# Session Handoff — 2026-07-29 (fourth session) / 2026-07-30
+# Session Handoff — 2026-07-30
 
 ## The one thing to know
 
-Round 6 ran on both changes and **everything is committed** — three commits on
-`feat/step3-hook-shims-and-dead-gate-removal`, working tree clean of change
-artifacts. `openspec validate --all` is green.
+`track-and-conform-plan-review` is **implemented and committed** — 14 commits on
+`feat/step3-hook-shims-and-dead-gate-removal`. Three artifacts published to
+`~/.agenticapps/bin/`; spec at **1.3.0**. All four conformance harnesses green.
 
-The `REVIEWS.md` on disk is **round 6**, written against pre-round-6 text.
-Round 6's findings have now been folded in, so under these changes' own
-proposed rule that evidence is again stale. Neither change is implemented.
+**The gate is live at 1.5.0 and currently blocks this repo**, because the last
+round of corrections staled `track`'s evidence. A final re-review was running at
+session end. That is the mechanism working on its own change, not a breakage —
+but it is where the next session starts.
 
 ## Accomplished
 
-- Committed rounds 4–6 revisions (`df10f75`) — three sessions of work that had
-  been sitting uncommitted.
-- Ran round 6 against gemini, codex, opencode at `REVIEW_TIMEOUT=600
-  MIN_REVIEWERS=1`; committed the evidence (`d6f884a`).
-- Verified every load-bearing reviewer claim against disk, then folded in
-  8 confirmed defects plus the accepted reviewer feature requests (`6184d9c`).
-
-### Round 6 verdicts
-
-| Change | gemini | codex | opencode |
+| Artifact | Was | Now | Harness |
 |---|---|---|---|
-| `track-and-conform-plan-review` | REQUEST-CHANGES | REQUEST-CHANGES | REQUEST-CHANGES |
-| `shim-project-hooks` | REQUEST-CHANGES | REQUEST-CHANGES | **no verdict** |
+| `spec_version` | 1.2.0, §18 self-contradictory | **1.3.0** | — |
+| `run-plan-review.sh` | 1.0.0, untracked | **1.1.0**, tracked + published | 55/55 |
+| `openspec-change-gate.sh` | 1.4.0 | **1.5.0**, published | 66/66 |
+| `reviewer-cli.sh` | 1.1.0 | **1.2.0**, published | 19/19 |
+| `install-shared-artifact.sh` | no rollback path | `--allow-downgrade` | 20/20 |
 
-gemini **flipped `shim` from APPROVE** (rounds 4, 5) to REQUEST-CHANGES against
-requirements the round-6 revision had newly added. opencode returned no verdict
-for the **third time** (rounds 2, 4, 6) — live evidence for `track`'s own
-verdict-and-substance rule.
+Also: `gate/run-plan-review.sh` (66-line ancestor) deleted, preserved first under
+the change's `evidence/`; ADR-0025 written; a new producer harness created
+(`tools/run-plan-review-conformance.sh`).
 
-### The 8 confirmed self-contradictions, all now fixed
+## Five defects found by BUILDING, not reviewing
 
-1. **Section-boundary rule shipped in two mutually exclusive versions** —
-   `design.md:325`/`proposal.md:161` said "any level"; the delta said "level 1
-   or 2" *and denounced "any level" as the rejected wording*. Round 5 fixed the
-   delta and never propagated it. Worst of the eight: an implementer following
-   `design.md` builds the truncating parser the delta forbids.
-2. Version-namespace collision — "since 1.1.0" (spec) vs "since 1.4.0" (gate),
-   neither labelled. Found independently by codex and opencode.
-3. Migration Plan named the wrong coupled pair — "steps 3 and 4" (both producer
-   steps) instead of 4-before-8 (producer before gate).
-4. Two step 9s.
-5. **"52-case harness" was fabricated** — `tools/change-gate-conformance.sh`
-   states no case count; it computes its own total.
-6. `spec_version` bump target unnamed → now 1.2.0 → 1.3.0, minor, with reasons.
-7. `claude-workflow` called touched and untouched in adjacent sentences.
-8. `shim` tasks 4.3 and 5.3 contradicted on `agents-task-viewer`'s hook count.
+Each verified against running code before being fixed.
 
-### Facts established by verification, not review
-
-- **`MultiEdit` does not exist on this host.** Absent from the tool list;
-  `ToolSearch select:MultiEdit` finds nothing. The six-repo matcher edit is
-  forward-compatibility, **not protection gained** — now stated in `tasks.md`
-  so no completion report can claim otherwise. Task 4.8 still settles it.
-- **The trailer guard must be line-anchored.** opencode's own round-6 review
-  quotes `openspec-review-trailer` inline; codex's quotes `## Reviewer: codex-2`
-  inline. The shipped forge guard is anchored (`^[[:space:]]*##…`) so the second
-  survived correctly — but a substring trailer guard would have destroyed the
-  first. Regression-tested as task 7b.7a.
-- **No project sets `env` in `.claude/settings.json`** (checked all seven), so
-  restricting the override to the process environment closes the door before
-  anyone walks through it.
-- `agenticapps-dashboard-add-agent-board` is a **worktree**, already recorded.
+1. **`MIN_REVIEWERS=0` destroyed evidence.** The guard rejected non-integers and
+   negatives but passed `0`; with every reviewer failing, `0 -lt 0` is false, so
+   the producer overwrote `REVIEWS.md` with a **zero-byte file** and exited 0.
+2. **Line-based digest enumeration dropped newline-bearing paths.** I specified
+   length-framing precisely so a path could not forge a record boundary, then
+   lost the boundary during enumeration. Now NUL-delimited end to end.
+3. **My own spec text would have locked `pi` out of the fleet.** Hosts and
+   reviewer vendors are different sets — `pi` is a host with no reviewer arm.
+   Validating the implementing host against the *reviewer* set makes every
+   pi-authored change permanently unreviewable. **Six review rounds across three
+   vendors missed this**; the harness caught it on the first run seeding `pi`.
+4. **Fence-blind guards rejected the most engaged reviews.** Quoting the trailer
+   grammar in a fenced block — the natural way — got the whole review rejected.
+   Exactly the failure round 6 established the principle for; I fixed the inline
+   case and stopped.
+5. **Stub harnesses cannot verify vendor integration.** The stdin conversion
+   scored green on all four stubbed arms while two were broken against real
+   CLIs: `opencode`'s `--file` is an array option that ate the message
+   positional; `gemini` refused because the *hint wording* told an agentic CLI
+   to go open something called "stdin". Every arm is now smoke-tested live.
 
 ## Decisions
 
-- **Scope: fix the 8 + accept reviewer feature requests** (operator's call over
-  "fix and freeze"). Requests accepted with limits stated rather than adopted
+- **Scope: fix the 8 round-6 defects + accept reviewer feature requests**
+  (operator's call). Requests accepted **with limits stated** rather than
   wholesale — provenance is bounded as *drift detection, not tamper-proofing*;
-  consumer sandboxing is **declined** as unenforceable and untestable.
-- **"Superset of protection" demoted** from unconditional rule to reviewed
-  default. codex was right that unioning seven variants propagates one
-  project's false positive to all of them.
-- **The override is a kill switch and says so** — one variable pointed at a
-  missing path disables a hook on a healthy machine. Follows from fail-open;
-  now in the coverage boundary, not buried.
-- **Normalisation manufacturing verdicts is accepted explicitly**
-  (`REQUEST-_CHANGES` → valid). The alternative reintroduces the placement
-  enumeration the rule removed, to defend against a typo read correctly.
-- **Rejections stay non-blocking** — unchanged, per §18 and CLAUDE.md.
+  consumer sandboxing was **declined** as unenforceable and untestable.
+- **Migration order is load-bearing and was followed**: spec → producer →
+  re-review → gate → wrapper. Publishing the gate first blocks every change in
+  every project at once.
+- **The log write gates the downgrade**, not the reverse: a failed audit record
+  must not leave a silently downgraded shared binary.
+- **Supporting evidence in the change dir never reaches reviewers** — the digest
+  set is exactly what is transmitted. Accepted, not fixed; findings are now
+  stated inline where relied on.
 
 ## Files modified
 
-- `openspec/changes/track-and-conform-plan-review/` — proposal, design, tasks,
-  both spec deltas, `REVIEWS.md` (round 6)
-- `openspec/changes/shim-project-hooks/` — proposal, tasks, spec delta,
-  `REVIEWS.md` (round 6, opencode verdictless)
-- `session-handoff.md` — this file
-- **No implementation code.** Commits: `df10f75`, `d6f884a`, `6184d9c`.
+- `spec/00,02,17,18`, `CHANGELOG.md` — floor repair, counting terms, 1.3.0
+- `reference-implementations/run-plan-review/` — new, tracked
+- `reference-implementations/{openspec-change-gate,reviewer-cli,shared-install}/`
+- `tools/{run-plan-review,change-gate,reviewer-cli,shared-install}-conformance.sh`
+- `adrs/0025-review-evidence-is-bound-to-what-was-reviewed.md`
+- `openspec/changes/track-and-conform-plan-review/` — all artifacts + evidence
+- `claude-workflow`: `templates/` and `setup/snapshot/workflow-config.md`
+- Deleted: `gate/run-plan-review.sh`
 
 ## Next session: start here
 
-**Decide whether to review again or start implementing.** Six rounds have each
-found at least one real defect, and round 6's were still severe (item 1 above).
-But the trend is now clear: rounds 5 and 6 found defects *in the previous
-round's fixes*, not in the original design — the changes are accreting surface
-faster than they are settling. A seventh round will most likely repeat that.
-
-Recommendation: **implement `track-and-conform-plan-review` first** — it repairs
-the machinery everything else is reviewed by, and task 9b.19 re-checks this
-branch under gate 1.5.0. Run a final review only after implementation, where
-findings are testable against running code rather than against prose.
-
-If you do run round 7, the command is unchanged:
-`REVIEW_TIMEOUT=600 MIN_REVIEWERS=1 ~/.agenticapps/bin/run-plan-review.sh <slug> gemini codex opencode`
-
-## Reviewer reliability — check before acting
-
-Roughly one claim in four is still wrong. Round 6 specifically:
-
-- opencode: "`openspec status` does not report the `specs/**/*.md` glob" —
-  **correct**, and the justification citing it has been dropped.
-- codex: "the change contradicts §16" — **downgraded**. §16 scope is already
-  declared out of scope at `proposal.md:216-218`; it is the standing open
-  question, not a new defect.
-- opencode's `·`-under-`LC_ALL=C` portability claim — **real but minor**; byte
-  matching works, so it was specified rather than treated as a blocker.
-- Prior rounds: opencode's "`Edit` matchers also match `MultiEdit`" was false;
-  codex twice claimed codex was the implementing host (it is claude).
+1. **Check the final re-review** (`REVIEWS.md` for `track`), then run
+   `bash ~/.agenticapps/bin/openspec-change-gate.sh --ci`. It must go green. If
+   it still reads `0/1`, the artifacts moved again — re-review, do not work
+   around it.
+2. **Task 10.5 — Stage-2 independent code review — is NOT done.** §07 requires
+   it in a separate context, and `openspec validate` does not discharge it. I
+   did not spawn an agent for it because this session was instructed not to use
+   the Agent tool unasked. **This is the one required gate still open.**
+3. Then archive (`/opsx:archive`) and ship — two separate acts.
+4. `shim-project-hooks` remains planned, not implemented. It is unblocked now
+   that the machinery it depends on is real.
 
 ## Open questions
 
 - **Does core migrate `spec/`'s 19 sections into `openspec/specs/`?** Still
-  unanswered. codex raised it again in round 6 as a §16 contradiction.
-- **§02 is written in GSD vocabulary** — root cause behind the dead hooks, and
-  the substance of plan step 5.
-- **`gate/` remains unclassified** apart from `run-plan-review.sh`, which
-  `track` deletes. Its README, gate copy, `pre-commit` and `hooks/` still need a
-  keep/track/delete call, as do the other untracked root items (`.planning/`,
-  the PDFs, `prompts/`, the `.mmd` diagrams).
-- **`screen-review-egress`** — deferred secret/PII screening, named and owned in
-  `track`'s proposal, still not a change.
-- Vendor CLIs can **write and execute**, not only read. Declared, not mitigated.
+  unanswered; codex has now raised it twice as a §16 conflict.
+- **`gate/` remains unclassified** apart from the deleted producer — its
+  `README.md`, gate copy, `pre-commit` and `hooks/` still need a
+  keep/track/delete call, as do the untracked root items (`.planning/`, the
+  PDFs, `prompts/`, the `.mmd` diagrams).
+- **`screen-review-egress`** — deferred secret/PII screening, still not a change.
+  codex argues the standing notice does not satisfy §14's mandatory controls;
+  that is a declared gap, not a closed one.
+- **The `tasks-digest` drift report is unspecified** (gemini, round 8): it is
+  written but nothing defines how the gate surfaces a mismatch.
+- **`MultiEdit` does not exist on this host** — the six-repo matcher edit in
+  `shim-project-hooks` is forward-compatibility, not protection gained.
+
+## Reviewer reliability — still roughly one claim in four
+
+- **Round 8, codex:** "the substance rule is bypassable by `### Findings` plus a
+  verdict" — **false**, tested directly (`SECTION gemini APPROVE 0`). Also cited
+  a scenario saying "four known vendors" that does not exist.
+- **Round 7, opencode:** every item checked out, including two genuine
+  self-contradictions I had shipped.
+- **opencode returned no verdict or no output four times** (rounds 2, 4, 6, and
+  the 8b re-review) and timed out at 600s in round 8 — continued live evidence
+  for the verdict-and-substance rule it was reviewing.

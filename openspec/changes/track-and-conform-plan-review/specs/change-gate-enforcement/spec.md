@@ -99,7 +99,9 @@ The vocabulary is closed: a value outside it is not a verdict. Anchoring at the
 end of the normalised line is required so that a value with a suffix —
 `REQUEST-CHANGES-LATER` — does not match a bare vocabulary member.
 
-**Conflict.** Two verdict lines carrying different values make the section
+**Conflict.** Exactly one *distinct* verdict value may appear in a section —
+repetitions of the same value are one verdict, not a conflict. Two verdict lines
+carrying **different** values make the section
 malformed: it SHALL NOT count, and SHALL be reported as malformed rather than
 silently resolved. Repetitions of the same value count once.
 
@@ -374,7 +376,9 @@ producer-version: <semver>
   vocabulary is malformed on the same footing.
 - **A required field present but malformed SHALL be treated exactly as absent.**
   A `digest` that does not match `sha256:` followed by 64 lowercase hex digits, a
-  `producer-version` that is not semver, an `implementing-host` violating the
+  `producer-version` that is not exactly three dot-separated runs of decimal
+  digits (`N.N.N` — no pre-release or build metadata; the trailer records a
+  published artifact version, which is always that shape), an `implementing-host` violating the
   list grammar — each makes the trailer malformed. Specifying only *missing*
   fields left a parser free to accept a garbage value, which fails open in the
   one place this requirement fails closed everywhere else.

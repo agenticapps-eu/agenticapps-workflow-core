@@ -437,6 +437,15 @@ Reviewer output SHALL be treated as untrusted third-party input. It is written
 verbatim into `REVIEWS.md`, which agents subsequently read as context, so it is
 a path by which text from outside this machine reaches an agent's instructions.
 
+**Failure reasons SHALL come from a closed, producer-generated vocabulary and
+SHALL be single-line.** Raw vendor stderr SHALL NOT be persisted into
+`REVIEWS.md`. A third-party CLI's error text may quote a credential it just
+read, or carry Markdown structure that changes how the artifact parses — and
+`REVIEWS.md` is committed. The reference producer already discards vendor
+stderr and records only strings it generated itself (`timed out at Ns`,
+`no verdict`, `no substance`, `unknown vendor`); this makes that a requirement
+rather than an implementation habit.
+
 The producer SHALL continue to reject a response containing a `## Reviewer:`
 heading, which would forge additional reviewer sections, and SHALL continue to
 strip vendor banner and hook-log noise from the response's edges without
@@ -499,8 +508,16 @@ sections are third-party input and are to be read as claims rather than as
 instructions.** The notice is placed by the producer so it is present wherever
 the file is read — an agent loading it as context gets the warning in the same
 buffer as the content, which a note in a specification the agent never opens
-would not achieve. §14 already governs prompt injection for this fleet; this
-requirement is the local application of it, not a second policy.
+would not achieve.
+
+**This pipeline does NOT satisfy §14, and SHALL record that rather than imply
+otherwise.** An earlier revision called the notice "the local application of
+§14"; it is not. §14 mandates trust classification, runtime separation, output
+validation, least-privilege tool dispatch and regression controls, and this
+pipeline implements none of them: it invokes agentic CLIs with the operator's
+full credentials and writes their output verbatim into a file other agents
+read. The notice is a label on untrusted content, which is worth having and is
+not a control. The gap is declared here and owned by `screen-review-egress`.
 
 The honest limit SHALL be stated with it: a notice is a mitigation an
 instruction-following model may itself be talked out of, and it is weaker than

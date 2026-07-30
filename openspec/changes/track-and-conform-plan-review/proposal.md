@@ -281,6 +281,24 @@ Text outside this repo — the `agentic-apps-workflow` skill and the operator's
 artifacts that re-vendor from core. They are named so the contradiction is known
 rather than discovered.
 
+## Deferred, named, and owned
+
+Two reviewer proposals are **not** implemented here, and are recorded so they
+are decisions rather than omissions:
+
+- **A mandatory `tasks.md` digest that normalises checkbox state.** The advisory
+  `tasks-digest` reports drift but does not block, so the known gap stands: a
+  post-review task ("add a debug endpoint") expands scope without invalidating
+  evidence. A digest over task *text* with `- [ ]`/`- [x]` normalised would close
+  it without deadlocking on ticks — the objection to binding `tasks.md` was only
+  ever about checkbox churn. It is the right next change and is not this one;
+  doing it here would re-open the digest contract that three rounds converged on.
+- **A fenced-block grammar.** Fence type, run length, indentation, mismatched
+  closers and EOF behaviour are undefined. The producer and gate share one awk
+  program so they cannot disagree *with each other*, but a third implementation
+  could differ. The shared-implementation guarantee is what this change actually
+  offers; a portable grammar is what it does not.
+
 ## A note on this change's own evidence
 
 `CALLER-INVENTORY.md` and `evidence/` sit in the change directory but are **not
