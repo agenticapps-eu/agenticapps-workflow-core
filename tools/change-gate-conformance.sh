@@ -81,11 +81,59 @@ make_fixture() { # $1 = validate exit code (0 green, 1 red)
   printf '%s' "$d"
 }
 
+# An INDEPENDENT implementation of the digest contract, written from the spec
+# text rather than by calling the gate's own function. A harness that built its
+# fixtures with the implementation's logic could not detect a wrong
+# implementation — both sides would be wrong together. Agreement between this
+# and the gate is therefore a real assertion, and it is the same cross-check
+# task 7.10 requires of the producer.
+fixture_digest() { # $1 = change dir
+  local d="$1" ser canon p plen clen hex
+  ser="$(mktemp)"
+  # proposal.md, design.md, then every specs/**/*.md, ordered bytewise.
+  {
+    [ -e "$d/proposal.md" ] && printf 'proposal.md\0'
+    [ -e "$d/design.md" ]   && printf 'design.md\0'
+    [ -d "$d/specs" ] && find "$d/specs" -name '*.md' -print0 2>/dev/null |
+      while IFS= read -r -d '' q; do printf '%s\0' "${q#"$d"/}"; done
+  } | LC_ALL=C sort -z | while IFS= read -r -d '' p; do
+    canon="$(mktemp)"
+    LC_ALL=C tr -d '\r' < "$d/$p" > "$canon"
+    [ -s "$canon" ] && [ "$(LC_ALL=C tail -c1 "$canon" | od -An -tu1 | tr -d ' \n')" != "10" ] && printf '\n' >> "$canon"
+    plen=$(printf '%s' "$p" | LC_ALL=C wc -c | tr -d ' ')
+    clen=$(LC_ALL=C wc -c < "$canon" | tr -d ' ')
+    { printf '%s\n%s\n%s\n' "$plen" "$p" "$clen"; cat "$canon"; } >> "$ser"
+    rm -f "$canon"
+  done
+  hex="$(LC_ALL=C shasum -a 256 "$ser" 2>/dev/null | awk '{print $1}')"
+  [ -n "$hex" ] || hex="$(LC_ALL=C sha256sum "$ser" 2>/dev/null | awk '{print $1}')"
+  rm -f "$ser"
+  printf 'sha256:%s' "$hex"
+}
+
+# Appends a well-formed trailer. Gate 1.5.0 counts ZERO reviewers without one,
+# so every fixture that expects its reviewers to count needs this — which is
+# precisely the fleet-wide migration the change schedules, rehearsed here.
+seed_trailer() { # $1 = change dir  [$2 = implementing host]  [$3 = digest override]
+  local dir="$1" host="${2:-pi}" dg="${3:-}"
+  [ -n "$dg" ] || dg="$(fixture_digest "$dir")"
+  {
+    printf '<!-- openspec-review-trailer v1\n'
+    printf 'implementing-host: %s\n' "$host"
+    printf 'digest: %s\n' "$dg"
+    printf 'producer-version: 1.1.0\n'
+    printf -- '-->\n'
+  } >> "$dir/REVIEWS.md"
+}
+
 reviewers() { # $1 = change dir, remaining args = reviewer names
   local dir="$1"; shift
   local f="$dir/REVIEWS.md" n
   : > "$f"
-  for n in "$@"; do printf '## Reviewer: %s\n\nLooks fine.\n\n' "$n" >> "$f"; done
+  # A verdict AND a body: gate 1.5.0 counts nothing that lacks either, and
+  # these rows exist to test counting, not to test the substance rule.
+  for n in "$@"; do printf '## Reviewer: %s\n\nVERDICT: APPROVE\n\nLooks fine.\n\n' "$n" >> "$f"; done
+  seed_trailer "$dir"
 }
 
 # Same, but each reviewer is given a verdict: `name:A` approves, `name:R`
@@ -105,6 +153,7 @@ reviewers_with_verdicts() { # $1 = change dir, remaining args = name[:A|:R]
       *) printf 'Some prose with no verdict line.\n\n' >> "$f" ;;
     esac
   done
+  seed_trailer "$dir"
 }
 
 # ── the assertion ────────────────────────────────────────────────────────────
@@ -489,8 +538,11 @@ score_gate() {
 
   # A reviewer who ignored the producer's format said nothing. Reporting them as
   # objecting would manufacture an objection out of a formatting miss.
+  # Under 1.5.0 a verdictless section counts zero, so the row pairs one real
+  # review with one silent vendor: the floor is met by the reviewer who spoke,
+  # and the one who did not is neither counted nor reported as objecting.
   fx="$(make_fixture 0)"
-  reviewers_with_verdicts "$fx/repo/openspec/changes/add-thing" gemini codex
+  reviewers_with_verdicts "$fx/repo/openspec/changes/add-thing" gemini:A codex
   run_row_stderr_lacks "no verdict line is not a rejection" 0 "NOTE" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
@@ -498,10 +550,11 @@ score_gate() {
   # vocabulary inside ``` is documentation, not a rejection.
   fx="$(make_fixture 0)"
   {
-    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n'
-    printf '## Reviewer: codex\n\nVERDICT: APPROVE\n\n'
+    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n- a finding\n\n'
+    printf '## Reviewer: codex\n\nVERDICT: APPROVE\n\n- another finding\n\n'
     printf 'Reviewers may reply:\n\n```\nVERDICT: REQUEST-CHANGES\n```\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
   run_row_stderr_lacks "fenced verdict is not a rejection" 0 "NOTE" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
@@ -511,9 +564,10 @@ score_gate() {
   # rejection is the same class of failure as inventing one.
   fx="$(make_fixture 0)"
   {
-    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n'
+    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n- a finding\n\n'
     printf '## Reviewer: opencode\n\n**VERDICT: REQUEST-CHANGES**\n\n- a finding\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
   run_row_stderr_has "bolded verdict is still a verdict" 0 \
     "but opencode requested changes" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
@@ -521,9 +575,10 @@ score_gate() {
   # Underscore emphasis, and emphasis on the label only.
   fx="$(make_fixture 0)"
   {
-    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n'
-    printf '## Reviewer: codex\n\n__VERDICT: REQUEST-CHANGES__\n'
+    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n- a finding\n\n'
+    printf '## Reviewer: codex\n\n__VERDICT: REQUEST-CHANGES__\n\n- a finding\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
   run_row_stderr_has "underscore-emphasised verdict counts" 0 \
     "but codex requested changes" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
@@ -531,9 +586,10 @@ score_gate() {
   # Emphasis must not turn a mid-prose mention into a rejection: still anchored.
   fx="$(make_fixture 0)"
   {
-    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n'
+    printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n- a finding\n\n'
     printf '## Reviewer: codex\n\nVERDICT: APPROVE\n\nI nearly said **VERDICT: REQUEST-CHANGES** but did not.\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
   run_row_stderr_lacks "emphasised mention mid-prose is not a rejection" 0 \
     "NOTE" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"

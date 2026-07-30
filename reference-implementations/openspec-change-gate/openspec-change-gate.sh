@@ -116,50 +116,212 @@ active_changes(){                      # print each active (non-archived) change
   find "$CHANGES_DIR" -mindepth 1 -maxdepth 1 -type d ! -name archive 2>/dev/null | sort
 }
 
-reviewer_count(){                      # $1 = change dir ; echo number of DISTINCT reviewers
-  local f="$1/REVIEWS.md"
-  [ -f "$f" ] || { echo 0; return; }
-  # One "## Reviewer: <name>" heading per reviewer. Three tightenings over the
-  # naive `grep -ciE '^##[[:space:]]*reviewer'`, each closing a way to satisfy
-  # the gate without two real reviews:
-  #
-  #   1. Skip fenced code blocks. A REVIEWS.md that merely QUOTES the convention
-  #      inside ``` fences counted as reviewers — a doc about the gate satisfied
-  #      the gate.
-  #   2. Require the colon and a non-empty name (`## Reviewer: x`), so a prose
-  #      heading like "## Reviewers" or "## Reviewer guidance" does not count.
-  #   3. Count DISTINCT names. Two sections from one vendor is one independent
-  #      opinion, not two; §18 wants independent reviewers.
-  #
-  #   4. Exclude self-review when OPENSPEC_GATE_SELF names the implementing host.
-  #      Without it the gate and the §02 evidence verifier DISAGREE about who
-  #      counts, and a gate that disagrees with its own verifier is the ADR-0018
-  #      drift pattern reappearing inside the tooling. Anchored
-  #      (^self([-_ ].*)?$) so a reviewer whose name merely starts with the same
-  #      letters is not swallowed. Unset => no exclusion.
-  #
-  # The `reviewers:` YAML fallback is deliberately GONE: it let a one-line
-  # `reviewers: [a, b]` — which no producer writes and which carries no review
-  # content at all — clear the gate. It also ran only when the hardened count was
-  # BELOW threshold, with no fence skipping and no dedup, so re-adding it defeats
-  # all four properties above at once. Do not restore it.
-  #
-  # OPENSPEC_GATE_SELF is interpolated into an awk regex, so a host name carrying
-  # regex metacharacters would not anchor as written. Host names are bare tokens
-  # (pi, claude, codex, opencode); documented constraint, not a guard.
-  awk -v self="${OPENSPEC_GATE_SELF:-}" '
-    /^[[:space:]]*```/ { fence = !fence; next }
+# ── the digest ───────────────────────────────────────────────────────────────
+# BYTE-IDENTICAL to the producer's `shared-digest v1`. The producer attests;
+# this reproduces. If the two ever diverge the attestation is unverifiable and
+# every review in the fleet reads stale — so change both together or neither.
+digest_set() { # $1 = change dir
+  local d="$1"
+  {
+    [ -e "$d/proposal.md" ] && printf 'proposal.md\0'
+    [ -e "$d/design.md" ]   && printf 'design.md\0'
+    if [ -d "$d/specs" ]; then
+      find "$d/specs" -name '*.md' -print0 2>/dev/null |
+        while IFS= read -r -d '' p; do printf '%s\0' "${p#"$d"/}"; done
+    fi
+  } | LC_ALL=C sort -z
+}
+
+compute_digest() { # $1 = change dir ; prints sha256:<hex>, or returns 3
+  local d="$1" p ser
+  ser="$(mktemp "${TMPDIR:-/tmp}/gdigest.XXXXXX")" || return 3
+  while IFS= read -r -d '' p; do
+    [ -n "$p" ] || continue
+    if [ -L "$d/$p" ] || [ ! -f "$d/$p" ]; then rm -f "$ser"; return 3; fi
+    local canon clen plen
+    canon="$(mktemp "${TMPDIR:-/tmp}/gcanon.XXXXXX")" || { rm -f "$ser"; return 3; }
+    LC_ALL=C tr -d '\r' < "$d/$p" > "$canon"
+    [ -s "$canon" ] && [ "$(LC_ALL=C tail -c1 "$canon" | od -An -tu1 | tr -d ' \n')" != "10" ] && printf '\n' >> "$canon"
+    plen=$(printf '%s' "$p" | LC_ALL=C wc -c | tr -d ' ')
+    clen=$(LC_ALL=C wc -c < "$canon" | tr -d ' ')
+    { printf '%s\n%s\n%s\n' "$plen" "$p" "$clen"; cat "$canon"; } >> "$ser"
+    rm -f "$canon"
+  done < <(digest_set "$d")
+  local hex
+  hex="$(LC_ALL=C shasum -a 256 "$ser" 2>/dev/null | awk '{print $1}')"
+  [ -n "$hex" ] || hex="$(LC_ALL=C sha256sum "$ser" 2>/dev/null | awk '{print $1}')"
+  rm -f "$ser"
+  [ -n "$hex" ] || return 3
+  printf 'sha256:%s' "$hex"
+}
+
+# ── one parse, consumed by both counting and reporting ───────────────────────
+# reviewer_count() and pending_rejections() previously mirrored each other's
+# parsing by hand, with a comment explaining that divergence would mean the
+# gate counts one set of reviewers and reports on another. It is now one pass
+# feeding both, so that cannot happen by editing only one.
+#
+# Emits a small record language on stdout:
+#   TRAILERS <n>            how many trailer blocks the file carries
+#   FIELD <key> <value>     each trailer field, in order, duplicates included
+#   FINAL <0|1>             whether the trailer is the file's final content
+#   SECTION <name> <verdict|none|conflict> <0|1 substance>
+#
+# The section rule and the verdict grammar are the producer's `shared-predicate
+# v1`. A section runs from its `## Reviewer:` heading to the next heading of
+# LEVEL 1 OR 2, or EOF — deeper headings are interior, so a vendor writing
+# `### Findings` above its verdict keeps that verdict. Bounding at any level
+# was the previous wording and silently discarded such a review at a floor of
+# one.
+parse_reviews() { # $1 = REVIEWS.md
+  LC_ALL=C awk '
+    # shared-predicate v1
+    function norm(s) {
+      gsub(/[*_]/, "", s)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      gsub(/[[:space:]]+/, " ", s)
+      return s
+    }
+    function flush(   v) {
+      if (cur == "") return
+      v = conflict ? "conflict" : (verdict == "" ? "none" : verdict)
+      print "SECTION " cur " " v " " (substance ? 1 : 0)
+      cur = ""; verdict = ""; conflict = 0; substance = 0
+    }
+    BEGIN { fence = 0; cur = ""; trailers = 0; intrailer = 0; lastcontent = 0 }
+
+    { raw = $0 }
+
+    # Trailer first: its delimiters must not be read as content or headings.
+    !fence && raw ~ /^[[:space:]]*<!--[[:space:]]*openspec-review-trailer/ {
+      trailers++; intrailer = 1; trailer_end = 0; next
+    }
+    intrailer {
+      if (raw ~ /-->/) { intrailer = 0; trailer_end = NR; next }
+      line = raw
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ /^[a-z][a-z-]*:[[:space:]]/) {
+        key = line; sub(/:.*$/, "", key)
+        val = line; sub(/^[a-z][a-z-]*:[[:space:]]*/, "", val)
+        sub(/[[:space:]]+$/, "", val)
+        print "FIELD " key " " val
+      }
+      next
+    }
+
+    /^[[:space:]]*(```|~~~)/ { fence = !fence; next }
     fence { next }
+
+    # A reviewer heading opens a section; any other level-1/2 heading closes one.
     /^##[[:space:]]*[Rr]eviewer[[:space:]]*:[[:space:]]*[^[:space:]]/ {
-      name = $0
+      flush()
+      name = raw
       sub(/^##[[:space:]]*[Rr]eviewer[[:space:]]*:[[:space:]]*/, "", name)
       sub(/[[:space:]]+$/, "", name)
-      name = tolower(name)
-      if (self != "" && name ~ ("^" tolower(self) "([-_ ].*)?$")) next
+      cur = tolower(name)
+      lastcontent = NR
+      next
+    }
+    /^#{1,2}[[:space:]]/ { flush(); lastcontent = NR; next }
+
+    {
+      n = norm(raw)
+      if (n != "") lastcontent = NR
+      if (cur == "") next
+      if (n == "") next
+      if (raw ~ /^[[:space:]]*_generated .* timeout [0-9]+s_[[:space:]]*$/) next
+      if (raw ~ /^[[:space:]]*#{1,6}[[:space:]]/) next
+      lower = tolower(n)
+      if (lower ~ /^verdict[[:space:]]*:[[:space:]]*(approve|request-changes)$/) {
+        v = (lower ~ /approve/) ? "APPROVE" : "REQUEST-CHANGES"
+        if (verdict != "" && verdict != v) conflict = 1
+        verdict = v
+        next
+      }
+      substance = 1
+    }
+    END {
+      flush()
+      print "TRAILERS " trailers
+      # Final content: nothing but whitespace after the closing `-->`.
+      print "FINAL " ((trailers == 1 && trailer_end > 0 && lastcontent <= trailer_end) ? 1 : 0)
+    }
+  ' "$1" 2>/dev/null
+}
+
+# Reads the trailer and reports why the evidence cannot be trusted, or `ok`.
+# Fails CLOSED: a malformed trailer is indistinguishable from an absent one for
+# the purpose it serves.
+trailer_status() { # $1 = change dir ; prints ok|<reason>
+  local d="$1" f="$1/REVIEWS.md" parsed
+  [ -f "$f" ] || { echo "no-reviews-file"; return; }
+  parsed="$(parse_reviews "$f")"
+  local n; n="$(printf '%s\n' "$parsed" | awk '/^TRAILERS /{print $2}')"
+  [ "${n:-0}" = "0" ] && { echo "trailer-absent"; return; }
+  [ "${n:-0}" = "1" ] || { echo "trailer-duplicated"; return; }
+  [ "$(printf '%s\n' "$parsed" | awk '/^FINAL /{print $2}')" = "1" ] || { echo "trailer-not-final"; return; }
+
+  local host digest pver dup
+  for k in implementing-host digest producer-version; do
+    dup="$(printf '%s\n' "$parsed" | awk -v k="$k" '$1=="FIELD" && $2==k' | wc -l | tr -d ' ')"
+    [ "$dup" = "1" ] || { echo "trailer-field-$([ "$dup" = "0" ] && echo missing || echo duplicated):$k"; return; }
+  done
+  host="$(printf '%s\n' "$parsed"   | awk '$1=="FIELD" && $2=="implementing-host"{print $3}')"
+  digest="$(printf '%s\n' "$parsed" | awk '$1=="FIELD" && $2=="digest"{print $3}')"
+  pver="$(printf '%s\n' "$parsed"   | awk '$1=="FIELD" && $2=="producer-version"{print $3}')"
+
+  # A field present but MALFORMED is treated exactly as absent. Specifying only
+  # missing fields left a parser free to accept a garbage value, which fails
+  # open in the one place this fails closed everywhere else.
+  printf '%s' "$digest" | LC_ALL=C grep -qE '^sha256:[0-9a-f]{64}$' || { echo "trailer-bad-digest"; return; }
+  printf '%s' "$pver"   | LC_ALL=C grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "trailer-bad-version"; return; }
+  # List grammar: bare commas, no whitespace, closed vocabulary.
+  #
+  # The vocabulary is the UNION of hosts and reviewer vendors, not the reviewer
+  # set alone: `pi` is a host with no reviewer arm, and validating against the
+  # reviewer set would read every pi-authored artifact as malformed — zero
+  # reviewers, permanently blocked, for one of the four hosts.
+  printf '%s' "$host" | LC_ALL=C grep -qE '^(claude|codex|gemini|opencode|pi)(,(claude|codex|gemini|opencode|pi))*$' \
+    || { echo "trailer-bad-host"; return; }
+
+  local now
+  now="$(compute_digest "$d")" || { echo "digest-uncomputable"; return; }
+  [ "$now" = "$digest" ] || { echo "digest-mismatch"; return; }
+  echo "ok"
+}
+
+reviewer_count(){                      # $1 = change dir ; echo number of DISTINCT reviewers
+  local d="$1" f="$1/REVIEWS.md"
+  [ -f "$f" ] || { echo 0; return; }
+
+  # The evidence must be verifiable before any of it is counted. An unbound,
+  # stale or malformed artifact contributes ZERO reviewers rather than the
+  # number of headings it happens to contain.
+  [ "$(trailer_status "$d")" = "ok" ] || { echo 0; return; }
+
+  local parsed self
+  parsed="$(parse_reviews "$f")"
+  self="$(printf '%s\n' "$parsed" | awk '$1=="FIELD" && $2=="implementing-host"{print $3}')"
+
+  # Counts a section only when it carries a verdict AND a body, and only when
+  # its heading names a vendor from the closed vocabulary.
+  #
+  # The closed name list is what stops `## Reviewer: codex-2` counting on a
+  # codex-authored change: exclusion is by name, so an arbitrary lookalike
+  # would otherwise read as an independent reviewer while being the
+  # implementing host's own output.
+  printf '%s\n' "$parsed" | LC_ALL=C awk -v self="$self" '
+    BEGIN { n = split(self, a, ","); for (i = 1; i <= n; i++) excl[a[i]] = 1 }
+    $1 == "SECTION" {
+      name = $2; verdict = $3; substance = $4
+      if (name != "claude" && name != "codex" && name != "gemini" && name != "opencode") next
+      if (name in excl) next
+      if (verdict == "none" || verdict == "conflict") next
+      if (substance != "1") next
       seen[name] = 1
     }
     END { n = 0; for (k in seen) n++; print n }
-  ' "$f" 2>/dev/null || echo 0
+  ' 2>/dev/null || echo 0
 }
 
 # Names the reviewers whose section carries a REQUEST-CHANGES verdict, comma
@@ -167,50 +329,36 @@ reviewer_count(){                      # $1 = change dir ; echo number of DISTIN
 # nothing here may ever change an exit code. §18's truth table has no verdict
 # term, so a gate that blocked on this would be non-conformant.
 #
-# Deliberately mirrors reviewer_count's parsing rather than sharing it: fences
-# are skipped for the same reason (a REVIEWS.md quoting the convention inside
-# ``` must not register), self-exclusion applies for the same reason (the
-# implementing host's own verdict is not an independent opinion), and both walk
-# the file once. Divergence between the two would mean the gate counts one set
-# of reviewers and reports on another.
+# Shares reviewer_count's parse rather than mirroring it. The previous pair
+# hand-mirrored each other with a comment warning that divergence would mean
+# the gate counts one set of reviewers and reports on another; one pass feeding
+# both makes that unrepresentable.
 #
 # A section with no verdict line at all is NOT a rejection. Reviewers that
 # ignore the producer's format, or vendors whose output was truncated, must not
 # be reported as objecting when they said nothing.
 pending_rejections(){
-  local f="$1/REVIEWS.md"
+  local d="$1" f="$1/REVIEWS.md"
   [ -f "$f" ] || { echo ""; return; }
-  awk -v self="${OPENSPEC_GATE_SELF:-}" '
-    /^[[:space:]]*```/ { fence = !fence; next }
-    fence { next }
-    /^##[[:space:]]*[Rr]eviewer[[:space:]]*:[[:space:]]*[^[:space:]]/ {
-      name = $0
-      sub(/^##[[:space:]]*[Rr]eviewer[[:space:]]*:[[:space:]]*/, "", name)
-      sub(/[[:space:]]+$/, "", name)
-      name = tolower(name)
-      cur = (self != "" && name ~ ("^" tolower(self) "([-_ ].*)?$")) ? "" : name
-      next
-    }
-    # Anchored at line start so a reviewer QUOTING the verdict vocabulary mid
-    # prose ("...I nearly said REQUEST-CHANGES here...") does not register as
-    # one. The producer asks for it on its own line.
-    #
-    # Markdown emphasis is tolerated around the label. 1.3.0 anchored on a bare
-    # `VERDICT:` and missed `**VERDICT: REQUEST-CHANGES**` — which is what
-    # opencode actually wrote on the first real run after 1.3.0 shipped. The
-    # rejection was genuine and the gate silently under-reported it, which is
-    # the same class of failure as reporting one that was never made. Reviewers
-    # are told the vocabulary, not the formatting; a bolded verdict is still a
-    # verdict.
-    cur != "" && /^[[:space:]]*[*_]*[[:space:]]*VERDICT[[:space:]]*:[[:space:]]*[*_]*[[:space:]]*REQUEST-CHANGES/ {
-      if (!(cur in flagged)) { flagged[cur] = 1; order[++k] = cur }
+  local parsed self
+  parsed="$(parse_reviews "$f")"
+  self="$(printf '%s\n' "$parsed" | awk '$1=="FIELD" && $2=="implementing-host"{print $3}')"
+  printf '%s\n' "$parsed" | LC_ALL=C awk -v self="$self" '
+    BEGIN { n = split(self, a, ","); for (i = 1; i <= n; i++) excl[a[i]] = 1 }
+    $1 == "SECTION" {
+      name = $2; verdict = $3; substance = $4
+      if (name != "claude" && name != "codex" && name != "gemini" && name != "opencode") next
+      if (name in excl) next
+      if (substance != "1") next
+      if (verdict != "REQUEST-CHANGES") next
+      if (!(name in flagged)) { flagged[name] = 1; order[++k] = name }
     }
     END {
       out = ""
       for (i = 1; i <= k; i++) out = (out == "" ? order[i] : out ", " order[i])
       print out
     }
-  ' "$f" 2>/dev/null || echo ""
+  ' 2>/dev/null || echo ""
 }
 
 validate_ok(){ ( cd "$ROOT" && "$OPENSPEC_BIN" validate --all >/dev/null 2>&1 ); }

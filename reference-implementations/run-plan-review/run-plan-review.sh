@@ -115,7 +115,7 @@ REVIEWERS=("$@"); [ ${#REVIEWERS[@]} -gt 0 ] || REVIEWERS=(gemini codex claude o
 [ -n "$SELF_RAW" ] || {
   echo "the implementing host is required and has no default" >&2
   echo "pass --implementing-host <vendor>[,<vendor>...] (or set AGENT_SELF)" >&2
-  echo "vendors: claude | codex | gemini | opencode" >&2
+  echo "hosts: claude | codex | gemini | opencode | pi" >&2
   exit 2
 }
 case "$SELF_RAW" in
@@ -123,13 +123,28 @@ case "$SELF_RAW" in
     echo "invalid --implementing-host '$SELF_RAW': no whitespace; separate vendors with a bare comma" >&2
     exit 2 ;;
 esac
+# THE HOST SET IS NOT THE REVIEWER SET, and conflating them locks a host out.
+#
+#   hosts that author changes : claude · codex · opencode · pi
+#   vendors with reviewer arms: claude · codex · gemini · opencode
+#
+# `pi` is a host with no reviewer arm; `gemini` is a reviewer with no host.
+# An earlier revision of this change validated the implementing host against
+# the REVIEWER set, which made a pi-authored change unreviewable: the producer
+# refused the identity, and had one been written by hand the gate would have
+# read the trailer as malformed and counted zero reviewers forever. One of the
+# four hosts, blocked outright.
+#
+# The field is accepted over the UNION. Naming a host that has no reviewer arm
+# excludes nothing, which is exactly right — there is no `pi` review to
+# discount — and costs nothing.
 SELF_HOSTS=()
 _ifs_save="$IFS"; IFS=','
 for _h in $SELF_RAW; do
   case "$_h" in
-    claude|codex|gemini|opencode) SELF_HOSTS+=("$_h") ;;
+    claude|codex|gemini|opencode|pi) SELF_HOSTS+=("$_h") ;;
     "")  IFS="$_ifs_save"; echo "invalid --implementing-host '$SELF_RAW': empty vendor in list" >&2; exit 2 ;;
-    *)   IFS="$_ifs_save"; echo "invalid --implementing-host '$_h': not one of claude|codex|gemini|opencode" >&2; exit 2 ;;
+    *)   IFS="$_ifs_save"; echo "invalid --implementing-host '$_h': not one of claude|codex|gemini|opencode|pi" >&2; exit 2 ;;
   esac
 done
 IFS="$_ifs_save"
