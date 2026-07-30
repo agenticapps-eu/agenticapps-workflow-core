@@ -189,7 +189,8 @@ fact the rule needs. The fact needed is *who authored the change being
 reviewed*, and that is knowable only at production time.
 
 **Chosen:** the producer requires an explicit implementing-host identity, from a
-closed vocabulary (`claude` | `codex` | `gemini` | `opencode`), with **no
+closed vocabulary (`claude` | `codex` | `gemini` | `opencode` | `pi` — the union
+of hosts and reviewer vendors), with **no
 default**; absent or unrecognised, it exits with a usage error and writes
 nothing. It records that identity in a trailer in `REVIEWS.md`. The gate reads
 the identity **from the trailer** and excludes that vendor's sections; a

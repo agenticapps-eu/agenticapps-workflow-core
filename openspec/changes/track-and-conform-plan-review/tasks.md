@@ -46,7 +46,7 @@ every project.
 ## 5. Require the implementing host, never default it
 
 - [x] 5.1 `tdd="true"` — failing test: invoked with no implementing-host identity, the producer exits with a usage error and writes nothing
-- [x] 5.2 `tdd="true"` — failing test: an identity outside `claude|codex|gemini|opencode` is a usage error
+- [x] 5.2 `tdd="true"` — failing test: an identity outside `claude|codex|gemini|opencode|pi` is a usage error; `pi` MUST be accepted (a host with no reviewer arm)
 - [x] 5.3 `tdd="true"` — remove the `AGENT_SELF:-claude` default (`run-plan-review.sh:68`); require the identity explicitly; make both tests pass
 - [x] 5.4 `tdd="true"` — failing test: the declared host's own vendor is recorded as excluded, not failed, and does not count
 - [x] 5.5 `tdd="true"` — failing test: the same vendor named twice contributes at most one

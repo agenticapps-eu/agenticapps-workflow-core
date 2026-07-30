@@ -42,9 +42,17 @@ is no wrapper script, no CI step, and no hook that runs it.
 - `reference-implementations/run-plan-review/README.md` — usage, floor, env
 - `reference-implementations/run-plan-review/run-plan-review.sh` — header usage
 - `gate/README.md`, `gate/hooks/wiring.md` — the `gate/` copy is deleted by §9
-- `claude-workflow`: `templates/workflow-config.md`,
-  `setup/snapshot/workflow-config.md`, `setup/snapshot/planning-config.json`,
-  `install.sh`
+- `claude-workflow`: `templates/workflow-config.md` and
+  `setup/snapshot/workflow-config.md` — the diagram line now states the required
+  `--implementing-host` and the one-reviewer floor
+
+**Not corrected, and the claim is narrowed rather than left standing:**
+`claude-workflow/setup/snapshot/planning-config.json` and `install.sh` carry
+only descriptive strings naming the artifact's path, not its usage, so there is
+nothing in them to migrate. An earlier version of this list named them as
+"corrected" when they had not been touched — an overclaim in the evidence
+document of a change whose subject is evidence integrity. A reviewer caught it
+in round 8.
 
 ## Sites deliberately left, and why
 

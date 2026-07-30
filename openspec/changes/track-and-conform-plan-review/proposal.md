@@ -134,7 +134,8 @@ Three shared-bin artifacts and one spec section are involved:
   meant the *invoking* host. That is the wrong party: CI, a pre-commit hook or
   another agent routinely evaluates evidence a different host produced. The
   producer now **requires** the implementing host explicitly, from the closed
-  vocabulary `claude|codex|gemini|opencode`, with no default, and records it in
+  vocabulary `claude|codex|gemini|opencode|pi` — the union of hosts and reviewer
+  vendors, since `pi` is a host with no reviewer arm — with no default, and records it in
   `REVIEWS.md`. The gate reads it **from the artifact** and fails closed when it
   is missing or unrecognised. `OPENSPEC_GATE_SELF` is retired as an identity
   source. Duplicate vendors count once.
@@ -279,6 +280,28 @@ Text outside this repo — the `agentic-apps-workflow` skill and the operator's
 `CLAUDE.md`, both of which state ≥2 — is **not** corrected here. Those are host
 artifacts that re-vendor from core. They are named so the contradiction is known
 rather than discovered.
+
+## A note on this change's own evidence
+
+`CALLER-INVENTORY.md` and `evidence/` sit in the change directory but are **not
+in the digest set**, which covers `proposal.md`, `design.md` and
+`specs/**/*.md`. The digest set is exactly what the producer transmits, so
+reviewers never receive them and cannot verify claims that rest on them — a
+reviewer in round 8 asked for the caller inventory that had been sitting beside
+the file it was reviewing.
+
+That is a real limitation of binding the digest to the transmitted set, and it
+is accepted rather than fixed here: widening the set would send implementation
+scratch to third-party CLIs on every run, and narrowing the claim is cheaper.
+Where this proposal relies on the inventory, it states the finding inline
+instead of pointing at the file.
+
+**The finding, inline:** no executable caller of `run-plan-review.sh` exists
+anywhere in core, `~/.agenticapps/bin/`, the four hosts, the seven projects or
+the workflow skill. Every reference is documentation — install echoes, diagram
+lines, descriptive JSON. The breaking interface change therefore surfaces as an
+interactive usage error naming the missing input, with no unattended job to
+fail unattended.
 
 ## Impact
 
