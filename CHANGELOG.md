@@ -194,6 +194,75 @@ does need a host change; see under *Fixed*.
 
 ### Fixed
 
+- **Gate 1.6.0 / producer 1.2.0 — the producer and the gate did not share a
+  predicate, and the harness could not see it.** The change's whole thesis is
+  that evidence the producer publishes is evidence the gate counts. Both
+  scripts carried the marker `shared-predicate v1` and a comment asserting the
+  two awk programs were byte-identical. They were not, and could not be — one
+  parses an assembled file, the other a single body.
+
+  Two ordinary vendor outputs broke it, each confirmed by execution:
+
+  - **A level-2 heading above the verdict.** The gate closed a reviewer section
+    at *any* level-1/2 heading, so `## Summary` — the commonest shape an LLM
+    returns — discarded the verdict beneath it. Producer: `wrote 2 reviewer
+    section(s)`, exit 0. Gate: `0/1 reviewers`, blocked. Gate 1.6.0 closes a
+    section only at the next `## Reviewer:`; this is 1.5.0's own `### Findings`
+    fix applied at the level it stopped short of.
+  - **An unclosed code fence.** The gate tracks fence state across the whole
+    file, so a truncated ``` from one vendor — what a token-capped or timed-out
+    CLI routinely returns — swallowed every later section *and* the trailer.
+    Producer 1.2.0 refuses such a body (`unbalanced-fence`) rather than the gate
+    resetting fence state per section, which would reopen the fence-forging hole
+    the gate currently closes. The body is dropped, never repaired: the record
+    commits to reproducing vendor text verbatim.
+
+  **Both shipped green at 55/55** because the producer harness advertised a
+  `G. Cross-check — producer and gate agree on the same file` group that did not
+  exist in the file. Nothing in the tree ever fed producer output to the
+  verifier. Group H now does, and both defects are mutation-tested.
+
+- **Gate 1.6.0 — the tasks-drift report the spec has required since 1.3.0 was
+  never implemented.** §18 says the gate SHALL report when `tasks.md` has moved
+  since review, and carries a scenario for it. No gate ever read the field: the
+  producer wrote `tasks-digest` and nothing consumed it. Not blocking, not
+  advisory — write-only, which is worse than absent because it reads as a
+  control that exists. The harness scored 66/66 over it, because its one
+  relevant row pinned the ALLOW half of the scenario, which a gate that never
+  reads the field satisfies by doing nothing.
+
+- **Substance had no grammar.** "Carries prose or data", backed by a list of
+  excluded constructs, omitted the ones that mattered: a thematic break (`---`)
+  or a bare `>` counted as a body, so `VERDICT: APPROVE` plus `---` passed the
+  verdict-and-substance rule. Now a positive test — a body line needs at least
+  one alphanumeric character — which has no enumeration to fall behind.
+
+- **Producer 1.2.0 — `--implementing-host` accepted a trailing comma the gate
+  rejects.** Word splitting drops a trailing empty field, so `claude,` yielded
+  one element, reached the trailer, and was refused by the gate's anchored
+  grammar with a message naming neither the trailer nor the comma. `,claude` was
+  caught, so the bug was asymmetric as well as silent. The whole string is now
+  matched against the gate's grammar before it is split.
+
+- **Producer 1.2.0 — a symlinked `REVIEWS.md` was followed, not refused.** The
+  change directory and every digest member were checked for links; the output
+  path was not, and `cp` writes through one. `REVIEWS.md -> ../../../src/app.go`
+  meant a successful review truncated `app.go` and replaced it with review
+  prose, reported as success — and it is the one write the gate always exempts,
+  so nothing downstream would have caught it. `mv` replaces `cp`, making the
+  publish atomic.
+
+- **shared-install 1.0.1 — `--allow-downgrade` glob-expanded.** Unquoted, the
+  value was pathname-expanded as well as split, so `'*'` could authorise a
+  downgrade from a directory containing a matching filename — against the
+  "there is no wildcard" promise the flag is documented with.
+
+- **Gate `Env:` documented `OPENSPEC_GATE_SELF` as live.** Dead since 1.5.0,
+  which reads the implementing host from the trailer. The gate harness set it in
+  every self-exclusion row, so that whole section passed on an unrelated
+  mechanism; the rows are rewritten to declare the host where the gate reads it,
+  with a control row proving they measure exclusion rather than the floor.
+
 - **Gate 1.2.2 — two symlink escapes in the `openspec/` exemption.** Both
   pre-existing since 1.2.0 (verified by running the same reproducer against
   1.2.0 and 1.2.1 with identical results), so neither is a regression from the
