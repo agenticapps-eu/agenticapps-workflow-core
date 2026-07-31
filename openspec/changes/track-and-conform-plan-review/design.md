@@ -527,9 +527,11 @@ modify and publish it); reversing those two blocks nothing.
 
    **Then resolve each one — by re-review OR by recorded acceptance.** This step
    originally said "re-review each", and the inventory made that unsatisfiable:
-   37 active changes across six repositories, three of them outside this
+   roughly 35 active changes across six repositories (the recorded total of 37
+   contradicts its own per-repo breakdown and is untrusted — see `tasks.md`
+   8b.4), three of them outside this
    family, where a change in this repo has no authority to edit. **Taken
-   2026-07-31: all 37 are accepted as blocked**, recorded in `tasks.md` 8b.4
+   2026-07-31: all of them are accepted as blocked**, recorded in `tasks.md` 8b.4
    with the reasoning. That is a resolution of this step, not an evasion of it —
    what the step exists to prevent is the fleet being *surprised*, and the
    inventory plus the acceptance record plus step 6b is what prevents it.
@@ -547,7 +549,7 @@ modify and publish it); reversing those two blocks nothing.
 8. Publish gate 1.6.0: verdict-and-substance counting, trailer-sourced identity,
    digest staleness, reviewer-heading-only section bounds, and the advisory
    tasks-drift report. ONLY after task 8b.7 has announced the block — 8b.4
-   accepted 37 changes across six repos as blocked rather than clearing them,
+   accepted the fleet's active changes as blocked rather than clearing them,
    so publication now surprises six repositories unless the notice precedes it. Run `tools/change-gate-conformance.sh` green — every case
    passing, none inconclusive, which is what the harness's own `TOTAL:` line
    reports. (A previous revision cited a "52-case harness"; the harness states

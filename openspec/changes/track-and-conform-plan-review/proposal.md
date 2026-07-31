@@ -394,7 +394,7 @@ in reverse, and rolling the producer back under a live gate has the same
 blocking effect as the wrong forward order.
 
 **The order is now insufficient on its own.** Task 8b.4 discharged the fleet
-re-review by *accepting* 37 changes across six repositories as blocked rather
+re-review by *accepting* the fleet's active changes as blocked rather
 than clearing them, so publishing the gate will block all six at their next code
 edit. That makes the announcement (task 8b.7) a precondition of publication, not
 a courtesy after it. The ordering rule stops the gate outrunning the producer;
