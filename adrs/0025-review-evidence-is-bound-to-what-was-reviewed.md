@@ -119,6 +119,32 @@ implementing host against the *reviewer* set made every pi-authored change
 permanently unreviewable. Six review rounds across three vendors missed the last
 one; the conformance harness caught it on the first run that seeded it.
 
+**The migration order is not advice, and skipping it caused a live incident.**
+On 2026-07-30 gate 1.5.0 was published after re-reviewing only *this repo's*
+two changes. The fleet inventory (task 8b.1) was run afterwards and found **37
+active changes across six repos, none carrying a trailer** — every one of them
+blocked at `PreToolUse` the moment the shared gate landed. This is precisely the
+"flag day announced by an outage" the plan's step 6 exists to prevent, and the
+plan named it in advance.
+
+The remedy was the downgrade path this same change introduced:
+`--allow-downgrade openspec-change-gate.sh --reason "fleet not re-reviewed…"`,
+restoring 1.4.0 byte-identically with a durable audit record. Task 10.4 had
+rehearsed that path on a scratch artifact; this exercised it on the real one,
+under real breakage, which is a better test than the rehearsal.
+
+Two lessons, both cheap to state and expensive to learn:
+
+1. **"Re-review the in-flight changes" means the fleet, not the repo you are
+   working in.** A shared artifact has shared blast radius; the inventory is
+   the step that makes that concrete, and it belongs *before* publication, not
+   after.
+2. **A rollback path is worth building before it is needed.** Had
+   `--allow-downgrade` still been "a task-list aside" — which is how an earlier
+   revision of this change carried it, until a reviewer objected — the only
+   remedies would have been hand-editing a shared binary or re-reviewing 37
+   changes under pressure.
+
 **Stub harnesses cannot verify vendor integration.** Converting the wrapper to
 stdin scored green on every stubbed arm while two were broken against the real
 CLIs: `opencode`'s `--file` is an array option that swallowed the message

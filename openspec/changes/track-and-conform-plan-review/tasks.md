@@ -102,10 +102,11 @@ every project.
 
 ## 8b. Re-review the in-flight changes — between producer and gate
 
-- [ ] 8b.1 **Inventory every active change across the fleet** — core, the four hosts, the seven projects — not just this branch. The gate is global; a project discovering the trailer requirement when the new gate blocks it is a flag day announced by an outage
+- [x] 8b.1 **Inventory every active change across the fleet** — core, the four hosts, the seven projects — not just this branch. The gate is global; a project discovering the trailer requirement when the new gate blocks it is a flag day announced by an outage
 - [x] 8b.2 Re-run the producer over `track-and-conform-plan-review` so it carries a 1.1.0 trailer for its current text
 - [x] 8b.3 Re-run it over `shim-project-hooks` likewise, once that change's own revision has settled
-- [ ] 8b.4 Re-review every other active change the inventory found, or record explicitly which are accepted as blocked and why
+- [ ] 8b.4 Re-review every other active change the inventory found, or record explicitly which are accepted as blocked and why. **INVENTORY TAKEN 2026-07-30 — 37 active changes across 6 repos, none carrying a trailer:** `fx-signal-agent` 10, `fbc-platform` 8, `agenticapps-dashboard-add-agent-board` 8, `agenticapps-dashboard` 5, `callbot` 3, `agenticapps-roadmap` 1. This wave is the gate's precondition, not its follow-up
+- [ ] 8b.6 **Re-publish gate 1.5.0 only after 8b.4 completes.** It was published early on 2026-07-30, blocking all six repos, and was rolled back with `--allow-downgrade openspec-change-gate.sh` (see `~/.agenticapps/install.log`). The tracked 1.5.0 is unaffected; re-publishing is one command once the fleet carries trailers
 - [x] 8b.5 Confirm each new `REVIEWS.md` satisfies verdict, substance, identity and digest before the gate that requires them exists
 
 ## 9. Retire the ancestor
@@ -165,7 +166,7 @@ every project.
 
 ## 10. Verify and record
 
-- [ ] 10.1 Run `openspec validate --all` green
+- [x] 10.1 Run `openspec validate --all` green
 - [ ] 10.2 Run `openspec-change-gate.sh --ci` green
 - [x] 10.3 `tdd="true"` — failing test: `install-shared-artifact.sh` refuses a downgrade today (`:148`), so add `--allow-downgrade <artifact> --reason <text>` — both mandatory together, scoped to the named artifact for that invocation only, no wildcard and no environment variable. Without it every row of the rollback table fails at the first command
 - [x] 10.3a `tdd="true"` — failing test: an unknown artifact name is a usage error, not a silent no-op
