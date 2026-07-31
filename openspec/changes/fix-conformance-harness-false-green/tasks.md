@@ -181,12 +181,12 @@ conditions rather than one. See `REVIEWS.md` and design Decisions 2–5.
       something other than reporting changed
 - [x] 6.3 Run every harness against its real targets; confirm nothing
       previously green went red for a reason other than unscoreability
-- [ ] 6.4 `superpowers:verification-before-completion` — paste the RED output,
+- [x] 6.4 `superpowers:verification-before-completion` — paste the RED output,
       the GREEN output, and the live coverage line as evidence
 
 ## 7. Review and land
 
-- [ ] 7.1 Re-run `run-plan-review.sh` after the artifact revisions, so the
+- [x] 7.1 Re-run `run-plan-review.sh` after the artifact revisions, so the
       review on record describes the shipped plan rather than the first draft
 - [ ] 7.2 `superpowers:requesting-code-review` in an independent context.
       `openspec validate` is a spec check and does not discharge this
