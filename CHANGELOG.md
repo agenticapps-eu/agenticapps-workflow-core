@@ -192,6 +192,44 @@ does need a host change; see under *Fixed*.
   > and it had no §08 exposure to retire. Surfaced while auditing codex for its
   > 0.10.0 adoption.
 
+### Changed
+
+- **Gate 2.0.0 — REVIEWS NO LONGER BLOCK.** A plan review is worth running.
+  Refusing to let anyone write code until one exists is a different claim, and
+  it is the one that kept failing. Missing, stale, unverifiable and objecting
+  review evidence are all reported now, on every invocation, and none of them
+  blocks.
+
+  **The gate blocks on exactly one thing: `openspec validate --all` not being
+  green** (or the `openspec` CLI being absent, so the question cannot be
+  answered). The distinction is error versus absence. A malformed spec delta is
+  wrong on its own terms — local, instant, deterministic, no network, no vendor
+  CLIs, no waiting. A missing review is a missing *opinion*: the change is not
+  more broken for the absence of it, and the person best placed to judge whether
+  that matters is the one being interrupted.
+
+  Measured on this repository, blocking cost three rollbacks, a six-repository
+  outage on 2026-07-30, and a migration whose stated precondition was announcing
+  that outage in advance. What it prevented is not identifiable. The reviewers
+  are third-party CLIs that are variously slow, rate-limited and prone to
+  returning nothing, so the floor went unmet routinely for reasons bearing no
+  relationship to the quality of the change — the block landed almost entirely
+  on the wrong cases.
+
+  **Counting is unchanged and still matters.** A gate that reports must count as
+  accurately as one that blocked: "0 reviewers" printed over two real reviews is
+  just as wrong when it is advisory. Every parser fix below is retained, and the
+  reports now distinguish *no review yet* from *reviewed, but the artifacts have
+  since changed* — a distinction that was invisible while the outcome was a
+  block either way.
+
+  MAJOR because any caller depending on exit 2 for an unreviewed change no
+  longer gets it. `GSD_SKIP_REVIEWS` is vestigial and kept so existing exports
+  do not error. **Three planning tasks dissolved rather than completed** — clear
+  the fleet, announce the block, publish behind the announcement — all of which
+  existed to manage the blast radius of the block and none of which improved a
+  single review.
+
 ### Fixed
 
 - **Gate 1.6.0 / producer 1.2.0 — the producer and the gate did not share a

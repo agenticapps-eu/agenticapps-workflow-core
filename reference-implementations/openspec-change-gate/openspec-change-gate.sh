@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gate-version: 1.6.0
+# gate-version: 2.0.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. That path is written by claude / codex /
@@ -7,6 +7,32 @@
 # a host still vendoring an older copy silently republishes it over a newer one
 # and reverts the fix for every agent on the machine. Installers MUST refuse to
 # overwrite a higher version. Bump this whenever the gate's behaviour changes.
+#   2.0.0 — REVIEWS NO LONGER BLOCK. A plan review is worth running; refusing to
+#           let anyone write code until one exists is a different claim, and it
+#           is the one that kept failing. Missing, stale, unverifiable and
+#           objecting evidence are all REPORTED now, never enforced.
+#           * only two things still block: a missing `openspec` CLI and a
+#             failing `openspec validate --all`. Both are errors in the change
+#             itself — local, instant, deterministic, no network, no vendor CLIs
+#           * the distinction is error vs absence. A malformed spec delta is
+#             WRONG ON ITS OWN TERMS. A missing review is a missing OPINION: the
+#             code is not more broken for it, and the person best placed to
+#             judge whether it matters is the one being interrupted
+#           * what blocking cost, measured here: three rollbacks, a six-repo
+#             outage on 2026-07-30, and a migration whose precondition was
+#             announcing that outage. What it prevented: nothing anyone can
+#             point to. Vendor CLIs are slow, rate-limited and sometimes return
+#             nothing, so the floor went unmet for reasons unrelated to change
+#             quality
+#           * counting still matters and is unchanged. A gate that REPORTS must
+#             count as accurately as one that blocked — "0 reviewers" printed
+#             over two real reviews is just as wrong when it is advisory. Every
+#             1.6.0 parser fix is retained
+#           * MAJOR: any caller depending on exit 2 for an unreviewed change no
+#             longer gets it. Nothing in the fleet does — the gate is consumed
+#             by PreToolUse hooks and CI, both of which want this
+#           * GSD_SKIP_REVIEWS is now vestigial for reviews and kept only so
+#             existing exports do not error
 #   1.6.0 — a reviewer section is closed ONLY by the next `## Reviewer:`.
 #           1.5.0 closed it at any level-1/2 heading, so `## Summary` above a
 #           verdict — the commonest shape an LLM returns — discarded the verdict
@@ -100,10 +126,15 @@
 # truth table. Change behaviour here only with a matching row.
 #
 # Rule: you may not edit code while an OpenSpec change is active unless
-#   (1) `openspec validate --all` is GREEN, and
-#   (2) every active change carries REVIEWS.md with >= MIN_REVIEWERS reviewers
-#       (floor 1; 2 preferred and reported, not enforced).
-# This is the OpenSpec-era retarget of the ADR-0018 multi-AI plan-review gate.
+#   `openspec validate --all` is GREEN.
+#
+# That is the whole blocking rule as of 2.0.0. Review state — absent, stale,
+# unverifiable, or carrying REQUEST-CHANGES — is REPORTED on every invocation
+# and never blocks. Running a plan review is strongly worth doing and the gate
+# says so, repeatedly; it does not hold the work hostage to it.
+#
+# This is the OpenSpec-era retarget of the ADR-0018 multi-AI plan-review gate,
+# with the enforcement half retired after it cost more than it caught.
 #
 # Three modes:
 #   (default)      HOOK mode — reads a PreToolUse JSON payload on stdin, decides for ONE edit.
@@ -113,7 +144,9 @@
 #   --ci           Whole-repo — every active change must validate + have reviews. Exit 0/1.
 #
 # Env:
-#   GSD_SKIP_REVIEWS=1     bypass the review requirement (emergency escape; still needs validate).
+#   GSD_SKIP_REVIEWS=1     vestigial since 2.0.0 — reviews no longer block, so there is
+#                          nothing to escape. Suppresses the review NOTEs. Kept so
+#                          existing exports keep working.
 #   OPENSPEC_GATE_STRICT=1 also block edits when there is NO active change ("no code without a change").
 #   MIN_REVIEWERS=1        blocking floor (spec 1.1.0 MUST). Set 2 for the old behaviour.
 #   PREFERRED_REVIEWERS=2  reported-but-not-enforced target (spec 1.1.0 SHOULD).
@@ -466,6 +499,11 @@ pending_rejections(){
 validate_ok(){ ( cd "$ROOT" && "$OPENSPEC_BIN" validate --all >/dev/null 2>&1 ); }
 
 # Core check. Returns: 0 = satisfied, 2 = blocked. Never errors out.
+#
+# Only TWO things block: a missing `openspec` CLI and a failing
+# `openspec validate --all`. Both are errors in the change itself — local,
+# instant, deterministic, no network, no vendor CLIs, no waiting. Everything
+# about REVIEWS.md is reported and never blocks.
 gate_check(){
   local changes; changes="$(active_changes)"
   if [ -z "$changes" ]; then
@@ -476,14 +514,47 @@ gate_check(){
     log "openspec CLI not found — cannot verify; run 'npm i -g @fission-ai/openspec'"; return 2
   fi
   if ! validate_ok; then log "openspec validate --all FAILED — fix the spec delta first"; return 2; fi
-  if [ "${GSD_SKIP_REVIEWS:-0}" = "1" ]; then log "GSD_SKIP_REVIEWS=1 — review requirement bypassed"; return 0; fi
+  if [ "${GSD_SKIP_REVIEWS:-0}" = "1" ]; then log "GSD_SKIP_REVIEWS=1 — review reporting suppressed"; return 0; fi
+  # No review condition sets this any more; it is retained so the loop's shape
+  # stays obvious and a future blocking condition has somewhere to live.
   local blocked=0 d n v
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     n="$(reviewer_count "$d")"
     if [ "$n" -lt "$MIN_REVIEWERS" ]; then
-      log "change '${d#"$ROOT"/}' has $n/$MIN_REVIEWERS reviewers — run plan-review to write REVIEWS.md"
-      blocked=1
+      # REPORTED, NOT BLOCKED. Reviewing a plan is worth doing; refusing to let
+      # anyone write code until it has been done is a different claim, and it is
+      # the one that kept failing. A missing review is a missing OPINION — the
+      # code is not more broken for the absence of it, and the person best
+      # placed to judge whether it matters is the one being interrupted.
+      #
+      # What blocking actually bought, measured on this repo: three rollbacks,
+      # a six-repository outage on 2026-07-30, a migration whose precondition
+      # was announcing the outage, and several rounds spent on the machinery of
+      # enforcement rather than on reviews. What it prevented: nothing anyone
+      # can point to. Vendor CLIs are slow, rate-limited and occasionally return
+      # nothing, so the floor was routinely unmet for reasons that had no
+      # relationship to the quality of the change.
+      #
+      # `validate` still blocks, and the difference is the point: a malformed
+      # spec delta is an ERROR — local, instant, deterministic, and wrong on its
+      # own terms. A missing review is an ABSENCE, and absences are for humans
+      # to weigh.
+      # Now that this only informs, it should inform WELL. "0 reviewers" reads
+      # as "nobody reviewed this", which is wrong and dispiriting when what
+      # actually happened is that two reviewers wrote a review and the artifacts
+      # moved underneath it. The distinction was invisible while the outcome was
+      # a block either way.
+      case "$(trailer_status "$d")" in
+        no-reviews-file)
+          log "NOTE change '${d#"$ROOT"/}' has no plan review yet — worth running (run-plan-review.sh); not blocking" ;;
+        ok)
+          log "NOTE change '${d#"$ROOT"/}' has $n/$MIN_REVIEWERS reviewers — a further opinion is worth having; not blocking" ;;
+        digest-mismatch)
+          log "NOTE change '${d#"$ROOT"/}' was reviewed, but the artifacts changed since — the review still reads, it just no longer describes this text; not blocking" ;;
+        *)
+          log "NOTE change '${d#"$ROOT"/}' has a REVIEWS.md this gate cannot verify ($(trailer_status "$d")) — probably predates the trailer format; not blocking" ;;
+      esac
       continue
     fi
     # Spec 1.1.0 moved the FLOOR to one reviewer and made two a SHOULD. The gap
@@ -528,6 +599,8 @@ gate_check(){
         log "NOTE change '${d#"$ROOT"/}' — tasks.md has changed since review; the reviewed artifacts are current but the implementation plan is not"
     fi
   done <<< "$changes"
+  # Reviews never reach here as failures. `blocked` can only be set by a
+  # condition added later; today the review path always falls through to 0.
   [ "$blocked" -eq 0 ] && return 0 || return 2
 }
 
@@ -678,7 +751,7 @@ case "$MODE" in
     if is_openspec_artifact "$path"; then exit 0; fi
     if gate_check; then exit 0; else
       # gate_check returned 2 => block
-      log "BLOCKED — no code edits until validate is GREEN and every active change has >= $MIN_REVIEWERS reviewers."
+      log "BLOCKED — no code edits until \`openspec validate --all\` is GREEN. (Reviews do not block.)"
       exit 2
     fi
     ;;
@@ -691,12 +764,12 @@ case "$MODE" in
     non_spec="$(printf '%s\n' "$staged" | grep -vE '^"?openspec/' | grep -v '^$' || true)"
     if [ -z "$non_spec" ]; then exit 0; fi          # only spec artifacts staged -> fine
     if gate_check; then exit 0; else
-      log "commit BLOCKED — you are committing code while the change gate is unsatisfied."
+      log "commit BLOCKED — \`openspec validate --all\` is not GREEN. (Reviews do not block.)"
       exit 1
     fi
     ;;
 
   ci)
-    if gate_check; then log "OK — all active changes validate and are reviewed."; exit 0; else exit 1; fi
+    if gate_check; then log "OK — all active changes validate."; exit 0; else exit 1; fi
     ;;
 esac

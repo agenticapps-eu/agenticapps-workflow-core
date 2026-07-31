@@ -7,39 +7,34 @@
 # Review record
 
 - requested: gemini codex
-- counted:   gemini (APPROVE) codex (REQUEST-CHANGES)
+- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES)
 - excluded:  (none) (declared implementing host)
 - failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-07-31T17:20:51Z · timeout 900s_
+_generated 2026-07-31T17:25:16Z · timeout 900s_
 
-VERDICT: APPROVE
-
-*   This is a comprehensive and well-reasoned change that addresses a series of critical correctness, security, and reliability issues in the review pipeline. However, its sheer size and complexity introduce significant risk that must be managed carefully post-deployment.
-*   The decision to defer secret/PII screening (`screen-review-egress`) is a reasonable scoping choice, but the explicit declaration of the egress boundary as "the entire user environment" is a significant finding. The named follow-up change should be treated as a high-priority item.
-*   The `tasks.md` digest being advisory-only is a pragmatic solution to avoid deadlocking the gate, but it constitutes a known and accepted gap. A post-review change to the task list can still alter the implementation's scope without invalidating the review evidence.
-*   The distribution of the host and vendor vocabularies across multiple components (spec, producer, gate) is a noted maintenance risk. The fact that a critical flaw in this logic (the omission of the `pi` host) was missed through multiple review rounds underscores how fragile this is. Future work should prioritize creating a single source of truth.
-*   The rollback plan's inclusion of a `--allow-downgrade` feature is a necessary and well-specified escape hatch, but it fundamentally weakens the installer's safety guarantees. Its use must be strictly controlled and monitored.
+VERDICT: REQUEST-CHANGES
+*   The specification for the `implementing-host` vocabulary is self-contradictory. The requirement states the set is "HOSTS, not reviewer vendors," but the vocabulary list provided (`claude, codex, gemini, opencode, pi`) is the union of hosts and vendors. This needs to be clarified to state that the validation set is the *union*, and the rationale for including non-host vendors (like `gemini`) and non-reviewer hosts (like `pi`) should be consistent.
+*   In the downgrade log format, the mechanism for determining the `invoking user` is unspecified. This should be defined to ensure consistent logging across environments (e.g., `$USER`, `whoami`).
+*   The change defers secret/PII screening, explicitly accepting the risk of data egress to vendor CLIs. While the deferral is well-documented and a follow-up is named, the risk remains significant and should be addressed with high priority after this change. This is an advisory note, not a required change for this proposal.
 
 ## Reviewer: codex
-_generated 2026-07-31T17:22:57Z · timeout 900s_
+_generated 2026-07-31T17:28:23Z · timeout 900s_
 
 VERDICT: REQUEST-CHANGES
 
-- Operative versions conflict: producer `1.1.0`/`1.2.0` and gate `1.5.0`/`1.6.0` are each still mandated in normative migration and “What Changes” text. The supersession note does not resolve executable instructions.
-- The new shared-installer downgrade requirement has no forward implementation, test, or publication step for `shared-install 1.0.1`; it appears only in rollback.
-- Existing §18/§17/§02 requirements are changed only through prose and tasks while “Modified Capabilities” is empty. The OpenSpec delta therefore cannot validate that contradictory existing requirements are actually replaced.
-- The migration knowingly leaves 37 changes blocked. “Recorded acceptance” plus notification is not migration and contradicts Decision 9’s re-review-before-gate rationale; it merely turns a flag day into an announced flag day.
-- `tasks.md` remains a direct scope-expansion bypass: adding “implement a debug endpoint” after review produces only an advisory warning. Normalize checkbox state and bind task text, or the gate permits unreviewed implementation scope.
-- A sole `REQUEST-CHANGES` review opens the gate with no durable acknowledgement. This is a reviewer-presence check, not review approval, and permits proceeding over the only independent reviewer’s objection.
-- Parser semantics remain incomplete: the exact `## Reviewer:` heading grammar, whitespace/alphanumeric character sets, and aggregation of valid plus malformed duplicate-vendor sections are undefined. The gate also cannot assume unbalanced fences are impossible merely because the producer rejects them; on-disk artifacts must fail closed independently.
-- The identity vocabulary is self-contradictory: `gemini` is repeatedly called a valid “host” while the table says it is not a host. Use separate host and reviewer types, or consistently name the current union.
-- Removing prompts from argv does not secure their temporary storage. The specification lacks requirements for unpredictable files, mode `0600`, signal-safe cleanup, and retention. Combined with unscreened agentic output being committed verbatim, this leaves concrete credential/PII exposure paths.
+- The migration still gives conflicting release instructions: producer 1.1.0 vs 1.2.0 and gate 1.5.0 vs 1.6.0. Active tasks and migration steps must use only the operative versions.
+- `GSD_SKIP_REVIEWS=1` contradicts claims that objections are reported “on every invocation” and that leaving the change unamended is the “only route” past an objection. Specify the override exception and test its reporting behavior.
+- A raised `MIN_REVIEWERS` is not actually enforced beyond one run: failure preserves an older one-review artifact that the gate accepts. Either persist the requested floor or weaken the requirement claiming the producer enforces it.
+- Moving prompts out of argv does not specify restrictive temporary-file permissions, lifetime, cleanup, or symlink handling. A conforming implementation could leave secret/PII-bearing prompts readable or retained.
+- The proposal claims producer 1.2.0 refuses a symlinked `REVIEWS.md`, but no normative requirement or scenario preserves that security behavior.
+- Parser behavior remains divergent: “alphanumeric” and “whitespace” lack byte/locale definitions; malformed unknown trailer lines are neither explicitly rejected nor ignored; and the downgrade log uses undefined “ISO-8601” despite rejecting that ambiguity elsewhere.
+- Treating invocation alone as consent conflicts with the installed review workflow’s explicit-confirmation rule and is unsafe for future noninteractive callers running agentic CLIs with full user credentials. Define one consent contract and migrate the host workflow with it.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:6c0e96ca003a19c08c934561ee331bd78661482d119720a5f7113eef2a0c17dc
+digest: sha256:a0723f4f950650adc415b45bc224504afde3cb60ea262ee4985939d513a5f631
 producer-version: 1.2.0
-tasks-digest: sha256:f50314f226bff243ffeec2336d5423565e0a011c25441a0f5c5ae7d065000bc4
+tasks-digest: sha256:a7a4024932fd11482226a2416e87fb80eabb9fadbf1d8c4cd07cd7ac05ecf3fd
 -->

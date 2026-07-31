@@ -315,7 +315,13 @@ score_gate() {
   rm -rf "$fx"
 
   # OpenSpec artifact write under an unsatisfied change → allow (author the change).
-  fx="$(make_fixture 0)"
+  #
+  # THE LEVER IS validate-RED, not "unreviewed". These rows test the openspec/
+  # PATH EXEMPTION, and they need the gate to be blocking for a reason so that
+  # "exempt" and "not exempt" are distinguishable. Since 2.0.0 an unreviewed
+  # change no longer blocks, so a fixture built that way would allow everything
+  # and every row here would pass without testing anything.
+  fx="$(make_fixture 1)"
   run_row "openspec artifact write -> allow" 0 "$fx" \
     "$(p_claude openspec/changes/add-thing/proposal.md)"
   # ...but the exemption must be THIS repo's spec slot, not any path containing a
@@ -382,9 +388,15 @@ score_gate() {
     "$(p_claude 'openspec/changes/add-thing/design.md')"
   rm -rf "$fx"
 
-  # Active change, validate green, no REVIEWS.md → block.
+  # Active change, validate green, no REVIEWS.md → ALLOW, with a note.
+  # This row is the 2.0.0 change itself. It asserted `block` for the whole life
+  # of the gate; reviewing a plan is worth doing, and refusing to let anyone
+  # write code until it has been done is a different claim that cost three
+  # rollbacks and a six-repository outage without preventing anything anyone
+  # can name.
   fx="$(make_fixture 0)"
-  run_row "active change, no REVIEWS.md -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "active change, no REVIEWS.md -> ALLOW with a note" 0 \
+    "has no plan review yet" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # ...and the same decision must hold from a SUBDIRECTORY. A gate that locates
@@ -394,7 +406,7 @@ score_gate() {
   # correct decision. A PreToolUse hook inherits the session's cwd, which is
   # wherever the user happens to be, so this is the common case rather than the
   # exotic one. Witness: the pre-adoption codex-workflow copy returned 0 here.
-  fx="$(make_fixture 0)"; mkdir -p "$fx/repo/sub/dir"
+  fx="$(make_fixture 1)"; mkdir -p "$fx/repo/sub/dir"
   ROW_CWD="$fx/repo/sub/dir"
   run_row "active change, evaluated from a subdirectory -> block" 2 "$fx" "$(p_claude src/main.go)"
   ROW_CWD=""
@@ -438,12 +450,14 @@ score_gate() {
   [ "$fail" -eq "$before" ] && FAILS_OPEN=1 || FAILS_OPEN=0
   rm -rf "$fx"
 
-  echo "  ── B. Payload shapes (code edit under an unsatisfied change -> block) ──"
+  echo "  ── B. Payload shapes (code edit under a validate-RED change -> block) ──"
   ROW_NEEDS_FAILOPEN=1
   # A shape the gate cannot parse yields no path, so it fails OPEN and the
   # gate silently does not enforce on that host. Driving a *code* edit (not an
   # artifact write) is what discriminates: under fail-open both exit 0.
-  fx="$(make_fixture 0)"
+  #
+  # validate-RED is the lever, for the reason given in section A.
+  fx="$(make_fixture 1)"
   run_row "Claude   {tool_input.file_path} -> block" 2 "$fx" "$(p_claude src/main.go)"
   run_row "pi       {input.path}           -> block" 2 "$fx" "$(p_pi src/main.go)"
   run_row "opencode {args.filePath}        -> block" 2 "$fx" "$(p_opencode src/main.go)"
@@ -452,15 +466,26 @@ score_gate() {
   ROW_NEEDS_FAILOPEN=0
 
   echo "  ── C. Modes: the agent-agnostic floor (advisory) ──"
+  # validate-RED is the lever here too. Before 2.0.0 these rows used an
+  # unreviewed change; a missing review no longer blocks a commit or fails CI,
+  # which is the whole point of 2.0.0, so the rows would have passed vacuously.
+  fx="$(make_fixture 1)"
+  ( cd "$fx/repo" && git add src/main.go >/dev/null 2>&1 )
+  run_row "--pre-commit, code staged, validate RED -> block" 1 "$fx" '' --pre-commit
+  run_row "--ci, validate RED -> fail"                       1 "$fx" '' --ci
+  rm -rf "$fx"
+
+  # And the converse, which is the behaviour change: an UNREVIEWED change with
+  # validate green must not block a commit or fail CI.
   fx="$(make_fixture 0)"
   ( cd "$fx/repo" && git add src/main.go >/dev/null 2>&1 )
-  run_row "--pre-commit, code staged, unsatisfied -> block" 1 "$fx" '' --pre-commit
-  run_row "--ci, unsatisfied change -> fail"                1 "$fx" '' --ci
+  run_row "--pre-commit, code staged, unreviewed -> ALLOW" 0 "$fx" '' --pre-commit
+  run_row "--ci, unreviewed change -> PASS"                0 "$fx" '' --ci
   rm -rf "$fx"
 
   # Same exemption hole, second entry point: a nested openspec/ dir must not
   # launder a staged file out of the pre-commit check.
-  fx="$(make_fixture 0)"
+  fx="$(make_fixture 1)"
   mkdir -p "$fx/repo/src/openspec"; printf 'x\n' > "$fx/repo/src/openspec/app.ts"
   ( cd "$fx/repo" && git add src/openspec/app.ts >/dev/null 2>&1 )
   run_row "--pre-commit, src/openspec/ staged -> block" 1 "$fx" '' --pre-commit
@@ -481,7 +506,8 @@ score_gate() {
   # fence-skipping.
   # Two headings naming the SAME reviewer is one independent reviewer.
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" claude claude
-  MIN_REVIEWERS=2 run_row "duplicate reviewer counts once -> block" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row_stderr_has "duplicate reviewer counts once -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # A heading inside a fenced code block is an example, not a reviewer.
@@ -490,7 +516,11 @@ score_gate() {
     printf '## Reviewer: claude\n\nReal.\n\n'
     printf 'Template for reviewers to copy:\n\n```markdown\n## Reviewer: codex\n```\n'
   } > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  MIN_REVIEWERS=2 run_row "fenced example is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
+  # Without a trailer the count short-circuits to zero and the row passes even
+  # if the fenced heading DOES count — it was vacuous before 2.0.0 too.
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  MIN_REVIEWERS=2 run_row_stderr_has "fenced example is not a reviewer -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # A prose section header is not a reviewer. With the colon optional,
@@ -499,7 +529,9 @@ score_gate() {
   fx="$(make_fixture 0)"
   printf '## Reviewers\n\n## Reviewer: claude\n\nReal.\n' \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  MIN_REVIEWERS=2 run_row "prose '## Reviewers' is not a reviewer -> block" 2 "$fx" "$(p_claude src/main.go)"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  MIN_REVIEWERS=2 run_row_stderr_has "prose '## Reviewers' is not a reviewer -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # A `reviewers: [a, b]` YAML line carries no review content. If a fallback
@@ -508,13 +540,17 @@ score_gate() {
   fx="$(make_fixture 0)"
   printf '## Reviewer: claude\n\n## Reviewer: claude\n\nreviewers: [claude, claude]\n' \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  MIN_REVIEWERS=2 run_row "YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  MIN_REVIEWERS=2 run_row_stderr_has "YAML 'reviewers:' does not satisfy -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"
   printf '## Reviewer: claude\n\n```yaml\nreviewers: [a, b]\n```\n' \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  MIN_REVIEWERS=2 run_row "fenced YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
+  seed_trailer "$fx/repo/openspec/changes/add-thing"
+  MIN_REVIEWERS=2 run_row_stderr_has "fenced YAML 'reviewers:' does not satisfy -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   echo "  ── E. Self-review exclusion (declared in the trailer) ──"
@@ -539,7 +575,8 @@ score_gate() {
   # name that genuinely counts as a reviewer — so removing the exclusion changes
   # the outcome, which is the only thing that makes these rows worth running.
   fx="$(make_fixture 0)"; reviewers_host "$fx/repo/openspec/changes/add-thing" claude claude gemini
-  MIN_REVIEWERS=2 run_row "self + 1 other = 1 independent -> block" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row_stderr_has "self + 1 other = 1 independent -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"; reviewers_host "$fx/repo/openspec/changes/add-thing" claude claude gemini codex
@@ -561,7 +598,8 @@ score_gate() {
   echo "  ── E2. Reviewer floor vs preference (spec 1.1.0) ──"
   # 1.4.0: MUST >= 1 (blocks), SHOULD >= 2 (reports). The gap must never block.
   fx="$(make_fixture 0)"   # zero reviewers
-  run_row "0 reviewers -> block (the floor still bites)" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "0 reviewers -> noted, never blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" gemini
@@ -576,7 +614,8 @@ score_gate() {
 
   # The old hard floor stays available for a repo that wants it.
   fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" gemini
-  MIN_REVIEWERS=2 run_row "MIN_REVIEWERS=2 restores the old hard floor" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row_stderr_has "MIN_REVIEWERS=2 raises what is REPORTED, not what blocks" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # Preference is reporting only — raising it must never turn into a block.
@@ -691,7 +730,8 @@ score_gate() {
     printf '## Reviewer: codex\n\nVERDICT: APPROVE\n\n'; } \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
   seed_trailer "$fx/repo/openspec/changes/add-thing"
-  run_row "verdicts with no body count zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "verdicts with no body count zero -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # Conflicting verdicts in one section are malformed, not silently resolved.
@@ -700,7 +740,8 @@ score_gate() {
     printf '## Reviewer: codex\n\nVERDICT: APPROVE\n\n- ok\n\nVERDICT: REQUEST-CHANGES\n\n- not ok\n\n'; } \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
   seed_trailer "$fx/repo/openspec/changes/add-thing"
-  MIN_REVIEWERS=2 run_row "a section with conflicting verdicts does not count" 2 "$fx" "$(p_claude src/main.go)"
+  MIN_REVIEWERS=2 run_row_stderr_has "a section with conflicting verdicts does not count" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # A vendor's own subheading must not truncate the section above its verdict.
@@ -716,26 +757,30 @@ score_gate() {
   { printf '## Reviewer: codex-2\n\nVERDICT: APPROVE\n\n- looks fine\n\n'; } \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
   seed_trailer "$fx/repo/openspec/changes/add-thing" codex
-  run_row "an unrecognised reviewer name does not count -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "an unrecognised reviewer name does not count -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # Trailer: absent, duplicated, non-final, and malformed VALUES all fail closed.
   fx="$(make_fixture 0)"
   { printf '## Reviewer: gemini\n\nVERDICT: APPROVE\n\n- fine\n\n'; } \
     > "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "no trailer counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "no trailer counts zero -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"
   reviewers "$fx/repo/openspec/changes/add-thing" gemini
   seed_trailer "$fx/repo/openspec/changes/add-thing"
-  run_row "two trailers count zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "two trailers count zero -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"
   reviewers "$fx/repo/openspec/changes/add-thing" gemini
   printf 'trailing prose after the trailer\n' >> "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "a non-final trailer counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "a non-final trailer counts zero -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"
@@ -747,19 +792,22 @@ score_gate() {
   fx="$(make_fixture 0)"
   reviewers "$fx/repo/openspec/changes/add-thing" gemini
   sed -i.bak 's/^digest: sha256:.*/digest: sha256:NOTHEX/' "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "a malformed digest VALUE counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "a malformed digest VALUE counts zero -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"
   reviewers "$fx/repo/openspec/changes/add-thing" gemini
   sed -i.bak 's/^producer-version: .*/producer-version: one/' "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "a non-semver producer-version counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "a non-semver producer-version counts zero -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   fx="$(make_fixture 0)"
   reviewers "$fx/repo/openspec/changes/add-thing" gemini
   sed -i.bak 's/^implementing-host: .*/implementing-host: claude, codex/' "$fx/repo/openspec/changes/add-thing/REVIEWS.md"
-  run_row "a space in the host list counts zero -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "a space in the host list counts zero -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # `pi` is a host with no reviewer arm and MUST be nameable, or one of the four
@@ -774,7 +822,8 @@ score_gate() {
   fx="$(make_fixture 0)"
   reviewers "$fx/repo/openspec/changes/add-thing" gemini
   printf 'amended after review\n' >> "$fx/repo/openspec/changes/add-thing/proposal.md"
-  run_row "an amended change stales its review -> block" 2 "$fx" "$(p_claude src/main.go)"
+  run_row_stderr_has "an amended change stales its review -> noted, not blocked" 0 \
+    "not blocking" "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   # …but ticking a checkbox must not, or implementation deadlocks the gate.
