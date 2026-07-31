@@ -26,15 +26,15 @@ evidence; it no longer stops anyone. That loop consumed most of this session.
 
 | Artifact | Was | Now | Harness |
 |---|---|---|---|
-| `openspec-change-gate.sh` | 1.5.0 | **1.6.0** tracked, **NOT published** | 69/69 |
-| `run-plan-review.sh` | 1.1.0 | **1.2.0** tracked, **NOT published** | 60/60 |
-| `install-shared-artifact.sh` | 1.0.0 | **1.0.1** | 20/20 |
+| `openspec-change-gate.sh` | 1.4.0 published | **2.0.0 PUBLISHED** | 71/71 |
+| `run-plan-review.sh` | 1.1.0 published | **1.2.0 PUBLISHED** | 60/60 |
+| `install-shared-artifact.sh` | 1.0.0 | **1.0.1** (tracked only) | 20/20 |
 | `reviewer-cli.sh` | 1.2.0 | unchanged | 19/19 |
 
-Six commits on `feat/step3-hook-shims-and-dead-gate-removal`. Nothing was
-published to `~/.agenticapps/bin/`; the fleet is untouched and the shared gate
-is still 1.4.0. The final re-review was run with the **tracked** 1.2.0 producer
-precisely to avoid publishing.
+Ten commits on `feat/step3-hook-shims-and-dead-gate-removal`. Gate and producer
+are live and byte-identical to the tracked sources; the published gate scores
+71/71 on its own harness. 1.5.0 and 1.6.0 were never published — 1.5.0 was, on
+2026-07-30, and rolled back the same day; 2.0.0 supersedes both.
 
 ## Six defects, each confirmed by execution before it was touched
 
@@ -60,15 +60,19 @@ precisely to avoid publishing.
 
 ## Decisions
 
-- **8b.4 discharged by acceptance, not by clearing the fleet** (operator's
-  call). 37 changes across six repos are recorded as accepted-blocked. Three of
-  the six repos are factiv-family, so a "re-review the fleet" task written here
-  was unsatisfiable by construction — the same defect class as the round-6 `pi`
-  lockout.
-- **That moves the precondition, it does not remove it.** New **task 8b.7**:
-  announce the block before publishing. Six repos will hit a hard `PreToolUse`
-  block with no warning; publishing without notice reschedules the 2026-07-30
-  outage rather than avoiding it. 8b.6 now depends on 8b.7.
+- **Reviews became advisory (operator's call, late in the session), and that
+  superseded the three tasks below it.** 8b.4 had been discharged by *accepting*
+  ~35 changes across six repos as blocked; 8b.7 was then added to announce that
+  block before publishing, and 8b.6 made publication depend on it. Gate 2.0.0
+  dissolved all three at once — there is no block to clear, announce, or
+  sequence behind. They are recorded as dissolved rather than deleted, because
+  the shape is the lesson: when a precondition needs its own precondition,
+  question the mechanism rather than the ordering.
+- **The inventory total was wrong and is not trusted.** Recorded as 37; its own
+  per-repo breakdown sums to 35. It survived three review rounds and was
+  restated in two documents and two handoffs by an author who never added it up.
+  Neither figure is asserted — retake the inventory if any count matters. It no
+  longer gates anything.
 - **Bumped rather than amended 1.5.0 in place.** It briefly reached the fleet on
   2026-07-30, and a version that ever shipped must keep meaning one thing.
 - **Every new harness row was mutation-tested** — disabling the fix must fail
