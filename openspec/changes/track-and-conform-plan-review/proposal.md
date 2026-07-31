@@ -1,3 +1,25 @@
+> **Version supersession — read before the numbers below.** This document was
+> written against gate **1.5.0** / producer **1.1.0**, and those are the numbers
+> its narrative uses throughout. The versions actually being shipped are gate
+> **1.6.0**, producer **1.2.0** and shared-install **1.0.1**. Gate 1.5.0 was
+> published on 2026-07-30, blocked six repositories, and was rolled back the
+> same day; it is superseded rather than amended in place, because a version
+> that ever reached the fleet must keep meaning one thing.
+>
+> What changed after this text was written: the gate closes a reviewer section
+> only at the next `## Reviewer:` (1.5.0 closed it at any level-1/2 heading and
+> so discarded verdicts under `## Summary`); the gate reads `tasks-digest` and
+> reports drift, which no earlier version did despite the spec requiring it; the
+> substance rule requires an alphanumeric character; the producer refuses a body
+> with unbalanced fences and validates `--implementing-host` against the gate's
+> whole-string grammar; and the producer refuses a symlinked `REVIEWS.md`.
+>
+> **The publication ORDER below is unchanged and still binding** — producer
+> before gate, wrapper last, rollback in reverse. Only the version numbers moved.
+> A reviewer flagged this drift; the operative statements carry the new numbers,
+> and the historical passages are left in their original terms deliberately, so
+> the record of what was decided when is not rewritten after the fact.
+
 ## Why
 
 `run-plan-review.sh` is the producer that satisfies §18's review requirement —
@@ -361,16 +383,24 @@ change, and it is scheduled in the migration rather than discovered in
 production. Grandfathering was considered and rejected: it would exempt exactly
 the evidence whose staleness motivated the rule.
 
-**Publication is ordered, and the order is load-bearing.** Gate 1.5.0 requires a
-trailer only producer 1.1.0 writes, so the producer ships first and the
-in-flight changes are re-reviewed before the gate lands. Publishing the gate
-first would block every change in every project until each was re-reviewed. The
-wrapper is independent and ships last. Rollback is per artifact, in reverse, and
-rolling the producer back under a live 1.5.0 gate has the same blocking effect
-as the wrong forward order.
+**Publication is ordered, and the order is load-bearing.** Gate **1.6.0**
+requires a trailer only producer **1.2.0** writes, so the producer ships first
+and the in-flight changes are re-reviewed before the gate lands. Publishing the
+gate first would block every change in every project until each was re-reviewed
+— which is not a hypothetical: it was done on 2026-07-30 and rolled back the
+same day. The wrapper is independent and ships last. Rollback is per artifact,
+in reverse, and rolling the producer back under a live gate has the same
+blocking effect as the wrong forward order.
+
+**The order is now insufficient on its own.** Task 8b.4 discharged the fleet
+re-review by *accepting* 37 changes across six repositories as blocked rather
+than clearing them, so publishing the gate will block all six at their next code
+edit. That makes the announcement (task 8b.7) a precondition of publication, not
+a courtesy after it. The ordering rule stops the gate outrunning the producer;
+it does not stop the gate outrunning the operators.
 
 **Machine state:** `~/.agenticapps/bin/run-plan-review.sh` is republished at
-1.1.0, `openspec-change-gate.sh` at 1.5.0 and `reviewer-cli.sh` at 1.2.0, via
+**1.2.0**, `openspec-change-gate.sh` at **1.6.0** and `reviewer-cli.sh` at 1.2.0, via
 the existing install path. Each gets or keeps a `reference-implementations/`
 entry; the producer additionally gets a `resolve-core-artifact.sh` mapping and
 the Claude installer is repointed at core rather than its vendored copy. The

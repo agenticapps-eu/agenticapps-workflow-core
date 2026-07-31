@@ -31,13 +31,31 @@ The gate SHALL count a reviewer section toward the floor only when that section
 carries exactly one verdict **and** at least one line of substance.
 
 **Section boundaries.** A reviewer section runs from its `## Reviewer:` heading
-to the next heading of **level 1 or 2** (`#` or `##`), or to end of file.
-Headings of level 3 or deeper are section content. Content outside every
-reviewer section SHALL NOT be attributed to any reviewer.
+to the **next `## Reviewer:` heading**, or to end of file. **No other heading
+closes a section**, at any level. Content outside every reviewer section SHALL
+NOT be attributed to any reviewer.
 
-Bounding at "any level" — the previous wording — truncates a section at the
-first `### Findings` a vendor writes, which discards the verdict below it and
-records the reviewer as having produced none. Vendor interiors are carried
+This bound has now been widened twice, each time after it discarded a review
+that had actually been written. "Any heading" truncated a section at the first
+`### Findings` a vendor wrote. "Level 1 or 2" truncated it at the first
+`## Summary` — which is the commonest shape an LLM returns, so the rule
+discarded verdicts routinely: the producer published two reviewer sections and
+reported success while the gate counted zero. Each wording was chosen to
+exclude producer-authored structure and each caught vendor prose instead.
+
+**What this trades away, stated plainly.** Under the previous rule, content
+following the last reviewer section was attributed to nobody. Under this one it
+is interior to that reviewer. That is safe only because the placement rule below
+is normative: the notice and the record precede the first section, and the
+trailer is parsed before headings are considered, so in a producer-written file
+there is nothing after the last section to misattribute. A hand-assembled
+`REVIEWS.md` that appends prose after the last section will have it read as that
+reviewer's body. The exchange is deliberate: a hypothetical misattribution in a
+file the producer did not write, against a verdict-discarding failure that was
+observed in production. Placement is what makes it sound, which is why it is
+normative rather than conventional.
+
+Vendor interiors are carried
 verbatim by design, and reviewers are told the vocabulary, not the formatting,
 so subheadings are expected rather than exceptional. At a floor of one this
 would silently drop a complete review.
@@ -63,6 +81,27 @@ parser SHALL NOT depend on locale-aware regex to recognise it. The digest
 contract already mandates C-locale byte semantics; a multi-byte character
 matched under a character-class regex in that locale is a portability trap, and
 recognising this line is load-bearing for the substance rule.
+
+**Fences bound everything, and this is normative, not incidental.** A line
+beginning (after optional leading whitespace) with ``` or `~~~` toggles fenced
+state. While fenced state is on, a line SHALL NOT be recognised as a verdict, as
+a `## Reviewer:` heading, as any other heading, as substance, or as a trailer
+delimiter. Every construct in this section is defined *outside* fences.
+
+This is stated because the alternative was to leave it to each implementation,
+and four separate rules already depend on it. A vendor quoting this grammar back
+inside a fenced block is the normal case, not an adversarial one — it is what a
+reviewer does when asked to comment on the grammar itself — and an implementation
+that read those quotations as live structure would let one review rename another
+reviewer, forge a verdict, or present a second trailer. A reviewer objected that
+deferring the fence grammar made these behaviours non-portable, which was
+correct; deferring it is what this paragraph stops.
+
+What is still deliberately undefined is fence *pairing* beyond the toggle:
+mismatched lengths, mismatched markers, indentation, and a fence left open at
+end of input. Those are producer-side concerns, and the producer refuses a body
+whose fences do not balance rather than publishing one whose reading depends on
+them.
 
 **Verdict grammar.** Outside fenced code blocks, a candidate line SHALL be
 normalised and then matched, and both steps are normative:
@@ -191,8 +230,37 @@ another."
 
 - **WHEN** a verdict line appears under a heading that is not a `## Reviewer:`
   heading, below a reviewer section
-- **THEN** it is not attributed to that reviewer and does not make the section
-  count
+- **THEN** it IS attributed to that reviewer, because no heading but
+  `## Reviewer:` closes a section
+
+This scenario previously asserted the opposite, and the opposite is what
+discarded real reviews: a vendor writing `## Summary` above its verdict had the
+verdict land outside every section. The rule it protected — that producer text
+after the last section is not attributed to a reviewer — is now carried by
+placement instead, which is normative for exactly this reason.
+
+#### Scenario: A reviewer heading appears inside a fenced block
+
+- **WHEN** a `## Reviewer:` line appears inside a fenced code block, as it does
+  whenever a vendor quotes this grammar back
+- **THEN** it does not open a section, is not counted as a reviewer, and does
+  not close the section that encloses it
+
+#### Scenario: A trailer delimiter appears inside a fenced block
+
+- **WHEN** a review quotes the trailer grammar inside a fenced code block, and a
+  real trailer also appears at end of file
+- **THEN** the file carries exactly ONE trailer — the real one — and the quoted
+  block is ordinary section content; the fields read are the real trailer's, not
+  the quoted ones
+
+#### Scenario: A review body leaves a fence open
+
+- **WHEN** a vendor returns a body whose fence markers do not balance, as a
+  token-capped or timed-out CLI does
+- **THEN** the producer refuses that body and records the reviewer as failed,
+  rather than publishing a section that would swallow every later section and
+  the trailer
 
 #### Scenario: The verdict vocabulary is quoted mid-prose
 

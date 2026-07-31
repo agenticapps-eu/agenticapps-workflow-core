@@ -146,7 +146,7 @@ every project.
 - [x] 9b.15f Record the accepted normalisation consequence: `VERDICT: REQUEST-_CHANGES` normalises to a valid verdict. Confirm a manufactured verdict alone still fails the substance rule
 - [x] 9b.16 Confirm the gate names every objecting reviewer on every invocation for as long as the objection stands — this report is the audit trail for proceeding past an objection
 - [x] 9b.17 Run the shared predicate over every `REVIEWS.md` in the repo and confirm each well-formed one still counts — the change must not discount good evidence
-- [ ] 9b.18 Bump to gate 1.5.0, run `tools/change-gate-conformance.sh` green — its `TOTAL:` line must report zero failed and zero inconclusive — and publish
+- [ ] 9b.18 Bump to gate **1.6.0** (was 1.5.0), run `tools/change-gate-conformance.sh` green — its `TOTAL:` line must report zero failed and zero inconclusive — and publish. **Bumped and green at 69/69; NOT published**, which is the remaining half. 1.5.0 is not amended in place because it briefly reached the fleet on 2026-07-30, and a version that ever shipped must keep meaning one thing. Publication is still gated on 8b.7
 - [x] 9b.19 Re-verify this branch's two changes under 1.5.0 — after 8b they carry trailers and MUST read as current; before 8b they MUST read as unverifiable. Test both directions.
 
 ## 9c. Fix the wrapper's process-table exposure (reviewer-cli.sh 1.1.0 → 1.2.0)
@@ -180,5 +180,7 @@ every project.
 - [x] 10.3c `tdd="true"` — failing test: a reason containing a newline, tab or other control character is rejected outright (not escaped), so it cannot forge a second log record; empty-after-trim and >200 chars are rejected too
 - [x] 10.3d Append one tab-separated record per downgrade to `~/.agenticapps/install.log`: UTC ISO-8601, `downgrade`, artifact, from-version, to-version, user, reason. Document it as an operator's record, not evidence against an adversary who can also write it
 - [x] 10.4 Rehearse rollback using that flag: republish producer 1.0.0 under a live 1.5.0 gate, confirm it blocks as the design predicts, then restore — the ordering claim must be tested, not asserted
-- [ ] 10.5 Stage-2 independent code review per §07
+- [x] 10.5 Stage-2 independent code review per §07 — **DONE 2026-07-31.** Dispatched to a sub-agent with no implementation context and instructed not to read `session-handoff.md`, `proposal.md`, `design.md` or `REVIEWS.md`, since those carry the author's rationale and §07's independence rule is about bias, not just about a separate process. Verdict: REQUEST-CHANGES.
+  It found what six rounds of Stage-1 vendor review across three vendors did not: **the producer and the gate do not share a predicate**, so two ordinary vendor outputs made the producer report success on evidence the gate counted as zero reviewers. That is the change's own thesis, false in its own code. Fixed in gate 1.6.0 and producer 1.2.0; see the CHANGELOG.
+  The reason Stage 1 could not have caught it is worth recording: Stage 1 reads artifacts, and the artifacts *described* the invariant correctly. Only reading the code — or running it — shows the two awk programs differ under a comment asserting they are byte-identical. This is the case for §07 existing, stated better than the section states it.
 - [x] 10.6 Write the ADR: why the installed copy was promoted over the in-repo ancestor, the floor-vs-preference distinction, why identity moved into the artifact, and why the digest covers exactly what is transmitted

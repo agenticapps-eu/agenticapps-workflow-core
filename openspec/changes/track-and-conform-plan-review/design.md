@@ -386,17 +386,17 @@ the migration against every `REVIEWS.md` in the repo.
 ### Decision 9: Publish in dependency order, or every change blocks
 
 The previous revision's Migration Plan covered the producer alone. It ships
-three binaries and a spec edit, and two of them are coupled: **gate 1.5.0
-requires a trailer that only producer 1.1.0 writes.** Publishing the gate first
+three binaries and a spec edit, and two of them are coupled: **gate 1.6.0
+requires a trailer that only producer 1.2.0 writes.** Publishing the gate first
 blocks every change in every project until each is re-reviewed.
 
-**Chosen order:** spec §18 → producer 1.1.0 → re-review the in-flight changes →
-gate 1.5.0 → wrapper 1.2.0. The wrapper is last because it is independent: no
+**Chosen order:** spec §18 → producer 1.2.0 → re-review the in-flight changes →
+announce the block (8b.7) → gate 1.6.0 → wrapper 1.2.0. The wrapper is last because it is independent: no
 other artifact reads its output format.
 
 The re-review wave is not a side effect to be discovered later. Every
 `REVIEWS.md` in existence predates the trailer, so **every one of them becomes
-unverifiable the moment gate 1.5.0 lands** — including the two on this branch,
+unverifiable the moment gate 1.6.0 lands** — including the two on this branch,
 which is exactly the behaviour task 9b.13 tests for. It is scheduled, not
 tolerated.
 
@@ -462,11 +462,34 @@ new mechanism is the part nobody has had to implement twice yet.
   accidental self-review, which is the observed failure; it does not resist a
   deliberate one. Stated here so the requirement is not read as an authenticity
   control.
+- **`implementing-host` accepts the UNION of hosts and reviewer vendors, so it
+  accepts `gemini`, which is not a host.** A reviewer asked for two separate
+  vocabularies. Declined, with the cost named: the union exists so `pi` — a host
+  with no reviewer arm — can be declared, and validating the host against the
+  *reviewer* set is precisely the defect that made pi-authored changes
+  permanently unreviewable. Two vocabularies would be more precise and would
+  need to stay in sync across the spec, the producer, the gate and at least one
+  host skill, which is the coupling this change is already faulted for.
+  What the imprecision buys an adversary is nothing: declaring `gemini` as the
+  implementing host *excludes* a gemini review, which lowers the counted total.
+  It cannot manufacture a reviewer, only discard one — a footgun for an honest
+  operator, not a bypass. It is recorded here rather than closed, and the
+  single-source vocabulary is the follow-up that would close it properly.
+- **A raised `MIN_REVIEWERS` is neither persisted nor enforced by the gate.**
+  `MIN_REVIEWERS=2` is a property of one producer run. If that run falls short
+  it writes nothing, so an *earlier* one-reviewer `REVIEWS.md` survives and the
+  gate — whose floor is one — accepts it. The operator who asked for two can be
+  left believing they got two. Accepted, because the floor is a §18 decision and
+  a gate that inferred a stricter floor from an artifact would let any producer
+  invocation silently raise the bar for every later reader. The honest fix is to
+  record the requested floor in the trailer and have the gate report a shortfall
+  the way it now reports tasks drift; that is a §18 change, not a gate change,
+  and it is not in this one. A reviewer identified this.
 
 ## Migration Plan
 
 Ordered per Decision 9. The load-bearing coupling is **step 4 before step 8** —
-gate 1.5.0 requires a trailer that only producer 1.1.0 writes, so publishing the
+gate 1.6.0 requires a trailer that only producer 1.2.0 writes, so publishing the
 gate first blocks every change in every project until each is re-reviewed.
 Steps 3 and 4 are merely sequential (seed the reference implementation, then
 modify and publish it); reversing those two blocks nothing.
@@ -503,8 +526,11 @@ modify and publish it); reversing those two blocks nothing.
 
 **Gate**
 
-8. Publish gate 1.5.0: verdict-and-substance counting, trailer-sourced identity,
-   digest staleness. Run `tools/change-gate-conformance.sh` green — every case
+8. Publish gate 1.6.0: verdict-and-substance counting, trailer-sourced identity,
+   digest staleness, reviewer-heading-only section bounds, and the advisory
+   tasks-drift report. ONLY after task 8b.7 has announced the block — 8b.4
+   accepted 37 changes across six repos as blocked rather than clearing them,
+   so publication now surprises six repositories unless the notice precedes it. Run `tools/change-gate-conformance.sh` green — every case
    passing, none inconclusive, which is what the harness's own `TOTAL:` line
    reports. (A previous revision cited a "52-case harness"; the harness states
    no case count anywhere, so the number was unverifiable and is dropped rather

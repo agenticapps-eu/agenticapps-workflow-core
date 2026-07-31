@@ -7,35 +7,36 @@
 # Review record
 
 - requested: gemini codex
-- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES)
+- counted:   gemini (APPROVE) codex (REQUEST-CHANGES)
 - excluded:  (none) (declared implementing host)
 - failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-07-31T16:04:00Z · timeout 900s_
+_generated 2026-07-31T17:03:24Z · timeout 900s_
 
-VERDICT: REQUEST-CHANGES
-
-*   The non-blocking, advisory-only nature of the `tasks-digest` is a significant concession. The rationale (avoiding deadlocks on checkbox ticks) is understood, but it accepts the risk that major scope changes ("add a debug endpoint") can be introduced post-review without invalidating evidence. The control should be blocking, perhaps by normalizing checkbox state (`- [ ]`/`- [x]`) before hashing task text, which would solve the deadlock issue while closing the scope-creep loophole.
-*   The manual, mandatory declaration of `--implementing-host` is a new, un-auditable human failure point. It is easy for an operator to forget a co-author after a handoff, which would cause the gate to incorrectly count a non-independent review as independent. The independence guarantee now rests entirely on perfect operator recall.
-*   The host and vendor vocabularies are hardcoded in at least three places (spec, producer, gate). The document correctly identifies this as requiring a "coordinated edit" and accepts the cost. This creates a maintenance trap and is a recipe for future divergence, the very defect class this change exists to fix. This vocabulary should be sourced from a single machine-readable file.
-*   The rollback plan requires a manual, per-artifact, privileged flag to execute. While well-specified, this complexity means a real-world rollback under pressure is likely to fail or be performed incorrectly, potentially blocking all changes fleet-wide. The fragility of the rollback path for such a tightly-coupled system is understated.
+VERDICT: APPROVE
+*   The proposal correctly identifies that the digest binding must cover exactly the artifacts transmitted to reviewers, and the detailed specification of the digest algorithm is a robust defense against divergence.
+*   Moving the implementing-host identity from an environmental guess to an explicit, trailer-recorded fact is the correct solution for reliable self-exclusion, especially in CI contexts.
+*   The detailed grammars for verdicts and the trailer fix the entire class of "parseable but not specified" defects that were exploited; the decision to normalize markdown emphasis rather than enumerate its positions is particularly robust.
+*   The honest and explicit scoping of security claims — particularly that the digest detects drift but not forgery, and that the egress boundary is the user's full context, not the prompt — is a major strength.
+*   The migration plan correctly identifies the producer-before-gate dependency and includes a viable, albeit manual, path for the required re-review wave. The addition of a logged, explicit downgrade mechanism for rollback is critical and well-specified.
 
 ## Reviewer: codex
-_generated 2026-07-31T16:06:40Z · timeout 900s_
+_generated 2026-07-31T17:06:31Z · timeout 900s_
 
 VERDICT: REQUEST-CHANGES
 
-- The operational review skills remain incompatible with the new contract. `codex-openspec-change-review` still transmits `tasks.md` and capability specs, requires ≥2 reviewers, blocks on `REQUEST-CHANGES`, requires separate affirmative consent, and emits no v1 trailer. Gate 1.5.0 will reject its evidence; the caller inventory incorrectly dismisses this instruction-driven producer because it is not an executable caller.
-- “Digest of exactly what was reviewed” is false under the declared egress model. Agentic reviewers may inspect arbitrary repository files, while the digest binds only the producer-supplied prompt bundle. Scope the claim to “prompt artifacts supplied by the producer.”
-- Fenced content is contradictory and unsafe: vendor headings inside fences are explicitly accepted, but reviewer-section boundaries are not specified as fence-aware. A quoted `## Reviewer:` can therefore terminate or rename a section under a conforming parser. The deferred fence grammar makes this security-sensitive behavior non-portable.
-- The substance predicate is not implementable as written. “Carries prose or data” has no grammar; constructs such as `---`, list markers, blockquotes, or malformed Markdown may count differently across implementations.
-- The identity scenario contradicts its requirement: it rejects identities outside “the four known vendors,” while the normative vocabulary has five values and expressly requires accepting `pi`.
-- “Change content never appears in any process’s argv” cannot be guaranteed for child processes spawned internally by agentic vendor CLIs. Limit the requirement to processes launched by the producer/wrapper.
+- The normative section boundary ends at any level-1/2 heading, but gate 1.6.0 closes only at the next `## Reviewer:`. This directly contradicts the “later non-reviewer heading” scenario. See [spec.md](/Users/donald/Sourcecode/agenticapps/agenticapps-workflow-core/openspec/changes/track-and-conform-plan-review/specs/change-gate-enforcement/spec.md:33) versus [openspec-change-gate.sh](/Users/donald/Sourcecode/agenticapps/agenticapps-workflow-core/reference-implementations/openspec-change-gate/openspec-change-gate.sh:10).
+- The proposal and migration still specify producer 1.1.0/gate 1.5.0, while tracked artifacts are producer 1.2.0/gate 1.6.0 with additional behavioral changes. Versions, rollback steps, publication ordering, and deltas are therefore stale.
+- `implementing-host` accepts `gemini`, while the same requirement says Gemini is not a host. This permits an impossible authorship identity to exclude a legitimate Gemini review. Define separate host and reviewer vocabularies.
+- Fence behavior is deliberately undefined even though reviewer boundaries, verdicts, structural guards, and trailer detection depend on it. A fenced trailer quotation is retained but can also satisfy “a second trailer” unless trailer recognition is explicitly fence-aware.
+- A raised `MIN_REVIEWERS` is not persisted or enforced by the gate. A failed `MIN_REVIEWERS=2` rerun can leave a current one-review `REVIEWS.md` that the default-one gate still accepts.
+- The change knowingly ships a §14-nonconformant path: full-credential third-party CLIs may read, write, execute, and return secrets into committed agent context. A warning and deferred screening do not address filesystem access, tool execution, or runtime trust separation.
+- Operational workflow instructions remain on incompatible semantics: ≥2 reviewers, affirmative egress confirmation, and mandatory resolution of REQUEST-CHANGES. Publishing the new spec without migrating those enforcement instructions leaves actual behavior non-conformant.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:08202e2ff82aabb24dd28374ae9c40ec8407344523d82669cef6e745b7696858
-producer-version: 1.1.0
-tasks-digest: sha256:b478e9341b10f698d8f94fa0244f7e7101323ca08cb9e96ee0248ede8b0ac5e7
+digest: sha256:d9ae3972c58ae053f8f61f68b10c9cd80b392490b333a3549b0d75d295157d2d
+producer-version: 1.2.0
+tasks-digest: sha256:3ce3fcb5c3601e3093e1994d4a5275abdde30a668d548970fa7fdc65669313ae
 -->
