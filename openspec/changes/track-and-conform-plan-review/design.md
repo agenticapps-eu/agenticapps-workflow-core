@@ -251,9 +251,17 @@ Three claims are corrected rather than deferred:
 
 **Chosen:** declare the boundary as above, state plainly that **no secret or PII
 screening is performed**, recommend the operator check before invoking, and
-require that change content never appear in any process's argv. Screening is
-deferred to a named follow-up change, `screen-review-egress`, owned by whoever
-implements this one.
+require that change content never appear in the argv of any process **the
+producer or the wrapper launches**. Screening is deferred to a named follow-up
+change, `screen-review-egress`, owned by whoever implements this one.
+
+That scoping is a correction, not a hedge. An earlier revision required that
+change content "never appear in any process's argv" full stop, which is not a
+property this change can deliver: the vendor CLIs are agentic and spawn their
+own children, and what they put on those command lines is theirs to decide. The
+requirement is enforceable exactly as far as the processes we start, and stating
+it wider made it unverifiable — an unfalsifiable requirement in the security
+section of a change about evidence integrity. A reviewer named this.
 
 *Alternative — full screening now.* Rejected on scope: it turns a conformance
 fix into a security feature and delays a floor repair that is losing reviews

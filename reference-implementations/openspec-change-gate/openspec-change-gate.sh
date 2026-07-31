@@ -118,7 +118,14 @@
 #   MIN_REVIEWERS=1        blocking floor (spec 1.1.0 MUST). Set 2 for the old behaviour.
 #   PREFERRED_REVIEWERS=2  reported-but-not-enforced target (spec 1.1.0 SHOULD).
 #   OPENSPEC_BIN=openspec  override the openspec CLI name/path.
-#   OPENSPEC_GATE_SELF     name of the implementing host; its own reviews do not count.
+#   OPENSPEC_GATE_SELF     IGNORED since 1.5.0 — retained only so an operator
+#                          who exported it is not misled by silence. The
+#                          implementing host is read from the trailer, because
+#                          CI and pre-commit evaluate evidence OTHER hosts
+#                          produced and an environment identity names the wrong
+#                          party. Documenting it as live was itself the hazard:
+#                          the gate harness set it in every self-exclusion row
+#                          and those rows passed on an unrelated mechanism.
 #
 # Exit codes follow the Claude Code PreToolUse convention (2 = block) in hook mode.
 #

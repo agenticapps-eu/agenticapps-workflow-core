@@ -133,6 +133,22 @@ case "$SELF_RAW" in
     echo "invalid --implementing-host '$SELF_RAW': no whitespace; separate vendors with a bare comma" >&2
     exit 2 ;;
 esac
+# The WHOLE string is matched against the gate's grammar before it is split.
+#
+# Splitting first is not equivalent, and the difference is a live divergence:
+# word splitting discards a trailing empty field, so `claude,` yields exactly
+# one element and the empty-vendor arm below never fires. The producer accepted
+# it, wrote `implementing-host: claude,` into the trailer, and exited 0; the
+# gate anchors `^(host)(,(host))*$`, refused it, and reported zero reviewers
+# with a message naming neither the trailer nor the comma. `,claude` WAS caught,
+# because a leading delimiter does produce an empty field — so the bug was
+# invisible from one side and asymmetric from the other.
+#
+# One grammar, checked once, in the form the gate checks it.
+printf '%s' "$SELF_RAW" | LC_ALL=C grep -qE '^(claude|codex|gemini|opencode|pi)(,(claude|codex|gemini|opencode|pi))*$' || {
+  echo "invalid --implementing-host '$SELF_RAW': expected <host>[,<host>...] over claude|codex|gemini|opencode|pi, with no leading, trailing or repeated comma" >&2
+  exit 2
+}
 # THE HOST SET IS NOT THE REVIEWER SET, and conflating them locks a host out.
 #
 #   hosts that author changes : claude · codex · opencode · pi
@@ -718,9 +734,19 @@ FINAL="$(mktemp "${TMPDIR:-/tmp}/reviews-final.XXXXXX")" || { echo "mktemp faile
   echo "-->"
 } > "$FINAL"
 
-# An unchecked `cp` is a false success report: it can truncate $OUT and fail, and
-# the echo below still says the file was written. The evidence the gate reads
-# would then be whatever survived the partial copy.
-cp "$FINAL" "$OUT" || { rm -f "$FINAL"; echo "failed writing ${OUT#"$ROOT"/} — earlier review evidence may be incomplete" >&2; exit 2; }
-rm -f "$FINAL"
+# An unchecked write is a false success report: it can truncate $OUT and fail,
+# and the echo below still says the file was written. The evidence the gate
+# reads would then be whatever survived the partial write.
+#
+# A symlinked REVIEWS.md is refused, not followed. The change dir is already
+# checked for this (a link there would put evidence outside the spec slot) and
+# so is every digest member — but the output path itself was not, and `cp`
+# writes THROUGH a link. `openspec/changes/x/REVIEWS.md -> ../../../src/app.go`
+# meant a successful review truncated app.go and replaced it with review prose,
+# reported as success. This is also the one write the gate always exempts as an
+# openspec artifact, so nothing downstream would have caught it.
+[ ! -L "$OUT" ] || { rm -f "$FINAL"; echo "refusing to write ${OUT#"$ROOT"/}: it is a symlink; review evidence must land in the change directory itself" >&2; exit 2; }
+# `mv`, not `cp`: the publish is then atomic within the filesystem, so a reader
+# racing the producer sees the old file or the new one, never a partial one.
+mv -f "$FINAL" "$OUT" || { rm -f "$FINAL"; echo "failed writing ${OUT#"$ROOT"/} — earlier review evidence may be incomplete" >&2; exit 2; }
 echo "wrote $count reviewer section(s) to ${OUT#"$ROOT"/}" >&2

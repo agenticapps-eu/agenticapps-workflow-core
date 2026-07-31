@@ -148,8 +148,8 @@ pre-commit hook, or another agent reads the artifact without any knowledge of
 the host that wrote it.
 
 A default is not a lesser version of this rule; it is the defect. The producer
-today defaults to `claude` (`AGENT_SELF:-claude`), which is wrong on three of
-the four hosts, and the gate defaults to empty, which applies no self-exclusion
+today defaults to `claude` (`AGENT_SELF:-claude`), which is wrong on four of
+the five hosts, and the gate defaults to empty, which applies no self-exclusion
 at all.
 
 #### Scenario: The identity is not supplied
@@ -160,9 +160,18 @@ at all.
 
 #### Scenario: The identity is outside the vocabulary
 
-- **WHEN** the producer is given an identity that is not one of the four known
-  vendors
+- **WHEN** the producer is given an identity that is not one of the five known
+  **hosts** — `claude`, `codex`, `gemini`, `opencode`, `pi`
 - **THEN** it exits with a usage error and writes nothing
+
+The set is HOSTS, not reviewer vendors, and the two are different sets. `pi` is
+a host with no reviewer arm; `gemini` is a reviewer vendor with no host. An
+earlier revision of this scenario said "the four known vendors", which would
+have made every pi-authored change permanently unreviewable — the producer
+would refuse the only correct identity for it. That is the same defect the
+round-6 review caught in the implementation, reintroduced in the prose
+describing it, and it is the concrete cost of keeping this vocabulary in three
+places rather than one. The implementation is correct; this text was not.
 
 #### Scenario: The implementing host is among the requested reviewers
 

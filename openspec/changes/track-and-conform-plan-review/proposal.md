@@ -114,7 +114,9 @@ Three shared-bin artifacts and one spec section are involved:
   reads the prompt file and then passes its full contents as an argv element
   to every vendor (`claude -p "$prompt"`, `codex exec "$prompt"`). The producer
   already passes a file; the exposure is entirely in the wrapper. The
-  requirement is that change content never appears in a process's argv; whether
+  requirement is that change content never appears in the argv of a process the
+  producer or wrapper launches — the vendor CLIs spawn their own children and
+  what reaches those command lines is not ours to promise; whether
   a given arm delivers by file path or stdin is the implementation's call,
   since the `codex` arm hangs on stdin. Wrapper → **1.2.0**.
 

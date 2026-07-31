@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# shared-install-version: 1.0.0
+# shared-install-version: 1.0.1
+#
+#   1.0.1 — `--allow-downgrade` no longer glob-expands. Unquoted, the value was
+#           pathname-expanded as well as split, so `'*'` could authorise a
+#           downgrade from a directory that happened to contain a matching
+#           filename — against the "there is no wildcard" promise this flag is
+#           documented with.
 #
 # install-shared-artifact.sh — serialised, monotonic install of a versioned
 # artifact into the shared ~/.agenticapps/bin/ path.
@@ -184,7 +190,14 @@ have="$(version_of "$DST")"
 if [ -f "$DST" ] && version_gt "$have" "$want"; then
   _dst_name="$(basename "$DST")"
   _authorised=0
+  # Unquoted here, the value is GLOB-expanded as well as split, so
+  # `--allow-downgrade '*'` run from a directory happening to contain a file
+  # named like the artifact authorised the downgrade — directly contradicting
+  # the "there is no wildcard" promise above it. Splitting is wanted; globbing
+  # is not, so it is disabled for the loop and restored immediately.
+  set -f
   for _a in $ALLOW_DOWNGRADE; do [ "$_a" = "$_dst_name" ] && _authorised=1; done
+  set +f
 
   if [ "$_authorised" != "1" ]; then
     if [ -n "$ALLOW_DOWNGRADE" ]; then

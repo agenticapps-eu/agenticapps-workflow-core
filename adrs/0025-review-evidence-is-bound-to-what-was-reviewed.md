@@ -56,10 +56,20 @@ lives in the artifact because the party evaluating evidence is routinely not the
 party that produced it: CI and pre-commit hooks read files other hosts wrote, so
 an environment-derived identity names the wrong party.
 
-**A digest binds the review to the reviewed bytes**, covering exactly what is
-transmitted — `proposal.md`, `design.md`, `specs/**/*.md`. Not `tasks.md`: it is
-never sent to reviewers, and binding it would stale a review on every ticked
-checkbox and deadlock the gate during implementation.
+**A digest binds the review to the TRANSMITTED bytes**, covering exactly what
+the producer sends — `proposal.md`, `design.md`, `specs/**/*.md`. Not
+`tasks.md`: it is never sent to reviewers, and binding it would stale a review
+on every ticked checkbox and deadlock the gate during implementation.
+
+"Transmitted", not "reviewed", and the distinction is load-bearing enough that
+this ADR's own title overstates it. The reviewers are agentic CLIs running with
+the operator's credentials on the operator's disk; nothing stops one reading a
+file the producer never sent, and the standing egress notice says so plainly.
+So the digest cannot bind what a reviewer *read* — it binds what was *put in
+front of it*. What that buys is real and worth having: the reviewed artifacts
+cannot change after the fact without the evidence going stale. What it does not
+buy is a guarantee about the reviewer's field of view. A reviewer named the
+gap; the claim is narrowed rather than defended.
 
 **The prompt leaves argv.** All four wrapper arms passed the full change as a
 command-line argument, world-readable in the process table for as long as the
