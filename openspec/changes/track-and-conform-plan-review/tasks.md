@@ -88,7 +88,7 @@ every project.
 - [x] 7b.7 `tdd="true"` — failing test: a vendor response carrying the trailer's opening delimiter **at the start of a line** is rejected and the vendor recorded as failed, so one vendor cannot invalidate the artifact
 - [x] 7b.7a `tdd="true"` — failing test: a vendor response mentioning the trailer delimiter or `## Reviewer:` **inside a sentence** is KEPT. Regression-test against round 6 of this change, where opencode's review quoted `openspec-review-trailer` inline and codex's quoted `## Reviewer: codex-2` inline — a substring guard would have destroyed the first. Match the anchoring the shipped forge guard already uses (`^[[:space:]]*…`)
 - [x] 7b.8 `tdd="true"` — failing test: an optional `tasks-digest` that no longer matches produces a non-blocking report of implementation-plan drift, and its absence changes nothing
-- [x] 7b.9 `tdd="true"` — failing test: a reviewer section containing a `### Findings` subheading keeps its verdict, because sections bound at headings of level ≤ 2
+- [x] 7b.9 `tdd="true"` — failing test: a reviewer section containing a `### Findings` subheading keeps its verdict. **Superseded by the round-10 bound:** sections close only at the next `## Reviewer:`, so a `## Summary` subheading keeps its verdict too — the level-≤2 rule this task was written against discarded exactly that case
 - [x] 7b.10 `tdd="true"` — failing test: the generation-timestamp line does not satisfy the substance rule, per its specified grammar
 
 ## 8. Publish the producer — before the gate
@@ -144,7 +144,7 @@ every project.
 - [x] 9b.15d `tdd="true"` — failing tests for malformed trailer values: a `digest` that is not `sha256:` + 64 lowercase hex, a non-semver `producer-version`, and `implementing-host: claude, codex` (space after comma) each count zero reviewers
 - [x] 9b.15e `tdd="true"` — failing test: trailing blank lines after `-->` still count as the trailer being final content
 - [x] 9b.15f Record the accepted normalisation consequence: `VERDICT: REQUEST-_CHANGES` normalises to a valid verdict. Confirm a manufactured verdict alone still fails the substance rule
-- [x] 9b.16 Confirm the gate names every objecting reviewer on every invocation for as long as the objection stands — this report is the audit trail for proceeding past an objection
+- [x] 9b.16 Confirm the gate names every objecting reviewer on every invocation for as long as the objection stands. **This is a nag, not an audit trail** — the wording here and in the spec claimed the latter and was withdrawn in round 11. It goes to stderr with no durable sink, no operator identity and no timestamp; what it guarantees is that an objection reappears until the change is amended or re-reviewed, which is worth having and is not a record of who proceeded
 - [x] 9b.17 Run the shared predicate over every `REVIEWS.md` in the repo and confirm each well-formed one still counts — the change must not discount good evidence
 - [ ] 9b.18 Bump to gate **1.6.0** (was 1.5.0), run `tools/change-gate-conformance.sh` green — its `TOTAL:` line must report zero failed and zero inconclusive — and publish. **Bumped and green at 69/69; NOT published**, which is the remaining half. 1.5.0 is not amended in place because it briefly reached the fleet on 2026-07-30, and a version that ever shipped must keep meaning one thing. Publication is still gated on 8b.7
 - [x] 9b.19 Re-verify this branch's two changes under 1.5.0 — after 8b they carry trailers and MUST read as current; before 8b they MUST read as unverifiable. Test both directions.

@@ -55,10 +55,10 @@ file the producer did not write, against a verdict-discarding failure that was
 observed in production. Placement is what makes it sound, which is why it is
 normative rather than conventional.
 
-Vendor interiors are carried
-verbatim by design, and reviewers are told the vocabulary, not the formatting,
-so subheadings are expected rather than exceptional. At a floor of one this
-would silently drop a complete review.
+Vendor interiors are carried verbatim by design, and reviewers are told the
+vocabulary, not the formatting, so headings inside a review are expected rather
+than exceptional. At a floor of one, dropping such a section silently discards
+the only review a change received.
 
 **Timestamp line.** The producer writes exactly one line immediately after each
 `## Reviewer:` heading, of the form `_generated <timestamp> · timeout <N>s_`.
@@ -97,11 +97,20 @@ reviewer, forge a verdict, or present a second trailer. A reviewer objected that
 deferring the fence grammar made these behaviours non-portable, which was
 correct; deferring it is what this paragraph stops.
 
-What is still deliberately undefined is fence *pairing* beyond the toggle:
-mismatched lengths, mismatched markers, indentation, and a fence left open at
-end of input. Those are producer-side concerns, and the producer refuses a body
-whose fences do not balance rather than publishing one whose reading depends on
-them.
+**Balance is defined, because a rule that refuses "unbalanced" fences without
+defining balance is not implementable.** A body is balanced when the number of
+fence-toggling lines in it is **even**. Marker type, marker length, and
+indentation are deliberately NOT part of the test: they are not part of the
+toggle either, so making them part of balance would mean two different fence
+models in one document. ` ``` ` closes ` ~~~ `, and a four-backtick line closes
+a three-backtick one. That is coarser than CommonMark, and it is the correct
+trade here — the parser's only question is whether structure is live on a given
+line, and one rule answers it everywhere.
+
+The producer SHALL refuse a review body that is not balanced, recording the
+reviewer as failed. The gate needs no equivalent rule: it never sees an
+unbalanced body, because the producer will not publish one. A fence left open at
+end of input is therefore a producer-side error, not a gate-side reading.
 
 **Verdict grammar.** Outside fenced code blocks, a candidate line SHALL be
 normalised and then matched, and both steps are normative:
@@ -151,7 +160,10 @@ failed), and the trailer. The notice and the record SHALL precede the **first**
 `## Reviewer:` heading; the trailer SHALL be the file's final content.
 
 Placement is normative because the section rule runs a section to the next
-level-1/2 heading **or EOF**, and none of these blocks is a heading. Placed
+`## Reviewer:` heading **or EOF**, and none of these blocks is one. It carries
+more weight under that rule than it did before: when any level-1/2 heading
+closed a section, the record's own `# Review record` heading would have bounded
+a trailing section by accident. Nothing bounds it now except placement. Placed
 after the last reviewer section they would be *interior to it* — and the
 substance rule would then count producer-authored lines as that reviewer's
 body, so a bare `VERDICT: APPROVE` followed by a notice would acquire
@@ -287,8 +299,22 @@ Two things bound it. Amending a change in response to an objection invalidates
 the digest and forces a re-review, so the only route past an objection is to
 leave the change unamended. And the gate SHALL name each objecting reviewer in
 its report, on every invocation, for as long as the objection stands — so
-proceeding is a repeated, logged, attributable act rather than a silent one.
-That log is the audit trail; no separate acknowledgement artifact is required.
+proceeding is a **repeated and unmissable** act rather than a silent one.
+
+**It is not an audit trail, and an earlier revision called it one.** The report
+goes to stderr. It has no durable sink, records no operator identity, carries no
+timestamp, and requires no acknowledgement; the console it printed to is gone by
+the time anyone asks who proceeded and why. What it actually provides is
+narrower and still worth having: an objection cannot be dismissed once and
+forgotten, because it reappears on every subsequent invocation until the change
+is amended or re-reviewed. That is a *nag*, not a record.
+
+A real audit trail here would need the same shape as the downgrade log —
+appended, timestamped, attributed to a user — and would belong with it rather
+than on stderr. It is not built here. A reviewer twice identified the claim as
+overstated; rather than defend it, the claim is withdrawn and the residual
+protection is described as what it is. No separate acknowledgement artifact is
+required because none is specified, not because the report substitutes for one.
 
 Promoting a verdict to blocking is a §18 decision, not a gate decision, and is
 not made here.

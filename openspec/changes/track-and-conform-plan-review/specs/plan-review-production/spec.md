@@ -152,9 +152,30 @@ today defaults to `claude` (`AGENT_SELF:-claude`), which is wrong on four of
 the five hosts, and the gate defaults to empty, which applies no self-exclusion
 at all.
 
+**Two sources, one precedence, no default.** The identity MAY be supplied by the
+`--implementing-host` flag or by the `AGENT_SELF` environment variable. **The
+flag wins whenever it is present**; `AGENT_SELF` is consulted only in its
+absence; and if neither supplies a value the producer exits with a usage error.
+There is no third case and no fallback host.
+
+Precedence is stated because "two sources" is how the original defect was built,
+and an undefined precedence would rebuild it. What made `AGENT_SELF:-claude`
+dangerous was not that an environment variable existed, but that it silently
+supplied a *wrong answer* when nothing was set. An environment variable that can
+only be overridden, never invented, does not have that property. It is retained
+for callers that already export it; the flag is the interface.
+
+#### Scenario: Both sources supply an identity
+
+- **WHEN** `--implementing-host` and `AGENT_SELF` are both set, to different
+  values
+- **THEN** the flag's value is used, and the environment value is ignored
+  without error
+
 #### Scenario: The identity is not supplied
 
-- **WHEN** the producer is invoked without an implementing-host identity
+- **WHEN** the producer is invoked with neither `--implementing-host` nor
+  `AGENT_SELF`
 - **THEN** it exits with a usage error and writes no `REVIEWS.md`, rather than
   assuming the host it was first written on
 

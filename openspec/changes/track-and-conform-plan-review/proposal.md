@@ -183,7 +183,8 @@ Three shared-bin artifacts and one spec section are involved:
   matches, a lower-case verdict does not, and a verdict under an unrelated `##`
   section is attributed to the reviewer above it. The delta fixes all three,
   enumerates the vocabulary (`APPROVE` | `REQUEST-CHANGES`), bounds a reviewer
-  section at the next heading of level 1 or 2, and makes two conflicting verdicts
+  section at the next `## Reviewer:` heading and nothing else, and makes two
+  conflicting verdicts
   a malformed section rather than an undefined one. Checked against every
   `REVIEWS.md` in the repo so no existing well-formed evidence is invalidated.
 

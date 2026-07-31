@@ -360,11 +360,14 @@ cur != "" && /^[[:space:]]*[*_]*[[:space:]]*VERDICT[[:space:]]*:[[:space:]]*[*_]
 
 **Chosen:** specify the grammar, and specify resolution:
 
-- A reviewer section runs from its `## Reviewer:` heading to the next heading of
-  **level 1 or 2** (`#` or `##`), or EOF. Deeper headings (`###` and below) are
-  interior to the section. Bounding at *any* level was the previous wording and
-  is wrong: a vendor that writes `### Findings` and puts its verdict below it
-  would have the verdict excluded and be recorded as producing none. The
+- A reviewer section runs from its `## Reviewer:` heading to the **next
+  `## Reviewer:` heading**, or EOF. No other heading closes a section, at any
+  level. This bound was widened twice, each time after it discarded a review
+  that had been written: bounding at *any* level excluded a verdict below a
+  vendor's `### Findings`, and bounding at level 1 or 2 excluded one below
+  `## Summary` — the commonest shape an LLM returns, so the rule discarded
+  verdicts routinely. Each wording was chosen to exclude producer-authored
+  structure and caught vendor prose instead. The
   normative statement is in `specs/change-gate-enforcement/spec.md`; this line
   restates it and must not diverge from it.
 - Fenced code blocks are skipped (the shipped parser already does this, and this
@@ -517,11 +520,26 @@ modify and publish it); reversing those two blocks nothing.
 **Re-review — before the gate, not after**
 
 6. **Inventory every active change across the whole fleet**, not just this
-   branch, and re-review each so it carries a 1.1.0 trailer. The previous
-   revision re-reviewed this repo's two changes and left every other project to
-   discover the incompatibility when the global gate landed and blocked it —
-   which is a flag day announced by an outage. The gate is shared; the migration
-   has to be too.
+   branch. The previous revision re-reviewed this repo's two changes and left
+   every other project to discover the incompatibility when the global gate
+   landed and blocked it — which is a flag day announced by an outage. The gate
+   is shared; the migration has to be too.
+
+   **Then resolve each one — by re-review OR by recorded acceptance.** This step
+   originally said "re-review each", and the inventory made that unsatisfiable:
+   37 active changes across six repositories, three of them outside this
+   family, where a change in this repo has no authority to edit. **Taken
+   2026-07-31: all 37 are accepted as blocked**, recorded in `tasks.md` 8b.4
+   with the reasoning. That is a resolution of this step, not an evasion of it —
+   what the step exists to prevent is the fleet being *surprised*, and the
+   inventory plus the acceptance record plus step 6b is what prevents it.
+
+6b. **Announce the block before the gate ships** (task 8b.7). Acceptance moved
+   this precondition; it did not remove it. Six repositories will each hit a
+   hard `PreToolUse` block at their next code edit, and nobody has been told.
+   Publishing with this open reschedules the 2026-07-30 outage rather than
+   avoiding it — the failure this whole ordering exists to prevent, arrived at
+   by a different route.
 7. Re-run the producer over both open changes on this branch.
 
 **Gate**
@@ -552,9 +570,18 @@ modify and publish it); reversing those two blocks nothing.
 | Artifact | Rollback | Consequence |
 |---|---|---|
 | reviewer-cli 1.2.0 | republish 1.1.0 | prompts return to the process table |
-| gate 1.5.0 | republish 1.4.0 | trailers ignored; pre-trailer evidence counts again |
-| producer 1.1.0 | republish 1.0.0 from the reference implementation's history | floor returns to 2; trailers stop being written |
+| gate 1.6.0 | republish 1.4.0 | trailers ignored; pre-trailer evidence counts again |
+| producer 1.2.0 | republish 1.0.0 from the reference implementation's history | floor returns to 2; trailers stop being written |
+| shared-install 1.0.1 | republish 1.0.0 | `--allow-downgrade` glob-expands again — **and this row must roll back LAST**, because it is the tool every other row runs |
 | §18 | revert the commit | the section is self-contradictory again |
+
+The shared-install row was missing until a reviewer asked for it, and its
+absence was not cosmetic: it is the only artifact whose rollback is
+self-referential. Downgrading the arbiter first would leave the remaining rows
+to be executed by the version being rolled back, so it goes last in a table
+that otherwise runs in reverse dependency order. Rolling gate 1.6.0 back to
+1.4.0 rather than 1.5.0 is deliberate — 1.5.0 was published once, blocked six
+repositories, and is not a state to return to.
 
 Rolling back the producer while gate 1.5.0 is live blocks every change — the
 same coupling as the forward order, and the reason the table is ordered.
