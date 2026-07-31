@@ -2,61 +2,59 @@
 
 ## The one thing to know
 
-**Task 8.4 is done and both repos have open PRs.** The Claude installer no
-longer vendors core's artifacts — it pins them. `install.sh` and migration 0032
-resolve the gate, the producer and the wrapper from core at a verified commit
-and publish those bytes; the three copies in `claude-workflow/bin/` are deleted.
+**Both PRs are merged and the installer is verified working from main.** The
+Claude installer no longer vendors core's artifacts — it pins them.
+`install.sh` and migration 0032 resolve the change-gate, the plan-review
+producer and the vendor wrapper from core at a verified commit and publish
+those bytes. The three copies in `claude-workflow/bin/` are gone.
 
-- **core PR #47** — https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/47 (41 commits, the whole plan-review track)
-- **claude-workflow PR #109** — https://github.com/agenticapps-eu/claude-workflow/pull/109 (all checks green)
+- **core PR #47** merged → main `6cd3b9c` (merge commit, not squash)
+- **claude-workflow PR #109** merged → main `70ef922`
+- Both feature branches deleted.
 
-**#109 depends on #47 and the dependency has a sharp edge.** The manifest pins
-`2b82a91`, a commit on core's feature branch, not on main. GitHub serves raw
-content by sha for any pushed commit, so it resolves everywhere today — but **a
-squash-merge of #47 orphans that sha** and the pin must then be advanced to the
-resulting main commit. The failure is loud (a failing test row and a refusing
-installer), never a silent fallback to a stale copy.
+**Merge order and method mattered and were deliberate.** #109 pinned a commit
+on #47's branch while #47 was open, so #47 was merged with a **merge commit**
+to keep that sha reachable; the manifest then advanced to `6cd3b9c`, core's
+main. All seven pinned entries were re-verified at the new revision and all
+seven were byte-identical. Nothing broke; the re-pin was follow-through.
 
-## Accomplished
+## Verified end-to-end, not just in CI
 
-| | Was | Now |
-|---|---|---|
-| `claude-workflow/bin/openspec-change-gate.sh` | vendored 1.3.1 | **deleted — resolved at 2.0.0** |
-| `claude-workflow/bin/run-plan-review.sh` | vendored 1.0.0 | **deleted — resolved at 1.2.0** |
-| `claude-workflow/bin/reviewer-cli.sh` | vendored 1.1.0 | **deleted — resolved at 1.2.0** |
-| migration suite | 218 pass / 4 fail | **226 pass / 0 fail** |
+A real `install.sh` run from merged main:
 
-All four pre-existing failures *were* this bug. Six commits on
-`feat/installer-resolves-core-artifacts`, TDD throughout (RED committed before
-GREEN), every new row mutation-tested.
+| check | result |
+|---|---|
+| published gate / producer / wrapper vs. the pin | byte-identical, all three |
+| installed versions | 2.0.0 / 1.2.0 / 1.2.0 |
+| leftover temp copies | 0 |
+| `openspec-change-gate.sh --ci` | exit 0 |
+| migration suite | **226 pass / 0 fail** (was 218 / 4) |
+| resolve over the network, no local checkout (what CI does) | all three resolve |
 
-## Decisions
+## What changed and why
 
-- **Pin, not re-vendor.** Re-vendoring fixes the bytes and keeps the mechanism
-  that made them wrong. The runtime never read those copies — the hook resolves
-  `~/.agenticapps/bin` first — so they existed only to feed the installer, and
-  they drifted. All three were stale at once.
-- **Fails closed.** No fallback to the copy on disk. That fallback, run today,
-  would have republished gate 1.3.1 over the 2.0.0 just shipped.
-- **Migration 0032 edited, not superseded.** It is shipped, but the edit only
-  reaches projects that have *not* applied it, and for them the alternative is a
-  hard failure on a missing file. Fixture updated in lockstep; only the three
-  source assignments are exempt from apply-parity.
-- **Drift is now measured against the pin, not `$CORE_SPEC_DIR`.** CI checks
-  core out at `ref: main`, so the old comparison asked "does this match whatever
-  main says today" — an answer that changes without either repo changing.
+All three vendored copies were stale **at once** — gate 1.3.1 vs 2.0.0,
+producer 1.0.0 vs 1.2.0, wrapper 1.1.0 vs 1.2.0 — and all four pre-existing
+test failures were exactly that. The runtime never read those copies (the hook
+resolves `~/.agenticapps/bin` first), so they existed only to feed the
+installer, and they drifted.
 
-## What resolving from the pin immediately falsified
+**Re-vendoring was rejected**: it fixes the bytes and keeps the mechanism that
+made them wrong. **Fails closed**: no fallback to the copy on disk — that
+fallback, run that morning, would have republished gate 1.3.1 over the 2.0.0
+just shipped.
+
+**The mechanism had been wired to nothing.** `resolve-core-artifact.sh` and
+`core-vendor.manifest` were written 2026-07-28 and sat **untracked** in
+claude-workflow — never committed, invoked by no code. Task 8.3 had added the
+producer's path mapping to a resolver no caller ran.
+
+## What resolving from the pin falsified
 
 The producer test had been green against a copy nothing ships. Against the real
 1.2.0 it failed three ways, all fixed: the wrapper delivers the prompt on
 **stdin**, not argv; `AGENT_SELF=none` is rejected by 1.2.0's identity
 validation; a review with no verdict line is not counted.
-
-**The mechanism had been wired to nothing.** `resolve-core-artifact.sh` and
-`core-vendor.manifest` were written 2026-07-28 and sat **untracked** in
-claude-workflow — never committed, invoked by no code. Task 8.3 added the
-producer's path mapping to a resolver no caller ran.
 
 ## Two defects I introduced and caught before merge
 
@@ -65,45 +63,55 @@ producer's path mapping to a resolver no caller ran.
   verified, now zero.
 - **A vacuous test row.** The first 0032 check greped for
   `resolve-core-artifact.sh` anywhere in the file, and the pre-flight mentions
-  it, so gutting the real resolve call left it green. Caught by mutation; it now
-  asserts what 0032 installs *from*.
+  it, so gutting the real resolve call left it green. Caught by mutation.
 
-## Files modified
-
-- `claude-workflow/` — `install.sh`, `migrations/0032-bind-openspec-v1.md`,
-  `migrations/run-tests.sh`, `migrations/test-fixtures/0032/common-apply.sh`,
-  `tools/core-vendor.manifest`, `.github/workflows/openspec-gate.yml`,
-  `.gitignore`, `docs/decisions/0047-…md`; three `bin/` files deleted, four
-  re-vendored at the pin
-- `agenticapps-workflow-core/` — `openspec/changes/track-and-conform-plan-review/tasks.md` (8.4)
+I also missed `.github/workflows/openspec-gate.yml` on the first pass — it
+scored the two deleted files, and CI caught it, not me.
 
 ## Next session: start here
 
-1. **Merge core #47 first, then re-pin.** If it squash-merges, update
-   `core_commit` and all seven sha256s in `claude-workflow/tools/core-vendor.manifest`
-   to the new main commit and re-run `bash migrations/run-tests.sh resolve-pin`.
-   Then merge #109. Nothing else blocks either PR.
-2. **`change-gate-conformance.sh` reports success for a missing file** —
-   `SKIP (not found)`, `TOTAL: 0 passed, 0 failed`, exit 0. The wrapper's harness
-   fails correctly on the same input. Worked around with `test -s` in CI; **the
-   real fix belongs in core**, which owns both harnesses.
-3. **Migration 0032 installs the producer without version arbitration.**
-   Pre-existing, left untouched to keep the edit to a shipped migration minimal.
+Nothing is blocked and nothing is urgent. In rough priority:
+
+1. **`change-gate-conformance.sh` reports success for a missing file** —
+   `SKIP (not found)`, `TOTAL: 0 passed, 0 failed`, exit 0. The wrapper's
+   harness fails correctly on the same input; only that one caught the
+   deletion. Worked around with `test -s` in claude-workflow's CI. **The real
+   fix belongs here in core**, which owns both harnesses. This is the highest-
+   value leftover — it is a harness that certifies nothing while looking green.
+2. **Archive `track-and-conform-plan-review`.** Task 8.4 was its last real open
+   item; the rest are declared limits (§14 non-conformance, `MIN_REVIEWERS` not
+   persisted, union host vocabulary) and out-of-repo sites.
+3. **`shim-project-hooks` is now on main as an open, unimplemented proposal** —
+   it landed with #47, intentionally. Implement or archive it.
+4. **Migration 0032 installs the producer without version arbitration.**
+   Pre-existing; left untouched to keep the edit to a shipped migration minimal.
    The gate and wrapper are arbitrated; the producer is not.
-4. **The other three hosts still vendor.** `codex-workflow` keeps copies plus a
-   provenance-style manifest; `pi-agentic-apps-workflow` has no manifest.
-   claude-workflow is the first host where the pin decides what gets published.
-5. `shim-project-hooks` remains proposed, not implemented — and merging #47
-   lands it as an open proposal. Intentional, but see it before merging.
+5. **The other three hosts still vendor.** `codex-workflow` keeps copies plus a
+   provenance-style manifest; `pi-agentic-apps-workflow` has no manifest at all.
+   claude-workflow is the only host where the pin decides what gets published —
+   porting ADR-0047 to codex is the obvious next repo.
+6. **Retake the fleet inventory if any count matters** (recorded 37, breakdown
+   sums to 35, neither trusted). It gates nothing.
 
 ## Open questions
 
 - **Does core migrate `spec/`'s 19 sections into `openspec/specs/`?** Still
   unanswered; codex has raised it as a §16 conflict three times.
-- **The host/vendor vocabulary is restated in at least four places.** Both
-  reviewers asked for one machine-readable source. Deferred, not declined.
+- **The host/vendor vocabulary is restated in at least four places** — spec,
+  producer, gate, and the codex review skill. Both reviewers asked for one
+  machine-readable source. Deferred, not declined.
 - **`~/.codex/skills/codex-openspec-change-review` is a second producer** whose
   every `REVIEWS.md` the gate counts as zero. Belongs to the codex re-vendor.
 - **`screen-review-egress`** — still a declared §14 non-conformance.
-- **The fleet inventory total is not trusted** (recorded 37, breakdown sums to
-  35). It gates nothing; retake it if any count matters.
+
+## Loose ends in the working trees
+
+- `claude-workflow` has an **untracked `openspec/`** (empty spec slot) and
+  regenerated `.claude/commands/opsx/*.md`, created by the real `install.sh`
+  run — `install.sh` runs `openspec init` when the slot is missing. Harmless
+  and arguably correct for a repo subject to §18, but it was not there before.
+- `claude-workflow` still has two **unrelated** modified files from earlier
+  work, deliberately left alone: `setup/snapshot/workflow-config.md` and
+  `templates/workflow-config.md`.
+- `core` has untracked `.planning/skill-observations/` files (frozen GSD
+  history area; never written to by this work).
