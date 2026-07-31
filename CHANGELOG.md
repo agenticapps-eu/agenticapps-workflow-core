@@ -20,11 +20,56 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
-**No spec version change.** Everything below touches `tools/` and
-`reference-implementations/`, neither of which is normative spec text. No
-host's conformance claim changes and no host action is required — though the
-drift-report fixes surface a pre-existing §11 gap in `claude-workflow` that
-does need a host change; see under *Fixed*.
+**Spec 1.3.0 → 1.4.0 — minor.** §20 is added and §00/§09 are amended to
+declare its type. The addition is normative for **this repository's tooling
+only**: `core-tooling-contract` sections bind the harnesses in `tools/` and
+form no part of any host's conformance claim. No host becomes non-conformant,
+no host's cited version is invalidated, and no host action is required.
+
+The rest of this section is unchanged from before that bump: it touches
+`tools/` and `reference-implementations/`, neither of which is normative spec
+text — though the drift-report fixes surface a pre-existing §11 gap in
+`claude-workflow` that does need a host change; see under *Fixed*.
+
+### Added — §20 conformance harness reporting
+- **`spec/20-conformance-harness-reporting.md`** (new section type
+  `core-tooling-contract`). Two of the five conformance harnesses certified
+  nothing while reporting success: given a target that did not exist they
+  printed `SKIP`, scored zero rows and exited 0. `--family` was worse — it
+  filtered absent hosts out of the roster before scoring, so after two hosts
+  moved to pin-and-resolve the sweep silently scored 4 of 6 and printed
+  success. A measurement tool that returns "pass" having measured nothing is
+  the failure it exists to prevent.
+
+  Five harnesses had three behaviours on an unscoreable target — count it,
+  abort on it, skip it silently. Nobody decided that; it accumulated. §20
+  decides it: never exit 0 with a scored total of zero; an explicitly named
+  target that cannot be scored is a failure; unscoreable is three independent
+  conditions with fixed precedence; roster mode declares its coverage on every
+  run and names what it skipped and why.
+
+- **`tools/conformance-harness-reporting.test.sh`** — the executable
+  demonstration, per the `drift-report.test.sh` precedent.
+
+### Changed
+- **All five harnesses in `tools/`** now score absence rather than skipping it,
+  report `UNSCOREABLE <label> — <reason>`, and carry a terminal backstop. The
+  two single-target harnesses keep their `exit 2` abort, which §20 declares
+  conformant rather than changing. `reviewer-cli-conformance.sh`'s
+  explicit-path handling was already correct and is the reference the others
+  were fixed against; it is untouched apart from gaining a reason and the
+  roster coverage line.
+- **`--family` reports `scored N of M`** and names a pin-and-resolve host as
+  *resolvable, not attempted* rather than absent. An opt-in `--resolve` fetches
+  and scores it; it is not the default, because resolution reaches a remote
+  commit and fails closed, and a conformance tool that cannot run offline is a
+  weaker tool.
+
+**Downstream, deliberately:** a host CI that was green *because* a target was
+missing will go red. That is the change working. `codex-workflow`'s `bin/` is a
+gitignored cache and must be materialised before the harness is invoked rather
+than relying on the silent skip. The `test -s` / `--check` workarounds in host
+CIs become redundant and can be removed in follow-up.
 
 ### Added
 - **`reference-implementations/shared-install/`** — the arbiter every host

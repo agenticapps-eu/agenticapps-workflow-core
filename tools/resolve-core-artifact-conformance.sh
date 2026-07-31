@@ -5,9 +5,39 @@
 # Usage: resolve-core-artifact-conformance.sh <path-to-resolve-core-artifact.sh>
 set -uo pipefail
 
+
+# ── target screening (capability: conformance-harness-reporting) ─────────────
+# SINGLE-TARGET shape: this harness takes exactly one target and ABORTS on one
+# it cannot use, rather than counting a failure row and continuing. That is
+# conformant — the rule is "never exit 0 having scored nothing", and an abort
+# before any row satisfies it. Preserved deliberately; changing it would churn
+# a tool that is already correct.
+#
+# What was missing is the REASON. `[ -f ]` alone reported every unscoreable
+# target as "not found", including directories, empty files and unreadable
+# ones — so an operator was told the wrong thing about three of the four cases.
+harness_screen_target() { # $1 = path; sets REASON, returns 1 if unscoreable
+  REASON=""
+  if [ -L "$1" ] && [ ! -e "$1" ]; then REASON="not a regular file (dangling symlink)"; return 1; fi
+  if [ ! -e "$1" ]; then REASON="not found"; return 1; fi
+  if [ ! -f "$1" ]; then REASON="not a regular file"; return 1; fi
+  if [ ! -s "$1" ]; then REASON="empty"; return 1; fi
+  if [ ! -r "$1" ]; then REASON="unreadable"; return 1; fi
+  return 0
+}
+
+# A path is attacker-influenceable in the general case; output that can be
+# forged with an embedded newline can be made to print a line reading like PASS.
+harness_safe_label() { # $1 = path
+  printf '%s' "$1" | LC_ALL=C tr -c '[:print:]' '?'
+}
+
 RESOLVER="${1:-}"
 [ -n "$RESOLVER" ] || { echo "usage: $0 <path-to-resolve-core-artifact.sh>" >&2; exit 2; }
-[ -f "$RESOLVER" ] || { echo "no such resolver: $RESOLVER" >&2; exit 2; }
+harness_screen_target "$RESOLVER" || {
+  echo "  UNSCOREABLE  $(harness_safe_label "$RESOLVER") — $REASON" >&2
+  exit 2
+}
 
 CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pass=0; fail=0
@@ -109,4 +139,13 @@ fi
 
 echo ""
 echo "═══ TOTAL: $pass passed, $fail failed"
+# Backstop, folded into the one place the exit code is computed. This harness
+# aborts before any row on an unscoreable target, so it is normally unreachable
+# — it exists because every instance of this defect so far arrived by a route
+# the previous fix did not anticipate, and a scored total of zero is the
+# observable every route shares.
+if [ $((pass + fail)) -eq 0 ]; then
+  echo "openspec-conformance: certified NOTHING — no row reached a verdict" >&2
+  exit 1
+fi
 [ "$fail" -eq 0 ]
