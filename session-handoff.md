@@ -19,18 +19,13 @@ added so the precondition cannot be skipped twice.
 `feat/step3-hook-shims-and-dead-gate-removal`. Three artifacts published to
 `~/.agenticapps/bin/`; spec at **1.3.0**. All four conformance harnesses green.
 
-**The gate is live at 1.5.0 and currently blocks this repo**, because the last
-round of corrections staled `track`'s evidence. A final re-review was running at
-session end. That is the mechanism working on its own change, not a breakage —
-but it is where the next session starts.
-
 ## Accomplished
 
 | Artifact | Was | Now | Harness |
 |---|---|---|---|
 | `spec_version` | 1.2.0, §18 self-contradictory | **1.3.0** | — |
 | `run-plan-review.sh` | 1.0.0, untracked | **1.1.0**, tracked + published | 55/55 |
-| `openspec-change-gate.sh` | 1.4.0 | **1.5.0**, published | 66/66 |
+| `openspec-change-gate.sh` | 1.4.0 | **1.5.0** built + tracked; **NOT published** (rolled back) | 66/66 |
 | `reviewer-cli.sh` | 1.1.0 | **1.2.0**, published | 19/19 |
 | `install-shared-artifact.sh` | no rollback path | `--allow-downgrade` | 20/20 |
 
@@ -38,7 +33,7 @@ Also: `gate/run-plan-review.sh` (66-line ancestor) deleted, preserved first unde
 the change's `evidence/`; ADR-0025 written; a new producer harness created
 (`tools/run-plan-review-conformance.sh`).
 
-## Five defects found by BUILDING, not reviewing
+## Six defects found by BUILDING, not reviewing
 
 Each verified against running code before being fixed.
 
@@ -62,6 +57,8 @@ Each verified against running code before being fixed.
    CLIs: `opencode`'s `--file` is an array option that ate the message
    positional; `gemini` refused because the *hint wording* told an agentic CLI
    to go open something called "stdin". Every arm is now smoke-tested live.
+6. **Publishing a shared artifact has fleet-wide blast radius** — see the top of
+   this file. Found by running the inventory I should have run first.
 
 ## Decisions
 
@@ -69,9 +66,10 @@ Each verified against running code before being fixed.
   (operator's call). Requests accepted **with limits stated** rather than
   wholesale — provenance is bounded as *drift detection, not tamper-proofing*;
   consumer sandboxing was **declined** as unenforceable and untestable.
-- **Migration order is load-bearing and was followed**: spec → producer →
-  re-review → gate → wrapper. Publishing the gate first blocks every change in
-  every project at once.
+- **Migration order is load-bearing and I broke it.** The order is spec →
+  producer → re-review **the fleet** → gate → wrapper. I re-reviewed only this
+  repo and published the gate, which blocked six repos until the rollback. The
+  plan named that failure in advance; reading it was not the same as doing it.
 - **The log write gates the downgrade**, not the reverse: a failed audit record
   must not leave a silently downgraded shared binary.
 - **Supporting evidence in the change dir never reaches reviewers** — the digest
