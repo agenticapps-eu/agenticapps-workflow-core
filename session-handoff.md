@@ -2,20 +2,25 @@
 
 ## The one thing to know
 
-**The change's own thesis was false in its own code, and the harness was
-structurally unable to see it.** `track` claims the producer and the gate apply
-one predicate. They did not. Two ordinary vendor outputs — a `## Summary`
-heading above the verdict, and a truncated code fence — made the producer report
-success on evidence the gate counted as **zero reviewers**.
+**The gate no longer blocks on reviews, and it is published.** Gate **2.0.0**
+and producer **1.2.0** are live in `~/.agenticapps/bin/`. A plan review is
+worth running; refusing to let anyone write code until one exists is a
+different claim, and it was the one that kept failing.
 
-It shipped green at 55/55 because the producer harness advertised a
-`G. Cross-check — producer and gate agree on the same file` group **that did not
-exist in the file**. Nothing in the tree ever fed producer output to the
-verifier. Group H now does.
+Blocking now happens on exactly one condition: `openspec validate --all` not
+green. Missing, stale, unverifiable and objecting review evidence are all
+reported, never enforced. Error vs absence — a malformed spec delta is wrong on
+its own terms; a missing review is a missing opinion.
 
-Found by the Stage-2 independent code review (task 10.5), not by six rounds of
-Stage-1 vendor review across three vendors. Stage 1 reads artifacts, and the
-artifacts described the invariant correctly.
+Verified against the condition that caused the 2026-07-30 rollback: an active
+change with a pre-trailer `REVIEWS.md`, hook mode, code payload. Gate 1.4.0 →
+exit 2 BLOCKED. Gate 2.0.0 → exit 0 with a NOTE. **Publishing was not a fleet
+event**, which is what dissolved tasks 8b.4, 8b.6 and 8b.7 — three tasks, a
+rollback and a rolled-back publication that all existed to manage the blast
+radius of a block, none of which improved a single review.
+
+**The re-review treadmill is gone.** Editing an artifact still stales the
+evidence; it no longer stops anyone. That loop consumed most of this session.
 
 ## Accomplished
 
@@ -133,29 +138,19 @@ corrections had reintroduced it in prose.
 
 ## Next session: start here
 
-1. **Read the round-12 verdicts in `REVIEWS.md`** — run at the end of the
-   session so the branch is left GREEN rather than blocked, and **deliberately
-   not acted on**. Any findings there are yours to triage. Triage the way this
-   session did: verify against running code first. Three claims this session
-   were refuted by a two-minute test (`fenced ## Reviewer:` hijack, fenced second
-   trailer, and — with the caveat that the spec gap was real — fence
-   portability), and one that was false in round 8 was true in round 9.
-2. **The loop is at diminishing returns, and stopping is a decision.** Round 9
-   found six defects, round 10 found two (both mine), round 11 found one real
-   drift plus text corrections. Every round of fixes stales the evidence and
-   buys another round; the fixes have been shrinking and turning textual, which
-   is what convergence looks like. **Quorum already opens the gate** — an
-   outstanding REQUEST-CHANGES is reported, not blocking, by design. So a green
-   branch carrying noted objections is a legitimate resting state, and a stale
-   one is not. The next required act is **8b.7**, which is communication, not
-   code. Do not start round 13 unless a finding is a real defect.
-3. **8b.7 gates everything downstream.** Write the notice, then 8b.6 (publish
-   gate 1.6.0), then 8.4, then archive. Publishing before 8b.7 is the one move
-   this branch has already been burned by, and 8b.4's acceptance *moved* that
-   precondition rather than removing it.
-4. **Task 10.2** (`--ci` green) is satisfiable once round 11 lands. Expect the
-   advisory tasks-drift NOTE to fire, since `tasks.md` is edited after every
-   review — that is the feature working, not a fault.
+1. **Nothing is blocked and nothing is urgent.** The gate is published and
+   permissive; both open changes validate. `track-and-conform-plan-review`
+   carries a round-12 review whose findings were deliberately not acted on —
+   read them, and treat them as optional now that no gate depends on them.
+2. **Archive `track-and-conform-plan-review` when you want to.** Its remaining
+   open items are declared limits (§14 non-conformance, `MIN_REVIEWERS` not
+   persisted, union host vocabulary) and out-of-repo sites, not defects.
+3. **Task 8.4 is the one real leftover** — the Claude installer still points at
+   its own vendored producer copy rather than core, so this publication was done
+   by hand with `install-shared-artifact.sh`.
+4. **Retake the fleet inventory if any count matters.** The recorded total (37)
+   contradicted its own breakdown (35) and neither figure is trusted. It no
+   longer gates anything, so this is bookkeeping.
 5. `shim-project-hooks` remains planned, not implemented.
 
 ## Open questions
