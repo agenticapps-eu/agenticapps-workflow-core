@@ -69,6 +69,10 @@ make_fixture() { # $1 = validate exit code (0 green, 1 red)
   printf '#!/usr/bin/env bash\nexit %s\n' "$rc" > "$d/stub/openspec"
   chmod +x "$d/stub/openspec"
   : > "$d/repo/openspec/changes/add-thing/proposal.md"
+  # tasks.md is part of a real change and the tasks-drift rows need it to exist
+  # before they can mean anything. Without it those rows scored green against a
+  # digest of nothing — which is the failure mode they were added to catch.
+  printf '# Tasks\n\n- [ ] 1.1 do it\n' > "$d/repo/openspec/changes/add-thing/tasks.md"
   printf 'package main\n' > "$d/repo/src/main.go"
   ( cd "$d/repo" && git init -q . && git config user.email t@t && git config user.name t )
   # A second, symlinked route to the same repo. `git rev-parse --show-toplevel`
@@ -111,6 +115,24 @@ fixture_digest() { # $1 = change dir
   printf 'sha256:%s' "$hex"
 }
 
+# Digest over tasks.md alone, under the same framing as one member of the set
+# above. Independently written rather than shelling out to the gate: a fixture
+# that computes its expected value with the code under test can only ever agree
+# with it.
+fixture_tasks_digest() { # $1 = change dir
+  local d="$1" ser canon plen clen hex p=tasks.md
+  ser="$(mktemp)"; canon="$(mktemp)"
+  LC_ALL=C tr -d '\r' < "$d/$p" > "$canon"
+  [ -s "$canon" ] && [ "$(LC_ALL=C tail -c1 "$canon" | od -An -tu1 | tr -d ' \n')" != "10" ] && printf '\n' >> "$canon"
+  plen=$(printf '%s' "$p" | LC_ALL=C wc -c | tr -d ' ')
+  clen=$(LC_ALL=C wc -c < "$canon" | tr -d ' ')
+  { printf '%s\n%s\n%s\n' "$plen" "$p" "$clen"; cat "$canon"; } >> "$ser"
+  hex="$(LC_ALL=C shasum -a 256 "$ser" 2>/dev/null | awk '{print $1}')"
+  [ -n "$hex" ] || hex="$(LC_ALL=C sha256sum "$ser" 2>/dev/null | awk '{print $1}')"
+  rm -f "$ser" "$canon"
+  printf 'sha256:%s' "$hex"
+}
+
 # Appends a well-formed trailer. Gate 1.5.0 counts ZERO reviewers without one,
 # so every fixture that expects its reviewers to count needs this — which is
 # precisely the fleet-wide migration the change schedules, rehearsed here.
@@ -124,6 +146,24 @@ seed_trailer() { # $1 = change dir  [$2 = implementing host]  [$3 = digest overr
     printf 'producer-version: 1.1.0\n'
     printf -- '-->\n'
   } >> "$dir/REVIEWS.md"
+}
+
+# As reviewers(), but the trailer also carries a tasks-digest matching the
+# fixture's tasks.md as it stands at seeding time. A row that then edits
+# tasks.md is the drift case; one that does not is the quiet case.
+reviewers_td() { # $1 = change dir, remaining args = reviewer names
+  local dir="$1"; shift
+  local f="$dir/REVIEWS.md" n
+  : > "$f"
+  for n in "$@"; do printf '## Reviewer: %s\n\nVERDICT: APPROVE\n\nLooks fine.\n\n' "$n" >> "$f"; done
+  {
+    printf '<!-- openspec-review-trailer v1\n'
+    printf 'implementing-host: pi\n'
+    printf 'digest: %s\n' "$(fixture_digest "$dir")"
+    printf 'producer-version: 1.2.0\n'
+    printf 'tasks-digest: %s\n' "$(fixture_tasks_digest "$dir")"
+    printf -- '-->\n'
+  } >> "$f"
 }
 
 reviewers() { # $1 = change dir, remaining args = reviewer names
@@ -707,6 +747,33 @@ score_gate() {
   reviewers "$fx/repo/openspec/changes/add-thing" gemini
   printf '# Tasks\n\n- [x] 1.1 done\n' > "$fx/repo/openspec/changes/add-thing/tasks.md"
   run_row "ticking a checkbox does not stale the review -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # The advisory tasks-drift report. The row above pinned only the ALLOW half of
+  # the spec's scenario, which the gate satisfied by never reading the field at
+  # all — 66/66 green over a normative SHALL with no implementation behind it.
+  # These pin the half that was missing: it must SAY so.
+  local c
+  fx="$(make_fixture 0)"; c="$fx/repo/openspec/changes/add-thing"
+  reviewers_td "$c" gemini
+  printf '# Tasks\n\n- [ ] 1.1 do it\n- [ ] 1.2 add a debug endpoint\n' > "$c/tasks.md"
+  run_row_stderr_has "a task added after review is REPORTED" 0 \
+    'tasks.md has changed since review' "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  fx="$(make_fixture 0)"; c="$fx/repo/openspec/changes/add-thing"
+  reviewers_td "$c" gemini
+  run_row_stderr_lacks "an untouched tasks.md is not reported" 0 \
+    'tasks.md has changed' "$fx" "$(p_claude src/main.go)"
+  rm -rf "$fx"
+
+  # Absent field is silence, not a warning: the key is optional, and every
+  # REVIEWS.md written before producer 1.1.0 lacks it.
+  fx="$(make_fixture 0)"; c="$fx/repo/openspec/changes/add-thing"
+  reviewers "$c" gemini
+  printf '# Tasks\n\n- [ ] 1.9 something else entirely\n' > "$c/tasks.md"
+  run_row_stderr_lacks "no tasks-digest recorded -> no report" 0 \
+    'tasks.md has changed' "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
   local pd=$((pass - p0)) fd=$((fail - f0)) idd=$((inconclusive - i0))

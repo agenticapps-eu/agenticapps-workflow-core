@@ -21,6 +21,13 @@
 #             H of tools/run-plan-review-conformance.sh feeds producer output to
 #             this script. The header advertised that group for six rounds while
 #             the body had none, which is why the defect shipped green
+#           * READS `tasks-digest` and reports drift. The spec has required this
+#             since 1.3.0 ("the gate SHALL report that the implementation plan
+#             has changed") and no version implemented it: the producer wrote
+#             the field, nothing ever consumed it. The harness scored 66/66 over
+#             it because its one row pinned the ALLOW half of the scenario,
+#             which a gate that never reads the field satisfies by doing
+#             nothing. Still advisory — reporting only, never blocking
 #   1.5.0 — counts REVIEWS a reviewer actually wrote, and binds it to what was
 #           reviewed. Implements spec 1.3.0 §18's new counting terms.
 #           * a section counts only with a VERDICT and a BODY. Both failure
@@ -191,6 +198,34 @@ compute_digest() { # $1 = change dir ; prints sha256:<hex>, or returns 3
   printf 'sha256:%s' "$hex"
 }
 
+# Digest of `tasks.md` alone, under the same framing compute_digest applies to
+# each member: path length, path, content length, content. The producer records
+# it as `tasks-digest`; this recomputes it so drift can be REPORTED.
+#
+# `tasks.md` is deliberately outside the reviewed set — a ticked checkbox must
+# not stale a review — which leaves a hole a reviewer named: a task added after
+# review ("add a debug endpoint") expands scope without contradicting a word of
+# the reviewed artifacts. The spec answers that with an advisory report, and
+# until now the gate never read the field. The producer wrote it, nothing
+# consumed it, and the requirement below it was normative. Write-only evidence
+# is worse than none: it reads as a control that exists.
+compute_tasks_digest() { # $1 = change dir ; prints sha256:<hex>, or returns 3
+  local d="$1" f="$1/tasks.md" canon ser hex plen clen p="tasks.md"
+  [ -f "$f" ] && [ ! -L "$f" ] || return 3
+  canon="$(mktemp "${TMPDIR:-/tmp}/gtasks.XXXXXX")" || return 3
+  ser="$(mktemp "${TMPDIR:-/tmp}/gtser.XXXXXX")" || { rm -f "$canon"; return 3; }
+  LC_ALL=C tr -d '\r' < "$f" > "$canon"
+  [ -s "$canon" ] && [ "$(LC_ALL=C tail -c1 "$canon" | od -An -tu1 | tr -d ' \n')" != "10" ] && printf '\n' >> "$canon"
+  plen=$(printf '%s' "$p" | LC_ALL=C wc -c | tr -d ' ')
+  clen=$(LC_ALL=C wc -c < "$canon" | tr -d ' ')
+  { printf '%s\n%s\n%s\n' "$plen" "$p" "$clen"; cat "$canon"; } >> "$ser"
+  hex="$(LC_ALL=C shasum -a 256 "$ser" 2>/dev/null | awk '{print $1}')"
+  [ -n "$hex" ] || hex="$(LC_ALL=C sha256sum "$ser" 2>/dev/null | awk '{print $1}')"
+  rm -f "$canon" "$ser"
+  [ -n "$hex" ] || return 3
+  printf 'sha256:%s' "$hex"
+}
+
 # ── one parse, consumed by both counting and reporting ───────────────────────
 # reviewer_count() and pending_rejections() previously mirrored each other's
 # parsing by hand, with a comment explaining that divergence would mean the
@@ -204,11 +239,15 @@ compute_digest() { # $1 = change dir ; prints sha256:<hex>, or returns 3
 #   SECTION <name> <verdict|none|conflict> <0|1 substance>
 #
 # The section rule and the verdict grammar are the producer's `shared-predicate
-# v1`. A section runs from its `## Reviewer:` heading to the next heading of
-# LEVEL 1 OR 2, or EOF — deeper headings are interior, so a vendor writing
-# `### Findings` above its verdict keeps that verdict. Bounding at any level
-# was the previous wording and silently discarded such a review at a floor of
-# one.
+# v1`. A section runs from its `## Reviewer:` heading to the NEXT `## Reviewer:`
+# heading, or EOF. No other heading closes it: everything between two reviewer
+# headings is vendor content, and vendor content is interior.
+#
+# This bound was tightened twice, both times after it discarded a real review.
+# "Any heading" killed `### Findings` above a verdict; "level 1 or 2" killed
+# `## Summary` above a verdict, which is the commonest shape an LLM returns.
+# Headings are still excluded from SUBSTANCE below — what widened is what keeps
+# a verdict, not what counts as one.
 parse_reviews() { # $1 = REVIEWS.md
   LC_ALL=C awk '
     # shared-predicate v1
@@ -462,6 +501,16 @@ gate_check(){
     # that is a §18 change, not a gate change.
     v="$(pending_rejections "$d")"
     [ -n "$v" ] && log "NOTE change '${d#"$ROOT"/}' has $n reviewer(s) but $v requested changes — allowed on quorum; address or record why not"
+
+    # Advisory tasks-drift report. Same shape as the line above: say it, never
+    # block on it. Absent or unreadable is silence, not a warning — the field is
+    # optional, and a change with no tasks.md has nothing to drift.
+    td="$(printf '%s\n' "$(parse_reviews "$d/REVIEWS.md")" | awk '$1=="FIELD" && $2=="tasks-digest"{print $3; exit}')"
+    if [ -n "$td" ]; then
+      now_td="$(compute_tasks_digest "$d")" || now_td=""
+      [ -n "$now_td" ] && [ "$now_td" != "$td" ] && \
+        log "NOTE change '${d#"$ROOT"/}' — tasks.md has changed since review; the reviewed artifacts are current but the implementation plan is not"
+    fi
   done <<< "$changes"
   [ "$blocked" -eq 0 ] && return 0 || return 2
 }
