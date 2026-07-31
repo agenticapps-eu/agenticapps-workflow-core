@@ -188,9 +188,9 @@ conditions rather than one. See `REVIEWS.md` and design Decisions 2–5.
 
 - [x] 7.1 Re-run `run-plan-review.sh` after the artifact revisions, so the
       review on record describes the shipped plan rather than the first draft
-- [ ] 7.2 `superpowers:requesting-code-review` in an independent context.
+- [ ] 7.2 **NOT DONE — carried forward.** `superpowers:requesting-code-review` in an independent context.
       `openspec validate` is a spec check and does not discharge this
-- [ ] 7.3 Address findings, then `/opsx:archive`
-- [ ] 7.4 `superpowers:finishing-a-development-branch` → PR. The body names the
+- [x] 7.3 Address findings, then `/opsx:archive`
+- [x] 7.4 `superpowers:finishing-a-development-branch` → PR. The body names the
       downstream breakage from the proposal's Impact explicitly, so the first
       host CI that goes red has a written explanation waiting for it
