@@ -51,9 +51,12 @@ host that wires one inherits the defect until core fixes it.
   file passes every `expect 0` row, and an unreadable one fails forty rows
   while the actual fault is a file mode.
 - Core gains a normative requirement for how its own harnesses report — the gap
-  that let this drift. It lands as a new **declarative-contract** section, not
-  in §09: §09 is `section_type: framing` and governs *host* conformance claims,
-  so normative SHALL text about core's own instruments does not belong there.
+  that let this drift. It lands as **§20, a new section type
+  `core-tooling-contract`** — not in §09, which is `section_type: framing` and
+  governs host conformance claims, and not as a `declarative-contract`, which
+  §00 defines as where *host* requirements live. §00 and §09 are amended to
+  declare the new type and to state that it forms no part of any host's
+  conformance claim.
 
 ## Capabilities
 
@@ -79,8 +82,17 @@ host that wires one inherits the defect until core fixes it.
 - `tools/resolve-core-artifact-conformance.sh`, `tools/shared-install-conformance.sh`
   — single-target tools that already abort non-zero on absence. Their behaviour
   is declared conformant by the delta rather than changed.
-- `spec/` — a new declarative-contract section carrying the requirement, plus
-  the `spec_version` bump and CHANGELOG entry.
+- `spec/20-conformance-harness-reporting.md` — new, typed
+  `core-tooling-contract`. Plus `spec/00-overview.md` and
+  `spec/09-conformance.md`, amended to declare the type and scope it away from
+  host claims; the `spec_version` bump to 1.4.0; the CHANGELOG entry; and
+  ADR-0026.
+
+  These are edits to core's own `spec/` product, not to the OpenSpec capability
+  slot, so they appear in the change as tasks and in the diff rather than as a
+  MODIFIED capability delta. `openspec/specs/` is empty in this repository —
+  core's normative text lives in `spec/`, and the two are different things
+  wearing similar names.
 - **Downstream, deliberately:** host CIs currently green *because* a target was
   missing will go red. That is the change working. `codex-workflow` must
   materialise `bin/` before invoking the harness rather than relying on the

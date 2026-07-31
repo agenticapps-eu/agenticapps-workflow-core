@@ -983,17 +983,43 @@ shared-install|$HOME/.agenticapps/bin/openspec-change-gate.sh"
        [ -f "$host_dir/bin/resolve-core-artifact.sh" ] &&
        [ -f "$host_dir/tools/core-vendor.manifest" ]; then
       if [ "$RESOLVE" = "1" ]; then
-        resolved="$(bash "$host_dir/bin/resolve-core-artifact.sh" \
+        # The resolver's stdout is a PATH THIS HARNESS WILL EXECUTE, and it
+        # comes from a script in another repository. The pin makes the resolver
+        # trustworthy about BYTES — it accepts nothing that does not hash to the
+        # manifest — but it says nothing about where it puts them. Treating that
+        # stdout as an arbitrary filesystem path meant executing whatever it
+        # named and then deleting it.
+        #
+        # So: the resolve runs into a scratch directory this harness owns, the
+        # returned path must land inside it, and the path is screened like any
+        # other target before it is scored. Cleanup removes the scratch
+        # directory, never a path the resolver chose.
+        rdir="$(mktemp -d)"
+        resolved="$(cd "$rdir" && TMPDIR="$rdir" bash \
+                      "$host_dir/bin/resolve-core-artifact.sh" \
                       "$host_dir/tools/core-vendor.manifest" \
-                      bin/openspec-change-gate.sh 2>/dev/null)" && [ -n "$resolved" ]
-        if [ $? -eq 0 ] && [ -s "${resolved:-/nonexistent}" ]; then
+                      bin/openspec-change-gate.sh 2>/dev/null)"
+        rrc=$?
+        # Absolutise before comparing: a relative path from the resolver would
+        # otherwise never match the prefix and would be rejected as an escape.
+        case "$resolved" in
+          /*) rabs="$resolved" ;;
+          *)  rabs="$rdir/$resolved" ;;
+        esac
+        if [ "$rrc" -eq 0 ] && [ -n "$resolved" ] &&
+           [ "${rabs#"$rdir"/}" != "$rabs" ] && harness_screen_target "$rabs"; then
           p0="$pass"; f0="$fail"
-          score_gate "$resolved" "$label (resolved from pin)"
+          score_gate "$rabs" "$label (resolved from pin)"
           [ $((pass - p0 + fail - f0)) -gt 0 ] && roster_scored=$((roster_scored + 1))
-          rm -f "$resolved"
+          rm -rf "$rdir"
           continue
         fi
-        roster_unscored="$roster_unscored  $label — resolve from pin FAILED"$'\n'
+        rm -rf "$rdir"
+        if [ "$rrc" -eq 0 ] && [ -n "$resolved" ]; then
+          roster_unscored="$roster_unscored  $label — resolver returned a path outside its scratch dir; refused"$'\n'
+        else
+          roster_unscored="$roster_unscored  $label — resolve from pin FAILED"$'\n'
+        fi
       else
         roster_unscored="$roster_unscored  $label — not vendored; resolvable from pin, not attempted (--resolve)"$'\n'
       fi

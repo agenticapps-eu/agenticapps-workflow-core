@@ -52,7 +52,11 @@ Two shapes exist and are bound differently:
   it cannot use.
 
 A row is **scored** only when it reached a verdict of pass or fail. A harness's
-**scored total** is its passed count plus its failed count. An inconclusive row
+**scored total** is its passed count plus its failed count. A target reported
+unscoreable counts as one **synthetic failed row** and therefore toward the
+scored total — the harness did determine something, namely that this target
+cannot be certified, so the run is red on its merits rather than on the
+backstop. An inconclusive row
 MUST NOT count toward the scored total: a harness reports a row inconclusive
 precisely when it could not determine the answer, and counting it as evidence
 gathered would turn "I could not tell" into "I checked".
@@ -72,11 +76,13 @@ A conformance harness in this repository:
   confirmation. A multi-target harness records the failure and continues to its
   remaining targets; a single-target harness aborts with a message naming the
   target and the reason.
-- **MUST** treat a target as unscoreable when it is not a regular file, OR is
-  empty, OR is not readable, testing the three independently and naming which
-  held. Precedence is fixed — not-found, not-a-regular-file, empty, unreadable
-  — so the report is reproducible across platforms whose `test` builtins
-  short-circuit differently.
+- **MUST** treat a target as unscoreable when it does not exist, OR is not a
+  regular file, OR is empty, OR is not readable, testing each independently and
+  naming which held. Precedence is fixed — not-found, not-a-regular-file,
+  empty, unreadable — so the report is reproducible across platforms whose
+  `test` builtins short-circuit differently. A dangling symlink is reported as
+  not-a-regular-file rather than not-found, since something is present at the
+  path.
 - **MUST NOT** test the executable bit. Targets are invoked as `bash <path>`,
   which requires read and not execute permission, so a readable
   non-executable script is fully scoreable.
@@ -117,8 +123,12 @@ A harness offering a roster (`--family`) mode additionally:
 - **MUST** report an entry whose host ships both a resolver and a pin manifest
   as resolvable-but-not-attempted, distinguishably from one that is simply not
   found. "Not vendored" and "unscoreable" are different facts.
-- **SHOULD** offer an opt-in mode that resolves such entries and scores them.
-  That mode **MUST NOT** be the default: resolution reaches a remote commit and
+- **SHOULD** offer an opt-in mode that resolves such entries and scores them;
+  where offered, that mode **MUST NOT** be the default. Reporting an entry
+  honestly is a MUST and costs nothing; fetching the bytes is a capability a
+  given harness may not have. `change-gate-conformance.sh` implements both;
+  `reviewer-cli-conformance.sh` implements reporting only, and is conformant.
+  The default matters because: resolution reaches a remote commit and
   fails closed, so a default resolve would let a network fault turn a
   conformance sweep red for a reason unrelated to conformance, and would make
   the instrument unusable offline.
@@ -130,6 +140,19 @@ A harness offering a roster (`--family`) mode additionally:
   silent narrowing this section closes, while looking more rigorous than the
   coverage line it replaced. Whether an absence was intended is a question for
   the reader, and the report's job is to ensure they are asked it.
+
+A harness implementing the resolving mode additionally:
+
+- **MUST NOT** treat the resolver's output as an arbitrary filesystem path. The
+  pin makes a resolver trustworthy about **bytes** — it accepts nothing that
+  does not hash to the manifest — and says nothing about **where** it writes
+  them. A harness that executes whatever path the resolver names, and then
+  deletes it, has handed a script in another repository the ability to choose
+  what this one runs and removes. The resolve MUST be directed into a scratch
+  location the harness owns, the returned path MUST be rejected unless it lands
+  inside that location, it MUST then be screened like any other target, and
+  cleanup MUST remove the harness's own scratch location rather than a path the
+  resolver chose.
 
 ## Out of scope
 

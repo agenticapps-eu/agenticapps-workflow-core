@@ -33,6 +33,15 @@ A harness SHALL treat a row as **scored** only when that row reached a verdict
 of pass or fail, and SHALL compute its **scored total** as its passed count
 plus its failed count.
 
+A target reported unscoreable under the requirements below SHALL count as one
+**synthetic failed row**, and therefore toward the scored total. Without this
+the two rules contradict: a named target that cannot be scored is required to
+be a counted failure, while a run consisting only of such targets would have a
+scored total of zero and would be indistinguishable from a run that did
+nothing. It is a real determination — the harness established that this target
+cannot be certified — so it is evidence, and the run is red on its merits
+rather than on the backstop.
+
 An inconclusive row SHALL NOT count toward the scored total. A harness reports
 a row inconclusive precisely when it could not determine the answer, and
 counting it as evidence gathered would turn "I could not tell" into "I
@@ -70,6 +79,11 @@ any row runs; it is not required to grow a tally to do so.
 
 - **WHEN** a run's rows were all inconclusive
 - **THEN** the harness exits non-zero, because its scored total is zero
+
+#### Scenario: No target and no roster flag is given
+
+- **WHEN** a harness is invoked with no arguments at all
+- **THEN** it exits non-zero with a usage error, having scored nothing
 
 #### Scenario: Some targets scored and all rows passed
 
@@ -110,13 +124,18 @@ The two shapes discharge this differently, and both are conformant:
 
 ### Requirement: Unscoreable is defined by three independent conditions
 
-A target SHALL be treated as unscoreable when it is not a regular file, OR is
-empty, OR is not readable. The three conditions SHALL be tested independently,
-and the reported reason SHALL name which one held.
+A target SHALL be treated as unscoreable when it does not exist, OR is not a
+regular file, OR is empty, OR is not readable. The conditions SHALL be tested
+independently, and the reported reason SHALL name which one held. A target that
+does not exist SHALL be reported as **not found** and not as
+not-a-regular-file: the two are different facts and lead an operator to
+different places.
 
-The conditions can hold together — a broken symlink is non-regular, empty and
-unreadable at once — so the reported reason SHALL be the first that holds in
-the order **not-a-regular-file, empty, unreadable**. A fixed precedence makes
+The conditions can hold together — a dangling symlink neither exists nor is a
+regular file nor is readable — so the reported reason SHALL be the first that
+holds in the order **not-found, not-a-regular-file, empty, unreadable**, with a
+dangling symlink reported as not-a-regular-file rather than not-found, since
+something is present at the path. A fixed precedence makes
 the report reproducible across platforms whose `test` builtins short-circuit
 differently, and puts the most structural explanation first.
 
@@ -255,8 +274,13 @@ and get the bytes. A coverage line that conflates the two teaches the reader
 that the number is as high as it can be, when it is only as high as the default
 mode chose to make it.
 
-A harness SHALL offer an opt-in mode that resolves such entries and scores
-them, and that mode SHALL NOT be the default. Resolution reaches a remote
+A harness SHOULD offer an opt-in mode that resolves such entries and scores
+them; where offered, that mode SHALL NOT be the default. The reporting half is
+a SHALL and the resolving half a SHOULD, deliberately: naming an entry
+honestly costs nothing and is required of every roster harness, while going and
+fetching the bytes is a genuine capability that a given harness may not have.
+`change-gate-conformance.sh` implements both; `reviewer-cli-conformance.sh`
+implements the reporting half only, and is conformant. Resolution reaches a remote
 commit and fails closed on an unreachable source, so making it the default
 would let a network fault turn a conformance sweep red for a reason bearing no
 relation to conformance, and would make the instrument unusable offline. A

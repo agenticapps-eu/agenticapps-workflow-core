@@ -119,7 +119,11 @@ false-green risk:
 - **Empty** is the false green. An empty script exits 0, so it passes every row
   expecting 0 — verified: `bash` on a zero-byte file exits 0.
 - **Not a regular file** is the same hazard reached via a directory, which
-  reports a non-zero size.
+  reports a non-zero size on the filesystems this repository is developed and
+  tested on (APFS, ext4). POSIX does not guarantee it, so the condition is
+  specified as *not a regular file* rather than as *`[ -s ]` is unreliable* —
+  the requirement holds regardless of what any given filesystem reports for a
+  directory's size.
 - **Not readable** is *not* a false-green risk. Verified: `bash` on an
   unreadable file exits **126**, and no row expects 126, so such a target fails
   its rows loudly. One reviewer asserted it "passes every expect-2 row"; that
@@ -280,6 +284,21 @@ of exception this repo keeps discovering as drift.
 - **The rule is stated over the whole run, not per call site.** A harness could
   satisfy "scored ≥1 row" while still dropping a target silently. That is why
   Decision 1 exists and Decision 6 is only a backstop; neither alone suffices.
+
+## A note on ordering, for the archive record
+
+This design and the spec delta were written and reviewed BEFORE the code, over
+three rounds of other-vendor review. The implementation then landed against
+them. A reviewer in the third round observed that the line citations in the
+Context table no longer match the working tree — `reviewer-cli-conformance.sh:169`
+has moved, the `═══` heading is no longer at `:306`, and so on.
+
+That is correct, and the citations are left as they were on purpose. They
+describe the code **as it stood when the defect was found**, which is what the
+Context section is for. Rewriting them to point at the fixed code would make
+the record describe a problem that, by then, did not exist. The change is a
+fix proposed against a real prior state, not a spec retrofitted onto shipped
+code.
 
 ## Migration Plan
 
