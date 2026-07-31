@@ -49,6 +49,37 @@ unset AGENT_SELF MIN_REVIEWERS PREFERRED_REVIEWERS REVIEWER_CLI REVIEW_TIMEOUT
 pass=0
 fail=0
 inconclusive=0
+
+# ── target screening (capability: conformance-harness-reporting) ─────────────
+# Shared shape with change-gate-conformance.sh. A harness must never exit 0
+# having scored nothing, and must never silently skip a target a caller named.
+# `[ -f ]` alone cannot decide scoreability: a ZERO-BYTE file passes it and
+# exits 0 on every invocation (passing every `expect 0` row); a DIRECTORY
+# passes `[ -s ]`; an UNREADABLE file is refused by the shell with 126, which
+# is loud but illegible. The readability check is a no-op under root.
+#
+# Precedence is fixed so the report is reproducible across platforms whose
+# `test` builtins short-circuit differently.
+harness_screen_target() { # $1 = path; sets REASON, returns 1 if unscoreable
+  REASON=""
+  if [ -L "$1" ] && [ ! -e "$1" ]; then REASON="not a regular file (dangling symlink)"; return 1; fi
+  if [ ! -e "$1" ]; then REASON="not found"; return 1; fi
+  if [ ! -f "$1" ]; then REASON="not a regular file"; return 1; fi
+  if [ ! -s "$1" ]; then REASON="empty"; return 1; fi
+  if [ ! -r "$1" ]; then REASON="unreadable"; return 1; fi
+  return 0
+}
+
+# A path is attacker-influenceable in the general case, and output that can be
+# forged with an embedded newline can be made to print a line reading like a PASS.
+harness_safe_label() { # $1 = path
+  printf '%s' "$1" | LC_ALL=C tr -c '[:print:]' '?'
+}
+
+harness_report_unscoreable() { # $1 = label, $2 = reason
+  echo "  UNSCOREABLE  $1 — $2"
+}
+
 WORK=""
 
 cleanup() { [ -n "$WORK" ] && rm -rf "$WORK"; }
@@ -763,10 +794,24 @@ PSTUB
   exit 2
 }
 for p in "$@"; do
-  [ -f "$p" ] || { echo "  SKIP  $p (not found)"; continue; }
-  score_producer "$p"
+  # Naming a target is the caller asserting it should be there. Skipping it and
+  # exiting 0 converts that assertion into this harness's silence.
+  if harness_screen_target "$p"; then
+    score_producer "$p"
+  else
+    harness_report_unscoreable "$(harness_safe_label "$p")" "$REASON"
+    fail=$((fail + 1))
+  fi
 done
 
 echo
 echo "═══ TOTAL: $pass passed, $fail failed, $inconclusive inconclusive"
+# Backstop, folded into the one place the exit code is computed. An
+# inconclusive row is NOT a scored row: it is emitted precisely when the answer
+# could not be determined (see the gate-not-found path above), and counting it
+# as evidence gathered would turn "I could not tell" into "I checked".
+if [ $((pass + fail)) -eq 0 ]; then
+  echo "openspec-conformance: certified NOTHING — no row reached a verdict" >&2
+  exit 1
+fi
 [ "$fail" -eq 0 ]
