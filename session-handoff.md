@@ -2,6 +2,19 @@
 
 ## The one thing to know
 
+**Gate 1.5.0 was published early, blocked six repos, and has been rolled back.**
+Task 8b.1 (fleet inventory) was run *after* publication instead of before, and
+found **37 active changes across six repos carrying no trailer** — all blocked
+at `PreToolUse` until the rollback. The shared gate is back at **1.4.0**,
+byte-identical, with an audit record in `~/.agenticapps/install.log`. The
+tracked 1.5.0 is unaffected.
+
+**Do not re-publish gate 1.5.0 until task 8b.4 completes** (re-review, or
+explicitly accept-and-record, every one of those 37 changes). That is task 8b.6,
+added so the precondition cannot be skipped twice.
+
+## Everything else
+
 `track-and-conform-plan-review` is **implemented and committed** — 14 commits on
 `feat/step3-hook-shims-and-dead-gate-removal`. Three artifacts published to
 `~/.agenticapps/bin/`; spec at **1.3.0**. All four conformance harnesses green.
@@ -78,10 +91,14 @@ Each verified against running code before being fixed.
 
 ## Next session: start here
 
-1. **Check the final re-review** (`REVIEWS.md` for `track`), then run
-   `bash ~/.agenticapps/bin/openspec-change-gate.sh --ci`. It must go green. If
-   it still reads `0/1`, the artifacts moved again — re-review, do not work
-   around it.
+1. **Re-review `track`** — the round-9 corrections staled its evidence again.
+   `REVIEW_TIMEOUT=900 MIN_REVIEWERS=1 ~/.agenticapps/bin/run-plan-review.sh
+   track-and-conform-plan-review --implementing-host claude gemini codex`.
+   Under the restored 1.4.0 the repo currently reads green, because 1.4.0 does
+   not check digests — that is not the same as the evidence being current.
+1b. **Decide the fleet re-review wave (8b.4).** 37 changes across six repos.
+   Either re-review them, or record which are accepted as blocked and why. Only
+   then re-publish gate 1.5.0 (8b.6).
 2. **Task 10.5 — Stage-2 independent code review — is NOT done.** §07 requires
    it in a separate context, and `openspec validate` does not discharge it. I
    did not spawn an agent for it because this session was instructed not to use
