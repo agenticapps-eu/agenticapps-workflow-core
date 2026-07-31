@@ -124,7 +124,7 @@ reviewer-cli: unknown vendor 'opencode' (expected: gemini | codex | claude)
 ```
 
 Not a gate bypass — a producer excluding its own host still had two vendors, and
-§18's `>= 2` threshold still held. But it is a silent capability loss that
+§18's floor still held. But it is a silent capability loss that
 surfaces mid-review as `unknown vendor`, gets recorded as "reviewer unavailable",
 and moves on with one fewer opinion. That is a quiet degradation of the exact
 evidence §18 exists to compel.

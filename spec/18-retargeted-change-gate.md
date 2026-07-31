@@ -70,14 +70,61 @@ truth table is normative:
 | The edit targets an OpenSpec artifact (`openspec/**` — proposal, design, delta, tasks) | **allow (exempt)** | `0` |
 | Active change, `validate` green, **no** `REVIEWS.md` (zero reviewers) | **block** | `2` |
 | Active change, `validate` **fails** | **block** | `2` |
-| Active change, `validate` green **and** `REVIEWS.md` ≥ 1 reviewer | **allow** | `0` |
-| …with exactly 1 reviewer (below the preferred 2) | **allow + report** | `0` |
+| Active change, `validate` green **and** `REVIEWS.md` ≥ 1 counted reviewer | **allow** | `0` |
+| …with exactly 1 counted reviewer (below the preferred 2) | **allow + report** | `0` |
+| Reviewer section with no verdict line | **not counted** | — |
+| Reviewer section with a verdict but no body | **not counted** | — |
+| Reviewer section with two conflicting verdicts | **not counted (malformed)** | — |
+| Section naming the declared implementing host | **not counted (excluded)** | — |
+| `REVIEWS.md` with no trailer, or a malformed one | **block (zero counted)** | `2` |
+| Trailer digest no longer matches the change artifacts | **block (stale)** | `2` |
+| Counted reviewer(s) present, some carrying REQUEST-CHANGES | **allow + report** | `0` |
 | Documented escape hatch env var set (e.g. `GSD_SKIP_REVIEWS=1`) | **allow (override)** | `0` |
 | Malformed / unparseable stdin | **allow (fail-open)** | `0` |
 
 - **MUST** enforce **both** clauses to allow a code edit under an active
   change: `openspec validate --all` passes **and** `REVIEWS.md` carries
-  **at least one** independent reviewer. Either alone is a block.
+  **at least one counted** independent reviewer. Either alone is a block.
+
+- **MUST** count a reviewer section only when it carries **a verdict and a
+  body**. The verdict vocabulary is closed — `APPROVE` | `REQUEST-CHANGES` —
+  matched case-insensitively and anchored at both ends of the line after
+  markdown emphasis is normalised away; fenced code blocks are skipped, so a
+  document quoting the convention does not satisfy it. A section runs from its
+  `## Reviewer:` heading to the next heading of **level 1 or 2**, so a vendor's
+  own `### Findings` subheading does not truncate it.
+
+  A verdict alone is not a review, and a body alone is not a verdict. Both
+  halves were observed counting in production: a bare `VERDICT: APPROVE` with
+  no body on 2026-07-29T07:52:54Z, and a verdictless preamble in the same
+  week's reviews.
+
+  **This term is why a gate may act on verdicts at all.** The reference gate's
+  own source records that "§18's truth table has no verdict term, so a gate
+  that blocked on this would be non-conformant" — correct against the previous
+  text. The spec moves first; the gate follows.
+
+- **MUST** record the implementing host in `REVIEWS.md` and exclude that
+  host's own sections from the count. The identity is read from the artifact,
+  not from the evaluating process's environment: CI, a pre-commit hook, or a
+  different agent routinely evaluates evidence some other host produced, so an
+  environment-derived identity describes the wrong party. A missing or
+  unrecognised identity counts **zero** reviewers.
+
+  Independence here means **a different CLI, not a different model**. A client
+  may route to the same provider and model as the implementing host, in which
+  case two counted reviewers are one model answering twice. Hosts and reviewer
+  vendors are also different sets — a host may have no reviewer arm — so the
+  recorded identity is drawn from the union of both.
+
+- **MUST** bind a review to the artifacts reviewed, by a digest recorded in
+  `REVIEWS.md`, and **MUST NOT** count a review whose digest no longer matches.
+  Without this, amending a change after review silently retains evidence for
+  text nobody read.
+
+  The digest is **drift detection, not authenticity**: it is computable by
+  anyone holding the same artifacts, so it does not resist a forged
+  `REVIEWS.md`, and no requirement here may be read as claiming it does.
 - **SHOULD** carry **two or more** independent reviewers. Two remains the
   target, and a host **MUST** report when a change is proceeding on one —
   the difference between "reviewed by one" and "reviewed by two" must not
@@ -143,7 +190,7 @@ truth table is normative:
   `REVIEWS.md`
 - **WHEN** the gate receives an `Edit classify.go` payload on stdin
 - **THEN** it exits `2` (block) with a message naming the missing
-  REVIEWS.md and the ≥2-reviewer requirement.
+  REVIEWS.md and the one-reviewer floor.
 
 #### Scenario: allow after review
 
@@ -171,7 +218,7 @@ A host implementation:
 
 - **MUST** ship a `PreToolUse` (or equivalent) change-gate implementing
   the exit-code truth table above, enforcing validate-green **and**
-  `REVIEWS.md` ≥ 2 reviewers for edits under an active change.
+  `REVIEWS.md` ≥ 1 counted reviewer for edits under an active change.
 - **MUST** exempt OpenSpec-artifact writes, provide a documented escape
   hatch, and fail open on malformed input.
 - **MUST** be demonstrable by direct script invocation with simulated

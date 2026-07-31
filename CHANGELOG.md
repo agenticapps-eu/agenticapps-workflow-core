@@ -192,7 +192,114 @@ does need a host change; see under *Fixed*.
   > and it had no §08 exposure to retire. Surfaced while auditing codex for its
   > 0.10.0 adoption.
 
+### Changed
+
+- **Gate 2.0.0 — REVIEWS NO LONGER BLOCK.** A plan review is worth running.
+  Refusing to let anyone write code until one exists is a different claim, and
+  it is the one that kept failing. Missing, stale, unverifiable and objecting
+  review evidence are all reported now, on every invocation, and none of them
+  blocks.
+
+  **The gate blocks on exactly one thing: `openspec validate --all` not being
+  green** (or the `openspec` CLI being absent, so the question cannot be
+  answered). The distinction is error versus absence. A malformed spec delta is
+  wrong on its own terms — local, instant, deterministic, no network, no vendor
+  CLIs, no waiting. A missing review is a missing *opinion*: the change is not
+  more broken for the absence of it, and the person best placed to judge whether
+  that matters is the one being interrupted.
+
+  Measured on this repository, blocking cost three rollbacks, a six-repository
+  outage on 2026-07-30, and a migration whose stated precondition was announcing
+  that outage in advance. What it prevented is not identifiable. The reviewers
+  are third-party CLIs that are variously slow, rate-limited and prone to
+  returning nothing, so the floor went unmet routinely for reasons bearing no
+  relationship to the quality of the change — the block landed almost entirely
+  on the wrong cases.
+
+  **Counting is unchanged and still matters.** A gate that reports must count as
+  accurately as one that blocked: "0 reviewers" printed over two real reviews is
+  just as wrong when it is advisory. Every parser fix below is retained, and the
+  reports now distinguish *no review yet* from *reviewed, but the artifacts have
+  since changed* — a distinction that was invisible while the outcome was a
+  block either way.
+
+  MAJOR because any caller depending on exit 2 for an unreviewed change no
+  longer gets it. `GSD_SKIP_REVIEWS` is vestigial and kept so existing exports
+  do not error. **Three planning tasks dissolved rather than completed** — clear
+  the fleet, announce the block, publish behind the announcement — all of which
+  existed to manage the blast radius of the block and none of which improved a
+  single review.
+
 ### Fixed
+
+- **Gate 1.6.0 / producer 1.2.0 — the producer and the gate did not share a
+  predicate, and the harness could not see it.** The change's whole thesis is
+  that evidence the producer publishes is evidence the gate counts. Both
+  scripts carried the marker `shared-predicate v1` and a comment asserting the
+  two awk programs were byte-identical. They were not, and could not be — one
+  parses an assembled file, the other a single body.
+
+  Two ordinary vendor outputs broke it, each confirmed by execution:
+
+  - **A level-2 heading above the verdict.** The gate closed a reviewer section
+    at *any* level-1/2 heading, so `## Summary` — the commonest shape an LLM
+    returns — discarded the verdict beneath it. Producer: `wrote 2 reviewer
+    section(s)`, exit 0. Gate: `0/1 reviewers`, blocked. Gate 1.6.0 closes a
+    section only at the next `## Reviewer:`; this is 1.5.0's own `### Findings`
+    fix applied at the level it stopped short of.
+  - **An unclosed code fence.** The gate tracks fence state across the whole
+    file, so a truncated ``` from one vendor — what a token-capped or timed-out
+    CLI routinely returns — swallowed every later section *and* the trailer.
+    Producer 1.2.0 refuses such a body (`unbalanced-fence`) rather than the gate
+    resetting fence state per section, which would reopen the fence-forging hole
+    the gate currently closes. The body is dropped, never repaired: the record
+    commits to reproducing vendor text verbatim.
+
+  **Both shipped green at 55/55** because the producer harness advertised a
+  `G. Cross-check — producer and gate agree on the same file` group that did not
+  exist in the file. Nothing in the tree ever fed producer output to the
+  verifier. Group H now does, and both defects are mutation-tested.
+
+- **Gate 1.6.0 — the tasks-drift report the spec has required since 1.3.0 was
+  never implemented.** §18 says the gate SHALL report when `tasks.md` has moved
+  since review, and carries a scenario for it. No gate ever read the field: the
+  producer wrote `tasks-digest` and nothing consumed it. Not blocking, not
+  advisory — write-only, which is worse than absent because it reads as a
+  control that exists. The harness scored 66/66 over it, because its one
+  relevant row pinned the ALLOW half of the scenario, which a gate that never
+  reads the field satisfies by doing nothing.
+
+- **Substance had no grammar.** "Carries prose or data", backed by a list of
+  excluded constructs, omitted the ones that mattered: a thematic break (`---`)
+  or a bare `>` counted as a body, so `VERDICT: APPROVE` plus `---` passed the
+  verdict-and-substance rule. Now a positive test — a body line needs at least
+  one alphanumeric character — which has no enumeration to fall behind.
+
+- **Producer 1.2.0 — `--implementing-host` accepted a trailing comma the gate
+  rejects.** Word splitting drops a trailing empty field, so `claude,` yielded
+  one element, reached the trailer, and was refused by the gate's anchored
+  grammar with a message naming neither the trailer nor the comma. `,claude` was
+  caught, so the bug was asymmetric as well as silent. The whole string is now
+  matched against the gate's grammar before it is split.
+
+- **Producer 1.2.0 — a symlinked `REVIEWS.md` was followed, not refused.** The
+  change directory and every digest member were checked for links; the output
+  path was not, and `cp` writes through one. `REVIEWS.md -> ../../../src/app.go`
+  meant a successful review truncated `app.go` and replaced it with review
+  prose, reported as success — and it is the one write the gate always exempts,
+  so nothing downstream would have caught it. `mv` replaces `cp`, making the
+  publish atomic.
+
+- **shared-install 1.0.1 — `--allow-downgrade` glob-expanded.** Unquoted, the
+  value was pathname-expanded as well as split, so `'*'` could authorise a
+  downgrade from a directory containing a matching filename — against the
+  "there is no wildcard" promise the flag is documented with.
+
+- **Gate `Env:` documented `OPENSPEC_GATE_SELF` as live.** Dead since 1.5.0,
+  which reads the implementing host from the trailer. The gate harness set it in
+  every self-exclusion row, so that whole section passed on an unrelated
+  mechanism; the rows are rewritten to declare the host where the gate reads it,
+  with a control row proving they measure exclusion rather than the floor.
 
 - **Gate 1.2.2 — two symlink escapes in the `openspec/` exemption.** Both
   pre-existing since 1.2.0 (verified by running the same reproducer against
@@ -344,6 +451,50 @@ normative spec text. No host's conformance claim is altered *by this repo*.
   four hosts. `drift-report.test.sh` T8 is inverted rather than deleted: it still
   pins that the dashboard (a genuine consumer) is never scored, and now also pins
   that pi *is*. 18/18 tests pass.
+
+## [1.3.0] — 2026-07-30
+
+**Minor — §18 gains the counting terms the gate needed, and stops
+contradicting itself about the reviewer floor.**
+
+**Conformance impact.** A host conformant to 1.2.0's *behaviour* stays
+conformant: the floor text is corrected to match enforcement that already
+existed, and the new terms are additive. But **evidence produced under 1.2.0
+becomes unverifiable** — every existing `REVIEWS.md` predates the trailer, so a
+gate implementing 1.3.0 counts zero reviewers until each change is re-reviewed.
+That wave is scheduled, not discovered: publish the producer, re-review, then
+publish the gate.
+
+### Fixed
+
+- **§18 mandated ≥1 and ≥2 simultaneously.** The truth table (line 73) and the
+  rationale said one; line 146 and line 174 still said two, so the section was
+  not satisfiable as written and "the producer is non-conformant" was only half
+  true. Both are corrected to the one-reviewer floor. The same stale floor is
+  corrected in §17, §02, the CI workflow, the reviewer-cli README and its script
+  header. Statements of *preference* (SHOULD ≥ 2) and the historical note on why
+  the floor moved are deliberately left.
+
+### Added
+
+- **A verdict term in the truth table.** The reference gate's own source recorded
+  that "§18's truth table has no verdict term, so a gate that blocked on this
+  would be non-conformant" — accurate against the previous text, and the reason
+  a heading with no review counted. A section is counted only with **a verdict
+  and a body**; the vocabulary is closed and the grammar is specified to the
+  byte. Both failure halves were observed in production: a bare
+  `VERDICT: APPROVE` with no body on 2026-07-29T07:52:54Z, and a verdictless
+  preamble the same week.
+- **Recorded implementing-host identity**, read from the artifact rather than
+  the evaluating process's environment — CI and pre-commit hooks routinely
+  evaluate evidence some other host produced, so an environment-derived identity
+  names the wrong party. Missing or unrecognised counts zero. Independence is
+  claimed as *a different CLI*, not a different model.
+- **A digest binding a review to what was reviewed.** An amended change
+  previously kept its old `REVIEWS.md` with the gate unable to tell — a hole
+  walked through twice in one session. Stated as drift detection, **not**
+  authenticity: it is computable by anyone holding the same artifacts and does
+  not resist forgery.
 
 ## [1.0.0] — 2026-07-24
 

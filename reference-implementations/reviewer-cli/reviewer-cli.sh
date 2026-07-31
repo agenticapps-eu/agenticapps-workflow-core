@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# reviewer-cli-version: 1.1.0
+# reviewer-cli-version: 1.2.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. That path is written by claude / codex /
@@ -26,7 +26,7 @@
 # reviewer-cli.sh — defensive wrapper for an external-vendor reviewer CLI (§18).
 #
 # The §18 change-gate requires the active change to carry independent multi-AI
-# review (>= 2 DISTINCT external vendors) in REVIEWS.md before any code edit.
+# review (>= 1 counted external vendor; 2 preferred) in REVIEWS.md before any code edit.
 # The review *producer* — each host's `openspec-change-review` skill — calls
 # this wrapper once per vendor to run the actual CLI.
 #
@@ -40,7 +40,7 @@
 # Usage:
 #   reviewer-cli.sh <vendor> <prompt-file>
 #     <vendor>       claude | gemini | opencode | codex
-#                    (>= 2 DISTINCT vendors required by §18)
+#                    (>= 1 counted vendor required by §18; 2 preferred)
 #     <prompt-file>  path to a file holding the full review prompt
 #
 # Env:
@@ -114,29 +114,63 @@ else
   printf 'reviewer-cli:   install coreutils (brew install coreutils) to bound reviewer CLIs.\n' >&2
 fi
 
-# stdin is pinned HERE, in one place, covering both branches — not at each call
-# site. Repeating `</dev/null` per arm is one forgotten redirect away from
+# stdin is bound HERE, in one place, covering both branches — not at each call
+# site. Repeating the redirect per arm is one forgotten redirect away from
 # reintroducing the hang this wrapper exists to prevent, and the omission is
 # invisible until that specific vendor is next called.
-run_bounded() {
+#
+# THE PROMPT IS NEVER AN ARGUMENT. Every arm previously passed the full prompt
+# as argv — `claude -p "$prompt"`, `codex exec "$prompt"` — which put the entire
+# change (proposal, design note and every spec delta) in the process table,
+# readable by any local user for as long as the reviewer ran. The producer had
+# always passed a file; the exposure was entirely here.
+#
+# stdin, not /dev/null, is now the delivery channel, and the never-blocks
+# property is preserved for the same reason it held before: the wrapper always
+# redirects stdin from something that reaches EOF. A regular file EOFs exactly
+# like /dev/null does. Pilot friction #3 — `codex exec` hanging — was an empty
+# TTY, not an inability to read stdin; `codex exec --help` documents that
+# instructions are read from stdin when no PROMPT argument is given.
+# A short, fixed instruction for arms that need a prompt argument to select
+# non-interactive mode. It is a constant carrying no change content, so it is
+# safe in argv — and it refers to the change POSITIONALLY, never by channel
+# name, because a vendor told its input is "on stdin" may try to open that as a
+# file instead of reading what it was already given.
+HEADLESS_HINT="Follow the review instructions given above."
+
+run_bounded() {   # stdin arrives already redirected by the caller
   if [ -n "$TIMEOUT_BIN" ]; then
-    "$TIMEOUT_BIN" "$TIMEOUT" "$@" </dev/null
+    "$TIMEOUT_BIN" "$TIMEOUT" "$@"
   else
-    "$@" </dev/null
+    "$@"
   fi
 }
 
-prompt="$(cat "$prompt_file")"
 
 case "$vendor" in
   claude)
     command -v claude >/dev/null 2>&1 || die "claude CLI not found on PATH"
-    run_bounded claude -p "$prompt"
+    # See HEADLESS_HINT: these arms deliver on stdin.
+    # `-p/--print` selects non-interactive; the prompt itself arrives on stdin.
+    run_bounded claude -p < "$prompt_file"
     ;;
   gemini)
     command -v gemini >/dev/null 2>&1 || die "gemini CLI not found on PATH"
-    # gemini -p "<prompt>" worked first-try in the pilot; still bound + stdin-pinned.
-    run_bounded gemini -p "$prompt"
+    # `-p` selects headless mode and its value is appended to stdin, so the
+    # change arrives on stdin and only the fixed hint is in argv.
+    #
+    # THE HINT'S WORDING IS LOAD-BEARING, which cost two smoke tests to learn.
+    # An earlier hint said the change was "supplied on stdin"; gemini — an
+    # agentic CLI, not a text filter — read that as an instruction to go and
+    # open something called stdin, replied "I cannot directly read from
+    # `stdin`", and reviewed nothing. The content had been there all along.
+    # Referring to it positionally ("above") rather than by channel name works.
+    #
+    # `@<path>` was tried as the alternative and is not viable: gemini refuses
+    # paths outside the workspace, and the producer writes its prompt to
+    # $TMPDIR. It appeared to work only because the first smoke test ran from
+    # /tmp with the file in /tmp.
+    run_bounded gemini -p "$HEADLESS_HINT" < "$prompt_file"
     ;;
   opencode)
     command -v opencode >/dev/null 2>&1 || die "opencode CLI not found on PATH"
@@ -145,12 +179,18 @@ case "$vendor" in
     # judged on the model behind the client. Without this, two arms pointed at
     # the same underlying model would count as two independent reviewers and
     # §18's threshold would be satisfied by one opinion wearing two names.
-    run_bounded opencode run "$prompt"
+    # stdin. `--file` was tried first and is wrong twice over: it is an ARRAY
+    # option, so it greedily consumed the message positional as a second
+    # filename ("Error: File not found: <message>"), and even correctly formed
+    # it returned no review. Smoke-tested: `opencode run < file` answers.
+    run_bounded opencode run < "$prompt_file"
     ;;
   codex)
     command -v codex >/dev/null 2>&1 || die "codex CLI not found on PATH"
-    # `codex exec` reads stdin and hangs without the pin (pilot friction #3).
-    run_bounded codex exec "$prompt"
+    # `codex exec` with no PROMPT argument reads instructions from stdin —
+    # documented in `codex exec --help`. Friction #3 was an empty TTY, not an
+    # inability to read stdin: a regular file EOFs and the hang does not recur.
+    run_bounded codex exec < "$prompt_file"
     ;;
   *)
     die_vendor "unknown vendor '$vendor' (expected: claude | gemini | opencode | codex)"
