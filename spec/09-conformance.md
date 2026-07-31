@@ -81,7 +81,7 @@ A host claiming `full` conformance MUST:
    frontmatter (or host-equivalent metadata block), where
    `<version>` is the spec version the host claims (e.g. `0.1.0`,
    `0.2.0`, `0.3.0`, `0.4.0`, `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`,
-   `0.9.0`, `0.9.1`, `0.10.0`, `1.0.0`).
+   `0.9.0`, `0.9.1`, `0.10.0`, `1.0.0`, `1.4.0`).
 5. **Maintain artifact shapes.** Phases produce CONTEXT.md, PLAN.md,
    VERIFICATION.md, REVIEW.md (with Stage 1 and Stage 2 sections),
    and SECURITY.md when applicable. The artifacts are
@@ -108,6 +108,20 @@ A host claiming `consumer-only` conformance MUST:
 3. Not assert authorship of any of the gates from section 02.
    (A consumer that authors gates is no longer consumer-only.)
 
+
+## Sections that bind core, not hosts
+
+A section typed `core-tooling-contract` (§20 is the first) is normative for
+the tooling in this repository and forms **no part of any host's
+conformance claim at any level**. A host does not satisfy it, does not
+cite it, and does not record a spec delta for it.
+
+The distinction is worth naming because the sections look alike: §20 uses
+the same RFC 2119 keywords as §18 and sits in the same directory. What
+differs is who is bound. §18 tells a host what its change-gate must do;
+§20 tells this repository what the harness that *scores* that gate must
+do. Filing the latter as a declarative contract would have quietly
+conscripted every host into a contract about somebody else's tools.
 
 ## Allowed extensions
 

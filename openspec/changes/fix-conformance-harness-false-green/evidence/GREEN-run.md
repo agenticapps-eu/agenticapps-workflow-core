@@ -23,3 +23,18 @@
   codex-workflow — not vendored; resolvable from pin, not attempted (--resolve)
 ═══ TOTAL: 226 passed, 58 failed, 0 inconclusive
 ```
+
+## --resolve (task 1.24) — opt-in, reaches the pins
+```
+═══ core
+═══ claude-workflow (resolved from pin)
+═══ codex-workflow (resolved from pin)
+═══ opencode-workflow
+═══ pi-agentic-apps-workflow
+═══ shared-install
+═══ COVERAGE: scored 6 of 6 roster entries
+═══ TOTAL: 368 passed, 58 failed, 0 inconclusive
+```
+
+claude-workflow and codex-workflow resolve to gate 2.0.0 and score 71/71.
+The old harness could not show this: it filtered them out and printed success.

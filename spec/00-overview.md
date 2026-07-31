@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.3.0
+spec_version: 1.4.0
 ---
 
 # 00 — Overview
@@ -10,6 +10,13 @@ spec_version: 1.3.0
 normative. Host implementations do not need to satisfy anything in this
 file directly; the requirements live in the canonical-prose and
 declarative-contract sections that follow.
+
+Sections typed `core-tooling-contract` (§20) are the exception to that
+sentence in the other direction: they are normative, but they bind the
+tooling shipped in *this* repository rather than any host. A host does not
+satisfy them and does not cite them. They are versioned with the spec
+because the tools they govern are the ones that decide whether a host
+conforms at all.
 
 ## What this workflow is
 
