@@ -2,9 +2,11 @@
 
 ## Accomplished
 
-**Core PR #49 open** — `fix/conformance-harness-false-green`. Fixes open item
-#1 from the previous handoff: two of five conformance harnesses exited 0 having
-scored nothing. Ships spec 1.4.0 / §20 and ADR-0026.
+**Core PR #49 MERGED** (`ef030d0`, merge commit — the `test(RED)` →
+`feat(GREEN)` pair is preserved on main, which a squash would have erased).
+Fixes open item #1 from the previous handoff: two of five conformance harnesses
+exited 0 having scored nothing. Ships spec 1.4.0 / §20 and ADR-0026. Verified
+from merged main: 36/36 fast rows, repro fixed, validate green, gate --ci OK.
 
 - All five harnesses in `tools/` now score absence instead of skipping it, and
   report `UNSCOREABLE <label> — <reason>` over four conditions with fixed
@@ -55,16 +57,30 @@ mergeable; dashboard #84 had CI in flight. Neither was touched this session.
 
 ## Next session: start here
 
-**PR #49 is open and unmerged; the change is NOT archived.** Two things are
-deliberately outstanding, in order: (1) an independent Stage-2 code review per
-§07 — `openspec validate` is a spec check and does not discharge it, and I
-could not self-dispatch a subagent in this session; (2) `/opsx:archive` once
-that review is addressed. Start by running the code review against the diff on
-`fix/conformance-harness-false-green`, then archive, then merge. After that the
-opencode and pi ports remain the largest untouched work — the recipe in the
-previous handoff still stands, and its method note (survey the host's
-installer, tests, AND every `.github/workflows/` file first) is the lesson that
-cost three round trips in codex.
+**RE-PIN claude-workflow AND codex-workflow FIRST.** This is not housekeeping —
+it is the step that makes the merge reach the fleet. Both hosts pin the
+conformance harnesses by digest in `tools/core-vendor.manifest`:
+
+| host | file | pinned | core main | |
+|---|---|---|---|---|
+| claude + codex | `tools/change-gate-conformance.sh` | `e99ca5eded43` | `9ddfd5d64146` | STALE |
+| claude + codex | `tools/reviewer-cli-conformance.sh` | `cee2ab002e52` | `f5161c8b7025` | STALE |
+
+Until they re-pin from `6cd3b9c` to `ef030d0`, **both hosts resolve and publish
+the harnesses that still have the false-green bug**. The fix is merged in core
+and has not reached a single host. Re-pin means recomputing every entry at the
+new commit — never hand-editing a sha.
+
+After that, the opencode and pi ports are the largest untouched work. The
+recipe in the previous handoff still stands, and its method note (survey the
+host's installer, tests, AND every `.github/workflows/` file first) is the
+lesson that cost three round trips in codex. Both are on gate 1.3.1 / wrapper
+1.1.0 with no resolver and no manifest.
+
+Still NOT done from this session: the independent Stage-2 code review of the
+merged work (§07). It is marked NOT DONE in the archived tasks rather than
+quietly ticked. `openspec validate` is a spec check and does not discharge it,
+and core has no CI to catch what it would have caught.
 
 ## Open questions
 
