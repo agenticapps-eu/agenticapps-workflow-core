@@ -20,7 +20,12 @@
 #   D. Record       — REVIEWS.md is self-contained (requested/counted/excluded/failed)
 #   E. Digest       — binds the review to the artifacts reviewed
 #   F. Trailer      — the grammar the gate parses
-#   G. Cross-check  — producer and gate agree on the same file
+#   G. Egress       — the notice names vendors, screening, and write/execute
+#   H. Cross-check  — the gate counts what the producer published
+#
+# Group H is the only group that runs the real gate. The header claimed a
+# cross-check group for six review rounds while the body had none; findings
+# that a cross-check would have caught on the first run shipped green under it.
 #
 # The vendor CLIs are stubbed. A conformance run must never invoke a real
 # agent CLI: it would be nondeterministic, slow, cost money, and send fixture
@@ -34,7 +39,12 @@ set -uo pipefail
 # ambient value rather than the row's. The sibling gate harness clears
 # OPENSPEC_GATE_SELF for exactly this reason. Rows that need an identity set it
 # per-row, which is a command-scoped assignment and unaffected by this.
-unset AGENT_SELF
+#
+# Clearing only the identity was itself the bug this comment warns about. The
+# floor is the value the gate's own docs tell operators to export, so a harness
+# run in that shell scored 29 spurious failures. Every variable the producer
+# reads is cleared here, not just the one that was noticed first.
+unset AGENT_SELF MIN_REVIEWERS PREFERRED_REVIEWERS REVIEWER_CLI REVIEW_TIMEOUT
 
 pass=0
 fail=0
@@ -67,6 +77,14 @@ make_fixture() {
     chmod +x "$d/stub/$v"
   done
 
+  # The `openspec` CLI, stubbed green — same device the sibling gate harness
+  # uses. The cross-check rows run the real gate, which refuses to look at
+  # reviewers at all until `openspec validate --all` passes; without this the
+  # fixture's minimal delta fails validation and every cross-check row would
+  # fail for a reason that has nothing to do with the predicate under test.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$d/stub/openspec"
+  chmod +x "$d/stub/openspec"
+
   # Stub wrapper. Behaviour per vendor is driven by STUB_<vendor>, read from
   # the environment at call time so a row can set it without rewriting a file.
   #   verdict      — a well-formed review: verdict line plus a body
@@ -94,6 +112,17 @@ case "$mode" in
   verdict_only)   printf 'VERDICT: APPROVE\n' ;;
   prose)          printf 'I read the change and have thoughts but no verdict.\n' ;;
   subheading)     printf '### Findings\n\nVERDICT: REQUEST-CHANGES\n\n- a real issue\n' ;;
+  # A LEVEL-2 heading above the verdict. `### Findings` is interior to a
+  # section; `## Summary` is not — it closes the section under the gate's
+  # bounding rule, so the verdict below it lands nowhere. This is the single
+  # most common shape an LLM returns, and the producer's flat scan cannot see
+  # the difference.
+  heading2)       printf '## Summary\n\nThe change is sound.\n\nVERDICT: APPROVE\n\n- one nit about naming\n' ;;
+  # An unclosed fence — what a token-capped or timed-out CLI returns. The
+  # producer tracks fences per response, so this looks balanced to it; the gate
+  # tracks them across the whole assembled file, so everything appended after
+  # this reviewer (later sections AND the trailer) is swallowed.
+  fence_open)     printf 'VERDICT: APPROVE\n\n- see snippet:\n\n```\nfoo\n' ;;
   conflict)       printf 'VERDICT: APPROVE\n\n- fine\n\nVERDICT: REQUEST-CHANGES\n\n- not fine\n' ;;
   forge)          printf 'VERDICT: APPROVE\n\n## Reviewer: ghost\n\nVERDICT: APPROVE\n' ;;
   forge_inline)   printf 'VERDICT: APPROVE\n\n- a `## Reviewer: codex-2` heading would evade exclusion\n' ;;
@@ -200,6 +229,70 @@ assert_ne() { # $1=desc $2=a $3=b
 
 # Asserts the producer's stderr contains a marker. The egress notice is the
 # only user-facing statement of what left the machine, so it is scored.
+# ── the cross-check ──────────────────────────────────────────────────────────
+# THE ASSERTION THIS WHOLE CHANGE RESTS ON: evidence the producer publishes is
+# evidence the gate counts. Every other row in this file scores the producer
+# against the harness author's belief about the gate. This one scores it
+# against the gate.
+#
+# Its absence was not an oversight in one row — the header advertised a
+# "G. Cross-check" group that was never written, so nothing in the tree ever
+# fed producer output to the verifier. Two ordinary vendor shapes (a `## Summary`
+# heading, a truncated fence) made the producer report success on evidence the
+# gate read as zero reviewers, and 55/55 stayed green over it.
+#
+# Resolves the gate next to the producer under reference-implementations/. A
+# missing gate scores INCONCLUSIVE, never PASS: the one row that would catch
+# producer/gate drift must not report success when it did not run.
+run_row_crosscheck() { # $1=desc $2=expected-reviewers $3=fixture $4...=producer args
+  local desc="$1" want="$2" fx="$3"; shift 3
+  local gate prod_rc gate_rc
+  gate="$(cd "$(dirname "$PRODUCER")/../openspec-change-gate" 2>/dev/null && pwd)/openspec-change-gate.sh"
+  if [ ! -f "$gate" ]; then
+    echo "  INCONCLUSIVE  $desc — gate not found beside the producer"
+    inconclusive=$((inconclusive + 1))
+    return
+  fi
+  prod_rc="$(
+    cd "$fx/repo" || exit 99
+    PATH="$fx/stub:$PATH" REVIEWER_CLI="$fx/stub/reviewer-cli.sh" \
+      bash "$PRODUCER" "$@" >/dev/null 2>&1
+    printf '%s' "$?"
+  )"
+  # Refusal is a coherent outcome — evidence never published cannot drift — but
+  # it is NOT a free pass. Counting it as one is how a harness goes vacuous: a
+  # producer broken badly enough to refuse everything would score green on the
+  # very rows meant to prove it publishes correctly. A row that expects refusal
+  # must say so; anything else must actually publish.
+  if [ "$want" = "refuse" ]; then
+    if [ "$prod_rc" != "0" ]; then
+      echo "  PASS  $desc (producer refused to publish, exit $prod_rc)"
+      pass=$((pass + 1))
+    else
+      echo "  FAIL  $desc — expected the producer to refuse, but it published"
+      fail=$((fail + 1))
+    fi
+    return
+  fi
+  if [ "$prod_rc" != "0" ]; then
+    echo "  FAIL  $desc — producer refused to publish (exit $prod_rc); expected $want reviewer(s)"
+    fail=$((fail + 1))
+    return
+  fi
+  gate_rc="$(
+    cd "$fx/repo" || exit 99
+    PATH="$fx/stub:$PATH" MIN_REVIEWERS="$want" bash "$gate" --ci >/dev/null 2>&1
+    printf '%s' "$?"
+  )"
+  if [ "$gate_rc" = "0" ]; then
+    echo "  PASS  $desc (producer published, gate counted $want)"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  $desc — producer published evidence the gate rejects (gate exit $gate_rc, expected $want reviewer(s))"
+    fail=$((fail + 1))
+  fi
+}
+
 run_row_stderr_has() { # $1=desc $2=marker $3=fixture $4...=producer args
   local desc="$1" marker="$2" fx="$3"; shift 3
   local err
@@ -617,6 +710,36 @@ PSTUB
   chmod +x "$WORK/stub/reviewer-cli.sh"
   run_row_file "a nested specs/**/*.md reaches the reviewers" \
     "has:saw the nested spec" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # ── H. Cross-check ─────────────────────────────────────────────────────────
+  echo
+  echo "  H. Cross-check — the gate counts what the producer published"
+
+  WORK="$(make_fixture)"
+  run_row_crosscheck "a plain review round-trips producer -> gate" \
+    1 "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  WORK="$(make_fixture)"
+  STUB_gemini=subheading run_row_crosscheck "a level-3 subheading keeps its verdict" \
+    1 "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # The two rows the change's thesis lives or dies on.
+  WORK="$(make_fixture)"
+  STUB_gemini=heading2 run_row_crosscheck "a level-2 heading above the verdict does not lose it" \
+    1 "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # The malformed reviewer is dropped, not repaired, so the surviving count is
+  # one, not two. What this pins is that the survivor is codex — under the old
+  # behaviour gemini's dangling fence swallowed codex's whole section and the
+  # trailer, and the gate counted zero.
+  WORK="$(make_fixture)"
+  STUB_gemini=fence_open STUB_codex=verdict \
+    run_row_crosscheck "one reviewer's unclosed fence does not erase the next" \
+    1 "$WORK" add-thing --implementing-host claude gemini codex
   rm -rf "$WORK"
 }
 

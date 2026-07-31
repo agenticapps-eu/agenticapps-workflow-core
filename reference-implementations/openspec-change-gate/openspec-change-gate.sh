@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gate-version: 1.5.0
+# gate-version: 1.6.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. That path is written by claude / codex /
@@ -7,6 +7,20 @@
 # a host still vendoring an older copy silently republishes it over a newer one
 # and reverts the fix for every agent on the machine. Installers MUST refuse to
 # overwrite a higher version. Bump this whenever the gate's behaviour changes.
+#   1.6.0 — a reviewer section is closed ONLY by the next `## Reviewer:`.
+#           1.5.0 closed it at any level-1/2 heading, so `## Summary` above a
+#           verdict — the commonest shape an LLM returns — discarded the verdict
+#           and the review counted zero, while the producer reported success on
+#           the same bytes. NOT a new rule: it is 1.5.0's own `### Findings` fix
+#           applied at the level it stopped short of.
+#           * this is a BEHAVIOUR change under a version that briefly shipped.
+#             1.5.0 was published on 2026-07-30 and rolled back the same day; it
+#             is not redefined in place, because a version that ever reached the
+#             fleet must keep meaning one thing
+#           * proven against the real gate, not against a belief about it: group
+#             H of tools/run-plan-review-conformance.sh feeds producer output to
+#             this script. The header advertised that group for six rounds while
+#             the body had none, which is why the defect shipped green
 #   1.5.0 — counts REVIEWS a reviewer actually wrote, and binds it to what was
 #           reviewed. Implements spec 1.3.0 §18's new counting terms.
 #           * a section counts only with a VERDICT and a BODY. Both failure
@@ -234,7 +248,19 @@ parse_reviews() { # $1 = REVIEWS.md
     /^[[:space:]]*(```|~~~)/ { fence = !fence; next }
     fence { next }
 
-    # A reviewer heading opens a section; any other level-1/2 heading closes one.
+    # A reviewer heading opens a section. ONLY a reviewer heading closes one.
+    #
+    # Bounding at "any level-1/2 heading" was wrong, and wrong in the direction
+    # that silently discards good reviews: `## Summary` above a verdict — the
+    # single most common shape an LLM returns — flushed the section, so the
+    # verdict below it landed nowhere and the review counted as zero. Widening
+    # from "any level" to "level 1 or 2" fixed `### Findings` and left this.
+    #
+    # Nothing else needs to close a section. The producer owns the file layout:
+    # notice, then record, then sections, then trailer. Every level-1/2 heading
+    # between two `## Reviewer:` lines is vendor content, and vendor content is
+    # interior by definition. Headings are still excluded from substance below,
+    # so this widens what keeps a verdict without weakening what counts as one.
     /^##[[:space:]]*[Rr]eviewer[[:space:]]*:[[:space:]]*[^[:space:]]/ {
       flush()
       name = raw
@@ -244,7 +270,6 @@ parse_reviews() { # $1 = REVIEWS.md
       lastcontent = NR
       next
     }
-    /^#{1,2}[[:space:]]/ { flush(); lastcontent = NR; next }
 
     {
       n = norm(raw)

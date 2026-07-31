@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
-# run-plan-review-version: 1.1.0
+# run-plan-review-version: 1.2.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. Installers MUST refuse to overwrite a higher
 # version (treat an unmarked file as 0.0.0). Bump whenever behaviour changes.
+#
+#   1.2.0 — refuses a review body whose code fences are unbalanced, with the
+#           reason `unbalanced-fence`. A dangling ``` is what a token-capped or
+#           timed-out CLI returns, and publishing one swallowed every LATER
+#           section and the trailer when the gate parsed the assembled file:
+#           two good reviews in, zero reviewers out, and a REVIEWS.md that
+#           looked correct to whoever produced it. The body is dropped, never
+#           repaired — the record commits to reproducing vendor text verbatim.
+#           Pairs with gate 1.6.0; group H of the conformance harness now
+#           executes the producer/gate agreement instead of asserting it.
 #
 # This marker is LATE. The gate and reviewer-cli were both given one after
 # core#41 — a host installer blind-installed its 3-arm reviewer-cli over a 4-arm
@@ -237,14 +247,24 @@ emits_outside_fence() { # $1 = ERE ; body on stdin ; exit 0 if emitted
 # ── the verdict-and-substance predicate ──────────────────────────────────────
 # THE SAME RULE THE GATE APPLIES. A section this counts must be one the gate
 # counts; if the two drift, the producer publishes evidence its own verifier
-# rejects, which is the defect class this whole change exists to close. The
-# gate carries a byte-identical copy of this awk program under the marker
-# `shared-predicate v1`. Change both together or neither.
+# rejects, which is the defect class this whole change exists to close.
+#
+# NOT a byte-identical copy, and an earlier revision of this comment claimed it
+# was. The gate parses an assembled file: it labels sections, bounds them, and
+# reads a trailer. This reads one vendor's body with no section around it yet.
+# They cannot be the same program, and asserting they were is what let them
+# drift — the gate closed a section on any level-1/2 heading while this skipped
+# headings and read on, so `## Summary` above a verdict published here and
+# counted zero there. The shared marker is `shared-predicate v1`; what it now
+# means is that the two agree ON A SINGLE SECTION'S BODY, which is exactly what
+# the H. Cross-check rows in tools/run-plan-review-conformance.sh execute
+# against the real gate rather than against a belief about it. Change both
+# together or neither, and re-run group H.
 #
 # Reads a review body on stdin. Prints one token and exits 0 when the body is a
 # review; prints a reason token and exits 1 when it is not:
 #   ok:APPROVE | ok:REQUEST-CHANGES
-#   no-verdict | no-substance | conflicting-verdicts
+#   no-verdict | no-substance | conflicting-verdicts | unbalanced-fence
 #
 # A verdict alone is not a review, and a body alone is not a verdict. Both
 # halves were observed counting in production on this repo's own changes.
@@ -287,6 +307,19 @@ classify_review() {
       substance = 1
     }
     END {
+      # An unclosed fence is refused BEFORE the verdict is considered, because
+      # its blast radius is not this section. The gate tracks fence state across
+      # the whole assembled file, so a dangling fence from one vendor swallows
+      # every section appended after it AND the trailer — the gate reads zero
+      # reviewers and a missing trailer, and blocks a change whose REVIEWS.md
+      # looks correct to the operator who produced it. A truncated fence is what
+      # a token-capped or timed-out CLI routinely returns, so this is ordinary
+      # traffic, not an attack.
+      #
+      # The body is DROPPED, never repaired. Balancing the fence would mean
+      # editing third-party text that the record commits to reproducing
+      # verbatim; refusing it keeps that promise and costs one reviewer.
+      if (fence)           { print "unbalanced-fence";     exit 1 }
       if (conflict)        { print "conflicting-verdicts"; exit 1 }
       if (verdict == "")   { print "no-verdict";           exit 1 }
       if (!substance)      { print "no-substance";         exit 1 }
@@ -597,6 +630,10 @@ for r in "${REVIEWERS[@]}"; do
     conflicting-verdicts)
       echo "  (rejected $r: two conflicting verdicts — malformed; not counted)" >&2
       FAILED+=("$r: conflicting verdicts")
+      continue ;;
+    unbalanced-fence)
+      echo "  (rejected $r: unclosed code fence — publishing it would swallow every later section and the trailer; not counted)" >&2
+      FAILED+=("$r: unbalanced fence")
       continue ;;
     *)
       echo "  (rejected $r: unclassifiable response '$verdict_class'; not counted)" >&2
