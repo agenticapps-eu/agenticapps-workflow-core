@@ -331,6 +331,15 @@ parse_reviews() { # $1 = REVIEWS.md
         verdict = v
         next
       }
+      # Structure is not substance, and the enumeration of structure was
+      # incomplete: headings, fences, comments and blanks were excluded, but a
+      # thematic break (`---`) or a bare blockquote marker (`>`) sailed through
+      # and satisfied the rule. A section of `VERDICT: APPROVE` plus `---` is a
+      # bare verdict wearing a costume, which is the failure this rule exists
+      # to catch. Requiring one alphanumeric character is the whole test: it
+      # needs no list of markers to stay in sync with, and no reviewer writes a
+      # finding without a letter or a digit in it.
+      if (n !~ /[[:alnum:]]/) next
       substance = 1
     }
     END {

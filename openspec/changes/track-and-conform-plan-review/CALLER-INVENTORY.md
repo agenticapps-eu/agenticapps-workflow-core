@@ -65,6 +65,38 @@ is additionally frozen GSD history that must not be written to.
 `pi-agentic-apps-workflow` and `codex-workflow` carry no usage-stating line —
 verified, not assumed.
 
+## A second producer, which this inventory originally missed
+
+**`~/.codex/skills/codex-openspec-change-review/SKILL.md`.** A reviewer named
+it; the claim was checked against the file and every part of it holds.
+
+The inventory above asks "what *calls* `run-plan-review.sh`?" and answers
+"nothing executable". That question is too narrow. The gate does not evaluate
+callers, it evaluates `REVIEWS.md` — so the set that matters is **everything
+that writes one**, and this skill writes one by its own route:
+
+| What it does | Where | Against the new contract |
+|---|---|---|
+| Writes `openspec/changes/<slug>/REVIEWS.md` | `:13`, `:214` | it is a producer, not a caller |
+| Requires `>= 2` reviewers | `:28`, `:64`, `:382` | floor has been one since gate 1.4.0 |
+| Treats `REQUEST-CHANGES` as not-ready-for-code | `:228`, `:389` | §18 is a quorum; two rejections open the gate |
+| Requires separate affirmative consent to transmit | `:106` | producer uses a standing notice |
+| Transmits `tasks.md` and capability specs | `:89`, `:245` | outside the digest set |
+| Emits no v1 trailer | (absent) | **gate 1.5.0+ counts its evidence as zero** |
+
+The last row is the operative one: every `REVIEWS.md` this skill writes is
+rejected outright by the gate this change ships, so a codex operator following
+it produces evidence that cannot satisfy the gate and gets no explanation
+naming the skill.
+
+**Not corrected here, and this is a narrowing rather than a dismissal.** It
+lives in `~/.codex/`, outside both repos in scope, and belongs to the
+`codex-workflow` re-vendor route with the other out-of-repo sites below. What
+changes is that it is now *known* rather than *undiscovered*, and it is listed
+below with them. It is also the strongest argument for the single-source
+vocabulary a reviewer asked for: this contract is now restated in a spec, a
+producer, a gate, and at least one host skill that nobody thought to look at.
+
 ## Out-of-repo sites that contradict until re-vendor (task 1.10)
 
 Named, not corrected — they live outside this repo and are refreshed when each
@@ -73,6 +105,7 @@ discovered:
 
 | Site | What it still says |
 |---|---|
+| `~/.codex/skills/codex-openspec-change-review/SKILL.md` | a whole second producer — floor, consent, blocking and trailer all pre-1.4.0; see above |
 | `~/.claude/skills/agenticapps-workflow/SKILL.md` | "≥2 independent other-vendor reviewers" as the gate's floor |
 | `~/.claude/CLAUDE.md` (operator's global) | "`REVIEWS.md` carries ≥2 other-vendor reviewers" |
 | `claude-workflow` templates + snapshot | `run-plan-review.sh {slug} -> REVIEWS.md (>= 2 reviewers)` |

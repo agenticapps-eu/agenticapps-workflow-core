@@ -166,6 +166,17 @@ reviewers_td() { # $1 = change dir, remaining args = reviewer names
   } >> "$f"
 }
 
+# As reviewers(), but the implementing host is declared explicitly in the
+# trailer — which is where gate 1.5.0+ reads it from, and the only way to
+# exercise self-exclusion at all.
+reviewers_host() { # $1 = change dir, $2 = implementing host, rest = reviewer names
+  local dir="$1" host="$2"; shift 2
+  local f="$dir/REVIEWS.md" n
+  : > "$f"
+  for n in "$@"; do printf '## Reviewer: %s\n\nVERDICT: APPROVE\n\nLooks fine.\n\n' "$n" >> "$f"; done
+  seed_trailer "$dir" "$host"
+}
+
 reviewers() { # $1 = change dir, remaining args = reviewer names
   local dir="$1"; shift
   local f="$dir/REVIEWS.md" n
@@ -506,22 +517,46 @@ score_gate() {
   MIN_REVIEWERS=2 run_row "fenced YAML 'reviewers:' does not satisfy -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
-  echo "  ── E. Self-review exclusion (OPENSPEC_GATE_SELF; advisory) ──"
+  echo "  ── E. Self-review exclusion (declared in the trailer) ──"
   # The implementing host reviewing its own change is not an independent second
   # opinion. A gate that counts it disagrees with the §02 evidence verifier,
   # which rejects it — the ADR-0018 drift pattern, inside the tooling.
-  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi claude
-  OPENSPEC_GATE_SELF=pi MIN_REVIEWERS=2 run_row "self + 1 other = 1 independent -> block" 2 "$fx" "$(p_claude src/main.go)"
+  #
+  # THIS SECTION WAS ENTIRELY VACUOUS and is rewritten. Two independent reasons,
+  # either alone sufficient:
+  #   * every row prefixed OPENSPEC_GATE_SELF=pi, which gate 1.5.0 ignores. The
+  #     exclusion that actually fired came from seed_trailer's DEFAULT host,
+  #     which happened to be `pi` too — so the rows passed while exercising a
+  #     different mechanism than their names and comments described.
+  #   * the self-reviewer was named `pi`, which is a HOST but not a reviewer
+  #     vendor. The gate drops any section whose name is outside
+  #     claude|codex|gemini|opencode before exclusion is ever consulted, so
+  #     nothing was excluded — the section was never counted in the first place.
+  # Verified: with the host set to `codex` and no env var, the old fixtures
+  # produced an identical result with exclusion never reached.
+  #
+  # The host is now declared in the trailer, where the gate reads it, and is a
+  # name that genuinely counts as a reviewer — so removing the exclusion changes
+  # the outcome, which is the only thing that makes these rows worth running.
+  fx="$(make_fixture 0)"; reviewers_host "$fx/repo/openspec/changes/add-thing" claude claude gemini
+  MIN_REVIEWERS=2 run_row "self + 1 other = 1 independent -> block" 2 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
-  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi claude codex
-  OPENSPEC_GATE_SELF=pi run_row "self + 2 others = 2 independent -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  fx="$(make_fixture 0)"; reviewers_host "$fx/repo/openspec/changes/add-thing" claude claude gemini codex
+  MIN_REVIEWERS=2 run_row "self + 2 others = 2 independent -> allow" 0 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
-  # Anchored: a reviewer whose name merely starts with the host's is not swallowed.
-  fx="$(make_fixture 0)"; reviewers "$fx/repo/openspec/changes/add-thing" pi pilot-crew claude
-  OPENSPEC_GATE_SELF=pi run_row "exclusion is anchored, not a prefix -> allow" 0 "$fx" "$(p_claude src/main.go)"
+  # Control: the SAME three sections with a host that reviewed nothing. If this
+  # did not allow where the first row blocks, the rows above would be measuring
+  # the floor rather than the exclusion.
+  fx="$(make_fixture 0)"; reviewers_host "$fx/repo/openspec/changes/add-thing" opencode claude gemini
+  MIN_REVIEWERS=2 run_row "host that reviewed nothing excludes nothing -> allow" 0 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
+
+  # Anchoring is NOT tested here, and pretending otherwise was the old row's
+  # sin. No name in the closed reviewer set is a prefix of another, so the
+  # property has no expressible fixture; the closed set is what enforces it,
+  # and `## Reviewer: codex-2` is covered by the name-filter rows above.
 
   echo "  ── E2. Reviewer floor vs preference (spec 1.1.0) ──"
   # 1.4.0: MUST >= 1 (blocks), SHOULD >= 2 (reports). The gap must never block.

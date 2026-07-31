@@ -126,11 +126,23 @@ line, or any producer-authored block named above. The exclusion is by
 construction as well as by rule: with the notice and record before the first
 section, no section can contain them.
 
-**Structural lines are not substance.** A line counts as a body only if it
-carries prose or data: headings at any level, fence markers, HTML comments and
-blank lines are all excluded. A reviewer that writes `### Findings` above a bare
-verdict has still not written a review, and a section consisting only of
-structure fails the rule exactly as a bare verdict does. A verdict with no body is not a review: on 2026-07-29T07:52:54Z a vendor
+**Structural lines are not substance.** A line counts as a body only if, after
+emphasis is stripped and whitespace collapsed, it **contains at least one
+alphanumeric character** and is not a heading, a fence marker, an HTML comment,
+the generation timestamp, or a verdict line. A reviewer that writes `### Findings`
+above a bare verdict has still not written a review, and a section consisting
+only of structure fails the rule exactly as a bare verdict does.
+
+The rule is stated as a positive test because the previous wording — "carries
+prose or data", plus a list of excluded constructs — was not implementable. The
+list named headings, fences, comments and blanks; a thematic break (`---`) and a
+bare blockquote marker (`>`) are in none of those categories, counted as
+substance, and turned `VERDICT: APPROVE` followed by `---` into a review that
+passed. Any enumeration of Markdown structure has the same problem, because the
+next construct is always missing from it. Requiring one alphanumeric character
+has nothing to keep in sync: no reviewer writes a finding without a letter or a
+digit, and no arrangement of punctuation is one. A reviewer identified that
+"carries prose or data" had no grammar; this is the grammar. A verdict with no body is not a review: on 2026-07-29T07:52:54Z a vendor
 returned a bare `VERDICT: APPROVE` with no body and it counted toward the floor.
 
 **One predicate.** The gate's counting and its reporting SHALL use the same

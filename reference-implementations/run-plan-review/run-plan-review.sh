@@ -320,6 +320,11 @@ classify_review() {
         verdict = v
         next                                             # a verdict is not substance
       }
+      # Structure is not substance. A thematic break or a bare blockquote
+      # marker satisfied the rule before this, so `VERDICT: APPROVE` plus `---`
+      # counted as a review. One alphanumeric character is the whole test —
+      # nothing to keep in sync with the gate beyond the rule itself.
+      if (n !~ /[[:alnum:]]/) next
       substance = 1
     }
     END {
