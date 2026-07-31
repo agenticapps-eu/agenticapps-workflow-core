@@ -5,7 +5,7 @@
 **Done and merged:** core PR #47 and claude-workflow PR #109. The Claude
 installer publishes core's artifacts from a pin instead of vendored copies.
 
-**In flight:** codex-workflow PR #33 — pushed, CI was still running at handoff.
+**Also merged:** codex-workflow PR #33 (main `6c9403a`) — all checks green.
 **Not started:** opencode-workflow, pi-agentic-apps-workflow.
 
 **Method note for whoever picks this up — this is the lesson of the session.**
@@ -29,19 +29,15 @@ core's main; all seven entries re-verified there, all byte-identical.
 Verified from merged main by a real `install.sh` run: published bytes match the
 pin, 0 temp leaks, `--ci` exit 0, suite 218/4 → 226/0.
 
-## codex-workflow PR #33 — needs finishing
+## codex-workflow — MERGED (PR #33, main `6c9403a`)
 
-https://github.com/agenticapps-eu/codex-workflow/pull/33 · branch
-`feat/installer-resolves-core-artifacts`
+Three jobs were red on the first push (`test (ubuntu/macos)`, `ci-gate`) because
+`ci.yml` runs `migrations/run-tests.sh` on a fresh clone where `bin/` is empty —
+I had only materialised by hand locally. Fixed in `run-tests.sh` so every caller
+is covered, not just the workflow that happened to be red. Final: 563 pass /
+0 fail, gate 71/71, all checks green.
 
-**Check CI first: `gh pr checks 33`.** Three jobs were red on my first push
-(`test (ubuntu-latest)`, `test (macos-latest)`, `ci-gate`) because `ci.yml` runs
-`migrations/run-tests.sh` on a fresh clone where `bin/` is empty. Fixed by making
-the harness materialise for itself (commit "fix(ci): the harness must materialise
-the pinned artifacts itself"); verified locally from a genuinely clean state at
-563 pass / 0 fail. If CI is green, merge it.
-
-What the PR does, and why it differs from claude's:
+What it did, and why it differs from claude's:
 
 - **`bin/` is a gitignored CACHE, not deleted.** claude-workflow deleted its
   copies outright; that is wrong here, because the setup skill's
