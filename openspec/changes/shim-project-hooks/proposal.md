@@ -14,9 +14,22 @@ prevents it.
 But measuring the eight hooks found something larger than duplication: **five
 of them should not exist at all.** Three are inert or actively harmful GSD
 remnants, and two write live telemetry into `.planning/` — a directory this
-fleet's own policy designates frozen archive, "never write to them". That
-policy is being violated on every session: `skill-router-log.sh` wrote into
-core's `.planning/` at 08:39 on 2026-07-29, during the session that found it.
+fleet's own policy designates frozen archive, "never write to them".
+
+**That policy is being violated on every session, but not mainly by these two
+hooks — the earlier version of this paragraph blamed the wrong writer.** It read:
+"`skill-router-log.sh` wrote into core's `.planning/` at 08:39 on 2026-07-29,
+during the session that found it." Core has **no `.claude/hooks/` directory at
+all**, so no project hook ran there. Remeasured: core carries 141 files under
+`.planning/skill-observations/` — 137 in the `<stamp>--<sessionId>.{md,jsonl}`
+naming of the **global** `SessionEnd` hook registered in
+`~/.claude/settings.json` (`agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`),
+and 4 in `skill-router-log.sh`'s `skill-router-{date}.jsonl`.
+
+Both hooks are still deleted — they are hooks and they do write there — but this
+change **reduces** the violation rather than ending it, and says so rather than
+claiming a compliance it does not deliver. `meta-observer` is recorded as a
+follow-up below.
 
 One of the three is not merely dead but blocking. `design-shotgun-gate.sh`
 fails **closed** against `.planning/current-phase/design-shotgun-passed`, a
@@ -124,10 +137,17 @@ rollout publishes and verifies **before** any project copy is replaced. An
 unresolvable shim warns on stderr and allows. Absence becomes a provisioning
 failure, caught once and visibly, rather than a per-tool-call outage.
 
-**Preserve `agents-task-viewer`'s opt-out.** Its `normalize-claude-md.sh` is
-**deliberately unregistered** — an in-file note dated 2026-07-21 says it must
-remain so. It is shimmed like the others but stays out of that project's
-`settings.json`. It was not a drifted third version.
+**Preserve `agents-task-viewer`'s opt-out — by shipping it no file at all.** Its
+`normalize-claude-md.sh` is **deliberately unregistered**; an in-file note dated
+2026-07-21 says it must remain so. It was not a drifted third version.
+
+A previous revision said it "is shimmed like the others but stays out of that
+project's `settings.json`", while task 4.3 left the choice open and the impact
+counts below assumed the shim existed — three artifacts, three positions, which
+review flagged. **Resolved: no file.** The opt-out forbids wiring the hook; it
+does not require an unwired file to exist. A shim nothing invokes is a copy that
+can drift unnoticed, and it would be the fleet's only file simultaneously
+required to be byte-identical everywhere and guaranteed never to run.
 
 ## Capabilities
 
@@ -171,9 +191,15 @@ in the text at once.
 `agenticapps-dashboard-add-agent-board` is a git *worktree* of
 `agenticapps-dashboard` on another branch, not an eighth repo.
 
-**Result per project:** 8 hooks become 3 (`openspec-change-gate` plus two
-shims); 634 lines become roughly 138. Across seven projects that is about
-−3,470 lines, plus ~360 lines added once to core as canonical implementations.
+**Result per project:** 8 hooks become 3 (`openspec-change-gate` plus two shims)
+in **six** of the seven; 634 lines become roughly 138. **`agents-task-viewer` is
+8 → 2**, since it receives no `normalize-claude-md` file (see the opt-out above).
+Across seven projects that is about −3,470 lines, plus ~360 lines added once to
+core as canonical implementations.
+
+The earlier text said "8 hooks become 3" without qualification, which review
+showed could not be true alongside an unresolved `agents-task-viewer`. The count
+is now stated per project rather than as a fleet uniformity that does not hold.
 
 **Behaviour changes**, all of them fixes or deliberate removals:
 
@@ -257,9 +283,25 @@ vendored content, and only the second happens here.
 gitignored logs `skill-router-log` wrote already exist on developer machines and
 may contain repository paths and session activity. "Gitignored and untracked"
 means nothing durable is *added* to the repos; it does not mean the existing
-data is disposed of. The change documents where those files live and offers an
-optional cleanup step, rather than treating deletion of the writer as deletion
-of what it wrote.
+data is disposed of.
+
+Review found "offers an optional cleanup step" too vague to act on, so it is
+concrete:
+
+- **Location** — `<projectRoot>/.planning/skill-observations/`, one file per
+  day per project, named `skill-router-<YYYY-MM-DD>.jsonl`. Each line is a JSON
+  object `{ts, skill, phase, tool}`.
+- **Inventory before deleting** —
+  `find . -path '*/.planning/skill-observations/skill-router-*.jsonl'`
+- **Cleanup** — the same expression with `-delete`, run per repo, by the
+  operator. It is **not** performed by this change: the files are local,
+  untracked, and may be wanted as history, so the decision is the machine
+  owner's.
+- **Scope limit, stated plainly** — this removes only what `skill-router-log`
+  wrote. The `<stamp>--<sessionId>.{md,jsonl}` files in the same directory come
+  from `meta-observer` and will keep appearing after this change, because its
+  producer is still registered. Deleting them without unregistering it is
+  housekeeping that undoes itself at the next session end.
 
 ## Deferred follow-ups
 
@@ -278,3 +320,27 @@ check with a real trigger:
 `database-sentinel`'s existing protections — `DROP`/`TRUNCATE TABLE`,
 `DELETE FROM` without a `WHERE`, and `.env` edits — are unaffected by this
 change and by the follow-up.
+
+3. **Retire or retarget `meta-observer`'s `.planning/` writes.** The global
+   `SessionEnd` hook in `~/.claude/settings.json` runs
+   `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, which
+   writes `<projectRoot>/.planning/skill-observations/<stamp>--<sessionId>.{md,jsonl}`
+   in **every** repository the operator opens — 137 of core's 141 such files,
+   in a repo with no `.claude/hooks/` at all. It is the fleet's dominant
+   frozen-archive violation and the reason this change cannot claim to end one.
+
+   Out of scope here for three reasons, each of which also shapes the follow-up:
+   it lives in `agenticapps-dashboard`, not in any of the seven hook-carrying
+   projects; it is wired through **global host settings** rather than a project's
+   `settings.json`, so no per-project edit reaches it; and unregistering a global
+   hook is an operator-level change to the machine, not a repository change this
+   change has standing to make.
+
+4. **Decide what backstops an unprovisioned machine.** This change establishes
+   that the git `pre-commit` wrapper fails open exactly when the PreToolUse shim
+   does — same missing shared install, same `exit 0` — leaving CI as the only
+   floor. That is recorded here as true rather than fixed: making the wrapper
+   fail closed re-creates the `--no-verify` training problem its comment
+   documents, and the alternative (provisioning detection at clone time) is a new
+   mechanism. The follow-up owns the choice; this change owns no longer
+   mis-stating it.
