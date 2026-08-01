@@ -1,11 +1,21 @@
 # .github/workflows/openspec-gate.yml
 #
-# The agent-agnostic enforcement floor in CI (spec §18): every active change must
-# validate and carry >= 1 counted independent reviewer before code merges (2 is
-# preferred and reported, not enforced). This is the
-# one surface no local configuration can bypass — a developer can pass
-# --no-verify to the pre-commit hook, and a PreToolUse hook cannot gate the
-# session that installed it.
+# The agent-agnostic enforcement floor in CI: every active change must pass
+# `openspec validate --all` before code merges. This is the one surface no local
+# configuration can bypass — a developer can pass --no-verify to the pre-commit
+# hook, and a PreToolUse hook cannot gate the session that installed it.
+#
+# REVIEWS DO NOT BLOCK, since gate 2.0.0. Missing, stale, unverifiable and
+# REQUEST-CHANGES review evidence are each printed as a NOTE on every run, and
+# none of them fails the job. The gate still counts reviewers exactly as
+# accurately as when it blocked, and still reports the shortfall against a floor
+# of 1 and a preference of 2 — but the report is the whole mechanism now, so
+# read it. No env var turns blocking back on; `GSD_SKIP_REVIEWS` is vestigial
+# and only silences the NOTEs.
+#
+# Blocking is reserved for what is an ERROR rather than an ABSENCE: a spec delta
+# that does not parse is wrong on its own terms, locally and deterministically,
+# with no vendor CLI in the path.
 name: OpenSpec change gate
 on:
   pull_request:
@@ -25,10 +35,15 @@ jobs:
         # nothing (issue #32: five copies, none conformant). Score it before
         # trusting its verdict.
         #
-        # Requires the harness to be vendored alongside the gate — see the
-        # vendoring steps in the gate README. Both files come from core; keep
-        # them in sync, since a stale harness certifies a stale gate.
+        # Requires the harness beside the gate — vendored, or written by the
+        # host's installer from its core pin. Both files come from core; keep
+        # them at the same provenance, since a stale harness certifies a stale
+        # gate. A target that is absent no longer scores zero-of-zero and passes:
+        # since spec §20 the harness prints `UNSCOREABLE <path> — not found` and
+        # exits 1.
         run: bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
       - name: Run the change gate
         run: bash bin/openspec-change-gate.sh --ci
-        # exit 0 = all active changes validate and carry >=1 counted reviewer; exit 1 = block the PR.
+        # exit 0 = every active change validates (review NOTEs may still print);
+        # exit 1 = block the PR — `openspec validate --all` is red, or the
+        # `openspec` CLI is missing so the question cannot be answered.
