@@ -59,13 +59,41 @@ hand-edit, a stale copy, a half-finished install — and it catches an attacker
 who did not think to update the manifest. It does not establish authenticity,
 and no requirement here SHALL be read as claiming it does.
 
-**Publication of several implementations SHALL be atomic**, or ordered so that
-no intermediate state leaves a project binding a hook whose implementation is
-absent. Publishing one artifact per invocation with no grouping is how a
-partially provisioned machine arises. Atomicity is per file — write to a
-temporary path in the same directory, then `mv` into place, which is atomic on
-a single filesystem — and the manifest row SHALL be updated in the same
-operation as the file it describes, so the two cannot disagree.
+**Publication is atomic per artifact, and is NOT atomic across artifacts.** An
+earlier revision required multi-artifact publication to be atomic and required
+each manifest row to be "updated in the same operation as the file it
+describes". A reviewer showed neither is achievable: two `rename(2)` calls are
+two operations, so an implementation and its manifest row cannot be swapped as
+one, and per-file renames do not compose into a multi-file transaction. A
+guarantee that cannot be implemented is not a guarantee, and specifying one
+here would have been discovered as a defect during implementation or, worse,
+asserted as satisfied. What is achievable is specified instead:
+
+- **Per-artifact atomicity** — each implementation SHALL be written to a
+  temporary path in the destination directory and `rename`d into place. On a
+  single filesystem that swap is atomic, so no reader observes a partial file.
+- **Whole-manifest atomicity** — the manifest SHALL be rewritten in full to a
+  temporary path and `rename`d, never edited row-by-row in place. A row-wise
+  edit has its own torn-write window, and rewriting the whole file makes the
+  manifest's own update atomic even though its atomicity cannot be *joined* to
+  the artifact's.
+- **Mutual exclusion** — a publishing run SHALL hold an exclusive lock for the
+  duration of its critical section. Without one, two concurrent installers
+  read-modify-write the shared manifest and the later writer silently discards
+  the earlier's rows. This is a lost-update defect, not a torn-write defect,
+  and the lock is what addresses it.
+- **Ordering** — an artifact SHALL be renamed into place *before* the manifest
+  row naming it is published. The reachable inconsistency is therefore an
+  implementation present with no manifest row — a artifact that reports as
+  unverifiable — rather than a manifest row promising a file that is absent.
+  The direction is chosen deliberately: an unverifiable-but-working hook
+  degrades to a reported warning, whereas a row pointing at nothing would make
+  the check report a failure the operator cannot act on.
+
+**The reconciliation is the check's job, not the installer's.** Because the two
+renames cannot be joined, the manifest and the directory can disagree after a
+crash. The conformance check SHALL treat that disagreement as a reportable
+state in both directions rather than as an invariant violation.
 
 This is the rule the current fleet violates: two hook implementations copied
 into seven projects produced three distinct versions of
@@ -102,8 +130,24 @@ into seven projects produced three distinct versions of
 #### Scenario: Publication is interrupted partway
 
 - **WHEN** the installer is killed between publishing two implementations
-- **THEN** no project binds a hook whose implementation is absent: each file
-  either exists complete with its manifest row, or does not exist at all
+- **THEN** every implementation it did publish is complete rather than
+  truncated, and the manifest is either the pre-run version or the post-run
+  version and never a torn mixture — the machine is left **partially
+  provisioned**, which is a legitimate state that the check reports, not an
+  invariant the installer promises cannot occur
+
+#### Scenario: Two installers publish concurrently
+
+- **WHEN** two publishing runs overlap
+- **THEN** the second blocks on the exclusive lock rather than
+  read-modify-writing the manifest in parallel, so neither run's rows are lost
+
+#### Scenario: A crash leaves an implementation with no manifest row
+
+- **WHEN** an artifact was renamed into place but the run died before the
+  manifest was rewritten
+- **THEN** the check reports that implementation as unverifiable — present but
+  unattested — rather than reporting it absent or reporting the install clean
 
 ### Requirement: The shim contract itself has a propagation path
 
@@ -121,11 +165,58 @@ A shim SHALL carry a version marker for the contract it implements, so a project
 running an older shim is detectable rather than discovered when it behaves
 differently from its siblings.
 
+**A marker alone does not make anything detectable, and the previous revision
+stopped at the marker.** A reviewer noted that it defined no format, no
+authoritative expected value, no comparison procedure and no check — so nothing
+could ever read a marker and conclude "this project is stale". All four are
+specified:
+
+- **Format** — a comment line `# shim-contract: <major>.<minor>.<patch>` within
+  the shim's first 10 lines, semver, matching `^[0-9]+\.[0-9]+\.[0-9]+$`. Same
+  shape and placement convention as the gate's `# gate-version:` marker, so one
+  reading rule covers both.
+- **Authority** — the expected version is the one recorded in the shim template
+  under `reference-implementations/project-hooks/`. The template in core is the
+  authority; a shim in a project is a copy that either matches it or is stale.
+  No project-local file is authoritative for its own conformance.
+- **Comparison** — a shim is **current** when its marker equals the template's,
+  **stale** when it is lower, and **unrecognised** when it is absent, malformed
+  or higher than the template's. Higher is not "newer and fine": it means the
+  project carries a shim the tracked template cannot account for, which is the
+  drift this marker exists to surface.
+- **Check** — a conformance tool SHALL enumerate every project binding a shimmed
+  hook, read each marker, and report each project's state. The marker's purpose
+  is discharged by that report existing, not by the marker being present.
+
+Bumping the contract version SHALL accompany any change to resolution order,
+exit behaviour or identification — the same three things this requirement's
+first paragraph calls a contract change.
+
 #### Scenario: The shim contract changes
 
 - **WHEN** the resolution order or exit behaviour required of shims is revised
 - **THEN** every project binding an affected hook is enumerated and updated, and
   each is verified rather than assumed to have been reached
+
+#### Scenario: A project carries a shim from before a contract change
+
+- **WHEN** the conformance check reads a shim whose marker is lower than the
+  template's
+- **THEN** that project is reported stale by name, rather than the discrepancy
+  surfacing later as one repo behaving unlike its siblings
+
+#### Scenario: A shim carries no marker or a malformed one
+
+- **WHEN** a shim has no `# shim-contract:` line in its first 10 lines, or one
+  that is not semver
+- **THEN** it is reported unrecognised — it is not treated as current by default,
+  because an unmarked shim is exactly the pre-marker shim the check exists to find
+
+#### Scenario: A shim's marker is higher than the template's
+
+- **WHEN** a project's marker exceeds the version recorded in core's template
+- **THEN** it is reported unrecognised rather than passed as up-to-date, because
+  the tracked template is the authority and cannot account for that version
 
 ### Requirement: A project binds a hook through a shim
 
@@ -144,6 +235,39 @@ fallback is the in-project copy this capability forbids two requirements above;
 if it is the scaffolder's own checkout, a shim running inside a product repo has
 no defined way to locate it. Either way the entry contradicted something, so it
 is removed rather than clarified.
+
+**This two-candidate order governs tool-boundary shims only. The git
+`pre-commit` wrapper is a different artifact and is NOT brought under it.** A
+reviewer observed that the capability claimed the pre-commit hook as the fallback
+carrying the guarantee when a shim fails open, without establishing that it
+survives the same conditions. Checked against
+`reference-implementations/openspec-change-gate/pre-commit`, it does not:
+
+```
+GATE="${OPENSPEC_GATE:-${OPENSPEC_CHANGE_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}}"
+[ -x "$GATE" ] || GATE="$(git rev-parse --show-toplevel)/bin/openspec-change-gate.sh"
+```
+
+Its last resort is `<repo>/bin/openspec-change-gate.sh` — **the very candidate
+this requirement forbids** — and when that too is absent it prints a warning and
+`exit 0`, fail-open by design so that a missing tool does not train operators
+into `--no-verify`. So on an unprovisioned machine the PreToolUse shim fails open
+*and* the pre-commit wrapper fails open, and the only enforcement left is CI. The
+capability's own claim that "the guarantee rests on the pre-commit hook and the
+CI floor" was half right, and the half that was wrong is the half that runs on a
+developer's machine.
+
+Two consequences are normative:
+
+- The two-candidate rule SHALL NOT be applied to the `pre-commit` wrapper. Doing
+  so would delete its `<repo>/bin/` fallback and leave it strictly weaker, which
+  is the opposite of the rule's purpose. The wrapper is not a tool-boundary shim:
+  it runs outside the host, has no matcher breadth, and its fallback is reached
+  by an operator running `git commit`, not by every `Edit`.
+- Any statement that the pre-commit hook backstops a fail-open shim SHALL name
+  the provisioning state it assumes. It backstops a **provisioned** machine. On
+  an unprovisioned one it fails open too, and **CI is the only floor** — which
+  SHALL be stated wherever the fallback is claimed.
 
 **The override is specified, not merely permitted:**
 
@@ -171,15 +295,33 @@ is removed rather than clarified.
   typo'd variable — but it SHALL appear in the hook's stated coverage boundary
   rather than only in this requirement, so an operator reading what the hook
   protects also reads what turns it off.
-- **The variable SHALL be read from the process environment only.** A shim SHALL
-  NOT read its override out of any project-controlled file. The distinction
-  matters because the host's settings files can define environment variables for
-  hook processes: an override honoured from project configuration would let a
-  cloned repository disable its own change gate, with no operator action and
-  nothing on screen but the shim's own warning. No project in the fleet sets
-  `env` in `.claude/settings.json` today — verified across all seven — so this
-  requirement is closing the door before anyone walks through it, not describing
-  an existing breach.
+- **The prohibition on project-set overrides SHALL be enforced by configuration
+  validation, not by the shim.** The previous revision required the shim to
+  honour the variable "from the process environment only" and not "out of any
+  project-controlled file". A reviewer showed that is unimplementable: when
+  `.claude/settings.json` defines a variable in its `env` block, the host injects
+  it into the hook process's environment, where it is **indistinguishable** from
+  one the operator exported. A shim reads `$VAR`; there is no provenance to
+  inspect. A behaviour-free shim cannot satisfy a rule about where a value came
+  from, and specifying one produced a requirement no test could ever fail.
+
+  The prohibition is real and is retained — a cloned repository must not be able
+  to switch off the gate that governs it — but it moves to the only layer that
+  can see provenance, the configuration itself:
+
+  - A conformance check SHALL scan every project's `.claude/settings.json` (and
+    any settings file the host merges) for an `env` block defining any shim's
+    override variable, and SHALL report each occurrence.
+  - The finding is reported against the **repository**, not suppressed at
+    runtime: the value still takes effect on a machine that has it, which is
+    precisely why it must be visible in review rather than silently ignored.
+  - No project in the fleet sets `env` in `.claude/settings.json` today —
+    verified across all seven — so this check starts green and exists to keep it
+    that way.
+
+  This is a weaker guarantee than the previous wording claimed, and the weakening
+  is the point: the strong version was unenforceable, so it guaranteed nothing
+  while reading as though it guaranteed everything.
 
 This does not weaken "authoritative in one place". That requirement is about
 what is *tracked and maintained* — one file that maintainers edit — not about
@@ -193,12 +335,14 @@ conflicting, which they will be unless the distinction is stated.
 - **THEN** the shim reports that the override is invalid, and does not fall
   through to the shared install as though the override had not been set
 
-#### Scenario: A project's configuration tries to set the override
+#### Scenario: A project's configuration sets the override
 
 - **WHEN** a repository's own `.claude/settings.json` defines the override
   variable in its `env` block
-- **THEN** the shim does not honour it as an override, because a project cannot
-  be permitted to disable the gate that governs it
+- **THEN** the conformance check reports that repository by name, because the
+  value **will** take effect at runtime — the shim cannot tell it apart from an
+  operator-exported variable, so the defence is detection in review, not
+  rejection at the tool boundary
 
 #### Scenario: The shared install is present
 
@@ -216,6 +360,29 @@ conflicting, which they will be unless the distinction is stated.
 A shim that resolves no implementation SHALL allow the tool call and SHALL make
 the failure visible in the session transcript, naming the missing implementation
 and the installer that provides it.
+
+**A machine is in exactly one of three provisioning states, and the invariants
+differ per state.** A reviewer found the capability asserting, under publication,
+that "no project binds a hook whose implementation is absent", while the
+clone-before-install scenario below explicitly permits exactly that. Both
+sentences were true of different states and neither said which, so the pair read
+as a contradiction. The states are named here and every invariant elsewhere in
+this capability SHALL be read as qualified by one of them:
+
+| State | Definition | Invariant |
+|---|---|---|
+| **Unprovisioned** | the installer has never run on this machine | shims resolve nothing, report, and allow. Binding a hook whose implementation is absent is **expected and permitted** — it is the state a fresh clone is in |
+| **Partially provisioned** | a publishing run was interrupted, or only some artifacts were published | each published implementation is complete and each is either attested by a manifest row or reported unverifiable. Mixed is legal; torn is not |
+| **Provisioned** | a publishing run completed | every shimmed implementation is present, executable, and attested by a manifest row whose digest matches |
+
+The rule that a project must never bind a missing implementation applies to the
+**provisioned** state only. It is a post-condition of a completed install, not a
+property of the fleet at all times — which is what made it look like it
+contradicted a usable fresh clone.
+
+A rollout SHALL move a machine to *provisioned* before any project's copy is
+replaced with a shim, because that ordering is what keeps the window in which a
+project has a shim but no implementation from being entered deliberately.
 
 **It SHALL exit with a non-blocking error code — not 0.** On the supported host,
 a PreToolUse hook exiting 0 has its stdout written to the debug log and its
@@ -262,8 +429,17 @@ whether an unprovisioned machine can be used.
 rather than passed over.** On an unprovisioned machine, PreToolUse enforcement
 of the change gate is absent, so §18's review requirement is advisory at the
 tool boundary until the installer has run. That is not a regression — the gate
-shim already fails open, silently — and §18 already places the real guarantee in
-the git pre-commit hook and the CI floor, neither of which a shim can weaken.
+shim already fails open, silently.
+
+**What is beneath it, stated correctly.** An earlier revision of this paragraph
+said §18 "places the real guarantee in the git pre-commit hook and the CI floor,
+neither of which a shim can weaken". The CI half holds. The pre-commit half does
+not, on the very machine this paragraph is about: the wrapper resolves the same
+`~/.agenticapps/bin/` path the shim just failed to resolve, falls back to
+`<repo>/bin/`, and then warns and exits 0. Unprovisioned means **both** layers
+fail open, and **CI is the only floor**. A reviewer doubted the claim; reading
+the wrapper confirmed the doubt. Any restatement of the fallback SHALL name the
+provisioning state it assumes.
 
 The **implementation** is free to take a different posture from the shim,
 because the matcher-breadth argument does not apply to it: it inspects the
@@ -274,9 +450,17 @@ run rather than an operator's session.
 #### Scenario: The change gate's implementation is missing on a developer machine
 
 - **WHEN** the shared install has not run and a code edit is attempted
-- **THEN** the edit proceeds with the failure reported, and the change gate's
-  guarantee rests on the pre-commit hook and the CI floor until the install is
-  repaired
+- **THEN** the edit proceeds with the failure reported, and — because the
+  pre-commit wrapper resolves the same absent shared install and then fails open
+  itself — **CI is the only remaining floor**, which is reported as such rather
+  than described as the pre-commit hook holding the guarantee
+
+#### Scenario: The pre-commit wrapper is audited against the shim contract
+
+- **WHEN** the two-candidate resolution order is applied to
+  `reference-implementations/openspec-change-gate/pre-commit`
+- **THEN** it is recorded as out of scope rather than corrected, because removing
+  its `<repo>/bin/` fallback would leave it weaker than it is today
 
 #### Scenario: A shim resolves no implementation
 
@@ -396,16 +580,39 @@ as they did.
 
 ### Requirement: Removal is argued from the binding, never from the filename
 
-A hook MAY be deleted without a §02 delta only when all three hold:
+A hook MAY be deleted without a delta only when all three hold:
 
-1. no §02 gate's documented binding names it;
-2. it produces none of the §02 evidence artifacts; and
-3. **it does not enforce a §02 gate** — it neither checks a gate's required
+1. no gate's documented binding names it;
+2. it produces none of the required evidence artifacts; and
+3. **it does not enforce a gate** — it neither checks a gate's required
    evidence nor is depended on by anything that does.
 
 A hook for which **any clause fails** SHALL NOT be deleted without a delta. (The
 previous wording said "satisfies any one of the three", which forbade exactly
 the deletions the clauses above permit — a reviewer caught the inversion.)
+
+**The three clauses SHALL be evaluated against every applicable specification
+section and against transitive consumers — not against §02 alone.** The previous
+revision scoped all three to §02, which a reviewer showed could authorise
+deleting a hook that §17, §18, another capability, or a project's own policy
+depends on: passing a §02-only test says nothing about a §17 obligation. The
+scope is therefore:
+
+- **Every section that can bind or require a hook**, which today means at least
+  §02's gates, §17's lifecycle-and-gate mapping and §18's change gate — and any
+  section added later, without this list needing to be reopened, because the
+  rule is "applicable specifications", not an enumeration.
+- **Capability specs under `openspec/specs/`**, which can require a hook without
+  any numbered section naming it.
+- **Transitive consumers** — anything that invokes the hook, reads what it
+  writes, or would change behaviour if it stopped running. The check is "what
+  breaks if this file is gone", asked of the fleet and not only of the spec.
+- **Project-local policy** — a repo may depend on a hook the fleet does not
+  require. That dependency is the project's to waive, and SHALL be recorded as
+  waived rather than overlooked.
+
+Clearing §02 is necessary and not sufficient, and a deletion argued only from
+§02 SHALL be treated as unargued.
 
 The third clause was missing and a reviewer supplied it. Binding, production and
 enforcement are three different relationships: §02 says hosts SHOULD enforce
@@ -440,6 +647,20 @@ evidence artifact.
   in the host instruction file, the hook writes none of the gate's required
   evidence, **and** the enforcement clause has been checked and also fails
 - **THEN** deleting the hook removes no binding, and no §02 delta is required
+
+#### Scenario: A hook clears §02 but another section requires it
+
+- **WHEN** a hook satisfies all three clauses against §02, and §17 or §18 or a
+  capability spec depends on it
+- **THEN** it SHALL NOT be deleted without a delta, because clearing one section
+  is not clearing the specification
+
+#### Scenario: A hook nothing specifies is depended on by something that runs
+
+- **WHEN** no specification names a hook, but another script invokes it or
+  consumes what it writes
+- **THEN** the transitive-consumer clause fails and the deletion is argued or
+  abandoned, rather than cleared on the grounds that no spec mentions it
 
 #### Scenario: A hook checks a sentinel that is not the gate's evidence
 
@@ -574,6 +795,39 @@ A hook SHALL NOT write to a directory the fleet designates as frozen history.
 treated as the current plan. A hook writing live session data there
 contradicts that designation and makes archived and live content
 indistinguishable.
+
+**This requirement binds hooks, and hooks are not the only writers — deleting
+the two named in this change does NOT end the violation.** Measured while
+revising: `agenticapps-workflow-core` carries 141 files under
+`.planning/skill-observations/` while having **no `.claude/hooks/` directory at
+all**. 137 of them are named `<stamp>--<sessionId>.{md,jsonl}`, which is the
+naming of a *global* `SessionEnd` hook registered in `~/.claude/settings.json`
+running `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`,
+whose own header states it "writes
+`<projectRoot>/.planning/skill-observations/<stamp>--<sessionId>.{md,jsonl}`".
+Only 4 match `skill-router-log.sh`'s `skill-router-{date}.jsonl` naming.
+
+The producer that writes the overwhelming majority of this fleet's `.planning/`
+traffic is therefore **not** a project hook, is registered globally rather than
+per-project, and writes into every repository the operator opens — including
+repositories that carry no hooks. It is out of this capability's scope, which
+governs project hook binding, and is recorded as a follow-up rather than
+silently left implied to be fixed.
+
+Deleting `skill-router-log.sh` and `session-bootstrap.sh` remains correct: they
+do write there, and they are hooks. What SHALL NOT be claimed is that their
+deletion makes the fleet compliant with the frozen-archive policy. Identifying a
+producer by the name of a nearby file, rather than by what actually writes, is
+the same error this capability's deletion rule exists to prevent — found here in
+this change's own evidence.
+
+#### Scenario: A non-hook writer produces the same violation
+
+- **WHEN** a directory designated frozen is being written and no hook accounts
+  for the files
+- **THEN** the actual producer is identified before any hook is credited with
+  causing or curing the violation, and a fix scoped to hooks is reported as
+  partial rather than complete
 
 #### Scenario: A hook needs to persist session data
 

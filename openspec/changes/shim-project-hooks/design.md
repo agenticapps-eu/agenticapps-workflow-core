@@ -110,6 +110,36 @@ violation is live: core's `.planning/` was written at 08:39 on 2026-07-29.
 
 **Chosen:** delete both.
 
+**The evidence sentence above is wrong, and the way it is wrong matters.**
+Core's `.planning/` writes cannot be `skill-router-log.sh`'s doing: **core has no
+`.claude/hooks/` directory at all.** Measured while revising — core holds 141
+files under `.planning/skill-observations/`, of which 137 are named
+`<stamp>--<sessionId>.{md,jsonl}` and only 4 match `skill-router-log.sh`'s
+`skill-router-{date}.jsonl`. The 137 come from a **global** `SessionEnd` hook in
+`~/.claude/settings.json` running
+`agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, whose
+header states it writes exactly that path.
+
+So the dominant producer of this fleet's `.planning/` traffic is not a project
+hook, is registered once globally rather than seven times per-project, and writes
+into **every** repository opened — not just the seven this change touches.
+
+The decision to delete the pair is unchanged: they are hooks, they do write
+there, and the policy is real. What changes is the claim attached to it. This
+change **reduces** the violation; it does not end it, and no report of it SHALL
+say the fleet is compliant with the frozen-archive policy afterwards.
+`meta-observer` is recorded as a follow-up (see Deferred follow-ups) rather than
+pulled into scope: it lives in another repository, it is wired through global
+host settings rather than any project's `settings.json`, and unregistering it is
+an operator-level change this change has no mandate to make.
+
+The lesson is the one this change already teaches about `design-shotgun-gate`
+and about `database-sentinel`'s middle column: **a producer was identified by the
+name of a nearby file rather than by what actually writes.** Three rounds of
+vendor review and six revisions did not catch it, because every reviewer read the
+sentence as evidence rather than checking whether the named hook exists in the
+repository the evidence cites.
+
 *Alternative — relocate storage outside `.planning/` and keep the feature.*
 Preserves session-start context warm-up and keeps the existing bats tests
 meaningful. Rejected: the logs are gitignored in every repo and tracked in
@@ -266,12 +296,37 @@ against the implementation:
 capability, and let the fail posture follow from that rather than from an
 overstated claim. A control described accurately can be relied on correctly.
 
-### Decision 8: `agents-task-viewer` stays unregistered
+### Decision 8: `agents-task-viewer` receives no `normalize-claude-md` file at all
 
 Its `normalize-claude-md.sh` carries an in-file note dated 2026-07-21 stating
 it is deliberately not wired into `settings.json`. It was initially miscounted
 as a drifted third version; the rollout would have re-registered it and undone
-a deliberate decision. It is shimmed like the others and stays unregistered.
+a deliberate decision.
+
+**The previous revision said it "is shimmed like the others and stays
+unregistered", while task 4.3 left the choice open between shipping an
+unregistered shim and shipping nothing.** A reviewer found that the proposal
+asserted one outcome, the tasks permitted either, and the impact counts
+("eight hooks become three", "six projects receive the fix") silently assumed
+the first. Three artifacts, three positions.
+
+**Chosen:** ship **no file**. The opt-out forbids wiring the hook; it does not
+require an unwired file to exist, and task 4.3's own reasoning is decisive — a
+shim nothing invokes is a copy that can drift unnoticed, which is the exact
+failure mode this change exists to remove. Shipping it unregistered would create
+the fleet's only file that is simultaneously required to be byte-identical across
+projects and guaranteed never to run, so nothing would ever detect it rotting.
+
+Consequences, applied consistently everywhere they appear:
+
+- `agents-task-viewer` carries **two** hooks (`openspec-change-gate` shim and
+  `database-sentinel` shim), not three.
+- "Eight hooks become three" holds for six of the seven projects; the seventh is
+  eight-becomes-two.
+- "Six projects receive the `normalize-claude-md` fix" is now literally true:
+  six projects run it, and `agents-task-viewer` deliberately does not.
+- The opt-out is preserved more strongly than before — there is no file to be
+  re-registered by a later rollout that has forgotten why.
 
 ### Decision 9: The change-gate shim is migrated, not exempted
 
@@ -347,6 +402,128 @@ The correction has a pattern to it. Round 3 replaced "not named in §02" with
 "not the documented binding"; round 4's version was still one relationship short.
 Binding, production and enforcement are three distinct things, and each round
 found the previous test collapsing two of them.
+
+**Round 7 found the pattern had one more instance: all three clauses were scoped
+to §02.** A reviewer pointed out that a hook can clear every §02 test and still
+be required by §17, §18, a capability spec under `openspec/specs/`, or a
+project's own policy — and that the rule as written would authorise deleting it.
+The three clauses were sound; the *universe* they quantified over was one section
+wide.
+
+**Chosen:** the clauses are evaluated against every applicable specification and
+against transitive consumers — anything that invokes the hook, reads what it
+writes, or changes behaviour if it stops running. Clearing §02 is necessary, not
+sufficient.
+
+That this is the fourth consecutive round to narrow the same rule is itself
+worth recording. Each earlier round fixed *which relationship* was tested and
+left *what it was tested against* unexamined, because §02 is where gates are
+listed and the question "which spec?" never surfaced. A test can be
+right in form and wrong in scope, and reviewing the form repeatedly does not
+surface the scope.
+
+### Decision 12: Publication is atomic per artifact, never across artifacts
+
+The previous revision required multi-artifact publication to be atomic and
+required each manifest row to be "updated in the same operation as the file it
+describes". A reviewer showed both are impossible: two `rename(2)` calls are two
+operations, so a file and its manifest row cannot be swapped together, and
+per-file renames do not compose into a multi-file transaction. It also noted the
+shared manifest needs locking, which nothing specified.
+
+The change had already half-noticed this — task 3.2c described a *per-artifact*
+crash guarantee while task 3.2b demanded a multi-artifact one, and the two sat
+four lines apart.
+
+**Chosen:** specify what is achievable and say plainly what is not.
+
+- per-artifact atomicity via temp-write + `rename` in the destination directory;
+- whole-manifest atomicity — rewrite the file entire and `rename` it, never edit
+  rows in place;
+- an exclusive lock around the publishing critical section, which addresses the
+  *lost-update* failure that atomicity does not touch;
+- artifact renamed before its manifest row, so the reachable inconsistency is
+  "present but unattested" rather than "attested but absent";
+- reconciliation is the check's job, reported in both directions.
+
+*Alternative — a journal or two-phase commit.* Rejected: it builds a transaction
+manager to install three shell scripts, and the failure it prevents is already
+detectable and repairable by re-running the installer.
+
+The general point: an unachievable guarantee is worse than a modest one, because
+it reads as stronger and is discovered only by whoever tries to implement it —
+or, if nobody checks, never.
+
+### Decision 13: The no-project-override rule moves from the shim to configuration validation
+
+Task 2.7b required a failing test proving the override is honoured "from the
+process environment only" and that a value in a project's `.claude/settings.json`
+`env` block does not disable the hook. A reviewer showed this is unimplementable:
+the host injects `env` values into the hook process's environment, where they are
+indistinguishable from operator-exported ones. A behaviour-free shim reads `$VAR`
+and has no provenance to inspect.
+
+This is a requirement no test could fail, which is the same defect class as an
+unachievable guarantee: it reads as protection and delivers none.
+
+**Chosen:** keep the prohibition, move it to the only layer that can see
+provenance. A conformance check scans every project's settings for an `env` block
+defining any override variable and reports each occurrence against the
+repository. The value still takes effect at runtime — that is precisely why it
+must be visible in review rather than silently dropped.
+
+*Alternative — remove the override entirely*, as the reviewer also offered.
+Rejected: the override is what makes staged rollout and testing possible without
+editing seven projects, and Decision 4's fail-open posture depends on being able
+to substitute an implementation. Removing it to enforce a rule about it costs
+more than the rule is worth.
+
+The guarantee is now weaker than the previous text claimed, and that is the
+correction rather than a regression.
+
+### Decision 14: The git `pre-commit` wrapper is out of scope, and the fallback claim it supported was false
+
+The capability said an unprovisioned machine still has the pre-commit hook and CI
+beneath a fail-open shim. A reviewer doubted the pre-commit half. Checked against
+`reference-implementations/openspec-change-gate/pre-commit`, the doubt is
+correct, and sharper than stated: the wrapper resolves `$OPENSPEC_GATE` →
+`$OPENSPEC_CHANGE_GATE` → `~/.agenticapps/bin/` → **`<repo>/bin/openspec-change-gate.sh`**,
+then prints a warning and `exit 0`.
+
+Two things follow. First, its last resort is exactly the `<repo>/bin/` candidate
+Decision 1 removes from shims — so the change's own resolution rule, applied
+here, would strip this wrapper's final fallback and leave it *weaker*. Second, on
+a machine with no shared install, shim and wrapper fail open together and **CI is
+the only floor**.
+
+**Chosen:** exclude the wrapper from the two-candidate rule explicitly, and
+require any claim that pre-commit backstops a fail-open shim to name the
+provisioning state it assumes. It backstops a provisioned machine. It does not
+backstop the case the claim was made about.
+
+*Alternative — bring the wrapper under the shim contract.* Rejected: it is not a
+tool-boundary shim. It runs outside the host, has no matcher breadth, and its
+fail-open exists for a documented reason — a commit hook that hard-fails on
+missing tooling trains people into `--no-verify`, disabling the floor
+permanently.
+
+### Decision 15: The shim version marker gets a format, an authority, a comparison and a check
+
+Tasks 2.9 and 4b.6 already stamped a marker, so the reviewer claim that the
+change "does not add this marker" is wrong. The companion objection is right and
+is the one that matters: a marker with no defined format, no authoritative
+expected value, no comparison procedure and no check cannot make anything
+detectable. It is a string in a comment.
+
+**Chosen:** `# shim-contract: <semver>` in the first 10 lines, matching the
+gate's `# gate-version:` convention; the template under
+`reference-implementations/project-hooks/` is the authority; lower is stale,
+absent or malformed or *higher* is unrecognised; and a conformance tool
+enumerates every binding project and reports each one's state.
+
+Higher-than-template counting as unrecognised rather than "newer, fine" is the
+non-obvious part: a project ahead of the tracked template is carrying something
+core cannot account for, which is drift in the direction nobody looks.
 
 ### Note on a reviewer claim that has now been wrong twice
 
