@@ -1,7 +1,7 @@
 # .github/workflows/openspec-gate.yml
 #
-# The agent-agnostic enforcement floor in CI: every active change must pass
-# `openspec validate --all` before code merges. This is the one surface no local
+# The agent-agnostic enforcement floor in CI (spec §18, 1.5.0): every active
+# change must pass `openspec validate --all` before code merges. This is the one surface no local
 # configuration can bypass — a developer can pass --no-verify to the pre-commit
 # hook, and a PreToolUse hook cannot gate the session that installed it.
 #

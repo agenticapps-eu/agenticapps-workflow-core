@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.4.0
+spec_version: 1.5.0
 ---
 
 # 00 — Overview
@@ -116,7 +116,20 @@ Linear coupling (§19). §02 and §07 are remapped for 1.0.0 hosts (the two
 review gates collapse into `validate`; execution gates are retained) and
 remain normative for 0.x hosts. The change is grounded in a measured
 cParX pilot (`PILOT-REPORT.md`, `MEASUREMENT.md`) and recorded in
-ADR-0021. Hosts may claim
+ADR-0021. Spec **v1.5.0** amends §18 and §17: the change-gate's review
+clause becomes **reported rather than enforced**, leaving `openspec
+validate --all` (or an unavailable `openspec` CLI) as the only condition
+that blocks a code edit. The reviewer floor of one and the preference of
+two survive as reported thresholds and every counting rule is retained
+unchanged — what is withdrawn is the consequence, not the arithmetic. It
+is a minor rather than a major because §18 simultaneously grants the
+stricter posture as a declared §09 host extension, so a host that still
+blocks on review state becomes a *declaring* host rather than a
+non-conformant one. The grounds are measured and recorded in the
+CHANGELOG's gate 2.0.0 entry: blocking cost three rollbacks and a
+six-repository outage on 2026-07-30, and prevented nothing identifiable,
+because third-party reviewer CLIs failed for reasons unrelated to change
+quality. Hosts may claim
 conformance against any
 of those versions; the version the host claims is the version the host's
 `implements_spec` field names.

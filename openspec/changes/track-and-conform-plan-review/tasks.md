@@ -17,6 +17,46 @@ every project.
 - [x] 1.10 Name, without correcting, the out-of-repo sites that will contradict until re-vendor: the `agentic-apps-workflow` skill and the operator's `CLAUDE.md`
 - [x] 1.11 Bump `spec_version` in `spec/00-overview.md:4` from `1.2.0` to `1.3.0` and record the change in `CHANGELOG.md`. Minor: enforcement terms are added and the floor text is corrected to match existing behaviour, so no host conformant to 1.2.0's behaviour becomes non-conformant
 
+## 1b. Sweep §17/§18 for gate 2.0.0
+
+Section 1 corrected the spec for the floor moving from ≥2 to ≥1 (spec 1.3.0).
+Gate **2.0.0 then withdrew blocking entirely**, inside this same change, and
+§17/§18 were never re-swept for it — so core's own spec still mandates a block
+the reference gate does not perform, and every host pinning that gate is
+non-conformant with the spec it cites. This section discharges the delta's own
+`Scenario: The spec is read for the reviewer count`, which requires that every
+statement of it in the spec agree and describe a *reported* threshold.
+
+Checklist-shaped, per 1.8 — a list of every site, not a grep-and-judge.
+
+- [x] 1b.1 `spec/18` L26: the concept sentence still says the gate "blocks it until the active change has both validated and been reviewed"
+- [x] 1b.2 `spec/18` truth table L71 (`validate` green, no `REVIEWS.md` → **block**/`2`) → **allow + report**/`0`
+- [x] 1b.3 `spec/18` truth table L79 (no trailer or malformed → **block (zero counted)**) → **allow + report**, zero counted
+- [x] 1b.4 `spec/18` truth table L80 (digest no longer matches → **block (stale)**) → **allow + report (stale)**, distinguishably from never reviewed
+- [x] 1b.5 `spec/18` L85–87: "**MUST** enforce **both** clauses … Either alone is a block" → validate alone blocks; review state never does
+- [x] 1b.6 `spec/18` L128–133: the floor/preference rule currently forbids blocking only *between* floor and preference. Widen to **MUST NOT block on review state at all**, keeping ≥1 as the counted floor that is REPORTED and ≥2 as the SHOULD
+- [x] 1b.7 `spec/18` **add** the permitted stricter posture: a host **MAY** block on review state as a documented, declared extension per §09 — the same MAY-extension shape §18 already grants the "no code edits outside a change at all" posture. This is what keeps pi's `check-change-review.sh` ≥2 hard stop legal as a declared opt-in instead of non-conformant on landing
+- [x] 1b.8 `spec/18` L187–193 `Scenario: block before review` → inverted: the gate allows and names the missing review. Rename the scenario; a scenario titled "block before review" that allows is worse than no scenario
+- [x] 1b.9 `spec/18` L219–221 Conformance bullet: "enforcing validate-green **and** `REVIEWS.md` ≥ 1 counted reviewer" → validate-green enforced, review state counted and reported
+- [x] 1b.10 `spec/18` L102–105: the verdict-term paragraph says the spec "moves first; the gate follows" so a gate MAY act on verdicts. Still true, but restate what acting means now — reporting an objection, not blocking on one
+- [x] 1b.10a **Found during the sweep, not predicted by it:** `spec/18`'s section-bound sentence still read "a section runs to the next heading of **level 1 or 2**" — the rule gate 1.6.0 replaced with "only the next `## Reviewer:` heading" because `## Summary`, the commonest shape an LLM returns, was truncating sections and discarding real verdicts. The delta carried the fix; §18 never received it. Corrected here on the same principle as the rest of 1b
+- [x] 1b.11 `spec/17` L40–41: stage 2's "the change **MUST** carry independent multi-AI review *before any code is written*" — the MUST is what §18 no longer enforces
+- [x] 1b.12 `spec/17` L52: "the retargeted change-gate (§18) blocks code edits until stage 2 (validate + review) has passed"
+- [x] 1b.13 `spec/17` L84 gate-mapping row: `plan-review` → "enforced by the retargeted change-gate"
+- [x] 1b.14 `spec/17` L107: "(multi-AI review present) before any code edit for the active change"
+- [x] 1b.15 `spec/17` L124–130 `Scenario: review before code`: "blocks the edit until the change carries `REVIEWS.md` with ≥1 counted independent reviewer"
+- [x] 1b.16 `docs/WORKFLOW.md` L13 ("no code until the change has validated and been reviewed") and L85
+- [x] 1b.17 Bump `spec_version` in `spec/00-overview.md:4` from `1.4.0` to `1.5.0`, update §18's and §17's own frontmatter, and record it in the version-history paragraph. **Minor, deliberately**: the withdrawal is paired with 1b.7's MAY, so a host that still blocks declares an extension rather than becoming non-conformant. Without that pairing this would be a major
+- [x] 1b.18 `CHANGELOG.md` entry for spec 1.5.0, pointing at gate 2.0.0's entry for the rationale rather than restating it
+- [x] 1b.19 Restore the `(spec §18)` citation in `reference-implementations/openspec-change-gate/hooks/openspec-gate.ci.yml`. PR #50 dropped it deliberately — citing §18 beside prose saying reviews never block would have moved the contradiction one line down — and it becomes true again the moment 1b.1–1b.10 land
+- [x] 1b.20 Re-grep after the sweep, 1.9's shape: `blocks?.*(review|REVIEWS)|until.*review|carry.*reviewer|MUST.*review` across `spec/`, `docs/`, `adrs/`, `reference-implementations/`. Every survivor is classified in writing as intentional or corrected — no silent survivors
+- [x] 1b.21 Record the two survivors already judged intentional: `spec/02:101` (0.x plan-review gate, normative for 0.x hosts and not retargeted) and `spec/07:18` (Stage-1-before-code ordering, not gate enforcement)
+- [x] 1b.22 Record the **deliberate deferral**: `openspec-change-gate.sh:144`'s usage line still reads `--ci  Whole-repo — every active change must validate + have reviews`. Correcting it bumps the version marker and invalidates the `sha256` in four host pins, so a one-line doc fix would force a fleet-wide re-pin. It waits for a gate change that must move anyway — and the deferral is recorded here rather than left for the next reader to rediscover
+- [x] 1b.23 Name, without correcting, the out-of-repo sites that contradict until re-vendor (1.10's shape): the `agentic-apps-workflow` skill and the operator's `CLAUDE.md`, both of which still describe code edits as blocked until `REVIEWS.md` carries ≥2 other-vendor reviewers
+- [x] 1b.24 `openspec validate --all` green after the sweep
+- [x] 1b.25 Write the ADR. Nothing in `adrs/` records the withdrawal of blocking — the fleet's largest behavioural reversal exists only as a CHANGELOG entry and a comment in a shell script, while `adrs/0021:48` still cites the gate having "demonstrably blocked a code edit before review" as evidence for the standard. ADRs are dated records and are not rewritten; a superseding one is what the convention calls for
+- [x] 1b.26 Check whether an ADR index or README lists ADRs, and add the new one if so
+
 ## 2. Establish the tracked source
 
 - [x] 2.1 Create `reference-implementations/run-plan-review/` and seed `run-plan-review.sh` byte-identically from `~/.agenticapps/bin/run-plan-review.sh` (227 lines, marker 1.0.0)

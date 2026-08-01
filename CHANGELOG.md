@@ -20,6 +20,43 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**Spec 1.4.0 → 1.5.0 — minor. §18's review clause becomes reported, not
+enforced.** The spec now describes the gate that shipped. Gate 2.0.0 withdrew
+blocking on review state; §18 and §17 were not swept for it, so core's own
+normative text still required a block — `validate` green + no `REVIEWS.md` →
+exit `2` — that the reference implementation does not perform. Every host
+pinning that gate was thereby non-conformant with the spec it cites, and the
+divergence was found by pi declining to pin the CI workflow template because
+pinning it would import the contradiction.
+
+What changed in §18: the truth-table rows for a missing `REVIEWS.md`, an
+absent or malformed trailer, and a stale digest flip from **block/`2`** to
+**allow + report/`0`**; "MUST enforce both clauses … Either alone is a block"
+becomes a single blocking condition (`openspec validate --all`, including the
+CLI being unavailable to answer it); `MUST NOT block on the count between the
+floor and the preference` widens to the whole count; the `block before review`
+scenario is inverted and renamed; the fail-open clause stops calling
+allow-on-missing-review non-conformant, since that is now the policy; and the
+escape-hatch requirement is restated for a gate with nothing review-shaped
+left to escape. §17's stage-2 MUST, gate-mapping row, requirement and
+`review before code` scenario follow, as does `docs/WORKFLOW.md`.
+
+Two things are deliberately **not** changed. Every counting rule — verdict
+and body, the closed vocabulary, section bounds, digest binding,
+implementing-host exclusion — is retained verbatim, because a gate that
+reports must count as accurately as one that blocked. And §18 now grants
+blocking on review state as a **declared §09 host extension**, which is what
+makes this a minor: a host that still blocks declares an extension rather
+than becoming non-conformant. pi's `check-change-review.sh`, which hard-stops
+at ≥2, is legal on that clause.
+
+Conformance impact for host implementers: none required. A host citing 1.4.0
+stays conformant with 1.4.0. A host citing 1.5.0 either reports on review
+state or declares the stricter posture.
+
+The rationale is not restated here — it is the gate 2.0.0 entry below, which
+records what blocking cost and what it caught.
+
 **Spec 1.3.0 → 1.4.0 — minor.** §20 is added and §00/§09 are amended to
 declare its type. The addition is normative for **this repository's tooling
 only**: `core-tooling-contract` sections bind the harnesses in `tools/` and
