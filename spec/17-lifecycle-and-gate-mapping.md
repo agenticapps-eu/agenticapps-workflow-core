@@ -1,7 +1,7 @@
 ---
 id: 17-lifecycle-and-gate-mapping
 section_type: declarative-contract
-spec_version: 1.0.0
+spec_version: 1.5.0
 ---
 
 # 17 — Lifecycle & Gate Mapping
@@ -36,9 +36,11 @@ Every unit of product work moves through four stages:
    design note when the change introduces UI or new architecture (the
    former `brainstorm-*` and `design-*` gates fold in here).
 
-2. **Validate** — `openspec validate --all` MUST be green, **and** the
-   change MUST carry independent multi-AI review (see §18) *before any
-   code is written*. This single stage absorbs **both** 0.x review gates:
+2. **Validate** — `openspec validate --all` MUST be green, and the change
+   SHOULD carry independent multi-AI review (see §18) *before any code is
+   written*. The two halves are enforced differently and deliberately: the
+   gate blocks on validation and reports on review (§18, spec 1.5.0). This
+   single stage absorbs **both** 0.x review gates:
    `openspec validate` checks the delta against the spec slot (what
    `spec-review` did after the fact), and the multi-AI review
    adversarially reviews the proposed change (what `plan-review` did). The
@@ -49,8 +51,9 @@ Every unit of product work moves through four stages:
    execution gates: TDD (RED→GREEN), verification (on-disk evidence per
    §06), independent Stage-2 code review, and any conditional gates that
    the changeset triggers (security, database, qa, design, lint). The
-   retargeted change-gate (§18) blocks code edits until stage 2
-   (validate + review) has passed for the active change.
+   retargeted change-gate (§18) blocks code edits until the active
+   change validates, and reports its review state on every invocation
+   without blocking on it.
 
 4. **Archive** — fold the spec delta into `specs/<capability>/spec.md`
    so the spec slot states the new truth, then `openspec archive` the
@@ -81,7 +84,7 @@ lifecycle. Three fates:
 
 | §02 gate | Fate under 1.0.0 | Where it lives now |
 |---|---|---|
-| `plan-review` | **Collapsed → validate** | Stage 2. Multi-AI review of the change *before code* (§18), enforced by the retargeted change-gate. |
+| `plan-review` | **Collapsed → validate** | Stage 2. Multi-AI review of the change *before code* (§18), **reported** by the retargeted change-gate on every invocation. Since spec 1.5.0 the gate does not block on it. |
 | `spec-review` | **Collapsed → validate** | Stage 2. `openspec validate --all` checks the delta against the spec slot. The former Stage-1 "spec compliance" pass becomes a machine check plus the pre-code review. |
 | `code-review` | **Retained** (always) | Stage 3. Independent Stage-2 code-quality review still fires; `validate` does not read code. §07's independence rule still binds. |
 | `tdd` | **Retained** | Stage 3. Superpowers TDD; RED→GREEN commit pair per §02. |
@@ -103,9 +106,10 @@ lifecycle. Three fates:
 
 - **MUST** move every unit of product work through propose → validate →
   Superpowers-execute → archive.
-- **MUST** satisfy stage 2 (`openspec validate --all` green **and**
-  multi-AI review present) before any code edit for the active change;
-  §18 specifies the enforcing gate.
+- **MUST** satisfy `openspec validate --all` before any code edit for the
+  active change, and **SHOULD** have the change's multi-AI review in hand
+  by then. §18 specifies the gate: it enforces the first and reports the
+  second.
 - **MUST** retain the `code-review` gate as an independent Stage-2 pass
   (§07) — `openspec validate` is a spec check, not a code review, and
   does not discharge it.
@@ -125,10 +129,11 @@ lifecycle. Three fates:
 
 - **GIVEN** an open change with a validated spec delta but no code yet
 - **WHEN** the agent attempts to edit a source file
-- **THEN** the change-gate (§18) blocks the edit until the change carries
-  `REVIEWS.md` with ≥1 counted independent reviewer (2 preferred) and `openspec validate
-  --all` is green — collapsing plan-review and spec-review into one
-  pre-code stage.
+- **THEN** the change-gate (§18) allows the edit once `openspec validate
+  --all` is green, and reports the change's review state against the
+  floor of one counted independent reviewer (2 preferred) — collapsing
+  plan-review and spec-review into one pre-code stage, of which one half
+  is enforced and the other surfaced.
 
 #### Scenario: code review still fires
 

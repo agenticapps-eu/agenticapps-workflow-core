@@ -10,7 +10,8 @@ Product work moves through an **OpenSpec change** — propose it, validate
 and review it *before* writing code, execute it with **Superpowers**
 discipline (TDD, evidence, independent review), then fold it into the
 durable spec and ship — while a `PreToolUse` gate refuses to let you edit
-code until the change has validated and been reviewed.
+code until the change has validated, and tells you where its review stands
+without stopping you.
 
 ## The two layers
 
@@ -82,7 +83,7 @@ Two things about this picture matter most:
 
 | Old §02 gate | Now |
 |---|---|
-| `plan-review`, `spec-review` | **collapse into `validate`** (review before code) |
+| `plan-review`, `spec-review` | **collapse into `validate`** (review before code — `validate` blocks, the review is reported) |
 | `code-review` | **retained** — validate doesn't read code |
 | `tdd`, `verification` | **retained** — Superpowers execution |
 | `security` | **retained, always** on triggering changes |

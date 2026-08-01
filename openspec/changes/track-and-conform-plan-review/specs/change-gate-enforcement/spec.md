@@ -322,11 +322,19 @@ reviewer asked three times for this to be said outright rather than left to be
 inferred from the truth table, and the request is correct — a rule that reads
 like approval enforcement but is not will be relied on as though it were.
 
-Two things bound it. Amending a change in response to an objection invalidates
-the digest and forces a re-review, so the only route past an objection is to
-leave the change unamended. And the gate SHALL name each objecting reviewer in
-its report, on every invocation, for as long as the objection stands — so
-proceeding is a **repeated and unmissable** act rather than a silent one.
+One thing bounds it: the gate SHALL name each objecting reviewer in its report,
+on every invocation, for as long as the objection stands — so proceeding is a
+**repeated and unmissable** act rather than a silent one.
+
+An earlier revision claimed a second bound — that amending a change in response
+to an objection invalidates the digest and *forces* a re-review, "so the only
+route past an objection is to leave the change unamended." **That is withdrawn.**
+It was true only while a stale review blocked. Since reviews stopped blocking,
+invalidating the digest changes what the gate SAYS and not what it permits: the
+author may amend and carry on, and the report merely changes from "objection
+outstanding" to "reviewed, but the artifacts have since changed." Both are
+nags. Leaving the sentence in would have described a barrier that no longer
+exists, in the requirement whose entire subject is that the barrier is gone.
 
 **It is not an audit trail, and an earlier revision called it one.** The report
 goes to stderr. It has no durable sink, records no operator identity, carries no
@@ -356,7 +364,8 @@ not made here.
 - **WHEN** a reviewer returns REQUEST-CHANGES and the author edits a reviewed
   artifact in response
 - **THEN** the digest no longer matches, the review no longer counts, and the
-  gate blocks until the amended change is reviewed again
+  gate reports the change as amended since review — it does not block, so the
+  bound above is a re-review PROMPT, not a barrier
 
 ### Requirement: Reviewers counted toward the floor are independent
 
@@ -447,8 +456,9 @@ hand-written `REVIEWS.md` may name any host.
 
 - **WHEN** `REVIEWS.md` carries no implementing-host identity, or one outside
   the closed vocabulary
-- **THEN** the gate counts no reviewers and blocks, rather than assuming a
-  default
+- **THEN** the gate counts no reviewers, rather than assuming a default, and
+  reports the identity as absent or unrecognised. Failing closed here is failing
+  closed on the COUNT — it does not block, because no review state does
 
 #### Scenario: Several hosts are named
 
@@ -699,8 +709,9 @@ artifacts, so it SHALL NOT be described as evidence that a review is authentic.
 
 - **WHEN** a proposal, design or spec delta is edited after `REVIEWS.md` was
   written
-- **THEN** the recorded digest no longer matches, the review does not count,
-  and the gate blocks until the change is reviewed again
+- **THEN** the recorded digest no longer matches, the review does not count, and
+  the gate reports the change as reviewed-but-since-amended — distinguishably
+  from never reviewed — and allows the edit
 
 #### Scenario: A change is unmodified since review
 
