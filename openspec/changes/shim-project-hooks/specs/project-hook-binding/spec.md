@@ -159,7 +159,13 @@ and SHALL be verified per project.
 The one-authoritative-place rule covers implementations, not shims: shims are
 deliberately copies, which is what makes them cheap and what makes a contract
 change a fleet-wide edit. This change is itself an instance — it edits the
-change-gate shim in seven repositories.
+change-gate shim in the seven projects **and** in core, which gained its own
+copy on 2026-08-02. Core's copy resolves its working-tree reference
+implementation rather than the published one (ADR-0028's deliberate inversion),
+so contract clauses about *resolution order* do not reach it; the version marker
+does. Eight files, not seven, and the count is not uniform in what it owes —
+which is why this requirement says a contract change SHALL name the projects it
+must reach rather than assume the set.
 
 A shim SHALL carry a version marker for the contract it implements, so a project
 running an older shim is detectable rather than discovered when it behaves

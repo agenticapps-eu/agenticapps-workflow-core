@@ -1,10 +1,16 @@
 ## Why
 
-Seven repos each carry eight `.claude/hooks/*.sh` files — 634 lines per repo,
-roughly 4,440 lines total, copied byte-for-byte from a single origin. The
-copies have already drifted: four of the eight exist in two or three distinct
-versions, and `agenticapps-dashboard` carries a `normalize-claude-md.sh` fix
-(2026-07-26) that the other six never received. The one hook that is *not*
+Seven repos each carry a `.claude/hooks/` directory copied from a single origin
+— 4,396 lines in total, 586 to 654 per repo. Six carry eight `*.sh` files;
+`agenticapps-dashboard` carries seven, having deleted `design-shotgun-gate.sh`
+on 2026-08-01 in its own PR #88, "it blocks every fresh clone". That deletion is
+this change's argument made by someone else: one repo fixing locally what is
+wrong in six, while the scaffolder that produced all seven still vendors the
+file and would hand it straight back.
+
+The copies have already drifted: four of the eight exist in two or three
+distinct versions, and `agenticapps-dashboard` carries a `normalize-claude-md.sh`
+fix (2026-07-26) that the other six never received. The one hook that is *not*
 copied — `openspec-change-gate.sh`, whose ~13 lines of logic `exec`
 `~/.agenticapps/bin/openspec-change-gate.sh` — has zero drift across all seven.
 
@@ -19,8 +25,12 @@ fleet's own policy designates frozen archive, "never write to them".
 **That policy is being violated on every session, but not mainly by these two
 hooks — the earlier version of this paragraph blamed the wrong writer.** It read:
 "`skill-router-log.sh` wrote into core's `.planning/` at 08:39 on 2026-07-29,
-during the session that found it." Core has **no `.claude/hooks/` directory at
-all**, so no project hook ran there. Remeasured: core carries 141 files under
+during the session that found it." Core carries **no `.planning`-writing project
+hook**, so none of its own hooks wrote them. (It carried no `.claude/hooks/` at
+all when this was measured. Since 2026-08-02 it carries exactly one — the
+`PreToolUse` change-gate installed by `core-self-enforcement` — which writes
+nothing under `.planning/`, so the inference is unchanged.) Remeasured: core
+carries 141 files under
 `.planning/skill-observations/` — 137 in the `<stamp>--<sessionId>.{md,jsonl}`
 naming of the **global** `SessionEnd` hook registered in
 `~/.claude/settings.json` (`agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`),
@@ -96,7 +106,10 @@ deleting the producers discards nothing durable.
 `openspec-change-gate.sh` pattern:
 
 - `normalize-claude-md.sh` — `agenticapps-dashboard`'s version becomes
-  canonical; its 2026-07-26 fix reaches the other six.
+  canonical. Its 2026-07-26 fix reaches **five** of the other six;
+  `agents-task-viewer` is shipped no file at all, so it gains nothing here
+  (see the opt-out below). Saying "the other six" counted a repo the same
+  section then excludes.
 - `database-sentinel.sh` — reconciled to `callbot`'s semantics, which are the
   strict superset: a `.env` wildcard (`.env|.env.*|*/.env|*/.env.*`) with an
   explicit `.env.example`/`.env.template` allowance, plus `MultiEdit` handling.
@@ -178,33 +191,62 @@ projects carrying hooks —
 `agenticapps-dashboard`, `agenticapps-roadmap`, `agents-task-viewer`,
 `callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`.
 
-**`claude-workflow` is touched; the other three hosts are not.** No host carries
-a `.claude/hooks/` directory of its own, so none is touched *as a hook-carrying
-project*. `claude-workflow` is nonetheless in scope because it **scaffolds** the
-projects that do: it vendors all eight hooks twice, plus stale matchers, so
-leaving it alone means the next `/setup-agenticapps-workflow` recreates
-everything this change deletes. See the `claude-workflow` subsection below for
-the specific edits. A previous revision said in one sentence that it was among
-the nine touched repos and in the next that it was untouched; both readings were
-in the text at once.
+**Of the four hosts, two are touched and two are not.**
+`agenticapps-dashboard` is a host *and* one of the seven hook-carrying projects
+listed above; it is touched in that second capacity and is already counted there.
+`codex-workflow` and `pi-agentic-apps-workflow` carry no `.claude/hooks/` of
+their own and are not touched at all. `claude-workflow` carries none either, but
+is in scope because it **scaffolds** the projects that do: it vendors all eight
+hooks twice, plus stale matchers, so leaving it alone means the next
+`/setup-agenticapps-workflow` recreates everything this change deletes —
+including the `design-shotgun-gate.sh` that `agenticapps-dashboard` has already
+had to delete once. See the `claude-workflow` subsection below for the specific
+edits.
+
+The scope of this repo has been mis-stated twice. One revision said in one
+sentence that `claude-workflow` was among the nine touched repos and in the next
+that it was untouched; both readings were in the text at once. The revision that
+fixed that introduced "no host carries a `.claude/hooks/` directory of its own",
+which was never true of `agenticapps-dashboard` and made a host look exempt
+while the change was editing its hooks.
 
 `agenticapps-dashboard-add-agent-board` is a git *worktree* of
 `agenticapps-dashboard` on another branch, not an eighth repo.
 
-**Result per project:** 8 hooks become 3 (`openspec-change-gate` plus two shims)
-in **six** of the seven; 634 lines become roughly 138. **`agents-task-viewer` is
-8 → 2**, since it receives no `normalize-claude-md` file (see the opt-out above).
-Across seven projects that is about −3,470 lines, plus ~360 lines added once to
-core as canonical implementations.
+**Result per project**, stated per repo because no single count covers all seven:
 
-The earlier text said "8 hooks become 3" without qualification, which review
-showed could not be true alongside an unresolved `agents-task-viewer`. The count
-is now stated per project rather than as a fleet uniformity that does not hold.
+- **8 → 3** (`openspec-change-gate` plus two shims) in **five** —
+  `agenticapps-roadmap`, `callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`.
+- **7 → 3** in `agenticapps-dashboard`, which already deleted
+  `design-shotgun-gate.sh` itself.
+- **8 → 2** in `agents-task-viewer`, which receives no `normalize-claude-md`
+  file (see the opt-out above).
+
+**The line figures are an estimate and are marked as one — the shims do not
+exist yet.** On the current sketch a three-hook project keeps roughly 138 lines
+and `agents-task-viewer` keeps less, having two. So 4,396 lines today become
+roughly 950, the seven projects shed on the order of **−3,450**, and ~360 lines
+are added once to core as canonical implementations. No report of this change
+may quote those as measured until the shims are written and counted.
+
+A first version of this paragraph multiplied 138 by seven, two sentences after
+enumerating why the projects are not uniform — and review caught it. Writing the
+enumeration does not stop the next sentence from averaging it away, which is this
+change's thesis turned on its own text.
+
+Two earlier counts were wrong here, in the same way. "8 hooks become 3" was
+stated without qualification, which review showed could not be true alongside an
+unresolved `agents-task-viewer`; the replacement said "six of the seven", which
+stopped being true when `agenticapps-dashboard` dropped to seven hooks on
+2026-08-01. Both asserted a fleet uniformity that has never held for long, so the
+count is now enumerated rather than generalised.
 
 **Behaviour changes**, all of them fixes or deliberate removals:
 
 - `callbot` and `fbc-platform` can edit design files again.
-- Six projects receive the `normalize-claude-md` fix they lacked.
+- Five projects receive the `normalize-claude-md` fix they lacked —
+  `agenticapps-dashboard` already has it, and `agents-task-viewer` is shipped no
+  file.
 - Two projects gain `.env` protection for novel suffixes they currently miss.
 - Session-start no longer surfaces recent skill invocations, and skill
   invocations are no longer logged. This is the accepted cost of deleting the
@@ -326,8 +368,9 @@ change and by the follow-up.
    `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, which
    writes `<projectRoot>/.planning/skill-observations/<stamp>--<sessionId>.{md,jsonl}`
    in **every** repository the operator opens — 137 of core's 141 such files,
-   in a repo with no `.claude/hooks/` at all. It is the fleet's dominant
-   frozen-archive violation and the reason this change cannot claim to end one.
+   in a repo whose only project hook is a `PreToolUse` gate that writes nothing
+   there. It is the fleet's dominant frozen-archive violation and the reason
+   this change cannot claim to end one.
 
    Out of scope here for three reasons, each of which also shapes the follow-up:
    it lives in `agenticapps-dashboard`, not in any of the seven hook-carrying

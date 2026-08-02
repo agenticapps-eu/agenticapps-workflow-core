@@ -22,6 +22,15 @@ The table is the design. Five of eight hooks earn deletion; only two are worth
 a shim. That ratio was not visible from the plan, which assumed the hooks were
 live machinery needing cheaper maintenance.
 
+Re-measured 2026-08-02, the Lines and Versions columns are unchanged, with one
+exception: `design-shotgun-gate` now exists in **six** copies rather than seven.
+`agenticapps-dashboard` deleted its own on 2026-08-01 (its PR #88, "it blocks
+every fresh clone"), reaching this table's disposition for that one row without
+this change. Its two versions survive across the remaining six, and
+`claude-workflow` still vendors the file twice, so the deletion is local and
+reversible by the next scaffold — which is the argument for doing it at the
+source instead.
+
 **The middle column was wrong in an earlier revision, in the way this change
 warns against.** It recorded `database-sentinel` as binding §02's
 `database-security` gate because the names match. They do not correspond: §02
@@ -44,7 +53,8 @@ that survives being told about itself.
 - Delete what cannot fire, what blocks wrongly, and what violates the
   `.planning/` policy — rather than making any of it cheaper to maintain.
 - Stop `design-shotgun-gate` blocking 204 design files.
-- Propagate `dashboard`'s `normalize-claude-md` fix to the other six.
+- Propagate `dashboard`'s `normalize-claude-md` fix to the five that lack it and
+  will run it (`agents-task-viewer` is shipped no file — Decision 8).
 
 **Non-Goals**
 
@@ -111,8 +121,12 @@ violation is live: core's `.planning/` was written at 08:39 on 2026-07-29.
 **Chosen:** delete both.
 
 **The evidence sentence above is wrong, and the way it is wrong matters.**
-Core's `.planning/` writes cannot be `skill-router-log.sh`'s doing: **core has no
-`.claude/hooks/` directory at all.** Measured while revising — core holds 141
+Core's `.planning/` writes cannot be `skill-router-log.sh`'s doing: **core
+carries no `.planning`-writing project hook.** It had no `.claude/hooks/`
+directory at all when this was measured; since 2026-08-02 it carries exactly one
+file, the `PreToolUse` change-gate installed by `core-self-enforcement`, which
+writes nothing under `.planning/`. Either way no project hook of core's produced
+those files. Measured while revising — core holds 141
 files under `.planning/skill-observations/`, of which 137 are named
 `<stamp>--<sessionId>.{md,jsonl}` and only 4 match `skill-router-log.sh`'s
 `skill-router-{date}.jsonl`. The 137 come from a **global** `SessionEnd` hook in
@@ -321,10 +335,15 @@ Consequences, applied consistently everywhere they appear:
 
 - `agents-task-viewer` carries **two** hooks (`openspec-change-gate` shim and
   `database-sentinel` shim), not three.
-- "Eight hooks become three" holds for six of the seven projects; the seventh is
-  eight-becomes-two.
-- "Six projects receive the `normalize-claude-md` fix" is now literally true:
-  six projects run it, and `agents-task-viewer` deliberately does not.
+- "Eight hooks become three" holds for **five** of the seven. `agents-task-viewer`
+  is eight-becomes-two. `agenticapps-dashboard` is **seven**-becomes-three, having
+  deleted `design-shotgun-gate.sh` itself on 2026-08-01; this consequence list
+  said "six of the seven" until that deletion made it false.
+- **Six projects run `normalize-claude-md`; five gain something from it.** The two
+  are not the same count and the earlier text used one number for both.
+  `agents-task-viewer` deliberately does not run it. `agenticapps-dashboard` runs
+  it but already carries the 2026-07-26 fix, so it receives no fix it lacked — it
+  is the source of the canonical version, not a recipient.
 - The opt-out is preserved more strongly than before — there is no file to be
   re-registered by a later rollout that has forgotten why.
 
@@ -524,6 +543,36 @@ enumerates every binding project and reports each one's state.
 Higher-than-template counting as unrecognised rather than "newer, fine" is the
 non-obvious part: a project ahead of the tracked template is carrying something
 core cannot account for, which is drift in the direction nobody looks.
+
+### Refuted with evidence: the matchers are not escaped, our table is
+
+Round-8 opencode read the matcher column of the table above as `Bash\|Edit\|Write`
+and reasoned that if the host parses the matcher as an ERE, `\|` is a literal
+pipe, so `database-sentinel` has matched nothing anywhere and the whole
+fail-open cost analysis concerns a control that never ran. That would be a
+serious finding if the premise held. It does not: the backslashes are **markdown
+table-cell escaping in this document**, not bytes on disk. Parsed from the JSON:
+
+    $ python3 -c "import json;print(repr(json.load(
+        open('cparx/.claude/settings.json'))['hooks']['PreToolUse'][0]['matcher']))"
+    'Bash|Edit|Write'
+
+    $ grep -o '"matcher"[^,]*' cparx/.claude/settings.json | head -1
+    "matcher": "Bash|Edit|Write"
+
+Real pipes, no backslashes, in all seven.
+
+**The residue of the objection is still owed an answer, and is not discharged by
+the above.** A well-formed matcher is not a firing hook. This change has verified
+the matcher's *syntax*; task 4.8 verifies `MultiEdit` *delivery*; nothing yet
+verifies that the base matcher fires today. Until something does, "unprovisioned
+machines lose `database-sentinel` protection" states a loss whose baseline is
+assumed. Task 4.8 is extended to establish the baseline first.
+
+The reviewer reached a false conclusion from a true reading of the artifact it
+was given, which is a defect in the artifact: a table that renders its own data
+ambiguously invites exactly this. The escaping stays — a raw pipe would break the
+table — and this note is what disambiguates it.
 
 ### Note on a reviewer claim that has now been wrong twice
 
