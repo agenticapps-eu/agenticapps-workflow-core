@@ -17,6 +17,7 @@
 #   - an unresolvable project root fails CLOSED (exit 2) — not knowing where to
 #     look is a defect, distinct from tooling being genuinely absent
 #   - a genuinely absent gate fails OPEN (exit 0) with a warning
+#   - arguments are forwarded to the gate, so `--ci` is not silently discarded
 #   - the registration quotes the command and matches the edit tools
 #
 # Usage: bash tools/test-claude-hook-wrapper.sh
@@ -108,6 +109,30 @@ check "genuinely absent gate fails open (0)" 0 \
 mkgate 2
 check "OPENSPEC_GATE override wins over an unresolvable root" 2 \
   "$(runw CLAUDE_PROJECT_DIR="$WORK/no/such/dir" OPENSPEC_GATE="$WORK/gate.sh")"
+
+# REGRESSION: the wrapper ended in `exec "$GATE"` and dropped "$@", so every
+# argument was discarded on the way to the gate. PreToolUse passes none and CI
+# invokes the gate directly, so nothing was ungated by this — but
+# `bash .claude/hooks/openspec-change-gate.sh --ci` reached the gate as a hook
+# invocation with no payload and exited 0 in silence, reporting nothing about
+# the changes it was asked to check. A green that checked nothing is the one
+# result a gate may not return, and it is the same class of defect as a
+# conformance harness that scores an artifact it never runs.
+#
+# EXIT STATUS CANNOT JUDGE THIS EITHER: both wrappers exit 0. The assertion is
+# what the gate RECEIVED, so the stand-in records its own arguments. Two are
+# passed, because forwarding "$1" alone would satisfy a single-argument case.
+cat > "$WORK/gate.sh" <<EOF
+#!/bin/sh
+printf '%s|' "\$@" > "$WORK/args.txt"
+exit 0
+EOF
+chmod +x "$WORK/gate.sh"
+rm -f "$WORK/args.txt"
+( cd "$OUTSIDE" && printf '{}' | env -u CLAUDE_PROJECT_DIR OPENSPEC_GATE="$WORK/gate.sh" \
+    bash "$WRAPPER" --ci second-arg >/dev/null 2>&1 )
+x=0; [ "$(cat "$WORK/args.txt" 2>/dev/null)" = "--ci|second-arg|" ] || x=1
+check "wrapper forwards its arguments to the gate" 0 "$x"
 
 x=0; grep -q 'OPENSPEC_GATE_SELF=' "$WRAPPER" && x=1
 check "wrapper exports no dead OPENSPEC_GATE_SELF" 0 "$x"
