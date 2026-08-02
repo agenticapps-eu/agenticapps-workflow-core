@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # normalize-claude-md — normalize GSD section markers in CLAUDE.md (migration 0010).
 #
-# normalize-claude-md-version: 1.0.0
+# normalize-claude-md-version: 1.0.1
 #
 # THIS IS THE CANONICAL IMPLEMENTATION. Projects bind it through a shim; see
 # ./README.md for the shim contract and ./shim-template.sh for the shim itself.
@@ -291,9 +291,20 @@ fi
 
 if ! diff -q "$INPUT" "$TMP_OUT" >/dev/null 2>&1; then
   # mv is atomic when source and dest are on the same filesystem (POSIX
-  # rename(2) guarantee). Preserves permissions because mv-as-rename
-  # doesn't touch file mode of the existing entry being replaced.
+  # rename(2) guarantee).
+  #
+  # IT DOES NOT PRESERVE THE MODE, and the comment that stood here said it did:
+  # "mv-as-rename doesn't touch file mode of the existing entry being replaced".
+  # rename(2) makes the destination NAME refer to the TEMP file's inode, so the
+  # destination ends up carrying the temp file's mode — 0600 from mktemp — and
+  # the original entry is unlinked, mode and all. Measured 0644 in, 0600 out.
+  #
+  # So the mode is captured before the swap and re-applied after it. Captured
+  # rather than hardcoded to 0644: a project that deliberately restricts its
+  # CLAUDE.md keeps that decision.
+  ORIG_MODE=$(stat -f '%Lp' "$INPUT" 2>/dev/null || stat -c '%a' "$INPUT" 2>/dev/null) || ORIG_MODE=""
   mv -f "$TMP_OUT" "$INPUT"
+  [ -n "$ORIG_MODE" ] && chmod "$ORIG_MODE" "$INPUT"
 fi
 
 exit 0

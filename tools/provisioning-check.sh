@@ -52,11 +52,13 @@ DEST_DIR="$HOME/.agenticapps/bin"
 SOURCE_CHECK=""
 STRICT=0
 
+need() { [ $# -ge 2 ] || { echo "provisioning-check: $1 needs a value" >&2; exit 64; }; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dest)         DEST_DIR="$2"; shift 2 ;;
+    --dest)         need "$@"; DEST_DIR="$2"; shift 2 ;;
     --dest=*)       DEST_DIR="${1#*=}"; shift ;;
-    --source-check) SOURCE_CHECK="$2"; shift 2 ;;
+    --source-check) need "$@"; SOURCE_CHECK="$2"; shift 2 ;;
     --source-check=*) SOURCE_CHECK="${1#*=}"; shift ;;
     --strict)       STRICT=1; shift ;;
     -h|--help)      sed -n '1,20p' "$0"; exit 0 ;;
@@ -187,6 +189,54 @@ else
     fi
   done
 fi
+
+# ── the write surface ───────────────────────────────────────────────────────
+# Stage-2 finding 2. The installer sets ownership and modes; until this loop
+# existed, nothing checked them afterwards, so a `chmod g+w` performed a minute
+# after a clean install still reported complete + attested.
+#
+# This is the mitigation the capability trades the concentration point for.
+# Every project execs whatever is in this directory, so anyone who can write one
+# of these files runs code at the tool boundary in all of them. Ownership and
+# the write bits are the cheap part of that bargain, and they are only worth
+# anything if something looks.
+#
+# Reported as its OWN dimension rather than folded into either axis.
+# `integrity` is defined as "present artifacts match their rows"; a
+# group-writable file whose digest matches is genuinely attested, and
+# overloading the word would break a vocabulary the capability spent a review
+# round separating. It counts toward --strict, which is where it bites.
+#
+# NOT a security boundary, and the disclaimer above still stands: a user who can
+# write their own files can still change what every project enforces. This
+# removes the cases where somebody ELSE can.
+me=$(id -u)
+write_surface() { # $1 = path, $2 = label
+  local f="$1" label="$2" owner mode
+  [ -e "$f" ] || return 0
+  owner=$(stat -f '%u' "$f" 2>/dev/null || stat -c '%u' "$f" 2>/dev/null) || owner=""
+  mode=$(stat -f '%Lp' "$f" 2>/dev/null || stat -c '%a' "$f" 2>/dev/null) || mode=""
+
+  if [ -n "$owner" ] && [ "$owner" != "$me" ]; then
+    echo "WRITE-SURFACE  $label  owned by uid $owner, not by uid $me who runs the hooks — reported rather than executed silently"
+    findings=$((findings + 1))
+  fi
+  # 022 = group-write | other-write. A group-writable shared directory makes
+  # every member of that group an author of every hook in every project.
+  if [ -n "$mode" ] && [ $(( 8#$mode & 8#022 )) -ne 0 ]; then
+    echo "WRITE-SURFACE  $label  mode $mode is group- or world-writable — anyone who can write it changes what every project enforces"
+    findings=$((findings + 1))
+  fi
+}
+
+write_surface "$DEST_DIR" "$(basename "$DEST_DIR")"
+for n in ${NAMES+"${NAMES[@]}"}; do
+  write_surface "$DEST_DIR/$n.sh" "$n.sh"
+done
+# The manifest is covered by the same rules: a digest record an attacker can
+# rewrite is the limitation this check already admits, and leaving its mode
+# unchecked widens it for no reason.
+write_surface "$MANIFEST" "$(basename "$MANIFEST")"
 
 # ── the source check, reported SEPARATELY ───────────────────────────────────
 # Task 3.2a-ii. The manifest check asks "does the executed copy match what was

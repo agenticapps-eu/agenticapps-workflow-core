@@ -50,6 +50,16 @@ assert_exit "$(bash_ 'psql -c "drop   table users"')"      2 "DROP TABLE blocked
 assert_exit "$(bash_ 'psql -c "TRUNCATE TABLE sessions"')" 2 "TRUNCATE TABLE blocked"
 assert_exit "$(bash_ 'psql -c "DELETE FROM users;"')"      2 "DELETE FROM without WHERE blocked"
 assert_exit "$(bash_ 'psql -c "DELETE FROM users WHERE id=1;"')" 0 "DELETE FROM with WHERE allowed"
+
+# Stage-2 finding 10. The table pattern stopped at the first dot, so a
+# schema-qualified table fell out of the match and a full-table delete was
+# allowed. Quoted and backticked identifiers had the same hole. The hook is
+# best-effort by design, but this is the plainest possible spelling of the exact
+# statement it claims to catch.
+assert_exit "$(bash_ 'psql -c "DELETE FROM public.users;"')" 2 "DELETE FROM schema.table without WHERE blocked"
+assert_exit "$(bash_ 'psql -c "DELETE FROM \"users\";"')"    2 "DELETE FROM \"quoted\" table without WHERE blocked"
+assert_exit "$(bash_ 'mysql -e "DELETE FROM `users`;"')"     2 "DELETE FROM \`backticked\` table without WHERE blocked"
+assert_exit "$(bash_ 'psql -c "DELETE FROM public.users WHERE id=1;"')" 0 "DELETE FROM schema.table WITH WHERE still allowed"
 assert_exit "$(bash_ 'ls -la')"                            0 "ordinary Bash allowed"
 
 echo

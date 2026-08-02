@@ -120,6 +120,41 @@ if [ -d "$FIXTURES/inlined-7-sections" ]; then
 fi
 
 echo
+echo "=== the rewrite preserves the file's mode ==="
+# Stage-2 finding 1. The write goes through mktemp (0600) and `mv`, and
+# rename(2) makes the destination NAME refer to the temp file's inode — so the
+# result carries the TEMP file's mode, not the original's. The comment at the
+# write site claimed the opposite for as long as this file has existed.
+#
+# 0644 in, 0644 out. A hook that quietly makes every project's CLAUDE.md
+# owner-only is changing something nobody asked it to change.
+if [ -d "$FIXTURES/inlined-7-sections" ]; then
+  tmp="$TMPROOT/mode"; mkdir -p "$tmp"
+  cp -R "$FIXTURES/inlined-7-sections/." "$tmp/"; rm -rf "$tmp/expected"
+  chmod 0644 "$tmp/CLAUDE.md"
+  ( cd "$tmp" && "$SCRIPT" "$tmp/CLAUDE.md" >/dev/null 2>&1 )
+  mode=$(stat -f '%Lp' "$tmp/CLAUDE.md" 2>/dev/null || stat -c '%a' "$tmp/CLAUDE.md" 2>/dev/null)
+  if [ "$mode" = "644" ]; then
+    echo "  PASS  a 0644 CLAUDE.md is still 0644 after the rewrite"; pass=$((pass + 1))
+  else
+    echo "  FAIL  a 0644 CLAUDE.md is still 0644 after the rewrite (got $mode)"; fail=$((fail + 1))
+  fi
+
+  # And a deliberately restrictive mode survives too — the fix must carry the
+  # original mode across, not hardcode 0644.
+  tmp="$TMPROOT/mode600"; mkdir -p "$tmp"
+  cp -R "$FIXTURES/inlined-7-sections/." "$tmp/"; rm -rf "$tmp/expected"
+  chmod 0600 "$tmp/CLAUDE.md"
+  ( cd "$tmp" && "$SCRIPT" "$tmp/CLAUDE.md" >/dev/null 2>&1 )
+  mode=$(stat -f '%Lp' "$tmp/CLAUDE.md" 2>/dev/null || stat -c '%a' "$tmp/CLAUDE.md" 2>/dev/null)
+  if [ "$mode" = "600" ]; then
+    echo "  PASS  a 0600 CLAUDE.md is still 0600 after the rewrite"; pass=$((pass + 1))
+  else
+    echo "  FAIL  a 0600 CLAUDE.md is still 0600 after the rewrite (got $mode)"; fail=$((fail + 1))
+  fi
+fi
+
+echo
 echo "=== idempotent: running twice changes nothing the second time ==="
 if [ -d "$FIXTURES/inlined-7-sections" ]; then
   out="$(run_normalize inlined-7-sections)"

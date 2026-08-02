@@ -25,9 +25,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPLATE="${SHIM_TEMPLATE:-$ROOT/reference-implementations/project-hooks/shim-template.sh}"
 
-# The hooks bound through a shim. The override variable name is derived the same
-# way the shim derives it, so the two cannot drift apart.
-SHIMMED_HOOKS=(database-sentinel normalize-claude-md openspec-change-gate)
+# The hooks bound through a shim, DECLARED rather than hardcoded here.
+#
+# This array used to be a literal while install-project-hooks.sh and
+# provisioning-check.sh both read a declaration file — one fleet, two expected
+# sets, maintained in two places (Stage-2 finding 7). SHIMMED-HOOKS explains in
+# its own header why it is a different set from ARTIFACTS.
+#
+# The override variable name is derived the same way the shim derives it, so the
+# two cannot drift apart.
+DECL="${SHIMMED_HOOKS_DECL:-$ROOT/reference-implementations/project-hooks/SHIMMED-HOOKS}"
+SHIMMED_HOOKS=()
+if [ -f "$DECL" ]; then
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(printf '%s' "$line" | tr -d '[:space:]')"
+    [ -n "$line" ] && SHIMMED_HOOKS+=("$line")
+  done < "$DECL"
+fi
+if [ "${#SHIMMED_HOOKS[@]}" -eq 0 ]; then
+  echo "project-hook-conformance: no shimmed-hook declaration at $DECL" >&2
+  echo "  Without it this tool would scan an empty set and report every project" >&2
+  echo "  green. Refusing to report." >&2
+  exit 65
+fi
 
 STRICT=0
 OVERRIDES_ONLY=0
@@ -135,6 +156,72 @@ report_markers() {
 }
 
 # ---------------------------------------------------------------------------
+# Shim identity — the file, not just the marker.
+#
+# Stage-2 finding 5. The template in core is "the authority", but until this
+# existed the only thing compared was a version string. A project could add
+# behaviour to its shim, reorder resolution, or drop the fail-open path and
+# still report `current`, because nothing read the rest of the file. The marker
+# attested a string about the file rather than the file.
+#
+# The render is deterministic — a project shim is the template with @@HOOK@@
+# substituted — so byte-identity within a profile is mechanically checkable.
+#
+# THE GATE SHIM IS ITS OWN AUTHORITY. It is a hand-maintained sibling of the
+# template rather than a render of it (the two must be edited together), so it
+# is compared against the reference copy core ships.
+#
+# THE SELF-HOSTING BINDER IS EXEMPT, AND EXEMPT IS NOT THE SAME AS PASSING.
+# Byte-identity is required WITHIN a profile, never across profiles. Core's own
+# gate hook resolves its working tree by design (ADR-0028), so scoring it
+# against the project render would report a deliberate inversion as drift. It is
+# recorded as out of profile — the marker and fail-open clauses still bind it,
+# and those are checked above like any other binder's.
+expected_shim_for() { # $1 = hook -> path of a file holding the expected bytes, or empty
+  local hook="$1"
+  case "$hook" in
+    openspec-change-gate)
+      printf '%s' "$ROOT/reference-implementations/project-hooks/openspec-change-gate.shim.sh" ;;
+    *)
+      local rendered="$TMPDIR_IDENT/$hook.expected"
+      [ -f "$rendered" ] || sed "s/@@HOOK@@/$hook/g" "$TEMPLATE" > "$rendered"
+      printf '%s' "$rendered" ;;
+  esac
+}
+
+TMPDIR_IDENT="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR_IDENT"' EXIT
+
+report_identity() {
+  local proj="$1" name hook shim expected
+  name=$(basename "$proj")
+  local resolved; resolved="$(cd "$proj" 2>/dev/null && pwd)" || return 0
+
+  for hook in "${SHIMMED_HOOKS[@]}"; do
+    shim="$proj/.claude/hooks/$hook.sh"
+    [ -f "$shim" ] || continue
+
+    if [ "$resolved" = "$ROOT" ]; then
+      echo "IDENTITY  $name  $hook  self-hosting — out of profile, byte-identity does not bind across profiles (ADR-0028)"
+      continue
+    fi
+
+    expected="$(expected_shim_for "$hook")"
+    if [ ! -f "$expected" ]; then
+      echo "IDENTITY  $name  $hook  cannot judge — no authority file at $expected"
+      findings=$((findings + 1))
+      continue
+    fi
+    if cmp -s "$shim" "$expected"; then
+      echo "IDENTITY  $name  $hook  matches the template"
+    else
+      echo "IDENTITY  $name  $hook  DIFFERS from the authority in core — a shim carries no behaviour of its own, so any difference is drift or an edit"
+      findings=$((findings + 1))
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
 # Override vectors.
 #
 # Five vectors, because settings.json is not the only way a repository can put
@@ -207,7 +294,10 @@ for proj in "${PROJECTS[@]}"; do
     echo "SKIP    $(basename "$proj")  — not a directory"
     continue
   fi
-  [ "$OVERRIDES_ONLY" -eq 1 ] || report_markers "$proj"
+  if [ "$OVERRIDES_ONLY" -eq 0 ]; then
+    report_markers "$proj"
+    report_identity "$proj"
+  fi
   report_override_vectors "$proj"
 done
 

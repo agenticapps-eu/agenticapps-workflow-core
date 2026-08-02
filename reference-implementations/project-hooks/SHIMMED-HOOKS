@@ -1,0 +1,25 @@
+# The hooks projects bind through a shim.
+#
+# WHY THIS IS NOT ARTIFACTS.
+#
+# ARTIFACTS declares what install-project-hooks.sh PUBLISHES to the shared bin
+# directory. This file declares what projects BIND. They are different sets and
+# the difference is not an oversight: openspec-change-gate is shimmed by every
+# project, but its implementation is published by install-shared-artifact.sh
+# alongside reviewer-cli and run-plan-review, so it has no row in this
+# manifest's set. Merging the two lists would either make the installer publish
+# an artifact it does not own or make the conformance scan blind to the gate —
+# which is the shim carrying the §18 gate's only blocking condition.
+#
+# WHY IT IS DECLARED AT ALL.
+#
+# project-hook-conformance.sh carried this set as a hardcoded array while the
+# installer and the provisioning check read a declaration, so one fleet had two
+# expected sets maintained in two places — the drift ARTIFACTS was created to
+# prevent, reintroduced in the third tool (Stage-2 finding 7).
+#
+# One hook name per line, without the .sh. Blank lines and # comments ignored.
+
+database-sentinel
+normalize-claude-md
+openspec-change-gate

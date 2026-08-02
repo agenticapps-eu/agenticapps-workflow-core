@@ -89,10 +89,16 @@ if [ -f "$H/$MAN" ]; then
   else
     bad "each row carries path, version and a lowercase-hex sha256" "$(cat "$H/$MAN")"
   fi
-  if grep -q '1\.0\.0' "$H/$MAN"; then
-    ok "the row's version comes from the implementation's own marker"
+  # Read the expected version from the implementation rather than hardcoding it.
+  # A literal here asserts "the manifest says 1.0.0", which is a fact about a
+  # release, not about the mechanism — it went red the first time an
+  # implementation was legitimately bumped.
+  want=$(grep -m1 -oE '^#[[:space:]]*database-sentinel-version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+' \
+           "$SRCDIR/database-sentinel.sh" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+  if [ -n "$want" ] && awk -F'\t' -v w="$want" '$1 ~ /database-sentinel\.sh$/ && $2 == w {n++} END{exit !(n==1)}' "$H/$MAN"; then
+    ok "the row's version comes from the implementation's own marker ($want)"
   else
-    bad "the row's version comes from the implementation's own marker" "$(cat "$H/$MAN")"
+    bad "the row's version comes from the implementation's own marker" "wanted $want" "$(cat "$H/$MAN")"
   fi
 else
   bad "a manifest was written beside the shared install directory"
@@ -203,6 +209,23 @@ hasnt "$OUT" "INTEGRITY     drifted" "an undeclared artifact does not make the m
 echo
 echo "=== 3.2b-ii  concurrent publishing runs do not lose each other's rows ==="
 # A lost-update defect, which atomicity alone does not address.
+#
+# STAGE-2 FINDING 3. This case used to background two runs and immediately wait.
+# Each finished in milliseconds, so the two critical sections never overlapped
+# and the assertion held whether or not a lock existed — verified: with the
+# mkdir lock loop removed outright it passed 15 of 15 runs. It asserted nothing.
+#
+# The first run now HOLDS the lock across the read-modify-write window
+# (INSTALL_PROJECT_HOOKS_TEST_HOLD_LOCK), so the second provably contends. Two
+# things are asserted, and the pair is what pins the mechanism:
+#
+#   rows      — all three survive. Unlocked, the second run reads the manifest
+#               before the first writes it and the later writer discards the
+#               earlier's rows.
+#   waiting   — the second run's elapsed time covers the hold. Unlocked it
+#               returns immediately, so this is what distinguishes "serialized"
+#               from "happened not to collide".
+HOLD=3
 H=$(mkhome concurrent)
 mkdir -p "$TMP/other"
 cp "$SRCDIR/database-sentinel.sh" "$TMP/other/"
@@ -210,16 +233,30 @@ sed 's/^# database-sentinel-version: .*/# other-hook-version: 1.0.0/' \
     "$SRCDIR/database-sentinel.sh" > "$TMP/other/other-hook.sh"
 cp "$SRCDIR/ARTIFACTS" "$TMP/other/"
 chmod +x "$TMP/other"/*.sh
-env HOME="$H" "$INSTALL" --source "$SRCDIR" >/dev/null 2>&1 &
+
+env HOME="$H" INSTALL_PROJECT_HOOKS_TEST_HOLD_LOCK="$HOLD" \
+    "$INSTALL" --source "$SRCDIR" >/dev/null 2>&1 &
 p1=$!
-env HOME="$H" "$INSTALL" --source "$TMP/other" --artifacts other-hook >/dev/null 2>&1 &
-p2=$!
-wait $p1; wait $p2
+sleep 1                      # let the first run take the lock and read
+t0=$(date +%s)
+env HOME="$H" "$INSTALL" --source "$TMP/other" --artifacts other-hook >/dev/null 2>&1
+t1=$(date +%s)
+wait $p1
+
 n=$(grep -c $'\t' "$H/$MAN" 2>/dev/null || echo 0)
 if [ "$n" -eq 3 ]; then
   ok "both concurrent runs' rows survive (3 rows)"
 else
   bad "both concurrent runs' rows survive (3 rows)" "got $n:" "$(cat "$H/$MAN" 2>/dev/null)"
+fi
+
+waited=$(( t1 - t0 ))
+if [ "$waited" -ge $(( HOLD - 1 )) ]; then
+  ok "the second run BLOCKED on the lock rather than interleaving (waited ${waited}s)"
+else
+  bad "the second run BLOCKED on the lock rather than interleaving" \
+      "it returned after ${waited}s while the first held the lock for ${HOLD}s —" \
+      "it did not contend, so this case cannot speak to mutual exclusion"
 fi
 
 echo
@@ -268,6 +305,67 @@ if [ -L "$H/$BIN/database-sentinel.sh" ]; then
 else
   ok "the symlink is replaced by a regular file"
 fi
+
+echo
+echo "=== Stage-2 finding 2  the write surface is CHECKED, not merely established ==="
+# The block above proves the INSTALLER sets the mode on a tree it just created.
+# It cannot observe the machine anyone is actually running on. The delta requires
+# an artifact owned by another user to be "reported, not executed silently" and
+# forbids group- or world-writable artifacts, the directory and the manifest —
+# and calls all of it checkable by the conformance tool. Nothing checked it.
+#
+# Degradation AFTER a clean install is the case that matters: the installer has
+# already run and exited 0, and every digest still matches.
+#
+# Assertions match the WRITE-SURFACE label, not a bare substring: "manifest"
+# and "database-sentinel" appear in this tool's normal output, so a substring
+# match would pass against the unfixed tool for the wrong reason.
+#
+# The two axes are NOT overloaded. `integrity` is defined by the delta as
+# whether present artifacts match their rows; a group-writable file whose
+# digest still matches is `attested` and saying otherwise would corrupt a
+# vocabulary the delta spent a review round pinning down. The write surface is
+# reported as its own dimension and counts toward --strict.
+H=$(mkhome perms-artifact); inst "$H" >/dev/null
+chmod g+w "$H/$BIN/database-sentinel.sh"
+OUT=$(check "$H")
+has "$OUT" "WRITE-SURFACE" "a group-writable artifact is reported as a write-surface finding"
+has "$OUT" "database-sentinel.sh" "…and the finding names the artifact"
+
+H=$(mkhome perms-dir); inst "$H" >/dev/null
+chmod go+w "$H/$BIN"
+OUT=$(check "$H")
+has "$OUT" "WRITE-SURFACE" "a world-writable shared directory is reported"
+
+H=$(mkhome perms-manifest); inst "$H" >/dev/null
+chmod g+w "$H/.agenticapps/manifest.tsv"
+OUT=$(check "$H")
+has "$OUT" "WRITE-SURFACE" "a group-writable manifest is reported — the digest record is covered by the same rules"
+has "$OUT" "manifest.tsv" "…and the finding names the manifest"
+
+# --strict is what CI would run. A write surface anyone can author must fail it.
+H=$(mkhome perms-strict); inst "$H" >/dev/null
+chmod g+w "$H/$BIN/database-sentinel.sh"
+check "$H" --strict >/dev/null 2>&1; rc=$?
+[ "$rc" -ne 0 ] && ok "--strict fails on a group-writable artifact" \
+                || bad "--strict fails on a group-writable artifact" "got exit 0"
+
+# And the healthy machine stays quiet: a check that cries wolf is one nobody runs.
+H=$(mkhome perms-clean); inst "$H" >/dev/null
+OUT=$(check "$H")
+hasnt "$OUT" "WRITE-SURFACE" "a freshly installed machine reports no write-surface finding"
+check "$H" --strict >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && ok "--strict passes on a freshly installed machine" \
+                || bad "--strict passes on a freshly installed machine" "got exit $rc"
+
+echo
+echo "=== Stage-2 finding 8  a missing option value is a usage error, not a crash ==="
+# The sibling installer guards every option and exits 64. This one dereferenced
+# $2 under `set -u` and died with 'unbound variable'.
+OUT=$(env HOME="$TMP" "$CHECK" --dest 2>&1); rc=$?
+[ "$rc" -eq 64 ] && ok "--dest with no value exits 64" \
+                 || bad "--dest with no value exits 64" "got exit $rc: $(printf '%s' "$OUT" | head -1)"
+hasnt "$OUT" "unbound variable" "…and does not report a shell error to the operator"
 
 echo
 echo "=== 3.2a-ii  the manifest check and the source check are reported apart ==="
