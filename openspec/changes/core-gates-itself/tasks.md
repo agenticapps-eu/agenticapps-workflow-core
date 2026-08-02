@@ -50,7 +50,7 @@
 - [x] 6.1 Run `openspec validate --all` and confirm it stays green with this change open.
 - [x] 6.2 Confirm this change modifies none of the files any host pins. Read all four manifests, which do not agree: `claude-workflow` pins seven, the other three pin five each (no `run-plan-review.sh`, no `install-shared-artifact.sh`). Assert what is checkable from inside core — that none of them is edited here — not a claim about host pin state, which core cannot verify.
 - [x] 6.3 Confirm nothing under `reference-implementations/` was modified. It is consumed by this change, never edited.
-- [ ] 6.4 Open the pull request and confirm the new CI job runs and passes on it — the first live proof the floor works.
+- [x] 6.4 Opened PR #56. The `gate` job ran and passed: harness scored 71 rows against the floor of 71, then `--ci` exited 0. The pre-commit hook also fired on the installing commit itself, reporting both stale reviews and allowing — core gating core, live.
 - [ ] 6.5 Request the §07 Stage-2 independent code review. `openspec validate` is a spec check and does not discharge it.
 - [x] 6.6 Confirm no report of this change claims core is now fully self-gating: this installs the change gate only, and core still carries no other project hook.
 - [x] 6.7 Confirm no surface — spec, ADR, workflow comment, PR body or handoff — calls the CI job an enforced floor. Core's `main` has no branch protection and no rulesets, so a failing check does not prevent a merge. The job reports.
