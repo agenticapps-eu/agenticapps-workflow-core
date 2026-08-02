@@ -12,54 +12,48 @@
 - failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-08-02T14:09:04Z · timeout 900s_
+_generated 2026-08-02T14:42:34Z · timeout 900s_
 
 VERDICT: APPROVE
-
-This is an exceptionally well-researched and self-critical change that I can approve with no reservations. The author has not only identified a clear problem (drift, dead code) but has also iteratively refined the solution by finding and correcting numerous subtle bugs and flawed assumptions in their own design.
-
-- **Deeply Investigated:** The change correctly identifies the root causes of problems, such as realizing `meta-observer` is the main source of `.planning/` writes, not the hooks being deleted. It demonstrates a pattern of checking assumptions and correcting the record, which is exemplary.
-- **Pragmatic & Achievable Spec:** The proposal consistently replaces unenforceable or impossible guarantees (e.g., multi-artifact atomic publishing, runtime detection of config-file `env` vars) with practical, verifiable alternatives (e.g., per-artifact atomicity with locking, conformance checks for config).
-- **Corrects Critical Defects:** The change finds and fixes multiple live, blocking defects in the current fleet (the `design-shotgun-gate` and `database-sentinel` dead-sentinel bugs) that would have been propagated fleet-wide by a less careful approach.
-- **Precise and Honest:** The document is precise about its impact, carefully enumerating outcomes per-repo instead of generalizing. It is also honest about the limitations of its own solution, such as clearly defining `database-sentinel` as "best-effort" and acknowledging that on an unprovisioned machine, CI is the only remaining floor for the change-gate.
+*   The self-correction and deep diligence shown throughout the decisions are exemplary, especially in identifying and fixing subtle issues like the silent `exit 0` failure (Decision 4), the dead sentinel in the canonical hook (Decision 5), and the false fallback claim for the `pre-commit` wrapper (Decision 14).
+*   The change honestly and accurately assesses its own limitations and risks, such as the protection now being tied to machine provisioning and the code execution risk from the override mechanism. The new `per-machine provisioning check` requirement is a crucial and correct response to this.
+*   The added `project-hook-binding` capability is thorough and robust, correctly translating the complex design decisions into normative requirements, particularly around publication atomicity (Decision 12) and the two distinct resolution profiles (Decision 17).
 
 ## Reviewer: codex
-_generated 2026-08-02T14:13:12Z · timeout 900s_
+_generated 2026-08-02T14:45:29Z · timeout 900s_
 
 VERDICT: REQUEST-CHANGES
 
-- The universal shim contract contradicts core’s documented exception: it mandates shared-install resolution and byte-identical shims, while core deliberately resolves its working-tree implementation. Define a separate profile or explicit normative exception; one shared version marker cannot honestly represent both contracts.
-- The “exactly three” provisioning states omit a completed install that is later deleted, corrupted, or modified—the primary condition the manifest check exists to detect. Add a degraded/drifted state or define states observationally.
-- The change is stale against §17/§18 v1.5.0: review is reported, never enforced, yet the delta repeatedly calls missing resolution/overrides a bypass of the review requirement. The lost enforcement is validation, not review.
-- “A cloned repository must not be able to switch off the gate” is contradicted by project-defined overrides taking effect and merely being reported by an on-demand check. Detection is not prohibition; an executable override also creates an omitted arbitrary-code execution path.
-- The interruption contract is inconsistent: “manifest is either pre-run or post-run” does not describe per-artifact manifest updates, and republishing an existing artifact before its row is updated leaves a stale row—not “no row.” Specify the exact publication algorithm and cover both initial install and upgrade crashes.
+- Provisioning states are not mutually exclusive. For example, a manifest whose files are all absent is both **unprovisioned** and **drifted**; one unattested file present while another is absent is both **partially provisioned** and **drifted**. Define precedence or separate completeness from integrity.
+- Tasks 2.2–2.3 require exit `1` for both hooks before task 2.10 verifies `PostToolUse` semantics, contradicting the requirement not to reuse the `PreToolUse` convention untested.
+- Manifest rows require an artifact “version marker,” but only `# shim-contract:` is defined—and that marks project shims, not the published implementations. Define implementation-version format, authority, and bump rules, or remove this field.
+- The deletion test still defines enforcement too narrowly: a hook can enforce a gate through a proxy, sentinel, API result, or other condition without checking the specified evidence artifact. The sentinel scenario acknowledges this but adds no operative test.
+- Removing `<repo>/bin/openspec-change-gate.sh` is a real regression where that fallback exists. `agents-task-viewer` currently has an executable fallback, so an unprovisioned machine changes from enforced validation to fail-open; the proposal incorrectly calls this “not a regression.”
+- The shared directory is acknowledged as an arbitrary-code-execution concentration point, but no ownership, permission, symlink, or safe-temporary-file requirements are specified. Require current-user ownership, reject group/world-writable artifacts, and define symlink-safe publication.
 
 ## Reviewer: opencode
-_generated 2026-08-02T14:14:33Z · timeout 900s_
+_generated 2026-08-02T14:47:16Z · timeout 900s_
 
+I'll verify a few of the change's load-bearing factual claims against the repo before ruling.
 VERDICT: REQUEST-CHANGES
 
-Concrete issues:
+Verified accurate (credit where due): the pre-commit wrapper quote and resolution order match `reference-implementations/openspec-change-gate/pre-commit` exactly, and `change-gate-enforcement/spec.md` does say the gate blocks only on `openspec validate --all` with reviews reported-never-enforced (Decision 18 checks out). But the change's evidence about its own exemplar is stale, in precisely the way the change spends its whole length warning against:
 
-- **Internal contradiction on `MultiEdit` (Impact vs. own scenario).** The Impact section lists "Six projects gain `MultiEdit` coverage" as a delivered behaviour change, while Decision 6 admits `MultiEdit` "is not present in the tool set of the Claude Code version running this change" and the delta's own scenario ("A tool named in a matcher no longer exists on the host") says such coverage "SHALL NOT be reported as a delivered protection." The Impact bullet violates the change's own rule. Either verify the tool exists on the supported host or strike the bullet.
+- **Decision 9's audit table mis-describes core's actual hook.** I read `.claude/hooks/openspec-change-gate.sh` as it exists today: it has **no `<repo>/bin/` candidate** (it resolves `$ROOT/reference-implementations/...` directly), and it carries an explicit comment "**NO OPENSPEC_GATE_SELF EXPORT**. An earlier revision set it here... the gate has IGNORED that variable since 1.5.0." Two of the three "violations" the table lists for the exemplar no longer exist in core's copy, and the third is fixed differently than described. The companion-change landing-order/conflict concern about the identity line is moot for core. The change audited a file that has since been rewritten — filename-proximity evidence, round nine.
 
-- **The change ships a `PostToolUse` shim without doing what its own delta mandates.** The delta requires that a shim for any event class other than `PreToolUse` "SHALL have its warning channel verified against the host docs for *that* event before the shim is written, and the verified behaviour recorded alongside this requirement." `normalize-claude-md` is `PostToolUse`; the delta records verification only for `PreToolUse` (exit 1 shows first stderr line). `PostToolUse` semantics differ (exit 2 feeds stderr to the model, other non-zero to the operator) — unrecorded here. The change violates a requirement it writes, in the same revision that writes it.
+- **The self-hosting profile contradicts core's actual hook.** The delta defines self-hosting as "that maintained file, directly... a self-hosting binder has neither candidate to carry," and states fail-open-and-report binds both profiles. Core's real hook (a) honours the `OPENSPEC_GATE` override — a candidate the profile says it doesn't have — and (b) **fails closed (exit 2)** when the root is unresolvable, with a long comment defending that choice. That is a deliberate, documented violation of the delta's "unresolvable shim allows" rule, and the change neither migrates it nor scopes it out. Decision 17 was written to eliminate exactly this kind of unstated exemption for the exemplar.
 
-- **Alarm-fatigue mechanism contradicts the pre-commit rationale.** Decision 14 rejects fail-closed pre-commit because persistent failure "trains people into `--no-verify`." But the chosen fail-open posture emits a non-blocking hook error on **every** Bash/Edit/Write call on every unprovisioned machine, indefinitely. That is the same conditioning pressure applied to the transcript. No rate-limiting (warn-once-per-session, marker file) is specified or rejected.
+- **The 141/137/4 counts are not reproducible and partly false now.** Core's `.planning/skill-observations/` today holds **29 files, all 29** in `<stamp>--<sessionId>` naming, **zero** matching `skill-router-*`. The qualitative conclusion survives (meta-observer is the sole producer here), but the change cites precise counts as evidence in both the Why and the delta while acknowledging the logs are gitignored per-machine local state — those numbers are unverifiable by any other machine or reviewer and should be stated as dated, single-machine observations, not measurements of "core".
 
-- **Override kill-switch detection covers only one provenance vector.** The settings.json `env`-block scan is the entire defense against project-set overrides, but a repo can ship `.envrc` (direnv), a bootstrap script, or README instructions that export the override into the operator's shell — indistinguishable from operator-exported and invisible to the scan. For the §18 gate this is a documented one-variable bypass with detection that is narrower than the delta's "defence is detection in review" framing implies.
+- **Kill switch × repetition-policy interaction is unaddressed.** Decision 13 accepts that a repo-shipped override pointing at a missing file disables the §18 gate's only blocking condition, with detection via the invalid-override report. Decision 16 then permits that report to be rate-limited to once-per-interval — so the highest-severity report the shim can emit is exactly the one the alarm-fatigue policy can suppress. Invalid-override (kill switch) reports should be carved out of rate limiting and mandated per-invocation; only the unprovisioned-machine report needs the repetition policy.
 
-- **Per-machine provisioning regression is real and unchecked.** Before this change, `database-sentinel` protection existed on any clone with zero provisioning. After, it exists only where the installer ran. All conformance checks enumerated are per-*repo* (markers, settings scan); nothing checks per-*machine* provisioning state, and every existing developer machine enters the unprovisioned state the moment it pulls the shim. "Publish before replacing project copies" only orders the operator's own machine.
+- **Contract sentence not amended for its own carve-outs.** "The shim SHALL contain no behaviour of its own beyond resolution, host self-identification, and `exec`" now coexists with a permitted marker read/write (Decision 16) and mandated invalid-override reporting (Decision 13). The delta acknowledges these as carve-outs in their own sections but the normative contract line still reads absolutely; amend it to enumerate the carve-outs.
 
-- **Unverified premise: the existing matchers may never have fired.** The table shows matchers as `Bash\|Edit\|Write` (escaped pipes). If the host interprets the matcher as ERE, `\|` is a literal pipe and the matcher matches nothing — meaning `database-sentinel` has been inert everywhere and the entire fail-open/fail-closed cost analysis is about a control that never ran. Task 4.8 verifies `MultiEdit` delivery; nothing verifies the base matcher currently fires. Verify before claiming protection is "lost" on unprovisioned machines.
-
-- **Telemetry-pair consumer claim is asserted, not shown.** "The only consumer of the log is the other hook" is exactly the name-proximity inference style the change itself indicts three times (design-shotgun-gate, database-sentinel's middle column, meta-observer). Given Decision 11's new transitive-consumer clause, the fleet-wide search establishing no other consumer should be cited, not implied.
-
-- **Minor arithmetic drift.** "Roughly 138 lines remain per project × 7 = 966" re-generalises a count the same section just enumerated as non-uniform (`agents-task-viewer` ends with 2 hooks, not 3); and the fleet net figure mixes "−3,430 across projects" with "+~360 to core" without stating the combined total. Trivial, but this change's whole thesis is that unverified counts survive review.
+- **Publication lock is under-specified.** "SHALL hold an exclusive lock" doesn't name a mechanism; a lock-*file* approach has a stale-lock-after-kill failure, `flock` doesn't. One sentence (e.g., "`flock` on a lockfile beside the manifest, never a create-and-check lock file") makes the requirement implementable as written.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:3fc36c69492813956f42c7cf3b0300d43b4c41a3e114392a1dfe1f0ba42641c3
+digest: sha256:cf5ef8dce4705cbf47f55d702ca93c59541ade1c1c591217755b60b62fd5381d
 producer-version: 1.2.0
-tasks-digest: sha256:09a8e2155eadbbc0d7350240a0378bacf71cb8395f85ebb18f2bfc6593d3a59e
+tasks-digest: sha256:a62c901b5e7505c27ec12fadc586cec372d5363a483f557e81843b48fd6948ff
 -->

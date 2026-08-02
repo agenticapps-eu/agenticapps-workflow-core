@@ -29,12 +29,19 @@ during the session that found it." Core carries **no `.planning`-writing project
 hook**, so none of its own hooks wrote them. (It carried no `.claude/hooks/` at
 all when this was measured. Since 2026-08-02 it carries exactly one — the
 `PreToolUse` change-gate installed by `core-self-enforcement` — which writes
-nothing under `.planning/`, so the inference is unchanged.) Remeasured: core
-carries 141 files under
-`.planning/skill-observations/` — 137 in the `<stamp>--<sessionId>.{md,jsonl}`
+nothing under `.planning/`, so the inference is unchanged.) Observed on this
+machine on 2026-08-02: core holds **29** files under
+`.planning/skill-observations/`, **all 29** in the `<stamp>--<sessionId>.{md,jsonl}`
 naming of the **global** `SessionEnd` hook registered in
 `~/.claude/settings.json` (`agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`),
-and 4 in `skill-router-log.sh`'s `skill-router-{date}.jsonl`.
+and **none** in `skill-router-log.sh`'s `skill-router-{date}.jsonl`.
+
+**Stated as a dated single-machine observation, because that is what it is.** An
+earlier revision recorded 141 / 137 / 4 and cited it as a measurement of core.
+Review re-ran the count and got different numbers — this directory is gitignored
+local state, so it varies per machine, grows every session, and no reviewer can
+reproduce a figure from it. The conclusion survives the correction and is
+strengthened by it: the non-hook producer now accounts for 29 of 29.
 
 Both hooks are still deleted — they are hooks and they do write there — but this
 change **reduces** the violation rather than ending it, and says so rather than
@@ -353,7 +360,21 @@ and `migrations/check-snapshot-parity.sh` must stay green across the edit.
 apply to it, and it currently breaks three of them: it carries the
 `<repo>/bin/` fallback the resolution order now forbids, it fails open
 **silently** where the rule requires a report, and it hardcodes
-`OPENSPEC_GATE_SELF=claude`. Its header also states the `>= 2` floor, in all
+`OPENSPEC_GATE_SELF=claude`. (Verified across `agents-task-viewer`, `cparx` and
+`callbot` during round 9 — four `<repo>/bin/` references and one
+`OPENSPEC_GATE_SELF` export apiece. This describes the shims in the seven
+consuming projects, not core's own self-hosting copy, which a reviewer read it
+as; that file is covered by task 4b.10.)
+
+**Removing the `<repo>/bin/` fallback is not free everywhere, and an earlier
+revision said it was.** Checked in all seven: six carry no such file, and
+**`agents-task-viewer` carries one that is present and executable**. There the
+third candidate resolves today, so an unprovisioned machine gets enforced
+validation in that repo and would get fail-open after the removal. "Not a
+regression — the gate shim already fails open" was true of six repositories and
+asserted of seven. The rule is kept uniformly; the ordering changes, so that
+repo's machine is verified provisioned **before** its candidate is removed
+(task 4b.1a). No exception, no silent loss. Its header also states the `>= 2` floor, in all
 seven projects — a set of sites the companion change's enumeration missed
 because this change had classified the file as untouched.
 

@@ -44,6 +44,22 @@ later check to establish that the executed copy is the one that was published:
 - **Location** — a manifest beside the shared install directory, written by the
   installer, holding one row per published artifact: path, version marker,
   digest.
+- **The row's version marker is the *implementation's*, and it is defined here.**
+  A reviewer noted the manifest demanded a version marker while the only marker
+  this capability defined was `# shim-contract:`, which marks **shims** — the
+  copies in projects — not the published implementations the manifest describes.
+  The field named something that did not exist. An implementation SHALL carry
+  `# <hook>-version: <major>.<minor>.<patch>` within its first 10 lines, semver,
+  matching `^[0-9]+\.[0-9]+\.[0-9]+$` — the convention `run-plan-review.sh` and
+  the change gate already use in this fleet, so no new reading rule is
+  introduced. The **authority** is the tracked file in core, as it is for the
+  shim template. The version SHALL be bumped whenever the implementation's
+  behaviour changes, and an installer SHALL refuse to overwrite a published copy
+  carrying a **higher** version than the one it holds, treating an unmarked file
+  as `0.0.0` — the rule that already governs the shared directory's other
+  artifacts. The two markers answer different questions and SHALL NOT be
+  conflated: `# shim-contract:` says which contract a project's shim implements,
+  `# <hook>-version:` says which build of the implementation is published.
 - **Trigger** — the check runs on demand (a conformance tool), not in the hook's
   hot path. A shim SHALL NOT hash its implementation before every invocation.
 - **Comparison** — the check compares the executed copy against the manifest.
@@ -82,6 +98,17 @@ asserted as satisfied. What is achievable is specified instead:
   read-modify-write the shared manifest and the later writer silently discards
   the earlier's rows. This is a lost-update defect, not a torn-write defect,
   and the lock is what addresses it.
+
+  **The mechanism is named, because the obvious one is wrong.** The lock SHALL be
+  an `flock` held on a lockfile beside the manifest, and SHALL NOT be a
+  create-and-check lock file. A reviewer pointed out that "SHALL hold an exclusive
+  lock" is not implementable as written and that the two candidate readings differ
+  where it matters: a create-and-check lockfile survives the process that made it,
+  so an installer killed mid-run leaves a lock nobody holds and the next run either
+  blocks forever or learns to delete locks — which is no lock at all. `flock` is
+  released by the kernel when the holder dies. The failure this whole requirement
+  is about is an interrupted publishing run, so a locking scheme that breaks on
+  interruption is the one scheme that must be excluded by name.
 - **Ordering** — an artifact SHALL be renamed into place *before* the manifest
   row naming it is published. The reachable inconsistency is therefore an
   implementation present with no manifest row — a artifact that reports as
@@ -173,8 +200,8 @@ into seven projects produced three distinct versions of
 - **WHEN** the installer is killed between publishing two implementations
 - **THEN** every implementation it did publish is complete rather than
   truncated, and the manifest is either the pre-run version or the post-run
-  version and never a torn mixture — the machine is left **partially
-  provisioned**, which is a legitimate state that the check reports, not an
+  version and never a torn mixture — the machine is left at completeness
+  **`partial`**, which is a legitimate condition the check reports, not an
   invariant the installer promises cannot occur
 
 #### Scenario: Two installers publish concurrently
@@ -291,7 +318,25 @@ first paragraph calls a contract change.
 
 A project SHALL bind a hook by shipping a shim that locates and `exec`s the
 authoritative implementation. The shim SHALL contain no behaviour of its own
-beyond resolution, host self-identification, and `exec`.
+beyond this closed list:
+
+1. resolution;
+2. host self-identification;
+3. `exec`;
+4. **reporting** — the fail-open report and the invalid-override report required
+   below; and
+5. **reading and writing a single repetition marker**, where the shim's stated
+   repetition policy needs one.
+
+Items 4 and 5 are carve-outs, and they are enumerated here because a reviewer
+found them added in their own sections while this sentence still read
+absolutely — three clauses in the contract and five behaviours in the
+capability. A rule that its own document contradicts is the defect this change
+exists to remove, and it had grown one.
+
+The list is **closed**. In particular no shim SHALL inspect the tool payload:
+that is what makes narrow blocking impossible, which is what makes fail-open
+necessary, and it is the duplication this capability exists to prevent.
 
 The shim SHALL resolve in this order:
 
@@ -305,6 +350,33 @@ if it is the scaffolder's own checkout, a shim running inside a product repo has
 no defined way to locate it. Either way the entry contradicted something, so it
 is removed rather than clarified.
 
+**Removing it is a real loss wherever that candidate currently resolves, and
+SHALL be sequenced rather than asserted harmless.** A reviewer challenged the
+claim that dropping the third candidate costs nothing because "the gate shim
+already fails open". Checked across all seven projects: six carry no
+`<repo>/bin/openspec-change-gate.sh`, and **`agents-task-viewer` carries one that
+is present and executable**. In that repository the third candidate resolves
+today, so an unprovisioned machine currently gets **enforced validation** there
+and would get fail-open after the removal. The claim was true of six repositories
+and asserted of seven.
+
+Therefore: a binder whose third candidate currently resolves SHALL be moved to
+completeness `complete` — verified by the per-machine check — **before** the
+candidate is removed. The rule is kept, uniformly, and the enforcement window it
+would otherwise open is closed by ordering rather than by an exception. Where
+that ordering cannot be established for a binder, the removal SHALL be deferred
+for that binder and the reason recorded, rather than the loss being taken
+silently.
+
+#### Scenario: A binder's forbidden third candidate currently resolves
+
+- **WHEN** a project ships an executable `<repo>/bin/<hook>.sh` that the shim
+  reaches today
+- **THEN** removing that candidate is recorded as a loss of enforcement on
+  unprovisioned machines, and the machine is verified `complete` first — the
+  removal is not described as costless because it is costless in the other
+  repositories
+
 **That order is the *published-resolution* profile, and it is not universal.** A
 reviewer showed the contract as previously written mandated shared-install
 resolution **and** byte-identical shims for every binder, while the repository
@@ -315,14 +387,23 @@ incompatible bindings honestly. It cannot. Two profiles are therefore normative:
 | Profile | Bound by | Resolves | Why |
 |---|---|---|---|
 | **published-resolution** | every project that consumes a shared hook | the override, then `~/.agenticapps/bin/<hook>.sh` | one implementation, published once, executed identically everywhere |
-| **self-hosting** | the repository whose working tree is the authoritative source | that maintained file, directly | scoring the published copy tests whichever host's installer ran last, not the bytes this repository ships (ADR-0028) |
+| **self-hosting** | the repository whose working tree is the authoritative source | the override, then that maintained file directly | scoring the published copy tests whichever host's installer ran last, not the bytes this repository ships (ADR-0028) |
 
 Each binder SHALL declare its profile, and every requirement in this capability
 SHALL be evaluated against the declared profile:
 
-- The two-candidate resolution order binds **published-resolution** only. A
-  self-hosting binder has neither candidate to carry, and SHALL NOT be reported
-  as violating an order from which it is exempt.
+- **Both profiles honour the override; they differ in the second candidate
+  only** — the shared install for one, the maintained working-tree file for the
+  other. A previous revision of this table said a self-hosting binder "has
+  neither candidate to carry", which a reviewer checked against
+  `.claude/hooks/openspec-change-gate.sh` and found false: that file resolves
+  `${OPENSPEC_GATE:-$ROOT/reference-implementations/...}`, so it honours the
+  override exactly as a project shim does. The error was compressing "no shared
+  install and no `<repo>/bin/` candidate" into "neither candidate", in a
+  paragraph written after reading the file. It is corrected rather than
+  explained.
+- A self-hosting binder SHALL NOT be reported as violating the *shared-install*
+  candidate it is exempt from.
 - Byte-identity is required **within** a profile, never across profiles.
 - The version marker, the behaviour-free rule, the fail-open-and-report rule and
   its repetition policy bind **both**. They are what the two profiles have in
@@ -524,30 +605,57 @@ A shim that resolves no implementation SHALL allow the tool call and SHALL make
 the failure visible in the session transcript, naming the missing implementation
 and the installer that provides it.
 
-**A machine is in exactly one of four provisioning states, and the invariants
-differ per state.** A reviewer found the capability asserting, under publication,
-that "no project binds a hook whose implementation is absent", while the
+**A machine's provisioning is reported on two independent axes, not as one list
+of states.** A reviewer found the capability asserting, under publication, that
+"no project binds a hook whose implementation is absent", while the
 clone-before-install scenario below explicitly permits exactly that. Both
-sentences were true of different states and neither said which, so the pair read
-as a contradiction. The states are named here and every invariant elsewhere in
-this capability SHALL be read as qualified by one of them:
+sentences were true of different conditions and neither said which, so the pair
+read as a contradiction.
 
-| State | Observable definition | Invariant |
+A previous revision answered that with a flat list of four states — unprovisioned,
+partially provisioned, provisioned, drifted — and a reviewer showed the list is
+**not mutually exclusive**: a manifest whose files are all absent is both
+unprovisioned *and* drifted, and one unattested file beside one missing file is
+both partially provisioned *and* drifted. A machine cannot be "in exactly one" of
+a set whose members overlap. The two things being conflated are **how much is
+installed** and **whether what is installed can be attested**, which vary
+independently:
+
+| Axis | Values | Observable definition |
 |---|---|---|
-| **Unprovisioned** | no shared install directory, or it holds none of the shimmed implementations | shims resolve nothing, report, and allow. Binding a hook whose implementation is absent is **expected and permitted** — it is the state a fresh clone is in |
-| **Partially provisioned** | some shimmed implementations are present and executable; others are absent | each present implementation is complete and is either attested by a matching manifest row or reported unverifiable. Mixed is legal; torn is not |
-| **Provisioned** | every shimmed implementation is present, executable, and attested by a manifest row whose digest matches | the state a completed publishing run is intended to produce, and the only state in which the fleet's protections are running as described |
-| **Drifted** | an implementation's bytes do not match its manifest row, **or** a row names a file that is absent, **or** a present implementation has no row | the check reports the specific disagreement and its direction. A drifted machine SHALL NOT be reported as provisioned, and SHALL NOT be reported as unprovisioned either — the files are there and the attestation does not hold, which is a distinct and actionable condition |
+| **Completeness** | `none` / `partial` / `complete` | how many shimmed implementations are present and executable: none of them, some of them, all of them |
+| **Integrity** | `attested` / `drifted` | `attested` when every present implementation matches a manifest row; `drifted` when any present implementation's bytes disagree with its row, any row names an absent file, or any present implementation has no row |
 
-**The states are defined by what a check can observe, never by what happened.**
-The previous revision defined *provisioned* as "a publishing run completed" and
+A machine's state is the **pair**. `none` + `drifted` is the all-files-deleted
+case that broke the flat list, and it is now expressible: nothing is installed
+*and* the manifest still claims otherwise, which is a different remedy from a
+clean fresh clone. The vocabulary maps onto the old names where they were
+unambiguous — *unprovisioned* is `none`+`attested` (no rows, no files),
+*provisioned* is `complete`+`attested` — and those names MAY be used as shorthand
+for exactly those pairs, never as a classification in their own right.
+
+Invariants attach to a value on one axis, never to a state name:
+
+- **`none`** — shims resolve nothing, report, and allow. Binding a hook whose
+  implementation is absent is **expected and permitted**; it is what a fresh
+  clone is.
+- **`partial`** — each present implementation is complete rather than truncated.
+  Mixed is legal; torn is not.
+- **`complete`** — every shimmed implementation is present and executable.
+- **`attested`** — every present implementation matches its row. This is the only
+  value on either axis under which the fleet's protections may be described as
+  running as documented.
+- **`drifted`** — the check reports the specific disagreement and its direction,
+  and SHALL NOT resolve it silently.
+
+**Both axes are computed from what is on disk, never from what happened.** The
+previous revision defined *provisioned* as "a publishing run completed" and
 *partially provisioned* as "a publishing run was interrupted". A reviewer showed
 that history is not evaluable after the fact — nothing on the machine records
 it — and, worse, that a completed install later deleted, hand-edited, replaced
 or half-removed classified as **provisioned** under that definition. That is
 precisely the condition the manifest check exists to detect, and the state table
-was the one place it could not be named. Observational definitions are what let
-the check compute the state instead of trusting a claim about the past.
+was the one place it could not be named.
 
 The rule that a project must never bind a missing implementation applies to the
 **provisioned** state only. It is a post-condition of a completed install, not a
@@ -604,6 +712,22 @@ invocation**, **once per session**, or **once per interval**. Leaving it unstate
 is what the previous revision did, and an unstated policy defaults silently to
 the noisiest of the three.
 
+**The invalid-override report is carved out and SHALL be emitted per invocation,
+whatever the policy.** A reviewer found that the policy as first written could
+rate-limit the highest-severity thing a shim can say. The two reports are not
+alike:
+
+| Report | Condition | Policy |
+|---|---|---|
+| implementation unresolvable | the machine is unprovisioned — an expected condition a fresh clone is in, self-correcting once the installer runs | subject to the repetition policy |
+| **override invalid** | a variable names a path that is not an executable file, on a machine whose shared install may be perfectly healthy | **per invocation, always** |
+
+The second is the kill switch. Suppressing it suppresses the only signal that a
+hook has been switched off — and for the §18 gate, that its one blocking
+condition is not running. A rate limit adopted to quiet a benign condition would
+have silenced the malign one, because the previous text wrote a single policy
+covering both.
+
 Per-session and per-interval both require a marker, which is behaviour beyond
 resolution and `exec`. That carve-out is permitted, is bounded to reading and
 writing a single marker path, and SHALL NOT extend to inspecting the tool
@@ -625,6 +749,33 @@ shim that blocked on non-resolution would block **every command and every file
 edit in the project**, not the narrow set the hook protects. Narrowing it would
 require the shim to inspect the tool payload, which the shim contract forbids
 and which would restore the duplicated logic this capability exists to remove.
+
+**Two distinct non-resolutions, and this rule governs only the first.** A
+reviewer checked `.claude/hooks/openspec-change-gate.sh` against this requirement
+and found it failing **closed** — `exit 2` — with a long comment defending the
+choice. Read precisely, that file separates two conditions this requirement had
+collapsed into one:
+
+- **The implementation is absent.** Tooling is not installed. The file allows and
+  reports, which is what this requirement mandates. (It exits `0` rather than a
+  non-blocking error code, so it is non-conformant on the *exit code* — a real
+  finding, and one this change fixes under task 4b.2.)
+- **The binder cannot determine where to look.** The root is unresolvable, so the
+  hook cannot tell an absent implementation from one sitting beside it. That
+  file fails **closed**, on the stated reasoning that an edit must not be
+  reported as gated when the gate could not be located.
+
+The second condition is **scoped out of this requirement**, with the reason
+recorded here as the "rules bind every fleet-shared hook" requirement demands.
+Fail-open is justified by the blast radius of blocking on a *missing optional
+file*; it is not justified for a binder that has lost track of its own
+repository, where allowing means silently ungating edits in a repo whose gate is
+present and working. A binder MAY fail closed on an unresolvable root, and SHALL
+document that it does. What it SHALL NOT do is fail closed on a merely absent
+implementation.
+
+The distinction was found by review rather than by this capability, which had
+one rule where the fleet already had two.
 
 **Absence is a provisioning failure, and SHALL be caught at provisioning time.**
 The installer SHALL verify that every shimmed implementation is present and
@@ -796,6 +947,33 @@ here: seven copies drift, one copy concentrates. It is stated so the trade is
 visible, and it is why provenance checking is required above rather than left to
 "the file exists".
 
+**Accepted is not the same as unmitigated, and the previous revision stopped at
+"accepted".** A reviewer observed that the capability names an
+arbitrary-code-execution concentration point and then specifies nothing about who
+may write to it — no ownership, no permission bits, no symlink handling — while
+requiring an unsigned digest check whose whole value depends on the directory not
+being writable by anyone who fancies it. Four requirements, all cheap, all
+checkable by the conformance tool that already exists:
+
+- **Ownership** — the shared install directory and every published artifact SHALL
+  be owned by the user executing the hooks. A published artifact owned by another
+  user SHALL be reported, not executed silently.
+- **Permissions** — neither the directory nor any artifact SHALL be group- or
+  world-writable. A group-writable shared directory makes every member of that
+  group an author of every hook in every project on the machine.
+- **Symlink-safe publication** — the installer SHALL write the temporary file and
+  `rename` within the destination directory, and SHALL NOT follow a symlink at
+  the destination path. Publishing through a symlink writes wherever the symlink
+  points, which relocates the concentration point without moving the check.
+- **The manifest is covered by the same three rules**, because a digest record an
+  attacker can rewrite is the limitation this capability already admits, and
+  leaving its file mode unspecified widens it for no reason.
+
+None of this makes the directory a security boundary — the drift-detection
+disclaimer above still stands, and a user who can write their own files can
+still change what all seven projects enforce. It removes the cases where somebody
+*else* can.
+
 Overstating protection is not cosmetic either: describing the hook as a security
 control with no floor beneath it is what motivated the fail-closed posture the
 requirement above had to withdraw.
@@ -868,8 +1046,22 @@ A hook MAY be deleted without a delta only when all three hold:
 
 1. no gate's documented binding names it;
 2. it produces none of the required evidence artifacts; and
-3. **it does not enforce a gate** — it neither checks a gate's required
-   evidence nor is depended on by anything that does.
+3. **it does not enforce a gate by any means** — checking a gate's required
+   evidence is one way to enforce one, and is not the only way. A hook also
+   enforces a gate when it gates on a **proxy** for the evidence (a sentinel
+   file, a marker, a naming convention), on a **result** from elsewhere (an API
+   response, an exit status, a CI verdict), or on any other condition that
+   stands in for the gate being satisfied — and when anything that does one of
+   those depends on it.
+
+   A reviewer showed the previous wording ("neither checks a gate's required
+   evidence nor is depended on by anything that does") still tested one
+   mechanism. A hook enforcing `design-shotgun` by checking a sentinel rather
+   than the rendered variants would clear that test while being the gate's only
+   enforcement. The scenario below acknowledged exactly this case and added no
+   operative test; clause 3 now carries one. The question is **"does this hook
+   make some gate harder to pass?"**, asked of any mechanism, not "does it read
+   the named artifact".
 
 A hook for which **any clause fails** SHALL NOT be deleted without a delta. (The
 previous wording said "satisfies any one of the three", which forbade exactly
@@ -946,13 +1138,35 @@ evidence artifact.
 - **THEN** the transitive-consumer clause fails and the deletion is argued or
   abandoned, rather than cleared on the grounds that no spec mentions it
 
+**Broadening clause 3 changes the argument for one deletion in this change, and
+that is recorded rather than absorbed.** A hook that gates on a sentinel standing
+in for a gate's evidence now *does* enforce that gate, by the clause above. So
+"it checks a sentinel §02 never names" no longer clears such a hook for deletion
+— it convicts it. What clears it instead is **unreachability**: when no surviving
+tool can write the sentinel, the check can never pass, and a condition that can
+never be satisfied does not enforce a gate. It blocks unconditionally, which is a
+different thing and is argued under the unreachable-gate requirement below.
+
+The distinction matters because the two arguments have different lifetimes. "Not
+the named evidence" would license deleting a *working* proxy enforcement.
+"Unreachable" licenses deleting only one that cannot fire. A deletion resting on
+the first SHALL be re-argued on the second.
+
 #### Scenario: A hook checks a sentinel that is not the gate's evidence
 
 - **WHEN** a hook gates on a file that §02 does not name as that gate's required
   evidence artifact
-- **THEN** that fact alone does not settle the enforcement clause: the hook may
-  still enforce the gate indirectly, and clause 3 is evaluated on its own rather
-  than inferred from the sentinel's name
+- **THEN** that fact alone does not settle the enforcement clause — and, under
+  clause 3, points the other way: a sentinel is a proxy, and gating on a proxy is
+  enforcement. The hook is cleared only if the proxy is **unreachable**, not
+  because it is unnamed
+
+#### Scenario: A hook enforces a gate without reading its evidence
+
+- **WHEN** a hook makes a gate harder to pass by checking a marker, an exit
+  status, an API result, or any condition standing in for the evidence
+- **THEN** clause 3 fails and the hook SHALL NOT be deleted without a delta,
+  regardless of whether it ever opens the artifact the gate names
 
 ### Requirement: A canonical implementation carries no unreachable gate
 
@@ -1081,17 +1295,29 @@ contradicts that designation and makes archived and live content
 indistinguishable.
 
 **This requirement binds hooks, and hooks are not the only writers — deleting
-the two named in this change does NOT end the violation.** Measured while
-revising: `agenticapps-workflow-core` carries 141 files under
-`.planning/skill-observations/` while carrying **no `.planning`-writing project
-hook** — no `.claude/hooks/` directory at all when this was measured, and since
-2026-08-02 exactly one `PreToolUse` change gate, which writes nothing there.
-137 of them are named `<stamp>--<sessionId>.{md,jsonl}`, which is the
-naming of a *global* `SessionEnd` hook registered in `~/.claude/settings.json`
-running `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`,
-whose own header states it "writes
+the two named in this change does NOT end the violation.** Observed on the
+author's machine on **2026-08-02**: `agenticapps-workflow-core` holds **29** files
+under `.planning/skill-observations/`, **all 29** named
+`<stamp>--<sessionId>.{md,jsonl}` and **none** matching `skill-router-{date}.jsonl`,
+in a repository carrying **no `.planning`-writing project hook** — no
+`.claude/hooks/` directory at all when first measured, and since 2026-08-02
+exactly one `PreToolUse` change gate, which writes nothing there. That naming is
+a *global* `SessionEnd` hook registered in `~/.claude/settings.json` running
+`agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, whose own
+header states it "writes
 `<projectRoot>/.planning/skill-observations/<stamp>--<sessionId>.{md,jsonl}`".
-Only 4 match `skill-router-log.sh`'s `skill-router-{date}.jsonl` naming.
+
+**These are dated single-machine observations, not measurements of the
+repository, and SHALL be read as such.** A reviewer re-ran the count and got
+different numbers from the ones a previous revision recorded (141 total, 137
+`<stamp>--<sessionId>`, 4 `skill-router-*`), which is how the framing defect
+surfaced: the directory is **gitignored local state**, so it differs per machine,
+changes every session, and no reviewer can reproduce a figure from it. Citing it
+as though it were a property of `agenticapps-workflow-core` invited exactly the
+contradiction that followed. What the observation supports is the **ratio and its
+direction** — a repository with no `.planning`-writing hook accumulating such
+files anyway — and that conclusion is now stronger than when it was first drawn,
+the non-hook producer accounting for 29 of 29 rather than 137 of 141.
 
 The producer that writes the overwhelming majority of this fleet's `.planning/`
 traffic is therefore **not** a project hook, is registered globally rather than

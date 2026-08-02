@@ -126,10 +126,21 @@ carries no `.planning`-writing project hook.** It had no `.claude/hooks/`
 directory at all when this was measured; since 2026-08-02 it carries exactly one
 file, the `PreToolUse` change-gate installed by `core-self-enforcement`, which
 writes nothing under `.planning/`. Either way no project hook of core's produced
-those files. Measured while revising — core holds 141
-files under `.planning/skill-observations/`, of which 137 are named
-`<stamp>--<sessionId>.{md,jsonl}` and only 4 match `skill-router-log.sh`'s
-`skill-router-{date}.jsonl`. The 137 come from a **global** `SessionEnd` hook in
+those files. Observed on this machine on 2026-08-02 — core holds **29** files
+under `.planning/skill-observations/`, **all 29** named
+`<stamp>--<sessionId>.{md,jsonl}` and **none** matching `skill-router-log.sh`'s
+`skill-router-{date}.jsonl`.
+
+**A previous revision recorded 141 / 137 / 4 here and cited it as a measurement
+of core.** Round 9 re-ran the count and got different figures, which is the
+finding: this directory is gitignored per-machine local state, so it differs
+between machines, grows every session, and cannot be reproduced by any reviewer.
+Precise counts from it are dated observations, and the numbers moving does not
+weaken the conclusion — it strengthens it, the non-hook producer now accounting
+for 29 of 29 rather than 137 of 141. What is corrected is the epistemic claim,
+not the direction.
+
+The `<stamp>--<sessionId>` files come from a **global** `SessionEnd` hook in
 `~/.claude/settings.json` running
 `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, whose
 header states it writes exactly that path.
@@ -381,6 +392,23 @@ Consequences, applied consistently everywhere they appear:
 
 ### Decision 9: The change-gate shim is migrated, not exempted
 
+**Subject of this decision, stated by path because round 9 showed the name is now
+ambiguous.** It is `<project>/.claude/hooks/openspec-change-gate.sh` **in the
+seven consuming projects** — the published-resolution shim. It is *not*
+`agenticapps-workflow-core/.claude/hooks/openspec-change-gate.sh`, which did not
+exist when this table was measured, arrived on 2026-08-02 with
+`core-self-enforcement`, and is the self-hosting binder covered by Decision 17
+and task 4b.10.
+
+A round-9 reviewer read this table as describing core's file and reported two of
+its three rows as already fixed. Checked against the projects: `agents-task-viewer`,
+`cparx` and `callbot` each still carry four references to the `<repo>/bin/`
+candidate and each still exports `OPENSPEC_GATE_SELF`. The table is accurate for
+its subject — but it never named that subject, and a same-named file now exists
+one repository over. That is the escaped-pipes lesson again: an artifact that
+renders its own referent ambiguously invites a false reading, and the fix belongs
+in the artifact.
+
 The measurement table classified `openspec-change-gate.sh` as "Template —
 unchanged" and the design built the shim contract from it. A reviewer then
 checked the template against the contract derived from it. It fails three ways:
@@ -466,6 +494,31 @@ against transitive consumers — anything that invokes the hook, reads what it
 writes, or changes behaviour if it stops running. Clearing §02 is necessary, not
 sufficient.
 
+**Round 9 found the fifth instance of the same pattern, and this one reverses an
+argument inside this change.** A reviewer showed clause 3 still tested one
+*mechanism*: a hook can enforce a gate through a proxy — a sentinel file, a
+marker, an exit status, an API result — without ever reading the evidence
+artifact the gate names. The clause is broadened to "does not enforce a gate by
+any means", with the question being *does this hook make some gate harder to
+pass*.
+
+That has a consequence the change has to own rather than absorb.
+`design-shotgun-gate.sh` gates on `.planning/current-phase/design-shotgun-passed`
+— a sentinel, which is to say a **proxy** — so under the broadened clause it
+*was* an enforcement of the `design-shotgun` gate, and "it checks a sentinel §02
+never names" no longer clears it for deletion. It convicts it.
+
+The deletion still holds, on a different argument that this change already makes
+elsewhere: **unreachability**. Since GSD's removal no surviving tool can write
+that sentinel, so the check can never pass; it does not enforce a gate, it blocks
+unconditionally. The two arguments have different lifetimes, which is why the
+substitution matters — "not the named evidence" would license deleting a working
+proxy enforcement, while "unreachable" licenses deleting only one that cannot
+fire.
+
+Fifth round, same shape: each time, the test was right about a relationship and
+wrong about its extent.
+
 That this is the fourth consecutive round to narrow the same rule is itself
 worth recording. Each earlier round fixed *which relationship* was tested and
 left *what it was tested against* unexamined, because §02 is where gates are
@@ -529,12 +582,25 @@ the machine records, and which classifies a completed-then-deleted or
 hand-edited install as *provisioned*: the precise condition the manifest check
 exists to detect, in the one place it could not be named.
 
-**Chosen:** define the states by what a check can **observe**, and add a fourth,
-**drifted** — bytes not matching a row, a row naming an absent file, or a present
-file with no row. The interrupted upgrade lands there, so does the tampered
-install, and the remedy for both is re-running the installer. Observational
-definitions are also what make the states computable at all; the earlier ones
-could only be asserted.
+**Chosen:** define provisioning by what a check can **observe**, on **two axes**
+rather than one list.
+
+The first attempt at this added a fourth state, *drifted*, alongside the three —
+and round 9 showed a flat list cannot work, because the members overlap: a
+manifest whose files are all absent is both *unprovisioned* and *drifted*; one
+unattested file beside one missing file is both *partially provisioned* and
+*drifted*. "Exactly one of four" was false of a set I had just written.
+
+The two things being conflated are **how much is installed** (`none` / `partial`
+/ `complete`) and **whether what is installed can be attested** (`attested` /
+`drifted`). They vary independently, so the state is the pair, and the case that
+broke the list — everything deleted while the manifest still claims otherwise —
+is `none` + `drifted`, which needs a different remedy from a clean fresh clone
+and previously had no name. The interrupted upgrade and the tampered install both
+land on `drifted`; the remedy for both is re-running the installer.
+
+Observational definitions are also what make either axis computable at all; the
+earlier ones could only be asserted.
 
 ### Decision 13: The no-project-override rule moves from the shim to configuration validation
 
@@ -677,6 +743,23 @@ marker path, read and written, never the tool payload — and it is stated as a
 carve-out so that it does not become a precedent for the payload inspection
 Decision 4 rules out.
 
+**Round 9 found this policy pointed at the wrong report, and that the contract
+sentence was never amended for it.** Two corrections:
+
+1. *The kill-switch report is carved out and always fires.* A rate limit adopted
+   to quiet the **unprovisioned-machine** report — a benign, expected,
+   self-correcting condition — would also have quieted the **invalid-override**
+   report, which says a hook has been switched off on an otherwise healthy
+   machine, and for the §18 gate that its one blocking condition is not running.
+   The noisiest signal and the most important one were being governed by a single
+   policy. The invalid-override report is now per-invocation, always.
+2. *The contract line still read absolutely.* "No behaviour of its own beyond
+   resolution, host self-identification, and `exec`" coexisted with a permitted
+   marker (this decision) and mandated reporting (Decision 13) — three clauses in
+   the contract, five behaviours in the capability. The delta now enumerates a
+   closed list. A rule contradicted by its own document is precisely what this
+   change exists to remove, and it had grown one in the act of removing others.
+
 ### Decision 17: Two shim profiles, because one contract cannot describe both bindings
 
 Round-8 codex found the contract asserting two things that cannot both hold:
@@ -712,6 +795,29 @@ cannot be used to exempt a project from resolution by declaring itself special.
 *Alternative — exempt core by name.* Rejected: an exemption for one repository is
 the "rule with an unstated exemption for its own exemplar" that Decision 9
 rejects. A profile is a rule; an exception list is not.
+
+**Round 9 found this decision's own description of core's hook wrong in two
+places, from a file I had read.** Both are corrected in the delta:
+
+1. *"A self-hosting binder has neither candidate to carry."* False. Core's hook
+   resolves `${OPENSPEC_GATE:-$ROOT/reference-implementations/...}` — it honours
+   the override exactly as a project shim does. The profiles differ in the
+   **second** candidate only. The error was compressing "no shared install and no
+   `<repo>/bin/`" into "neither candidate", one paragraph after reading the file.
+2. *Fail-open-and-report binds both profiles.* Core's hook **fails closed**
+   (`exit 2`) when it cannot resolve its own root, with a comment defending the
+   choice at length. Reading it properly shows the fleet already distinguishes two
+   conditions this design had collapsed into one: an **absent implementation**
+   (tooling missing — allow, the blast-radius argument holds) and an
+   **unresolvable root** (the binder cannot tell an absent gate from one sitting
+   beside it — block, because allowing means silently ungating a repository whose
+   gate is present and working). The delta now carries both, and scopes the second
+   out of the fail-open rule with its reason, as the exemplar requirement demands.
+
+Point 2 is the more useful finding: it is not that core deviates from the rule,
+it is that the rule had one clause where the fleet had two. The exemplar was
+right and the capability derived from it was under-specified — which is the same
+direction of error as Decision 9, arriving from the opposite side.
 
 ### Decision 18: What a missing gate loses is validation, not review
 
