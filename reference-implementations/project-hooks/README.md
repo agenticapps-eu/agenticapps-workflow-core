@@ -64,18 +64,51 @@ events" — that qualifier is why the empirical check below is not redundant.
    but by verification, not by inheritance.** The general rule is what makes it
    correct, not the `PreToolUse` convention.
 
-**Still outstanding: the empirical leg (task 2.3a).** The docs say the notice
-reaches the operator; nobody on this fleet has watched it happen. The whole
-fail-open trade rests on the operator actually seeing the message, and the
-"for most hook events" qualifier leaves `PostToolUse` unconfirmed by the text
-alone. Until a live session is observed, describe `normalize-claude-md` as
-**failing open with its reporting channel established by documentation and not
-yet by observation** — not as warning anyone (task 2.10a).
+### The empirical leg (task 2.3a) — RUN, and the result is negative
 
-This cannot be verified from inside the session that writes the hook: hooks
-load at session start, so a newly registered probe does not fire until the next
-one. That is the same inherent self-gating property §18 discloses for the
-change gate, and it is why this task is carried rather than claimed.
+Not carried this time. A headless `claude -p` session was driven against a
+scratch project registering **real, unresolvable shims** on both `PreToolUse`
+and `PostToolUse`, with the rate-limit marker directory isolated so it could not
+lie. 2026-08-02, Claude Code 2.1.220.
+
+**What is confirmed:**
+
+- **Both shims ran, on both event classes.** Both wrote their rate-limit
+  markers, which only happens on the unresolvable-and-reporting path.
+- **Fail-open works, live.** The `Write` proceeded and the file was created.
+  This is no longer an argument from exit codes; it was observed.
+
+**What is refuted — or at best unsupported:**
+
+- **The exit-1 report did not reach the agent.** Asked to report any hook error
+  notices verbatim, it answered "none".
+- **No `hook_response` event for either hook appeared in `--output-format
+  stream-json`.** Eight such events were emitted for `SessionStart` hooks in the
+  same run, so the surface exists and was being populated; the two `ToolUse`
+  hooks produced none.
+
+The contrast with `database-sentinel` is sharp and was measured in the same
+sitting: its **exit 2** block *did* reach the agent, which quoted the message
+back. Exit 2 is observable. Exit 1 was not observable anywhere this probe could
+look.
+
+**What remains genuinely unknown:** whether the notice renders in the
+*interactive* TUI transcript. Headless mode has no such surface, so this probe
+cannot settle it — but the evidence now runs **against** relying on the channel
+rather than merely being absent.
+
+**So the wording of task 2.10a stands, and now applies to both shims, not just
+`normalize-claude-md`: they fail open with the reporting channel
+UNESTABLISHED.** No report of this change may describe either hook as "warning"
+anyone.
+
+> **The one check that would settle it**, for a human at an interactive
+> session: on a machine where `~/.agenticapps/bin/database-sentinel.sh` is
+> absent, open one of the seven repos and edit any file. If a
+> `database-sentinel hook error` notice appears in the transcript, the channel
+> is established and this section can be rewritten. If nothing appears, the
+> fail-open trade is silent, and that is a design problem this change should
+> reopen — not a documentation nit.
 
 ### Unresolvable → fail open, and report
 

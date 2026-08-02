@@ -229,3 +229,33 @@ task. Section 4c covers `templates/.claude/hooks/`, `setup/snapshot/hooks/` and
   registrations and the pre-change matcher.
 
 Both are added to `tasks.md` as 4c.7 and 4c.8.
+
+---
+
+# Baseline: does the existing matcher fire today? (task 4.8a)
+
+**Yes. Measured, not assumed.** 2026-08-02, Claude Code 2.1.220.
+
+A headless session was driven against a scratch project carrying the
+**unmodified** `Bash|Edit|Write` matcher and the **unmodified**
+`database-sentinel.sh` from `agenticapps-dashboard`, and asked to `Write` a
+`.env` file.
+
+```
+The write was **blocked** by a PreToolUse hook, which reported:
+`❌ Database Sentinel: blocked edit to env file … env files contain secrets`
+```
+
+The file was unchanged afterwards.
+
+This settles what round-8 opencode's objection left open. That objection
+inferred from this design's markdown-escaped table that the on-disk matcher
+might be `Bash\|Edit\|Write` and therefore inert everywhere; the escaping is the
+document's and the JSON holds real pipes, which refuted the *syntax* premise
+only. A well-formed matcher is not a firing hook, and every statement that
+unprovisioned machines "lose" protection presumed a baseline nobody had
+measured.
+
+**The baseline is real: the control runs today, and blocks.** So the fail-open
+cost analysis is about a live control, and the proposal's behaviour-change list
+needs no correction on this point.
