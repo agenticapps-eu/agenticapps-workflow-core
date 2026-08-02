@@ -92,21 +92,84 @@ Two things about this picture matter most:
 
 ## The gate that enforces it (§18)
 
-A `PreToolUse` hook inspects every code-editing tool call and blocks it
-until the active change has validated and carries a `REVIEWS.md` with ≥2
-independent reviewers. Its decision is an exit code:
+A `PreToolUse` hook inspects every code-editing tool call. Since change-gate
+**2.0.0** it blocks on exactly one condition — `openspec validate --all` is not
+green. Review evidence is **reported on every invocation and never blocks**:
 
 - no active change → **allow** (0)
 - writing the OpenSpec change itself → **allow, exempt** (0)
-- active change, validate green, no/​insufficient review → **block** (2)
 - active change, validate fails → **block** (2)
-- active change, validate green + ≥2 reviewers → **allow** (0)
+- active change, validate green → **allow** (0), whatever `REVIEWS.md` says
+- missing/stale/REQUEST-CHANGES review evidence → **reported, allow** (0)
+- `openspec` CLI absent while a change is active → **block** (2), fail-closed
 - documented escape hatch env var → allow; garbage stdin → allow (fail-open)
+
+A blocked edit therefore means a broken spec delta — fix the delta. It never
+means "go get a review". (This list previously described a ≥2-reviewer blocking
+floor; that was the pre-2.0.0 gate, and spec 1.5.0 retired it. ADR-0027 has the
+reasoning.)
 
 It reuses the mechanism the 0.x multi-AI plan-review gate proved, pointed
 at OpenSpec changes instead of `*-PLAN.md`. A hook can't gate the session
 that installs it (the harness loads hooks at session start), so it's
 proven by direct invocation and enforces live for the next session.
+
+### Core resolves its own gate (the inversion)
+
+Every consuming project installs a shim that resolves the published copy at
+`~/.agenticapps/bin/openspec-change-gate.sh`. **Core does the opposite**: its
+`PreToolUse` hook, its `pre-commit` hook and its CI job all resolve
+`reference-implementations/openspec-change-gate/openspec-change-gate.sh` from
+the working tree.
+
+Core is the source of truth for those bytes. Gating core with the published copy
+would test whichever host's installer ran last on that machine (the issue #32
+race) and prove nothing about what core ships — and it cannot work in CI, where
+no shared install exists. Running the working-tree copy, and scoring it with
+`tools/change-gate-conformance.sh` before trusting its verdict, makes core's own
+pull request the earliest place gate drift is detectable. Until this existed,
+the conformance of the artifact core authors was proven only downstream, by
+hosts that had already advanced a pin to it. See ADR-0028.
+
+Install the commit hook with `bash tools/install-core-git-hooks.sh`. It resolves
+its target with `git rev-parse --git-path hooks` — never a literal `.git/hooks/`
+path, which does not exist in a linked worktree and which would ignore
+`core.hooksPath`. Its behaviour is pinned by
+`tools/test-install-core-git-hooks.sh`, which the CI job runs.
+
+The `PreToolUse` wrapper resolves the repository root from `CLAUDE_PROJECT_DIR`,
+falling back to its own location — **never from the working directory**. Hooks
+run wherever the session currently is, and that moves; deriving the root from it
+meant one `cd` outside the repository made every subsequent edit silently
+ungated behind a warning.
+
+Neither the wrapper nor the generated commit hook exports `OPENSPEC_GATE_SELF`.
+The gate has ignored it since 1.5.0 and reads the implementing host from the
+`REVIEWS.md` trailer instead, because CI and pre-commit judge evidence *other*
+hosts produced.
+
+**Limits, stated rather than left to be discovered.**
+
+- **CI reports; it does not enforce.** Core's `main` has no branch protection and
+  no rulesets, so a red run does not prevent a merge.
+- **A missing `openspec` CLI is fail-closed.** Core almost always has a change
+  open, so without the CLI every non-exempt edit is blocked locally.
+- **The matcher does not cover `Bash`.** `sed -i`, `tee` and redirects bypass the
+  hook entirely. Three interposition points are not complete coverage.
+- **The hook executes working-tree shell on every edit.** Checking out an
+  untrusted branch and editing a file runs that branch's code. The trust
+  boundary is the checkout.
+- **The commit hook needs the installer per clone**, and its ownership marker is
+  a claim, not an integrity proof.
+Both interposition points are pinned by suites the CI job runs —
+`tools/test-install-core-git-hooks.sh` and `tools/test-claude-hook-wrapper.sh`.
+Every case in each is a regression test for a defect that was actually
+reproduced, and both are verified to fail against the code they describe.
+
+An **unresolvable project root fails closed** (exit 2). Fail-open is reserved
+for tooling that is genuinely absent; not knowing where to look is a defect, and
+reporting an ungated edit for a repository whose gate is present and working is
+the outcome this wrapper may not have.
 
 ## Where prose lives (§19)
 
@@ -129,7 +192,10 @@ Linear ID for traceability, but nothing syncs and nothing requires it.
 
 ## Adopting it
 
-The core repo is spec-only; it defines the standard but does not run it.
+The core repo defines the standard and, since ADR-0028, runs its own change
+gate against itself — with its working-tree copy, at all three interposition
+points. It remains spec-only in the sense that hosts, not core, scaffold
+projects; it is no longer spec-only in the sense of being ungated.
 A host or app repo adopts v1 by applying
 `docs/recipes/0001-planning-to-openspec.md`, which reconstructs `specs/`
 from an existing `.planning/` tree (mechanical Tier 1 + supervised Tier 2),

@@ -1,0 +1,156 @@
+# .github/workflows/openspec-gate.yml
+#
+# Core running the §18 change gate against itself.
+#
+# Adapted from the template this repo publishes at
+# reference-implementations/openspec-change-gate/hooks/openspec-gate.ci.yml.
+# Two deliberate divergences from that template, plus the hardening below:
+#
+#   1. It scores and runs reference-implementations/openspec-change-gate/
+#      openspec-change-gate.sh, NOT bin/openspec-change-gate.sh. Core has no
+#      bin/ — that path is the HOST layout, mapped by resolve-core-artifact.sh.
+#
+#   2. Core resolves its own WORKING-TREE copy rather than the shared install
+#      at ~/.agenticapps/bin/. This is the exact inverse of the shim every
+#      consuming project installs, and it is intentional: core is the source of
+#      truth for these bytes. Gating core with a published copy tests whichever
+#      host's installer ran last on that machine (the issue #32 race) and proves
+#      nothing about what core ships. See ADR-0028 and docs/WORKFLOW.md.
+#
+# WHAT THIS JOB IS NOT: an enforced floor. core's `main` carries no branch
+# protection and no rulesets, so a red run here does not prevent a merge. The
+# job REPORTS. Making the check required is a repository setting, deliberately
+# left outside the change that added this file. Do not describe it as a floor
+# without first checking that the setting exists.
+#
+# REVIEWS DO NOT BLOCK, since gate 2.0.0. Missing, stale, unverifiable and
+# REQUEST-CHANGES review evidence are each printed as a NOTE and none fails the
+# job. Blocking is reserved for what is an ERROR rather than an ABSENCE: a spec
+# delta that does not parse is wrong on its own terms.
+name: OpenSpec change gate
+
+# `pull_request`, NEVER `pull_request_target`. This job executes shell scripts
+# from the working tree of the revision under test, so a fork's pull request
+# supplies arbitrary code to the harness and the gate. Under `pull_request` that
+# code runs with a read-only token and no access to repository secrets;
+# `pull_request_target` would run the same fork-supplied shell with this
+# repository's privileges. The trigger is the trust boundary.
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+# Least privilege: this job reads the tree and reports. It writes nothing.
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      GATE: reference-implementations/openspec-change-gate/openspec-change-gate.sh
+      HARNESS: tools/change-gate-conformance.sh
+      # The scorer scores the gate; nothing scores the scorer. The harness is a
+      # working-tree file run from the same checkout as its target, so a change
+      # that deletes rows or inverts expected exit codes yields a green job while
+      # certifying a drifting gate. Asserting a minimum row count closes that.
+      # Raising this needs no ceremony. LOWERING IT REQUIRES A RECORDED DECISION
+      # — removing obsolete rows is legitimate, so the floor must be able to
+      # follow, but the number has to move deliberately and show in the diff.
+      MIN_SCORED_ROWS: "71"
+      # A SECOND, INDEPENDENT FLOOR — on the harness SOURCE, not its output.
+      # MIN_SCORED_ROWS is scraped from the harness's own stdout, so it bounds
+      # only HONEST shrinkage: a stub that prints "TOTAL: 71 passed, 0 failed"
+      # satisfies it while scoring nothing. Counting row call sites in the file
+      # cannot be satisfied that way — the stub would have to carry 57 real row
+      # invocations as well. Neither floor bounds row CORRECTNESS; see the
+      # residual noted in the delta. Same rule as above: raising is free,
+      # lowering takes a recorded decision.
+      MIN_ROW_CALLSITES: "57"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Do not leave a credential in the workspace that working-tree shell
+          # could reach.
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with: { node-version: "22" }
+
+      - name: Install OpenSpec (pinned)
+        # Pinned, not floating. An unpinned global install lets an upstream
+        # release change this job's verdict for an unchanged revision. 1.6.0 is
+        # the version core validated against.
+        run: npm i -g @fission-ai/openspec@1.6.0
+
+      - name: Fail closed if the gate or the harness is missing
+        # CI is the deliberate INVERSE of the local hooks. The PreToolUse hook
+        # and the pre-commit hook fail OPEN on a missing gate, so absent tooling
+        # cannot brick an editing session. Here an unanswerable question is a
+        # defect, not a missing convenience.
+        run: |
+          for f in "$GATE" "$HARNESS"; do
+            if [ ! -s "$f" ]; then
+              echo "::error::required file missing or empty: $f"
+              exit 1
+            fi
+          done
+
+      - name: Prove the gate itself is conformant
+        # A gate that has drifted can pass every repo it guards while enforcing
+        # nothing (issue #32: five copies, none conformant). Score it before
+        # trusting its verdict. Core is the first place this is possible: until
+        # now the artifact core authors was scored only downstream, by hosts
+        # that had already advanced a pin to it.
+        run: |
+          set -o pipefail
+          bash "$HARNESS" "$GATE" | tee harness.out
+
+      - name: Assert the harness actually scored something
+        run: |
+          line=$(grep -oE 'TOTAL: [0-9]+ passed' harness.out | tail -1) || true
+          if [ -z "$line" ]; then
+            echo "::error::harness produced no TOTAL line — cannot confirm it scored anything"
+            exit 1
+          fi
+          rows=$(printf '%s' "$line" | grep -oE '[0-9]+')
+          echo "harness scored $rows rows (floor: $MIN_SCORED_ROWS)"
+          if [ "$rows" -lt "$MIN_SCORED_ROWS" ]; then
+            echo "::error::harness scored $rows rows, below the recorded floor of $MIN_SCORED_ROWS."
+            echo "::error::If rows were legitimately removed, lower MIN_SCORED_ROWS in this file"
+            echo "::error::with a recorded decision — do not lower it silently."
+            exit 1
+          fi
+
+      - name: Assert the harness source still defines its rows
+        # Independent of anything the harness prints about itself.
+        run: |
+          sites=$(grep -cE '^[[:space:]]*run_row(_stderr_(has|lacks))?[[:space:]]' "$HARNESS") || sites=0
+          echo "harness source defines $sites row call sites (floor: $MIN_ROW_CALLSITES)"
+          if [ "$sites" -lt "$MIN_ROW_CALLSITES" ]; then
+            echo "::error::harness source has $sites row call sites, below the recorded floor of $MIN_ROW_CALLSITES."
+            echo "::error::A harness can print a passing TOTAL without running rows; this floor is the check"
+            echo "::error::that does not take the harness's word for it. Lower it only with a recorded decision."
+            exit 1
+          fi
+
+      - name: Test the PreToolUse wrapper and its registration
+        # The wrapper runs on every edit, and both of its defects were SILENT
+        # UNGATING — the one failure a gate may not have. Neither the harness
+        # nor the installer suite executes it.
+        run: bash tools/test-claude-hook-wrapper.sh
+
+      - name: Test the hook installer
+        # The harness above scores the GATE. It does not execute this
+        # repository's own interposition points, and that gap is not academic:
+        # CI reported 71/71 green while the installer carried four defects that
+        # wrote into the working tree or destroyed a hook it did not own, each
+        # exiting 0 and calling it success. Scoring the artifact core publishes
+        # is not the same as testing the code core runs.
+        run: bash tools/test-install-core-git-hooks.sh
+
+      - name: Run the change gate
+        # exit 0 = every active change validates (review NOTEs may still print);
+        # exit 1 = `openspec validate --all` is red, or the openspec CLI is
+        # missing so the question cannot be answered.
+        run: bash "$GATE" --ci
