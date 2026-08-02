@@ -82,6 +82,15 @@ its own authority for as long as the gap lasts):
 Then **archive the change** — `/opsx:archive shim-project-hooks`. It is the only
 open change and every box is checked.
 
+**Archive with the residual named, not silently.** Every task is checked, but
+task 2.3a's empirical leg is recorded with *negative* evidence: the fail-open
+report's channel for `PostToolUse` was never verified, and the README's "The
+empirical leg (task 2.3a)" section is where that is written down. Archiving is
+correct — the change does not claim the channel is proven — but the archive note
+should carry the residual forward rather than let "0 open boxes" read as "no open
+questions". CodeRabbit raised exactly this on #63, and it is a fair reading of an
+unqualified "next session: archive".
+
 ## Open questions
 
 - **No third-party review ran on this work.** As on #62, that is a discipline

@@ -380,6 +380,25 @@ run_shim "$GATE_SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw"
   || bad "gate shim: with no override, the shared install runs" \
          "implementation reached: $(cat "$TMP/saw" 2>/dev/null)"
 
+# The empty-override case, against the SIBLING. The 2.6a block above asserts it
+# of the template, and the template's assertions do not reach this file — which
+# is the whole reason finding 6 was present in both and caught in neither. An
+# assertion made of one of two hand-synchronised files is an assertion about one
+# of them.
+rm -f "$TMP/saw"; rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+run_shim "$GATE_SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw" OPENSPEC_GATE=; rc=$?
+if [ "$(cat "$TMP/saw" 2>/dev/null)" = "SHARED" ] && [ "$rc" -eq 0 ]; then
+  ok "gate shim: an empty override falls through to the shared gate, silently"
+else
+  bad "gate shim: an empty override falls through to the shared gate, silently" \
+      "exit $rc, implementation reached: $(cat "$TMP/saw" 2>/dev/null)"
+fi
+if grep -qi 'OPENSPEC_GATE is set' "$TMP/err"; then
+  bad "gate shim: an empty override reports nothing" "stderr: $(head -2 "$TMP/err")"
+else
+  ok "gate shim: an empty override reports nothing"
+fi
+
 # CORE'S OWN BINDER carries the same defect, and the exemption would be the
 # finding-12 mistake repeated: a rule with an unstated exemption for the
 # repository that defines it is advisory.

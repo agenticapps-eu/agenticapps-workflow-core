@@ -1,0 +1,42 @@
+# The repositories that bind this fleet's hooks through a shim.
+#
+# WHY THIS EXISTS.
+#
+# A shim-contract change must reach every binder, and the capability requires
+# each one "verified rather than assumed to have been reached". Until this file
+# existed the fleet was enumerated in three places and declared in none: a list
+# of absolute paths typed into project-hook-conformance.test.sh, a scratchpad
+# script that lived outside the repository, and prose in README.md. Nothing in
+# the repository could re-run the propagation check, and — worse — a repository
+# MISSING from those lists was indistinguishable from one that passed.
+#
+# That is Stage-2 finding 7 one level up. ARTIFACTS declares what the installer
+# publishes and SHIMMED-HOOKS declares what projects bind, both because an
+# expected set discovered from what you happened to find cannot detect a missing
+# member. This is the same answer applied to the repositories themselves.
+#
+# WHY NAMES AND NOT PATHS.
+#
+# Bare repository names, because a path is a fact about one machine. The fleet
+# is checked out under different roots on different machines and in CI, so
+# `project-hook-conformance.sh --fleet <root>` resolves each name beneath the
+# root it is given and reports the ones it cannot find. A name that resolves
+# nowhere is a finding; it is never silence.
+#
+# WHAT IS NOT HERE.
+#
+# agenticapps-workflow-core itself. It is the authority rather than a consumer:
+# its .claude/hooks/openspec-change-gate.sh is the one self-hosting binder, out
+# of profile for byte-identity by ADR-0028. Pass it as an ordinary positional
+# argument when you want it scored; do not add it here, or `--fleet` would
+# compare the template against itself.
+#
+# One repository name per line. Blank lines and # comments ignored.
+
+agenticapps-dashboard
+agenticapps-roadmap
+agents-task-viewer
+callbot
+cparx
+fbc-platform
+fx-signal-agent
