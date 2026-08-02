@@ -171,7 +171,10 @@ Linear ID for traceability, but nothing syncs and nothing requires it.
 
 ## Adopting it
 
-The core repo is spec-only; it defines the standard but does not run it.
+The core repo defines the standard and, since ADR-0028, runs its own change
+gate against itself — with its working-tree copy, at all three interposition
+points. It remains spec-only in the sense that hosts, not core, scaffold
+projects; it is no longer spec-only in the sense of being ungated.
 A host or app repo adopts v1 by applying
 `docs/recipes/0001-planning-to-openspec.md`, which reconstructs `specs/`
 from an existing `.planning/` tree (mechanical Tier 1 + supervised Tier 2),

@@ -44,14 +44,31 @@ case "$HOOKS_DIR" in
   *)  HOOKS_DIR="$ROOT/$HOOKS_DIR" ;;
 esac
 
-# Refuse to write into tracked repository content.
-if git ls-files --error-unmatch "$HOOKS_DIR" >/dev/null 2>&1; then
-  printf 'refusing: resolved hooks directory is tracked repository content:\n  %s\n' "$HOOKS_DIR" >&2
-  printf 'core.hooksPath points into the working tree. Installing there would commit a\n' >&2
-  printf 'hook into the repository, which is a different decision from installing one\n' >&2
-  printf 'locally. Unset core.hooksPath or install the hook deliberately by hand.\n' >&2
-  exit 1
-fi
+# Refuse to write anywhere INSIDE the working tree.
+#
+# The test is path containment, not tracking status. An earlier revision asked
+# `git ls-files --error-unmatch "$HOOKS_DIR"` — but an UNTRACKED directory inside
+# the tree (core.hooksPath=.githooks, freshly created) fails that lookup, which
+# the script then read as permission to write. Reproduced: the hook landed in
+# the worktree. Tracking status answers "is this committed", and the question
+# here is "is this repository content", which an untracked in-tree path also is.
+canon(){ ( cd "$1" 2>/dev/null && pwd -P ); }
+ROOT_P="$(canon "$ROOT")"
+HOOKS_P="$(canon "$HOOKS_DIR")"
+# A not-yet-existing directory cannot be canonicalised; fall back to its parent.
+[ -n "$HOOKS_P" ] || HOOKS_P="$(canon "$(dirname "$HOOKS_DIR")")/$(basename "$HOOKS_DIR")"
+
+case "$HOOKS_P/" in
+  "$ROOT_P"/.git/*) ;;                      # inside .git — the normal case, fine
+  "$ROOT_P"/*)
+    printf 'refusing: resolved hooks directory is inside the working tree:\n  %s\n' "$HOOKS_P" >&2
+    printf 'core.hooksPath points at repository content. Installing there writes a hook\n' >&2
+    printf 'into the repo rather than into local untracked config — a different decision\n' >&2
+    printf 'with different consequences. Unset core.hooksPath, point it outside the tree,\n' >&2
+    printf 'or install the hook deliberately by hand.\n' >&2
+    exit 1
+    ;;
+esac
 
 if [ "$HOOKS_DIR" != "$ROOT/.git/hooks" ]; then
   printf 'note: hooks directory resolves to %s\n' "$HOOKS_DIR"
@@ -82,10 +99,18 @@ export OPENSPEC_GATE_SELF="\${OPENSPEC_GATE_SELF:-claude}"
 exec "\$GATE" --pre-commit
 EOF
 
-mkdir -p "$HOOKS_DIR"
+# Every filesystem operation is required to succeed. Without this, a failing
+# mkdir, write or chmod still fell through to printing "installed" and exiting
+# 0 — reporting a gate that is not there.
+write_hook(){
+  mkdir -p "$HOOKS_DIR" || { printf 'failed: could not create %s\n' "$HOOKS_DIR" >&2; return 1; }
+  printf '%s\n' "$DESIRED" > "$HOOK" || { printf 'failed: could not write %s\n' "$HOOK" >&2; return 1; }
+  chmod +x "$HOOK" || { printf 'failed: could not chmod +x %s\n' "$HOOK" >&2; return 1; }
+  return 0
+}
 
 if [ ! -e "$HOOK" ]; then
-  printf '%s\n' "$DESIRED" > "$HOOK" && chmod +x "$HOOK"
+  write_hook || exit 1
   printf 'installed: %s\n' "$HOOK"; exit 0
 fi
 
@@ -98,12 +123,12 @@ if ! grep -qF "$MARKER" "$HOOK" 2>/dev/null; then
 fi
 
 if [ "$(cat "$HOOK")" != "$DESIRED" ]; then
-  printf '%s\n' "$DESIRED" > "$HOOK" && chmod +x "$HOOK"
+  write_hook || exit 1
   printf 'upgraded: %s (was stale)\n' "$HOOK"; exit 0
 fi
 
 if [ ! -x "$HOOK" ]; then
-  chmod +x "$HOOK"
+  chmod +x "$HOOK" || { printf 'failed: could not chmod +x %s\n' "$HOOK" >&2; exit 1; }
   printf 'repaired: %s (content current, execute bit restored)\n' "$HOOK"; exit 0
 fi
 

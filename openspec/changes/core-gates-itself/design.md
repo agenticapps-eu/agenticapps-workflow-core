@@ -37,9 +37,13 @@ publish it.
 **Non-Goals:**
 - Changing what the gate enforces. No requirement in `change-gate-enforcement`
   moves.
-- Editing any pinned artifact. The seven files named in every host's
+- Editing any pinned artifact. The files named in each host's
   `core-vendor.manifest` are consumed, not modified, so no host pin can be
-  invalidated by this change.
+  invalidated by this change. The manifests are **not uniform**:
+  `claude-workflow` pins seven files, while `codex-workflow`,
+  `opencode-workflow` and `pi-agentic-apps-workflow` pin five each, omitting
+  `run-plan-review.sh` and `install-shared-artifact.sh`. Any "the seven pinned
+  files" phrasing is wrong for three of the four hosts.
 - Fixing the published `pre-commit` wrapper's `<repo>/bin/` fallback. That
   defect is real and is already in `shim-project-hooks`'s scope; duplicating it
   here would put two changes on the same lines.

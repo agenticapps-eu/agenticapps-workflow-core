@@ -59,6 +59,19 @@ exists at all. This resolution order is deliberately the inverse of the one
 every consuming project uses, and SHALL be documented in
 `adrs/0028-core-gates-itself.md` and in `docs/WORKFLOW.md`.
 
+An explicit `OPENSPEC_GATE` override is retained and is **not** a violation of
+the above: the prohibition is on *silently preferring* the published copy, which
+is what a resolution-order fallback does. Setting an environment variable is a
+deliberate operator act, it is required to test the fail-open path, and §18
+requires the gate be demonstrable by direct invocation. The override SHALL be
+documented wherever the resolution order is documented.
+
+#### Scenario: An explicit override is honoured
+
+- **WHEN** `OPENSPEC_GATE` names an executable and a local interposition point runs
+- **THEN** that executable SHALL be used
+- **AND** this SHALL NOT be treated as preferring the shared install, which is reached only by a fallback the resolution order does not contain
+
 #### Scenario: The working-tree copy is preferred over a present shared install
 
 - **WHEN** an executable gate exists at `~/.agenticapps/bin/openspec-change-gate.sh` whose behaviour differs from the working-tree copy
