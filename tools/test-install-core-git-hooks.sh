@@ -120,6 +120,28 @@ setup "$d" git config core.hooksPath .githooks/missing/hooks
 x=0; [ -e "$d/.githooks/missing/hooks/pre-commit" ] && x=1
 check "in-tree hooksPath (deep-missing) is refused" 1 "$r" "wrote into worktree" "$x"
 
+# REGRESSION: the re-appended components were concatenated without normalising
+# `..`, so a path that LOOKS outside the tree and resolves back into it was
+# accepted — mkdir -p then created the absent segment and the hook landed in the
+# working tree at exit 0. The outward-and-back direction is the dangerous one.
+# The path must start OUTSIDE the root TEXTUALLY, or the naive prefix test
+# refuses it for the wrong reason and the case proves nothing — which is what
+# an earlier draft of this test did, passing against the very bug it names.
+# Hence a sibling of the repo, not a child of it.
+d="$(fresh_repo dotdot_back_in)" || exit 1
+setup "$d" git config core.hooksPath "$BASE/absent/../dotdot_back_in/.githooks"
+( cd "$d" && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
+x=0; [ -e "$d/.githooks/pre-commit" ] && x=1
+check "hooksPath escaping via .. back into the tree is refused" 1 "$r" "wrote into worktree" "$x"
+
+# The same normalisation must not over-refuse: a `..` path that genuinely
+# resolves OUTSIDE the tree still installs, at the normalised location.
+d="$(fresh_repo dotdot_outside)" || exit 1
+setup "$d" git config core.hooksPath "$WORK/absent-sibling/../landing/hooks"
+( cd "$d" && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
+x=0; [ -x "$WORK/landing/hooks/pre-commit" ] || x=1
+check "hooksPath with .. resolving outside still installs" 0 "$r" "not installed at the normalised path" "$x"
+
 d="$(fresh_repo outside_missing)" || exit 1
 out="$WORK/outside/a/b"
 setup "$d" git config core.hooksPath "$out"

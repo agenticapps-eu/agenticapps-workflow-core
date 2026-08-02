@@ -58,6 +58,15 @@ jobs:
       # — removing obsolete rows is legitimate, so the floor must be able to
       # follow, but the number has to move deliberately and show in the diff.
       MIN_SCORED_ROWS: "71"
+      # A SECOND, INDEPENDENT FLOOR — on the harness SOURCE, not its output.
+      # MIN_SCORED_ROWS is scraped from the harness's own stdout, so it bounds
+      # only HONEST shrinkage: a stub that prints "TOTAL: 71 passed, 0 failed"
+      # satisfies it while scoring nothing. Counting row call sites in the file
+      # cannot be satisfied that way — the stub would have to carry 57 real row
+      # invocations as well. Neither floor bounds row CORRECTNESS; see the
+      # residual noted in the delta. Same rule as above: raising is free,
+      # lowering takes a recorded decision.
+      MIN_ROW_CALLSITES: "57"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -110,6 +119,18 @@ jobs:
             echo "::error::harness scored $rows rows, below the recorded floor of $MIN_SCORED_ROWS."
             echo "::error::If rows were legitimately removed, lower MIN_SCORED_ROWS in this file"
             echo "::error::with a recorded decision — do not lower it silently."
+            exit 1
+          fi
+
+      - name: Assert the harness source still defines its rows
+        # Independent of anything the harness prints about itself.
+        run: |
+          sites=$(grep -cE '^[[:space:]]*run_row(_stderr_(has|lacks))?[[:space:]]' "$HARNESS") || sites=0
+          echo "harness source defines $sites row call sites (floor: $MIN_ROW_CALLSITES)"
+          if [ "$sites" -lt "$MIN_ROW_CALLSITES" ]; then
+            echo "::error::harness source has $sites row call sites, below the recorded floor of $MIN_ROW_CALLSITES."
+            echo "::error::A harness can print a passing TOTAL without running rows; this floor is the check"
+            echo "::error::that does not take the harness's word for it. Lower it only with a recorded decision."
             exit 1
           fi
 

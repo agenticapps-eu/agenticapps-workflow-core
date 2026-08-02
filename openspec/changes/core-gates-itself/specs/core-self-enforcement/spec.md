@@ -1,11 +1,27 @@
 ## ADDED Requirements
 
-### Requirement: Core runs the gate against its own repository
+### Requirement: Core provides and registers the gate against its own repository
 
-The core repository SHALL run the §18 change gate against itself at all three
-interposition points §18 names: a `PreToolUse` hook, a git `pre-commit` hook, and
-a CI job. Publishing an enforcement artifact SHALL NOT be accepted as a
-substitute for running it.
+The core repository SHALL provide and register the §18 change gate against
+itself at three interposition points: a `PreToolUse` hook, a git `pre-commit`
+hook, and a CI job. Publishing an enforcement artifact SHALL NOT be accepted as
+a substitute for running it.
+
+**"Provides and registers", not "runs".** The `pre-commit` hook is written by an
+installer and is absent until that installer is run, so a requirement that core
+*runs* the gate at all three points would be unsatisfiable in any fresh clone —
+and would contradict this capability's own "the installer was never run"
+scenario, which explicitly blesses that state. The obligation is on what the
+repository ships and wires, which is what core controls.
+
+**§18 requires only the first, and no surface SHALL claim otherwise.** §18's
+interposition-point requirement is a `PreToolUse` hook (or host equivalent); it
+mentions `pre-commit` and CI only as *evaluating contexts* whose reviewer
+identity must come from the trailer rather than the environment. The other two
+points are core's own additions, adopted because core authors the gate and
+wants drift caught at commit time and on the pull request. Attributing all three
+to §18 overstates the normative premise, which an earlier revision of this
+requirement did.
 
 **None of the three is a guarantee, and the requirement SHALL NOT claim
 otherwise.** §18 records that a `PreToolUse` hook is loaded at session start and
@@ -65,6 +81,17 @@ is what a resolution-order fallback does. Setting an environment variable is a
 deliberate operator act, it is required to test the fail-open path, and §18
 requires the gate be demonstrable by direct invocation. The override SHALL be
 documented wherever the resolution order is documented.
+
+**Its weakness SHALL be disclosed rather than argued away.** "A deliberate
+operator act" describes setting the variable, not every occasion it is read: an
+`OPENSPEC_GATE` exported once in a shell profile is ambient thereafter, and
+silently redirects core's local gate to a foreign copy on every subsequent
+session — which is the same class of silent divergence the resolution inversion
+exists to remove, re-entering by a door this capability holds open. It is kept
+because removing it would leave the fail-open and direct-invocation paths
+untestable, and because a local override cannot affect CI, where no such
+environment exists and the verdict that gates the pull request is produced. That
+is a trade accepted with its cost named, not a property the override lacks.
 
 #### Scenario: An explicit override is honoured
 
@@ -142,14 +169,31 @@ only downstream, in host repositories that advanced a pin and trusted it.
 
 **The scorer SHALL itself be bounded.** The harness is a working-tree file
 executed from the same checkout as the gate, so a change that weakens the
-harness — deleting rows, inverting expected exit codes — would otherwise yield a
-green job while certifying a drifting gate. The job SHALL therefore assert a
-minimum scored-row count, and SHALL fail when the harness reports fewer rows
-than that floor. The floor SHALL be recorded as a literal in the workflow.
-Raising it needs no ceremony; **lowering it SHALL require an explicit recorded
-decision**, since removing obsolete rows is a legitimate edit the floor must be
-able to follow. The point is that the number moves deliberately and shows up in
-the diff.
+harness would otherwise yield a green job while certifying a drifting gate. The
+job SHALL therefore assert **two** floors, recorded as literals in the workflow:
+
+1. a minimum **scored-row count**, from the harness's reported total; and
+2. a minimum count of **row call sites in the harness source**.
+
+The second exists because the first takes the harness's word for it. The
+reported total is scraped from the harness's own stdout, so a stub that prints a
+passing `TOTAL` satisfies it while scoring nothing; a source count cannot be
+satisfied that way. Raising either needs no ceremony; **lowering either SHALL
+require an explicit recorded decision**, since removing obsolete rows is a
+legitimate edit the floors must be able to follow. The point is that the number
+moves deliberately and shows up in the diff.
+
+**Neither floor bounds row CORRECTNESS, and the delta SHALL NOT claim they do.**
+Inverting a row's expected exit code, duplicating rows, or weakening an
+assertion leaves both counts unchanged. An earlier revision listed "inverting
+expected exit codes" among what the floor catches; it does not.
+
+**The residual trust SHALL be recorded.** A single pull request can edit the
+gate, the harness and both floors atomically, and nothing mechanical then
+objects — the tripwire's value rests on a human noticing the changed literals in
+the diff. Core has no required checks, no branch protection and no CODEOWNERS,
+so that is a real assumption rather than a theoretical one, and it is named here
+because this capability is otherwise explicit about exactly this kind of gap.
 
 **Scoring the published artifact is not the same as testing the code core
 runs.** The harness scores the gate; it does not execute core's own `PreToolUse`
@@ -179,7 +223,14 @@ not a hypothetical, so that the suite's failures name real history.
 
 - **WHEN** an edit makes the reference implementation fail one or more harness rows
 - **THEN** core's own pull request SHALL go red
-- **AND** the failure SHALL be visible before any host advances a pin to that commit
+- **AND** the failure SHALL be visible on core's own pull request
+
+Ordering against host pins is an **expectation, not a control**. Host
+repositories are external to core; core has no required check and no branch
+protection, so nothing here prevents a host from advancing a pin to a commit
+whose gate job was red, or from pinning a commit that never ran the job. What
+this capability establishes is that the signal now EXISTS in core, and earlier
+than it did — not that anyone is compelled to read it.
 
 #### Scenario: The harness is weakened
 
@@ -327,6 +378,14 @@ ancestor and re-appending the remaining components.
 - **THEN** the installer SHALL still recognise it as inside the tree and refuse
 - **AND** SHALL NOT create the missing parents and report success
 
+#### Scenario: The hooks path re-enters the tree through an absent `..` segment
+
+- **WHEN** `core.hooksPath` begins outside the working tree and returns into it
+  through a `..` segment whose preceding directory does not exist
+- **THEN** the installer SHALL normalise the path before deciding containment
+- **AND** SHALL refuse, rather than accepting the unnormalised string as outside
+  the tree and then creating the absent segment
+
 ### Requirement: The installer owns its hook without clobbering another
 
 The installer SHALL be safe to re-run and SHALL NOT silently destroy a
@@ -456,4 +515,12 @@ privilege.
 
 - **WHEN** the workflow installs the `openspec` CLI
 - **THEN** it SHALL install an exact pinned version
-- **AND** an upstream release SHALL NOT change the verdict for an unchanged revision
+- **AND** an `openspec` release SHALL NOT change the verdict for an unchanged revision
+
+The pinning claim SHALL be scoped to `openspec` and SHALL NOT be generalised to
+the job as a whole. The rest of the execution chain remains mutable —
+`actions/*@v7` is a moving major tag, `ubuntu-latest` is a moving image, Node is
+pinned only to major `"22"`, and npm still resolves `openspec`'s transitive
+dependencies at install time. A claim of full reproducibility would be false;
+what is true is that the one dependency whose behaviour decides the verdict is
+exact.

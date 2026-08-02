@@ -74,16 +74,35 @@ fi
 
 # NOTE the `-u` flags come FIRST: env stops parsing options at the first
 # NAME=VALUE, so `env FOO=1 -u BAR cmd` runs `-u` as the command and exits 127.
-# Written the other way round, these two cases exited 127 and the suite caught it.
+# Written the other way round, these cases exited 127 and the suite caught it.
 
-# Fails CLOSED: not knowing where to look is a defect, not absent tooling.
-check "unresolvable project root blocks (2)" 2 \
-  "$(runw -u OPENSPEC_GATE CLAUDE_PROJECT_DIR="$WORK/no/such/dir")"
+# The fail-CLOSED guard on an unresolvable root is retained as defence in depth,
+# but it is no longer reachable by any input a test can supply: the root is now
+# derived from the wrapper's own location, which resolves whenever the wrapper
+# is able to run at all. Asserting the guard is PRESENT is honest; asserting it
+# fires would need a fabricated case that cannot occur.
+x=0; grep -q 'exit 2' "$WRAPPER" || x=1
+check "fail-closed guard on an unresolvable root is present" 0 "$x"
+
+# REGRESSION: a STALE BUT EXISTING CLAUDE_PROJECT_DIR passed the is-a-directory
+# check, resolved to a gate that was not there, and reported an ungated edit for
+# a repository whose gate sits beside the wrapper. The variable is no longer
+# consulted, so pointing it at a real but wrong directory must change nothing.
+( cd "$OUTSIDE" && printf '{}' | env -u OPENSPEC_GATE CLAUDE_PROJECT_DIR="$WORK" \
+    bash "$WRAPPER" >/dev/null 2>"$WORK/err.txt" ); r=$?
+if grep -q 'gate not found' "$WORK/err.txt" 2>/dev/null; then
+  bad "a stale CLAUDE_PROJECT_DIR does not ungate" "fell open: $(tr -d '\n' < "$WORK/err.txt")"
+else
+  check "a stale CLAUDE_PROJECT_DIR does not ungate" 0 "$r"
+fi
 
 # Fails OPEN: the root resolved, the gate genuinely is not installed there.
-mkdir -p "$WORK/emptyproj"
+# Exercised by copying the wrapper into a project-shaped tree with no gate.
+mkdir -p "$WORK/emptyproj/.claude/hooks"
+cp "$WRAPPER" "$WORK/emptyproj/.claude/hooks/"
 check "genuinely absent gate fails open (0)" 0 \
-  "$(runw -u OPENSPEC_GATE CLAUDE_PROJECT_DIR="$WORK/emptyproj")"
+  "$( cd "$OUTSIDE" && printf '{}' | env -u OPENSPEC_GATE -u CLAUDE_PROJECT_DIR \
+        bash "$WORK/emptyproj/.claude/hooks/openspec-change-gate.sh" >/dev/null 2>&1; echo $?; )"
 
 # An explicit override names the gate outright, so root resolution is moot.
 mkgate 2

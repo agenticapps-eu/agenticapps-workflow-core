@@ -7,43 +7,51 @@
 # Review record
 
 - requested: gemini codex claude opencode
-- counted:   gemini (APPROVE) opencode (REQUEST-CHANGES)
+- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
 - excluded:  claude (declared implementing host)
-- failed:
-  - codex: timed out at 180s
+- failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-08-02T11:25:47Z · timeout 180s_
+_generated 2026-08-02T13:17:58Z · timeout 900s_
 
-VERDICT: APPROVE
-- The decision to resolve the working-tree copy in core, while having hosts resolve the shared install, is a sound and well-justified trade-off that correctly puts the earliest possible regression test in the authoring repository.
-- The proposal anticipates and correctly handles numerous subtle edge cases, including git worktrees (`.git` as a file), ambient git configuration (`core.hooksPath`), and the need for an upgrade path for the hook installer (marker vs. byte equality).
-- The inclusion of a bounded scorer (the minimum row count) shows strong adversarial thinking, preventing a class of failure where the conformance harness is silently weakened.
-- The spec delta is exceptionally clear and honest about the limitations of the implementation, correctly distinguishing between a CI job that *reports* versus one that *enforces*, and disclosing the surprising but inherited fail-closed behavior when the `openspec` CLI is missing.
+VERDICT: REQUEST-CHANGES
+- The CI job's harness-health check relies on a hardcoded minimum row count. This number will become stale as tests are added, requiring developers to edit two files. The job should instead derive the expected test count dynamically from the harness source to ensure the check is always current.
+- The installer's "upgrade" path for a stale, marked hook is too aggressive. It will overwrite local, uncommitted modifications a developer may have made for debugging. The installer should detect this state, report a diff, and require a `--force` flag to overwrite, preserving local changes by default.
+- This change adopts the gate's existing fail-CLOSED behavior when the `openspec` CLI is missing. For a local hook, this is a harsh and surprising developer experience. The local wrappers should be modified to WARN and exit 0 in this scenario, while CI continues to fail closed, consistent with the principle of not blocking local work for missing tooling.
 
-## Reviewer: opencode
-_generated 2026-08-02T11:31:21Z · timeout 180s_
+## Reviewer: codex
+_generated 2026-08-02T13:22:17Z · timeout 900s_
 
-Let me verify key factual claims against the repo before rendering a verdict.
 VERDICT: REQUEST-CHANGES
 
-Verified against the repo before judging: the gap claims are accurate (no `.claude/hooks/`, no non-sample git hooks, `core.hooksPath` unset, only `pages-cheatsheet.yml` in workflows), the harness does score 71/71 against the working-tree gate, `openspec --version` is 1.6.0, and the fail-closed-on-missing-CLI claim matches gate source (line 514: `return 2`). The design is unusually self-aware. Remaining concrete issues:
+- §18 names only `PreToolUse` as an interposition point; it does not require `pre-commit` or CI. The change repeatedly attributes all three to §18, so the normative premise is wrong.
+- Installer containment is bypassable. Reproduced with an absolute `core.hooksPath` containing a non-existent `../` segment: installation exited 0 and wrote inside the working tree. Require full path normalization and add this scenario.
+- A stale but existing `CLAUDE_PROJECT_DIR` silently ungates edits; reproduced with exit 0 even though the real gate existed beside the wrapper. The registered command also cannot reach the wrapper-location fallback when that variable is unset. Specify and test wrong/unset host roots.
+- The row-count floor does not bound scorer correctness. A weakened harness can retain or forge `TOTAL: 71 passed`, duplicate rows, or invert expectations without reducing the count. The delta explicitly names expectation inversion but provides no control for it.
+- “An upstream release SHALL NOT change the verdict for an unchanged revision” is false. `actions/*@v7`, `ubuntu-latest`, Node `"22"`, and npm transitive resolution remain mutable. Narrow the claim or pin the complete execution chain.
+- “Visible before any host advances a pin” is not enforceable: host repositories are external, and core has neither required checks nor branch protection. Make this an expectation, or introduce a control that establishes the ordering.
+- `tasks.md` remains internally contradictory: completed task 3.2 requires exporting `OPENSPEC_GATE_SELF`, while the delta forbids it and task 6.9 says it was removed. Rewrite the obsolete task rather than leaving two checked requirements.
 
-- **Spec/Impact inconsistency — `docs/WORKFLOW.md` is required but unlisted.** Requirement 2 states the resolution inversion "SHALL be documented in `adrs/0028-core-gates-itself.md` and in `docs/WORKFLOW.md`," but the Impact section lists only "Files added" and has no "Files modified" section at all. Either the requirement drops the WORKFLOW.md obligation or Impact gains a modified-files list; as written the delta contradicts itself.
+## Reviewer: opencode
+_generated 2026-08-02T13:25:46Z · timeout 900s_
 
-- **Security requirement under-specifies the CI trigger.** "The CI job constrains what it executes" covers permissions, credential persistence, and CLI pinning — but the job executes working-tree shell scripts, and the spec says it runs "on pull requests" without pinning down `pull_request` vs `pull_request_target` or fork behavior. A fork PR supplies arbitrary shell to the harness/gate. With `contents: read` + no persisted credentials this is *probably* acceptable, but for a change whose whole thesis is "state the trust boundary rather than leave it implicit," the fork-PR execution surface needs an explicit scenario or an explicit statement that fork code runs with a read-only token and no secrets.
+Verified several load-bearing claims against the actual repo. A few more checks on the implementation:
+One more check on a worktree subtlety:
+VERDICT: REQUEST-CHANGES
 
-- **`core.hooksPath` scenario is over-broad.** "When the installer runs in a repository where `core.hooksPath` is configured → report conflict and exit non-zero" fires even when `core.hooksPath` is set to the *same* directory `git rev-parse --git-path hooks` already resolves to (an explicit no-op setting). Since `rev-parse --git-path hooks` itself honors `hooksPath`, the correct predicate is "resolved path differs from the default," not "setting is present." The scenario as written mandates a false-positive refusal.
+Verified load-bearing claims against the repo first (all held up): `git rev-parse --git-path hooks` does honor `core.hooksPath`; the gate header confirms `OPENSPEC_GATE_SELF` ignored since 1.5.0; the CLI-absent branch does `return 2`; the workflow uses `pull_request`, read-only `permissions`, `persist-credentials: false`, pinned `openspec@1.6.0`; the generated pre-commit resolves `ROOT` at runtime via `--show-toplevel`, so worktree commits gate on the worktree's own gate copy. The factual backbone of this change is solid. The issues are in the seams:
 
-- **Stale evidence claim.** Risks states `openspec validate --all` is green "(4 passed, 0 failed)"; it is now 5 items (this change added one). The measurement was taken at `eccaf18` per the Context, so it's not wrong — but the parenthetical reads as current. Date it or drop the count, since this change's own existence invalidates it.
-
-- **Minor: row-floor wording ambiguity.** "SHALL be raised, never lowered, without an explicit recorded decision" parses two ways ("never lowered" vs "lowered only with a recorded decision"). Decision 5 says the latter; make the requirement text match it unambiguously, since *removing* obsolete rows is a legitimate edit that would force a lowering.
-
-- **Minor: marker-ownership scenarios skip the non-executable case.** Fresh-install scenario asserts an executable hook, but no scenario covers "marker present, content current, execute bit lost" (e.g., after a checkout on a filesystem that drops modes). No-op vs repair is undefined.
+- **The row-count floor is self-reported by the thing it bounds.** The workflow scrapes the count from the harness's own stdout (`grep -oE '[0-9]+'` on its summary line). A stubbed harness that prints `71 passed, 0 failed` satisfies `MIN_SCORED_ROWS=71` trivially. Decision 5 sells the floor as the control against "gutting the harness," but it only catches *honest* row-count shrinkage. Counting row definitions in the harness *source* (or hashing just the row table) closes this at the same friction the digest-pin rejection wanted to keep. Related: the prose claims the floor covers "inverting expected exit codes" — it does not; inversion keeps the count constant. The scenarios are written narrowly enough to be technically satisfied, but the design prose overclaims.
+- **The floor parse is fragile.** If a harness refactor changes the summary format, `rows` comes back empty and `[ "" -lt 71 ]` is an unbound comparison — the tripwire either errors or silently stops tripping, depending on shell options. Unspecified behavior at exactly the point the spec calls safety-critical.
+- **The `OPENSPEC_GATE` override undermines Decision 1 as specified.** The spec calls it "a deliberate operator act," but it's an ambient env var: a globally exported `OPENSPEC_GATE` in a shell profile silently redirects core's local gate to a foreign copy — precisely the silent divergence Decision 1 exists to eliminate, reintroduced through the side door. Either scope it (e.g., honored only in test/CI contexts) or disclose this explicitly instead of the current "not a violation" framing.
+- **Headline requirement contradicts its own scenario.** "Core SHALL run the gate at all three interposition points" is unsatisfiable for any clone where the installer hasn't run — which the "installer was never run" scenario then blesses (`SHALL NOT be gated locally`). Reword the requirement as "provides and registers" so the SHALL and the scenario don't cancel out.
+- **Untestable scenario presented as conformance.** "The merge SHALL NOT be prevented by this capability" asserts a GitHub repository-settings fact that no in-repo artifact can verify. Fine as documentation; it shouldn't wear a WHEN/THEN costume.
+- **No mechanical guard on the floor itself.** A single PR can atomically edit gate + harness + `MIN_SCORED_ROWS`, and the tripwire's whole value then rests on a human noticing one number in the diff. Consider CODEOWNERS on the workflow or a separate required-check boundary — or at least record that residual trust assumption, since the change is otherwise meticulous about recording exactly these.
+- **Process debt, from the repo's own handoff:** the change sits at 38/40 tasks with the §07 Stage-2 independent code review (6.5) and the review re-run (6.8) still owed. Whatever the verdict on the delta text, the change shouldn't archive with those open.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:80001269edd853460379da01e37665a451544849cf05ddc734b7b0977f96c279
+digest: sha256:c541fbdf47377d3ab474d91b174bb74bc0568bdb56b976ab5642d03a0807bcbf
 producer-version: 1.2.0
-tasks-digest: sha256:bf2c2b3e17a99cb3de471f64bc7f43b1262cea55654c4f5938917bee497f1512
+tasks-digest: sha256:5d20df9af4e1b179f919e182a9e45cc1aa766becfd57fca98026d69baf01651a
 -->

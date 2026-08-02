@@ -65,6 +65,19 @@ esac
 # install a hook INSIDE the working tree, reported as success. Reproduced before
 # this was written. It is the same defect as the tracking-status test that
 # preceded it: the guard answered a question adjacent to the one being asked.
+# The re-appended components MUST be normalised, not concatenated. Appending
+# them literally left `..` in the result, so the containment comparison below
+# ran on an unnormalised string: core.hooksPath=/somewhere/absent/../<root>/.githooks
+# does not start with <root>, so it was accepted as outside the tree — and then
+# mkdir -p created `absent/`, `..` resolved, and the hook landed INSIDE the
+# working tree at exit 0. Reproduced; `git status` showed the untracked
+# directory afterwards. Third instance of this guard being wrong, and the first
+# where the path pointed outward and came back.
+#
+# Lexical normalisation is correct here precisely because the walk stops at the
+# deepest EXISTING directory: `head` is physically resolved by pwd -P, and no
+# remaining component exists, so none of them can be a symlink whose target
+# would make `..` mean something else.
 canon(){
   p="$1"; rest=""
   while [ -n "$p" ] && [ ! -d "$p" ]; do
@@ -73,7 +86,21 @@ canon(){
   done
   head="$( cd "$p" 2>/dev/null && pwd -P )" || return 1
   [ -n "$head" ] || return 1
-  printf '%s' "${head%/}${rest:+/$rest}"
+  out="${head%/}"
+  if [ -n "$rest" ]; then
+    oldIFS="$IFS"; IFS='/'
+    # shellcheck disable=SC2086
+    set -- $rest
+    IFS="$oldIFS"
+    for c in "$@"; do
+      case "$c" in
+        ''|.) ;;
+        ..)   out="${out%/*}"; [ -n "$out" ] || out="" ;;
+        *)    out="$out/$c" ;;
+      esac
+    done
+  fi
+  printf '%s' "${out:-/}"
 }
 ROOT_P="$(canon "$ROOT")" || { printf 'failed: could not resolve %s\n' "$ROOT" >&2; exit 1; }
 HOOKS_P="$(canon "$HOOKS_DIR")" || { printf 'failed: could not resolve %s\n' "$HOOKS_DIR" >&2; exit 1; }
