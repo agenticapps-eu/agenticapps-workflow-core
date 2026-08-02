@@ -58,8 +58,15 @@ it there would give a spec with a crisp single purpose a second, unrelated one.
 **Files added**
 - `.claude/hooks/openspec-change-gate.sh` — core-specific resolver
 - `.claude/settings.json` — registers the hook
-- `.github/workflows/openspec-gate.yml` — the CI floor
-- `tools/install-core-git-hooks.sh` — installs the pre-commit floor
+- `.github/workflows/openspec-gate.yml` — the CI job, which **reports**. It is
+  not a floor: `main` carries no branch protection, so a red run does not
+  prevent a merge. An earlier revision of this list called it "the CI floor",
+  which is the precise claim task 6.7 exists to prevent
+- `tools/install-core-git-hooks.sh` — installs the local pre-commit hook
+- `tools/test-install-core-git-hooks.sh` — regression tests for that installer,
+  run by the CI job. Added because the job scored the gate 71/71 green while the
+  installer carried four live defects: the harness scores the artifact core
+  publishes, not the code core runs
 - `adrs/0028-core-gates-itself.md` — the resolution decision
 
 **Files modified**

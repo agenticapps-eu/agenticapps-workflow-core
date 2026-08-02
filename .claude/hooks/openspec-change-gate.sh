@@ -27,7 +27,19 @@
 # Override (emergency, logged):  export GSD_SKIP_REVIEWS=1
 # Stricter posture (opt-in):     export OPENSPEC_GATE_STRICT=1
 
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+# ROOT MUST NOT come from the working directory. Hooks run in whatever
+# directory the session currently has, and that changes during a session — one
+# `cd` outside the repo and `git rev-parse` fails, ROOT goes empty, GATE
+# resolves to the absolute `/reference-implementations/...`, the not-executable
+# branch below fires and the edit proceeds UNGATED with only a warning.
+# Reproduced. Silent ungating is the one failure this hook cannot have.
+#
+# This file's own location is the fixed point: it is always
+# <root>/.claude/hooks/, so the root is two levels up regardless of cwd, and
+# regardless of whether the host exported anything. CLAUDE_PROJECT_DIR is
+# preferred when present because it is what the host says the project is.
+SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd -P)"
+ROOT="${CLAUDE_PROJECT_DIR:-$SELF_ROOT}"
 GATE="${OPENSPEC_GATE:-$ROOT/reference-implementations/openspec-change-gate/openspec-change-gate.sh}"
 
 # FAIL OPEN if the gate cannot be located. A hook that hard-fails because
@@ -39,9 +51,12 @@ if [ ! -x "$GATE" ]; then
   exit 0
 fi
 
-# Name this host so its own reviews do not count toward the independence floor.
-# The session running this hook IS claude, so a "## Reviewer: claude" section it
-# wrote is not an independent review.
-export OPENSPEC_GATE_SELF="${OPENSPEC_GATE_SELF:-claude}"
-
+# NO OPENSPEC_GATE_SELF EXPORT. An earlier revision set it here and claimed it
+# kept claude's own reviews from counting toward the independence floor. The
+# gate has IGNORED that variable since 1.5.0 — it reads the implementing host
+# from the REVIEWS.md trailer, because the host that produced the evidence is
+# not necessarily the host evaluating it. Exporting it did nothing; the comment
+# asserting otherwise was the actual defect, and the gate's own header names
+# that hazard by name: the conformance harness once set this in every
+# self-exclusion row and those rows passed on an unrelated mechanism.
 exec "$GATE"

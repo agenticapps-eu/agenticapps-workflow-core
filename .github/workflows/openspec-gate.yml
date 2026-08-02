@@ -113,6 +113,15 @@ jobs:
             exit 1
           fi
 
+      - name: Test the hook installer
+        # The harness above scores the GATE. It does not execute this
+        # repository's own interposition points, and that gap is not academic:
+        # CI reported 71/71 green while the installer carried four defects that
+        # wrote into the working tree or destroyed a hook it did not own, each
+        # exiting 0 and calling it success. Scoring the artifact core publishes
+        # is not the same as testing the code core runs.
+        run: bash tools/test-install-core-git-hooks.sh
+
       - name: Run the change gate
         # exit 0 = every active change validates (review NOTEs may still print);
         # exit 1 = `openspec validate --all` is red, or the openspec CLI is

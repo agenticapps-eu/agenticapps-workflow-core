@@ -90,6 +90,44 @@ documented wherever the resolution order is documented.
 - **THEN** core SHALL prefer the working-tree copy and the project SHALL prefer the shared install
 - **AND** core SHALL record the reason for the inversion in the two documents named above
 
+The repository root SHALL NOT be derived from the process working directory.
+A `PreToolUse` hook runs in whatever directory the session currently holds, and
+that directory changes during a session; deriving the root from it meant one
+`cd` outside the repository made resolution fail, which the fail-open branch
+then reported as an ungated edit. The wrapper SHALL resolve the root from a
+fixed point — the host-provided project directory, falling back to the
+wrapper's own location — so that resolution does not depend on session state.
+
+Silent ungating is the one outcome this wrapper SHALL NOT have. Failing open on
+genuinely absent tooling is deliberate; failing open because the wrapper could
+not work out where it was is a defect.
+
+#### Scenario: The session's working directory has moved
+
+- **WHEN** an edit is attempted while the session's working directory is outside the repository
+- **THEN** the wrapper SHALL still resolve and execute core's working-tree gate
+- **AND** SHALL NOT report the edit as ungated
+
+### Requirement: The wrapper asserts no identity the gate will honour
+
+Neither the `PreToolUse` wrapper nor the generated `pre-commit` hook SHALL
+export `OPENSPEC_GATE_SELF`, and no comment SHALL describe it as excluding a
+host's own reviews.
+
+The gate has **ignored** that variable since 1.5.0: the implementing host is
+read from the `REVIEWS.md` trailer, because CI and pre-commit evaluate evidence
+that *other* hosts produced, and an environment identity names the wrong party.
+The gate's own header records that documenting this variable as live was itself
+the hazard — the conformance harness set it in every self-exclusion row, and
+those rows passed on an unrelated mechanism. Core, which published that
+warning, SHALL not reintroduce the pattern it names.
+
+#### Scenario: The generated hook claims no host identity
+
+- **WHEN** the generated `pre-commit` hook is inspected
+- **THEN** it SHALL contain no `OPENSPEC_GATE_SELF` export
+- **AND** no comment asserting that such an export affects reviewer counting
+
 ### Requirement: Core proves the gate conformant before acting on its verdict
 
 Core's CI job SHALL score
@@ -113,11 +151,29 @@ decision**, since removing obsolete rows is a legitimate edit the floor must be
 able to follow. The point is that the number moves deliberately and shows up in
 the diff.
 
+**Scoring the published artifact is not the same as testing the code core
+runs.** The harness scores the gate; it does not execute core's own `PreToolUse`
+wrapper or its hook installer. That gap is not academic — the job reported
+71 of 71 rows green while the installer carried four defects that wrote a file
+into the working tree or destroyed a hook it did not own, each exiting 0 and
+reporting success. Core's CI SHALL therefore also exercise the interposition
+code this capability adds, and SHALL fail when it misbehaves.
+
+Each case SHALL be a regression test for a defect that was actually reproduced,
+not a hypothetical, so that the suite's failures name real history.
+
 #### Scenario: The gate is scored before it is run
 
 - **WHEN** the CI job executes
 - **THEN** the conformance harness SHALL run against the reference implementation before the gate is invoked
 - **AND** a failing harness SHALL fail the job without the gate's verdict being consulted
+
+#### Scenario: The installer regresses
+
+- **WHEN** a change reintroduces any of the installer defects this capability fixed
+- **THEN** core's CI job SHALL fail
+- **AND** the harness's row count SHALL NOT be what is relied on to catch it,
+  since that count stayed at its floor throughout
 
 #### Scenario: The reference implementation stops being conformant
 
@@ -218,10 +274,25 @@ positive, including in the degenerate case where the setting names the default
 directory.
 
 One case does warrant refusal: when the resolved hooks directory lies **inside
-the working tree**, installing would write into tracked repository content
-rather than local, untracked configuration. Committing a hook into the
-repository is a different act with different consequences, so the installer
-SHALL report and exit non-zero rather than make that decision silently.
+the working tree**, installing would write into repository content rather than
+local, untracked configuration. Placing a hook into the repository is a
+different act with different consequences, so the installer SHALL report and
+exit non-zero rather than make that decision silently.
+
+The predicate SHALL be **path containment**, and nothing adjacent to it. Two
+adjacent predicates have each already produced this bug:
+
+- *Tracking status.* `git ls-files --error-unmatch` fails for an untracked
+  in-tree directory, which the installer read as permission to write. An
+  untracked path inside the tree is still repository content.
+- *Existence.* Containment SHALL be decided for a directory that does not yet
+  exist, since the installer creates missing parents. Canonicalising by
+  `cd`-ing to the path cannot resolve one that is absent, and resolving only
+  its immediate parent fails when that is absent too — which yielded a path
+  outside the tree and installed a hook inside it.
+
+The installer SHALL therefore canonicalise by resolving the deepest **existing**
+ancestor and re-appending the remaining components.
 
 #### Scenario: Installation inside a linked worktree
 
@@ -242,11 +313,19 @@ SHALL report and exit non-zero rather than make that decision silently.
 - **THEN** the installer SHALL install normally
 - **AND** SHALL NOT report a conflict
 
-#### Scenario: The resolved hooks directory is tracked repository content
+#### Scenario: The resolved hooks directory is inside the working tree
 
 - **WHEN** the resolved hooks directory lies inside the working tree
 - **THEN** the installer SHALL report this and exit non-zero
-- **AND** SHALL NOT write a hook into tracked repository content
+- **AND** SHALL NOT write a hook into repository content
+- **AND** SHALL refuse whether or not that directory is tracked by git
+
+#### Scenario: The resolved hooks directory is inside the tree but does not exist
+
+- **WHEN** `core.hooksPath` names a path inside the working tree whose directory
+  and whose parent are both absent
+- **THEN** the installer SHALL still recognise it as inside the tree and refuse
+- **AND** SHALL NOT create the missing parents and report success
 
 ### Requirement: The installer owns its hook without clobbering another
 
@@ -268,10 +347,29 @@ Marker semantics SHALL be explicit:
   an upgrade. This is what makes the gate advanceable.
 - **Hook present, no marker** — refuse, report what was found, exit non-zero.
 
+The marker SHALL be matched as a **whole line**. A substring match anywhere in
+the file is not an ownership claim: a foreign hook that merely mentions the
+marker — in an `echo`, a comment about this installer, a pasted doc block — was
+claimed and overwritten under a substring test.
+
 A marker is an ownership claim, not an integrity proof: a hand-edited or
 adversarially marked hook will be treated as core's and updated in place. That
 is an accepted limit of a repository-local convenience script, and SHALL be
 recorded rather than implied.
+
+A `pre-commit` **symlink** SHALL be refused rather than written through. It
+carries no marker the installer can read, so it is foreign by the same rule as
+any other hook it did not write, and writing through it modifies the link
+target — which may lie inside the working tree, defeating the containment rule
+above. Presence SHALL therefore be tested such that a **dangling** symlink is
+detected: it is not "no hook present", and treating it as such followed the
+link and created its target.
+
+The hook SHALL be written **atomically** — to a temporary file in the
+destination directory, made executable, then renamed into place. Redirecting
+onto the destination truncates a working hook before the replacement is known
+to be complete, so an interrupted write leaves a truncated hook that git still
+executes, while the installer reports failure.
 
 #### Scenario: The installer runs on a fresh clone
 
@@ -284,6 +382,19 @@ recorded rather than implied.
 - **WHEN** the installer is run again and the installed hook is already current
 - **THEN** it SHALL leave the hook unchanged
 - **AND** SHALL report a no-op rather than an install
+
+#### Scenario: A foreign hook mentions the marker without claiming it
+
+- **WHEN** a `pre-commit` hook the installer did not write contains the marker
+  text somewhere other than as a line of its own
+- **THEN** the installer SHALL treat it as foreign and refuse
+- **AND** SHALL leave its contents intact
+
+#### Scenario: The pre-commit path is a symlink
+
+- **WHEN** `pre-commit` is a symlink, including one whose target does not exist
+- **THEN** the installer SHALL refuse and name the target
+- **AND** SHALL NOT create or modify the link target
 
 #### Scenario: A self-written hook is stale
 

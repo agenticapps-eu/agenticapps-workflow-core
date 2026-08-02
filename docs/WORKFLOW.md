@@ -134,7 +134,19 @@ hosts that had already advanced a pin to it. See ADR-0028.
 Install the commit hook with `bash tools/install-core-git-hooks.sh`. It resolves
 its target with `git rev-parse --git-path hooks` — never a literal `.git/hooks/`
 path, which does not exist in a linked worktree and which would ignore
-`core.hooksPath`.
+`core.hooksPath`. Its behaviour is pinned by
+`tools/test-install-core-git-hooks.sh`, which the CI job runs.
+
+The `PreToolUse` wrapper resolves the repository root from `CLAUDE_PROJECT_DIR`,
+falling back to its own location — **never from the working directory**. Hooks
+run wherever the session currently is, and that moves; deriving the root from it
+meant one `cd` outside the repository made every subsequent edit silently
+ungated behind a warning.
+
+Neither the wrapper nor the generated commit hook exports `OPENSPEC_GATE_SELF`.
+The gate has ignored it since 1.5.0 and reads the implementing host from the
+`REVIEWS.md` trailer instead, because CI and pre-commit judge evidence *other*
+hosts produced.
 
 **Limits, stated rather than left to be discovered.**
 
@@ -149,6 +161,10 @@ path, which does not exist in a linked worktree and which would ignore
   boundary is the checkout.
 - **The commit hook needs the installer per clone**, and its ownership marker is
   a claim, not an integrity proof.
+- **The `PreToolUse` wrapper has no CI coverage.** The suite covers the
+  installer and the commit hook it generates. The wrapper's cwd-independence and
+  its `settings.json` registration were verified by hand; nothing would catch
+  their regression automatically.
 
 ## Where prose lives (§19)
 

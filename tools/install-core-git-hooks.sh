@@ -27,9 +27,11 @@
 # A marker is an ownership CLAIM, not an integrity proof — a hand-edited or
 # adversarially marked hook will be treated as ours and updated in place. For a
 # locally-bypassable, --no-verify-able convenience hook that is proportionate.
+# The claim must be the WHOLE line: a hook that merely mentions the marker in
+# passing has not made it.
 #
 # Exit 0 = installed, upgraded, repaired or already current.
-# Exit 1 = refused (foreign hook, or hooks dir inside the working tree).
+# Exit 1 = refused (foreign hook, a symlink, or hooks dir inside the working tree).
 set -uo pipefail
 
 MARKER='# managed-by: agenticapps-workflow-core tools/install-core-git-hooks.sh'
@@ -52,11 +54,29 @@ esac
 # the script then read as permission to write. Reproduced: the hook landed in
 # the worktree. Tracking status answers "is this committed", and the question
 # here is "is this repository content", which an untracked in-tree path also is.
-canon(){ ( cd "$1" 2>/dev/null && pwd -P ); }
-ROOT_P="$(canon "$ROOT")"
-HOOKS_P="$(canon "$HOOKS_DIR")"
-# A not-yet-existing directory cannot be canonicalised; fall back to its parent.
-[ -n "$HOOKS_P" ] || HOOKS_P="$(canon "$(dirname "$HOOKS_DIR")")/$(basename "$HOOKS_DIR")"
+# Canonicalise a path that need NOT exist: resolve the deepest existing
+# ancestor with cd+pwd -P, then re-append the components below it.
+#
+# `cd` can only resolve a directory that is already there, and a single-level
+# parent fallback is not enough. With core.hooksPath=deep/not/there BOTH the
+# directory and its parent are missing, so the fallback produced the
+# absolute-looking `/there` — which does not start with $ROOT_P, sailed through
+# the containment test below, and let `mkdir -p` create the missing parents and
+# install a hook INSIDE the working tree, reported as success. Reproduced before
+# this was written. It is the same defect as the tracking-status test that
+# preceded it: the guard answered a question adjacent to the one being asked.
+canon(){
+  p="$1"; rest=""
+  while [ -n "$p" ] && [ ! -d "$p" ]; do
+    rest="$(basename "$p")${rest:+/$rest}"
+    p="$(dirname "$p")"
+  done
+  head="$( cd "$p" 2>/dev/null && pwd -P )" || return 1
+  [ -n "$head" ] || return 1
+  printf '%s' "${head%/}${rest:+/$rest}"
+}
+ROOT_P="$(canon "$ROOT")" || { printf 'failed: could not resolve %s\n' "$ROOT" >&2; exit 1; }
+HOOKS_P="$(canon "$HOOKS_DIR")" || { printf 'failed: could not resolve %s\n' "$HOOKS_DIR" >&2; exit 1; }
 
 case "$HOOKS_P/" in
   "$ROOT_P"/.git/*) ;;                      # inside .git — the normal case, fine
@@ -89,32 +109,76 @@ $MARKER
 # Fails OPEN if the gate is missing: a commit hook that hard-fails on absent
 # tooling trains people to pass --no-verify, which disables it permanently.
 # Regenerate with: bash tools/install-core-git-hooks.sh
-ROOT="\$(git rev-parse --show-toplevel 2>/dev/null)"
+#
+# git runs hooks from the top of the working tree, so rev-parse resolves here —
+# but its failure is checked rather than assumed, because an empty ROOT would
+# silently degrade this into the fail-open branch and report nothing useful.
+#
+# No OPENSPEC_GATE_SELF export: the gate has IGNORED it since 1.5.0 and reads
+# the implementing host from the REVIEWS.md trailer instead.
+ROOT="\$(git rev-parse --show-toplevel 2>/dev/null)" || ROOT=""
+if [ -z "\$ROOT" ] && [ -z "\${OPENSPEC_GATE:-}" ]; then
+  printf 'openspec-gate: WARNING — not inside a git working tree; commit not gated.\\n' >&2
+  exit 0
+fi
 GATE="\${OPENSPEC_GATE:-\$ROOT/reference-implementations/openspec-change-gate/openspec-change-gate.sh}"
 if [ ! -x "\$GATE" ]; then
   printf 'openspec-gate: WARNING — gate not found at %s; commit not gated.\\n' "\$GATE" >&2
   exit 0
 fi
-export OPENSPEC_GATE_SELF="\${OPENSPEC_GATE_SELF:-claude}"
 exec "\$GATE" --pre-commit
 EOF
 
 # Every filesystem operation is required to succeed. Without this, a failing
 # mkdir, write or chmod still fell through to printing "installed" and exiting
 # 0 — reporting a gate that is not there.
+#
+# The write is ATOMIC: a temporary file in the same directory, made executable,
+# then renamed over the destination. Redirecting straight onto "$HOOK"
+# truncates a working hook before the new bytes are known to be complete, so an
+# ENOSPC or an interrupt leaves a TRUNCATED hook that git will still execute —
+# reported as a failure while having already broken what was there. Same
+# same-directory-temp-plus-rename pattern as
+# reference-implementations/shared-install/install-shared-artifact.sh.
 write_hook(){
   mkdir -p "$HOOKS_DIR" || { printf 'failed: could not create %s\n' "$HOOKS_DIR" >&2; return 1; }
-  printf '%s\n' "$DESIRED" > "$HOOK" || { printf 'failed: could not write %s\n' "$HOOK" >&2; return 1; }
-  chmod +x "$HOOK" || { printf 'failed: could not chmod +x %s\n' "$HOOK" >&2; return 1; }
+  tmp="$HOOKS_DIR/.pre-commit.$$.tmp"
+  printf '%s\n' "$DESIRED" > "$tmp" || {
+    printf 'failed: could not write %s\n' "$tmp" >&2; rm -f "$tmp"; return 1; }
+  chmod +x "$tmp" || {
+    printf 'failed: could not chmod +x %s\n' "$tmp" >&2; rm -f "$tmp"; return 1; }
+  mv -f "$tmp" "$HOOK" || {
+    printf 'failed: could not move %s into place\n' "$tmp" >&2; rm -f "$tmp"; return 1; }
   return 0
 }
+
+# -e is FALSE for a dangling symlink, so testing it alone took the "nothing is
+# here" branch for `pre-commit -> ../../created-in-worktree`, and the redirect
+# then FOLLOWED the link and created that file — inside the working tree, the
+# very thing the containment check above exists to prevent, reported as
+# `installed`. Reproduced. -L is therefore tested separately, and a symlink is
+# never written through: it carries no marker this script can read, so it is
+# foreign by the same rule that governs any other hook it did not write.
+if [ -L "$HOOK" ]; then
+  printf 'refusing: %s is a symlink -> %s\n' "$HOOK" "$(readlink "$HOOK")" >&2
+  printf 'Writing through it would modify the link target rather than the hook, and the\n' >&2
+  printf 'target may lie inside the working tree. Inspect it, then move it aside if you\n' >&2
+  printf 'want the gate installed.\n' >&2
+  exit 1
+fi
 
 if [ ! -e "$HOOK" ]; then
   write_hook || exit 1
   printf 'installed: %s\n' "$HOOK"; exit 0
 fi
 
-if ! grep -qF "$MARKER" "$HOOK" 2>/dev/null; then
+# -x, not a bare substring match: the marker must be the WHOLE line. With
+# `grep -qF` a foreign hook that merely MENTIONS the marker — inside an echo, a
+# comment about this installer, a copied-in doc block — was claimed as ours and
+# overwritten. Reproduced: a hook whose body was `echo '# managed-by: ... is
+# only documentation'; exit 42` was silently replaced. Ownership is a claim the
+# writer makes on its own line, not a string that appears somewhere in a file.
+if ! grep -qxF "$MARKER" "$HOOK" 2>/dev/null; then
   printf 'refusing: %s exists and was not written by this installer.\n' "$HOOK" >&2
   printf 'It carries no ownership marker, so overwriting it could destroy work this\n' >&2
   printf 'script knows nothing about. Inspect it, then move it aside if you want the\n' >&2
