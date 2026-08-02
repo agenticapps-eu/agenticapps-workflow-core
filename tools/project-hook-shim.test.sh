@@ -380,7 +380,26 @@ run_shim "$GATE_SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw"
   || bad "gate shim: with no override, the shared install runs" \
          "implementation reached: $(cat "$TMP/saw" 2>/dev/null)"
 
-# The two files carry the same contract and must be bumped together. A sibling
+# CORE'S OWN BINDER carries the same defect, and the exemption would be the
+# finding-12 mistake repeated: a rule with an unstated exemption for the
+# repository that defines it is advisory.
+#
+# Its profile is self-hosting, so the expected answer is NOT the shim's exit 1.
+# This file resolves ONE path — $OPENSPEC_GATE or its working-tree default — and
+# its stated behaviour when that path is not usable is to warn, name it, and fail
+# open. A directory there must reach that branch instead of being `exec`ed.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+CORE_BINDER="$ROOT/.claude/hooks/openspec-change-gate.sh"
+run_shim "$CORE_BINDER" "$PAYLOAD" OPENSPEC_GATE="$TMP/gate-plain-subdir"; rc=$?
+if [ "$rc" -eq 0 ] && grep -qi 'not found\|WARNING' "$TMP/err"; then
+  ok "core's self-hosting binder: a directory at the gate path warns and fails open"
+else
+  bad "core's self-hosting binder: a directory at the gate path warns and fails open" \
+      "got exit $rc — 126 means it exec'd the directory" \
+      "stderr: $(head -1 "$TMP/err")"
+fi
+
+# The three files carry the same contract and must be bumped together. A sibling
 # left behind is the drift the marker exists to surface, and it would surface it
 # in the fleet rather than here.
 TPL_V=$(head -10 "$TEMPLATE" | grep -m1 '^# shim-contract:' | awk '{print $3}')
