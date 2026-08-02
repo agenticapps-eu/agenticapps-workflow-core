@@ -12,6 +12,7 @@
 - [ ] 2.3 Add a comment in the workflow naming Decision 1 and why core's resolution is inverted relative to every consuming project. A reader who knows the shim will otherwise read this as a mistake.
 - [ ] 2.4 Assert a minimum scored-row count in the job and fail below it (floor: 71 today). Without this a PR that guts the harness yields a green job while certifying a drifting gate — the missing-target check only covers zero-of-zero, not a row count falling from 71 to 3.
 - [ ] 2.5 Constrain what the job executes: declare read-only `contents` permission, set `persist-credentials: false` on checkout, and pin `@fission-ai/openspec` to 1.6.0 — the version core validated against. An unpinned global install lets an upstream release change the verdict for an unchanged revision.
+- [ ] 2.5b Trigger on `pull_request`, never `pull_request_target`. The job executes working-tree shell by design, so a fork PR supplies arbitrary scripts; `pull_request` runs them with a read-only token and no secrets, `pull_request_target` would run the same shell with the base repo's privileges. State this in the workflow as the trust boundary, not as a default.
 - [ ] 2.6 Verify the steps locally before pushing: `tools/change-gate-conformance.sh` against the reference implementation (expect 71/71, exit 0), then the gate with `--ci` (expect exit 0).
 - [ ] 2.7 Confirm the job fails closed where CI must: point it at an absent gate and an absent harness and confirm non-zero. CI fail-closed is the deliberate inverse of the hook's fail-open, and the two are easy to conflate.
 - [ ] 2.8 Record — do not fix — that core's published template at `reference-implementations/openspec-change-gate/hooks/openspec-gate.ci.yml` carries the same three supply-chain weaknesses. No host pins it (verified against all four manifests), so it is safely fixable, but editing it changes what every host scaffolds and belongs in its own change.
@@ -31,17 +32,17 @@
 ## 4. The pre-commit floor
 
 - [ ] 4.1 Write `tools/install-core-git-hooks.sh`, resolving the destination with `git rev-parse --git-path hooks` and writing a `pre-commit` that `exec`s core's working-tree gate with `--pre-commit`. Never write a literal `.git/hooks/` path: in a linked worktree `.git` is a file and that path does not exist.
-- [ ] 4.2 Detect `core.hooksPath`. When it is set, report the conflict and exit non-zero rather than writing a hook git will silently ignore — an ignored hook is worse than none, because it looks installed.
+- [ ] 4.2 Do **not** refuse merely because `core.hooksPath` is set. Verified directly: `git rev-parse --git-path hooks` honors it, returning `.githooks` when configured — so the resolver already targets the directory git reads, and a refusal would be a false positive every time, including when the setting names the default. Refuse only when the resolved hooks directory lies inside the working tree, since installing there writes into tracked repository content.
 - [ ] 4.3 Implement the four marker outcomes explicitly: absent → install; marked and current → no-op, reported as such; marked and stale → update in place, reported as an upgrade; unmarked → refuse, report what was found, exit non-zero. Byte equality is deliberately not the test — it would make every revised hook permanently foreign and the gate unadvanceable.
 - [ ] 4.4 Run it in this checkout and confirm the resolved hooks path now holds an executable `pre-commit`.
-- [ ] 4.5 Test all five installer paths in throwaway clones under `$TMPDIR`: fresh, second run, stale-marked, foreign-unmarked, and `core.hooksPath` set. Do not plant a foreign hook in the real checkout.
+- [ ] 4.5 Test all seven installer paths in throwaway clones under `$TMPDIR`: fresh, second run, stale-marked, marked-but-non-executable, foreign-unmarked, `core.hooksPath` outside the tree (installs), and `core.hooksPath` inside the tree (refuses). Do not plant a foreign hook in the real checkout.
 - [ ] 4.6 Test the worktree path for real: `git worktree add` a throwaway, run the installer inside it, and confirm it resolves to the main checkout's hooks directory and says so. This is the case that would have shipped broken.
 - [ ] 4.7 Confirm the installed hook blocks a commit under the section 1 fixture and allows one on the clean tree.
 
 ## 5. Record
 
 - [ ] 5.1 Write `adrs/0028-core-gates-itself.md` in core's existing ADR format, carrying Decision 1 (resolve own source), Decision 3 (installer over `core.hooksPath`) and the alternatives rejected for each.
-- [ ] 5.2 Document core's inverted resolution order where core's other gate behaviour is documented, per the spec delta's requirement that the inversion be recorded. Check `docs/WORKFLOW.md` for the right slot.
+- [ ] 5.2 Document core's inverted resolution order in `docs/WORKFLOW.md`, named explicitly by the spec delta. It is the one file this change modifies rather than adds, and the proposal's Impact must keep listing it.
 - [ ] 5.3 State the disclosed limits in the same place: the `PreToolUse` self-gating property, the ungated-clone case, and the accepted fleet divergence.
 
 ## 6. Verify the change as a whole

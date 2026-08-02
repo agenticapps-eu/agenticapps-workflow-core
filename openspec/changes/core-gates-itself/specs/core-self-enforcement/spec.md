@@ -94,8 +94,11 @@ executed from the same checkout as the gate, so a change that weakens the
 harness — deleting rows, inverting expected exit codes — would otherwise yield a
 green job while certifying a drifting gate. The job SHALL therefore assert a
 minimum scored-row count, and SHALL fail when the harness reports fewer rows
-than that floor. The floor SHALL be recorded as a literal in the workflow and
-SHALL be raised, never lowered, without an explicit recorded decision.
+than that floor. The floor SHALL be recorded as a literal in the workflow.
+Raising it needs no ceremony; **lowering it SHALL require an explicit recorded
+decision**, since removing obsolete rows is a legitimate edit the floor must be
+able to follow. The point is that the number moves deliberately and shows up in
+the diff.
 
 #### Scenario: The gate is scored before it is run
 
@@ -193,10 +196,19 @@ hooks`. It SHALL NOT write to a literal `.git/hooks/` path: in a linked git
 worktree `.git` is a file rather than a directory, so that path does not exist,
 and the real hooks directory belongs to the main checkout.
 
-The installer SHALL detect `core.hooksPath`. When that setting is present and
-points elsewhere, a hook written to the resolved default directory would be
-silently ignored by git, so the installer SHALL report the conflict and exit
-non-zero rather than install a hook that cannot fire.
+`git rev-parse --git-path hooks` **honors `core.hooksPath`**: with that setting
+configured the command returns the configured directory, not the default. The
+installer SHALL therefore rely on the resolver rather than inspect the setting.
+It SHALL NOT refuse merely because `core.hooksPath` is present — a hook written
+to the resolved path fires normally, so such a refusal would be a false
+positive, including in the degenerate case where the setting names the default
+directory.
+
+One case does warrant refusal: when the resolved hooks directory lies **inside
+the working tree**, installing would write into tracked repository content
+rather than local, untracked configuration. Committing a hook into the
+repository is a different act with different consequences, so the installer
+SHALL report and exit non-zero rather than make that decision silently.
 
 #### Scenario: Installation inside a linked worktree
 
@@ -205,11 +217,23 @@ non-zero rather than install a hook that cannot fire.
 - **AND** SHALL NOT attempt to create or write a literal `.git/hooks/` path
 - **AND** SHALL report that the hook it installs is shared with the main checkout
 
-#### Scenario: core.hooksPath is set
+#### Scenario: core.hooksPath points outside the working tree
 
-- **WHEN** the installer runs in a repository where `core.hooksPath` is configured
-- **THEN** it SHALL report the conflict and exit non-zero
-- **AND** SHALL NOT write a hook that git would ignore
+- **WHEN** the installer runs where `core.hooksPath` names a directory outside the working tree
+- **THEN** it SHALL install into the directory the resolver returns
+- **AND** SHALL NOT refuse on the grounds that the setting is present
+
+#### Scenario: core.hooksPath names the default directory
+
+- **WHEN** `core.hooksPath` is set to the same directory the resolver would return by default
+- **THEN** the installer SHALL install normally
+- **AND** SHALL NOT report a conflict
+
+#### Scenario: The resolved hooks directory is tracked repository content
+
+- **WHEN** the resolved hooks directory lies inside the working tree
+- **THEN** the installer SHALL report this and exit non-zero
+- **AND** SHALL NOT write a hook into tracked repository content
 
 ### Requirement: The installer owns its hook without clobbering another
 
@@ -254,6 +278,12 @@ recorded rather than implied.
 - **THEN** it SHALL update the hook in place
 - **AND** SHALL report an upgrade
 
+#### Scenario: A self-written hook has lost its execute bit
+
+- **WHEN** the installer finds a hook carrying its marker whose content is current but which is not executable
+- **THEN** it SHALL restore the execute bit
+- **AND** SHALL report a repair rather than a no-op
+
 #### Scenario: A foreign pre-commit hook is already present
 
 - **WHEN** the installer finds a `pre-commit` hook with no ownership marker
@@ -276,6 +306,21 @@ The job SHALL declare least-privilege permissions, SHALL NOT persist checkout
 credentials into the workspace, and SHALL pin the version of the `openspec` CLI
 it installs. An unpinned global install would let an upstream release change the
 gate's verdict between two runs of an unchanged repository.
+
+The job SHALL be triggered by `pull_request`, never by `pull_request_target`.
+The distinction is the whole trust boundary here: `pull_request` runs the fork's
+code with a read-only token and no access to repository secrets, while
+`pull_request_target` would run that same fork-supplied shell with the base
+repository's privileges. Since this job executes working-tree scripts by design,
+the trigger is the control that keeps a fork pull request from turning that into
+privilege.
+
+#### Scenario: A pull request arrives from a fork
+
+- **WHEN** a pull request from a fork causes the job to execute the working-tree harness and gate
+- **THEN** the job SHALL run under the `pull_request` trigger
+- **AND** the fork's code SHALL execute with a read-only token and without repository secrets
+- **AND** the workflow SHALL NOT use `pull_request_target`
 
 #### Scenario: The workflow declares its privileges
 

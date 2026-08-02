@@ -7,53 +7,43 @@
 # Review record
 
 - requested: gemini codex claude opencode
-- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
+- counted:   gemini (APPROVE) opencode (REQUEST-CHANGES)
 - excluded:  claude (declared implementing host)
-- failed:    (none)
+- failed:
+  - codex: timed out at 180s
 
 ## Reviewer: gemini
-_generated 2026-08-02T07:54:35Z · timeout 180s_
+_generated 2026-08-02T11:25:47Z · timeout 180s_
 
-VERDICT: REQUEST-CHANGES
-*   The pre-commit hook installer is blind to `core.hooksPath`. If a developer has `core.hooksPath` set in their git config, the installer will write a `pre-commit` hook to `.git/hooks/` that git will silently ignore. The installer must detect this condition and refuse to run, or at least warn the user that their configuration will prevent the hook from running.
-*   The spec (`Requirement: The pre-commit floor is installable and its absence is visible`) should include a scenario for this conflict. For example: "WHEN the installer is run in a repository where `core.hooksPath` is set, THEN it SHALL report the conflict and exit non-zero".
-
-## Reviewer: codex
-_generated 2026-08-02T07:56:49Z · timeout 180s_
-
-VERDICT: REQUEST-CHANGES
-
-- A workflow is not an enforcement floor unless its check is required by branch protection/rulesets. As specified, failing PR checks may still be merged, and a push-to-`main` check only detects failure after the push.
-- “Core wires all three points” is not satisfied by merely shipping an installer. Fresh clones, skipped installation, and foreign-hook refusal all leave pre-commit unenforced. Specify bootstrap/verification or soften the enforcement claim.
-- Literal `.git/hooks/` installation fails in linked Git worktrees, where `.git` is a file. Resolve the hook directory with `git rev-parse --git-path hooks` and add a worktree scenario.
-- Marker-based ownership cannot establish that the installer wrote a hook: foreign or modified hooks can carry the marker. Behavior for a marked-but-altered hook and upgrades is undefined; require exact-byte/hash verification or a safe composition contract.
-- The fail-open requirement contradicts the CI requirement: it broadly says a missing gate fails open, while the missing-target scenario requires CI to fail. Scope fail-open explicitly to interactive/pre-commit wrappers; CI must fail closed.
-- The central inverted-resolution decision lacks a decisive scenario: place a conflicting executable in `~/.agenticapps/bin/` and verify both PreToolUse and pre-commit still execute the working-tree gate. Absence of the shared install does not test preference order.
-- The PR workflow executes mutable repository scripts after an unpinned global `npm` install. Specify least-privilege workflow permissions, disable persisted checkout credentials, and pin the OpenSpec dependency so supply-chain drift cannot silently change the gate result.
+VERDICT: APPROVE
+- The decision to resolve the working-tree copy in core, while having hosts resolve the shared install, is a sound and well-justified trade-off that correctly puts the earliest possible regression test in the authoring repository.
+- The proposal anticipates and correctly handles numerous subtle edge cases, including git worktrees (`.git` as a file), ambient git configuration (`core.hooksPath`), and the need for an upgrade path for the hook installer (marker vs. byte equality).
+- The inclusion of a bounded scorer (the minimum row count) shows strong adversarial thinking, preventing a class of failure where the conformance harness is silently weakened.
+- The spec delta is exceptionally clear and honest about the limitations of the implementation, correctly distinguishing between a CI job that *reports* versus one that *enforces*, and disclosing the surprising but inherited fail-closed behavior when the `openspec` CLI is missing.
 
 ## Reviewer: opencode
-_generated 2026-08-02T07:58:45Z · timeout 180s_
+_generated 2026-08-02T11:31:21Z · timeout 180s_
 
-I'll verify the change's factual claims against the actual repo before rendering a verdict.
-Verified against the repo before judging: `.claude/` has no `hooks/` and no `settings.json`, `core.hooksPath` is unset, `.github/workflows/` holds only `pages-cheatsheet.yml`, the harness genuinely scores **71 passed, 0 failed**, hook mode fail-open/fail-closed branches match the delta's claims, and `.gitignore` won't swallow `.claude/settings.json`. The factual spine of this change is accurate. The problems are in what the delta omits.
-
+Let me verify key factual claims against the repo before rendering a verdict.
 VERDICT: REQUEST-CHANGES
 
-- **Unscored scorer: nothing bounds the harness itself.** The third requirement guarantees core "proves the gate conformant," but the proof instrument (`tools/change-gate-conformance.sh`) is a working-tree file executed from the same checkout. A PR that guts the harness — deletes rows, flips expected exit codes — still yields a green job, because a weakened harness passes a drifting gate. The "named target is missing" scenario only guards the zero-of-zero case, not row-count reduction. Add a scenario requiring the CI job to assert a minimum row count (≥71 today) or a pinned harness digest; without it, the headline guarantee ("conformance proven in core, not downstream") has a self-reference hole.
+Verified against the repo before judging: the gap claims are accurate (no `.claude/hooks/`, no non-sample git hooks, `core.hooksPath` unset, only `pages-cheatsheet.yml` in workflows), the harness does score 71/71 against the working-tree gate, `openspec --version` is 1.6.0, and the fail-closed-on-missing-CLI claim matches gate source (line 514: `return 2`). The design is unusually self-aware. Remaining concrete issues:
 
-- **The fail-open requirement silently omits the missing-CLI case, which is fail-CLOSED.** `gate_check` returns 2 when the `openspec` binary is absent (verified at line 514), so in hook mode every non-spec edit is blocked while any change is active. The fourth requirement's narrative says the gate "fails open on malformed input, on a missing gate, and when no change is active" — a reader reasonably infers infrastructure-absence fails open generally. Core is a repo where a change is almost always open, so a contributor without the CLI installed is hard-bricked locally. This is inherited gate semantics (correctly preserved), but it must be disclosed in Known Limits/Risks, and the delta should state explicitly that missing CLI is fail-closed by design.
+- **Spec/Impact inconsistency — `docs/WORKFLOW.md` is required but unlisted.** Requirement 2 states the resolution inversion "SHALL be documented in `adrs/0028-core-gates-itself.md` and in `docs/WORKFLOW.md`," but the Impact section lists only "Files added" and has no "Files modified" section at all. Either the requirement drops the WORKFLOW.md obligation or Impact gains a modified-files list; as written the delta contradicts itself.
 
-- **Installer upgrade path is unspecified.** Scenarios cover the fresh clone and the foreign hook, but not "installer previously wrote the hook and the desired content has since changed" (gate moved, flags changed). "Running it a second time SHALL leave the same result" reads as pure idempotence; taken literally it forbids the installer from ever updating its own hook. Add a scenario defining stale-self-written-hook behavior (update-in-place with marker check, presumably).
+- **Security requirement under-specifies the CI trigger.** "The CI job constrains what it executes" covers permissions, credential persistence, and CLI pinning — but the job executes working-tree shell scripts, and the spec says it runs "on pull requests" without pinning down `pull_request` vs `pull_request_target` or fork behavior. A fork PR supplies arbitrary shell to the harness/gate. With `contents: read` + no persisted credentials this is *probably* acceptable, but for a change whose whole thesis is "state the trust boundary rather than leave it implicit," the fork-PR execution surface needs an explicit scenario or an explicit statement that fork code runs with a read-only token and no secrets.
 
-- **New local code-execution surface is never threat-noted.** The `PreToolUse` hook auto-executes a working-tree script on every edit; after this change, pulling a poisoned branch means merely editing a file runs attacker-controlled shell. True for the four hosts already, but this change introduces it to core and the security section is silent. One sentence in Risks ("hook executes working-tree content; trust boundary is the checkout") suffices — plus it argues for the CI job running *before* any local dogfooding expectation.
+- **`core.hooksPath` scenario is over-broad.** "When the installer runs in a repository where `core.hooksPath` is configured → report conflict and exit non-zero" fires even when `core.hooksPath` is set to the *same* directory `git rev-parse --git-path hooks` already resolves to (an explicit no-op setting). Since `rev-parse --git-path hooks` itself honors `hooksPath`, the correct predicate is "resolved path differs from the default," not "setting is present." The scenario as written mandates a false-positive refusal.
 
-- **Inherited Bash bypass restated nowhere.** The hook registers on `Edit|Write|MultiEdit|NotebookEdit`; `sed -i`/`tee`/scripted edits via `Bash` never touch the gate. CI being the real floor mostly covers this, but since the delta enumerates the three interposition points as if complete, it should acknowledge the tool-matcher boundary so future readers don't treat the hook as airtight.
+- **Stale evidence claim.** Risks states `openspec validate --all` is green "(4 passed, 0 failed)"; it is now 5 items (this change added one). The measurement was taken at `eccaf18` per the Context, so it's not wrong — but the parenthetical reads as current. Date it or drop the count, since this change's own existence invalidates it.
 
-Minor (not blocking on their own): the "all seven manifest artifacts byte-identical between pin `ef030d0` and `main`" claim is unverifiable from this repo — the manifests live in hosts; phrase it as "this change edits none of the seven" (which I verified) rather than asserting pin state. And "SHALL be documented where core's other gate behaviour is documented" is unverifiably vague — name the file (ADR-0028 exists in the migration plan; reference it in the requirement).
+- **Minor: row-floor wording ambiguity.** "SHALL be raised, never lowered, without an explicit recorded decision" parses two ways ("never lowered" vs "lowered only with a recorded decision"). Decision 5 says the latter; make the requirement text match it unambiguously, since *removing* obsolete rows is a legitimate edit that would force a lowering.
+
+- **Minor: marker-ownership scenarios skip the non-executable case.** Fresh-install scenario asserts an executable hook, but no scenario covers "marker present, content current, execute bit lost" (e.g., after a checkout on a filesystem that drops modes). No-op vs repair is undefined.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:534067ea7b9a0b8492595daefe48270be9fa9f1860ea1e722e35e712812ab298
+digest: sha256:80001269edd853460379da01e37665a451544849cf05ddc734b7b0977f96c279
 producer-version: 1.2.0
-tasks-digest: sha256:ca24f0788774c8002dcee9110be3f4f9a45f23502d15e6aba67ea99366090570
+tasks-digest: sha256:bf2c2b3e17a99cb3de471f64bc7f43b1262cea55654c4f5938917bee497f1512
 -->

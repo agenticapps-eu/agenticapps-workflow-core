@@ -62,6 +62,12 @@ it there would give a spec with a crisp single purpose a second, unrelated one.
 - `tools/install-core-git-hooks.sh` — installs the pre-commit floor
 - `adrs/0028-core-gates-itself.md` — the resolution decision
 
+**Files modified**
+- `docs/WORKFLOW.md` — records core's inverted resolution order and the
+  disclosed limits. The spec delta requires this documentation, so it must
+  appear here; an earlier revision listed only files added, which contradicted
+  its own requirement.
+
 **Files not changed**
 - `reference-implementations/openspec-change-gate/openspec-change-gate.sh` and
   its `pre-commit` and `hooks/openspec-gate.ci.yml` siblings are consumed, not

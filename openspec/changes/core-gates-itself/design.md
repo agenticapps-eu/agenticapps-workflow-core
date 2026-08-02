@@ -111,10 +111,20 @@ installer therefore resolves the destination with `git rev-parse --git-path
 hooks`, and reports that a hook installed from a worktree is shared with the
 main checkout.
 
-**It must detect `core.hooksPath`.** If that setting is configured, git ignores
-the default hooks directory entirely, so an installer blind to it writes a hook
-that can never fire — worse than not installing, because it looks installed. The
-installer reports the conflict and exits non-zero.
+**`core.hooksPath` needs no separate detection — and refusing on it is wrong.**
+Round 2 review caught a bug this design introduced in round 1. Tested directly:
+`git rev-parse --git-path hooks` *honors* `core.hooksPath`, returning `.githooks`
+when that is the configured value. The resolver therefore already writes to the
+directory git will actually read, and gemini's round-1 objection is subsumed by
+the worktree fix rather than needing its own mechanism. Refusing whenever the
+setting is present — as round 1 specified — would be a false positive every
+time, including when the setting names the default directory.
+
+One case does warrant refusal: a resolved hooks directory **inside the working
+tree**, meaning `hooksPath` points at tracked repository content. Installing
+there writes into the repository rather than into local untracked config, which
+is a different act with different consequences, so the installer reports and
+exits rather than deciding silently.
 
 *Alternative considered — set `core.hooksPath` to a tracked directory ourselves.*
 Delivers the hook by checkout, needs no installer. Rejected because the setting
@@ -178,8 +188,9 @@ spec with one crisp purpose a second, unrelated one.
   that change open and its `REVIEWS.md` stale: `--ci` exits 0, `--pre-commit`
   exits 0, a `PreToolUse` payload on product code exits 0, malformed stdin exits
   0, and an edit to the change's own `tasks.md` exits 0. Gate 2.0.0 blocks only
-  on `openspec validate --all`, which is green (4 passed, 0 failed). No deadlock
-  exists, and this change does not depend on `shim-project-hooks` landing.
+  on `openspec validate --all`, which was green at `eccaf18` — 4 passed, before
+  this change existed — and is green now at 5. No deadlock exists, and this
+  change does not depend on `shim-project-hooks` landing.
 
 - **Core's gate drifts from the fleet's published copy** → This is Decision 1's
   accepted cost, and the CI job is the mitigation: divergence becomes a red
