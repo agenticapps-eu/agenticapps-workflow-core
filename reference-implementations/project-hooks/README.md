@@ -476,3 +476,51 @@ them.
 | `database-sentinel.sh` | canonical implementation, published to `~/.agenticapps/bin/` |
 | `normalize-claude-md.sh` | canonical implementation, published to `~/.agenticapps/bin/` |
 | `shim-template.sh` | the authority for shim conformance |
+
+---
+
+## The local telemetry logs `skill-router-log` already wrote (tasks 4.11, 4.11a)
+
+Deleting a producer does not remove what it produced. The logs are gitignored in
+every repo and tracked in none — so nothing durable was *added* to the repos —
+but the existing data sits on developer machines and may contain repository
+paths and session activity.
+
+- **Location** — `<projectRoot>/.planning/skill-observations/`, one file per day
+  per project, named `skill-router-<YYYY-MM-DD>.jsonl`. Each line is a JSON
+  object `{ts, skill, phase, tool}`.
+- **Inventory** —
+  `find . -path '*/.planning/skill-observations/skill-router-*.jsonl'`
+- **Cleanup** — the same expression with `-delete`, run per repo.
+
+**The operator runs it, not this change.** The files are local, untracked, and
+may be wanted as history, so the decision belongs to the machine's owner.
+
+**Scope limit, stated in the same breath (task 4.11a).** This removes only what
+`skill-router-log` wrote. The `<stamp>--<sessionId>.{md,jsonl}` files beside them
+come from `meta-observer`, whose producer stays registered — they will reappear
+at the next session end. Cleaning them without unregistering it is housekeeping
+that undoes itself.
+
+## `meta-observer` is the dominant `.planning/` writer — recorded, not fixed (task 4.12)
+
+The global `SessionEnd` hook in `~/.claude/settings.json` runs
+`agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, which
+writes `<projectRoot>/.planning/skill-observations/<stamp>--<sessionId>.{md,jsonl}`
+in **every repo opened**.
+
+Observed on this machine on 2026-08-02: core held **29** files under
+`.planning/skill-observations/`, **all 29** in that naming, and **none** in
+`skill-router-log`'s `skill-router-<date>.jsonl` — in a repo carrying no
+`.planning`-writing project hook at all.
+
+**That is a dated single-machine observation, and must never be quoted as a
+measurement of the repository.** The directory is gitignored local state; it
+varies per machine, grows every session, and no reviewer can reproduce a figure
+from it. An earlier revision recorded 141/137/4 as a measurement, review re-ran
+the count and got different numbers, and that is what surfaced the framing error.
+
+**So this change REDUCES the frozen-archive violation; it does not end it.** No
+report of it may claim the fleet becomes frozen-archive compliant. Fixing the
+dominant writer is a different repo, global wiring, and an operator-level change
+— out of scope here, and recorded as proposal follow-up 3.

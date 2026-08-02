@@ -257,8 +257,36 @@ while the change was editing its hooks.
 - **8 → 2** in `agents-task-viewer`, which receives no `normalize-claude-md`
   file (see the opt-out above).
 
-**The line figures are an estimate and are marked as one — the shims do not
-exist yet.** On the current sketch a three-hook project keeps roughly 138 lines
+> **MEASURED AT IMPLEMENTATION (task 5.5), and the estimate below was wrong by
+> about 60%.** The shims exist now, so these are counts, not projections:
+>
+> | | estimated | measured |
+> |---|---|---|
+> | the seven, before | 4,396 | **4,396** (exact) |
+> | the seven, after | ~950 | **1,944** |
+> | the seven, delta | −3,450 | **−2,452** |
+> | added to core | ~360 | **+575** |
+> | fleet net | ≈ −3,090 | **−1,877** |
+>
+> **Why the estimate missed.** It assumed a ~13-line shim, the size of the
+> original `openspec-change-gate.sh`, giving "roughly 138 lines" for a
+> three-hook project. The shims as built are ~93–105 lines each — 291 for a
+> three-hook project — because each one carries the contract it implements:
+> the resolution order and why there is no third candidate, the fail-open
+> reasoning, the repetition policy and why a session id is unreachable, and the
+> kill-switch warning.
+>
+> **The duplication argument is unaffected, and is stronger than the raw count
+> suggests.** Of those 291 lines, **102 are code and 189 are comments**. The
+> same repo before held **351 lines of code** across eight hooks, so executable
+> logic per project falls 351 → 102, a **−71%** reduction — and the 102 that
+> remain are byte-identical across all seven, whereas the 351 had drifted into
+> two or three versions in four of the eight files.
+>
+> No report of this change may quote the estimated figures. These are the
+> numbers.
+
+**The line figures below are the original estimate, kept for the record.** On the current sketch a three-hook project keeps roughly 138 lines
 and `agents-task-viewer` keeps less, having two. So 4,396 lines today become
 roughly 950, the seven projects shed on the order of **−3,450**, and ~360 lines
 are added once to core as canonical implementations — a fleet net of roughly
