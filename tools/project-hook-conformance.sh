@@ -7,10 +7,25 @@
 # (2.7c, 2.7c-i).
 #
 # Usage:
-#   tools/project-hook-conformance.sh [--strict] [--overrides-only] <project-dir>...
+#   tools/project-hook-conformance.sh [--strict] [--overrides-only]
+#                                     [--fleet <root>] <project-dir>...
 #
 #   --strict          exit 1 if any finding was reported (for CI)
 #   --overrides-only  skip the marker report; scan override vectors only
+#   --fleet <root>    resolve every repository DECLARED in FLEET beneath <root>
+#                     and scan it; a declared repository that resolves nowhere
+#                     is reported as a finding, never as silence. This is what
+#                     makes a contract propagation reproducible from the
+#                     repository instead of from a list someone typed once.
+#
+# WHAT --fleet MEASURES, stated because it is easy to over-read: it scores the
+# WORKING TREE of each repository — whatever branch happens to be checked out on
+# this machine right now. Observed during the 1.1.0 rollout: a concurrent session
+# switched one repo's checkout to an unrelated branch between two runs, and the
+# second run reported it stale while the propagated shims sat safely on the
+# pushed branch. That is the tool being right about the disk, not wrong about the
+# rollout. To score what a branch actually carries, compare
+# `git show <ref>:.claude/hooks/<hook>.sh` against the authority instead.
 #
 # Default exit is 0 even with findings: like the §18 gate since 2.0.0, this
 # tool REPORTS. Blocking is reserved for what is an error rather than an
@@ -52,18 +67,70 @@ fi
 
 STRICT=0
 OVERRIDES_ONLY=0
+FLEET_ROOT=""
 PROJECTS=()
+want_root=0
 for a in "$@"; do
+  if [ "$want_root" -eq 1 ]; then FLEET_ROOT="$a"; want_root=0; continue; fi
   case "$a" in
     --strict)         STRICT=1 ;;
     --overrides-only) OVERRIDES_ONLY=1 ;;
+    --fleet)          want_root=1 ;;
     -*) echo "project-hook-conformance: unknown option '$a'" >&2; exit 64 ;;
     *)  PROJECTS+=("$a") ;;
   esac
 done
+# Guarded like its sibling (Stage-2 finding 8): a value-taking option with no
+# value exits 64 rather than proceeding with an empty root, which would resolve
+# every declared repository to nothing and report the whole fleet absent.
+if [ "$want_root" -eq 1 ]; then
+  echo "project-hook-conformance: --fleet requires a root directory" >&2
+  exit 64
+fi
+
+findings=0
+
+# --- the declared fleet -----------------------------------------------------
+# Repositories are DECLARED, not discovered, for the reason ARTIFACTS and
+# SHIMMED-HOOKS are: a set derived from what you found cannot detect a missing
+# member, so a repository that never got the contract bump would look exactly
+# like one that passed. FLEET's own header carries the argument.
+#
+# Names, not paths — a path is a fact about one machine. Each name is resolved
+# beneath the given root, and one that resolves nowhere is a FINDING.
+if [ -n "$FLEET_ROOT" ]; then
+  FDECL="${FLEET_DECL:-$ROOT/reference-implementations/project-hooks/FLEET}"
+  if [ ! -f "$FDECL" ]; then
+    echo "project-hook-conformance: no fleet declaration at $FDECL" >&2
+    echo "  Without it --fleet would scan an empty set and report nothing," >&2
+    echo "  which is indistinguishable from a fleet that is fully conformant." >&2
+    echo "  Refusing to report." >&2
+    exit 65
+  fi
+  if [ ! -d "$FLEET_ROOT" ]; then
+    echo "project-hook-conformance: --fleet root '$FLEET_ROOT' is not a directory" >&2
+    exit 66
+  fi
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(printf '%s' "$line" | tr -d '[:space:]')"
+    [ -n "$line" ] || continue
+    # Depth 2, because the fleet is checked out one family directory below the
+    # root on this machine and directly below it elsewhere. Bounded so the
+    # lookup cannot wander into unrelated trees.
+    found=$(find "$FLEET_ROOT" -maxdepth 2 -type d -name "$line" 2>/dev/null | head -1)
+    if [ -n "$found" ]; then
+      echo "FLEET   $line  found at ${found#"$FLEET_ROOT"/}"
+      PROJECTS+=("$found")
+    else
+      echo "FLEET   $line  not found under $FLEET_ROOT — declared but unreachable, so its binders were NOT checked"
+      findings=$((findings + 1))
+    fi
+  done < "$FDECL"
+fi
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
-  echo "usage: project-hook-conformance.sh [--strict] [--overrides-only] <project-dir>..." >&2
+  echo "usage: project-hook-conformance.sh [--strict] [--overrides-only] [--fleet <root>] <project-dir>..." >&2
   exit 64
 fi
 
@@ -79,8 +146,6 @@ if ! printf '%s' "$TEMPLATE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
   echo "project-hook-conformance: template carries no well-formed '# shim-contract:' marker" >&2
   exit 65
 fi
-
-findings=0
 
 # semver compare. Echoes -1, 0 or 1 for $1 <, =, > $2.
 semver_cmp() {

@@ -146,10 +146,25 @@ echo
 echo "=== 2.6  an unusable override reports specifically, allows, and does NOT fall through ==="
 # The shared install is present and working throughout this block. A shim that
 # falls through would run it and the test could not tell the two paths apart.
-for case in missing nonexec; do
+for case in missing nonexec directory; do
   case "$case" in
     missing) OV="$TMP/does-not-exist.sh" ;;
     nonexec) OV="$TMP/not-executable.sh"; echo '#!/bin/sh' > "$OV"; chmod 644 "$OV" ;;
+    # STAGE-2 FINDING 6. `-x` on a directory tests the SEARCH bit, and every
+    # ordinary directory has it — so a gate written `[ -x "$OVERRIDE" ]` calls a
+    # directory executable and `exec`s it. bash then exits 126 with its own "is a
+    # directory" message, the invalid-override report never fires, and the exit
+    # code is not the 1 this contract states. The contract has always said
+    # executable regular FILE; the test that would have caught the gap is this
+    # one, and it did not exist.
+    #
+    # The fixture is NOT named `override-dir`. It was, and the "reports the
+    # override, naming the path" assertion below then passed while the shim was
+    # still broken: bash's own `.../override-dir: is a directory` message
+    # contains both the word and the path, so the grep matched the failure it
+    # was supposed to catch. A neutral name is what makes that assertion mean
+    # anything.
+    directory) OV="$TMP/plain-subdir"; mkdir -p "$OV" ;;
   esac
   rm -f "$TMP/saw"; rm -rf "$TMP/state"; mkdir -p "$TMP/state"
   run_shim "$SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw" DATABASE_SENTINEL_OVERRIDE="$OV"; rc=$?
@@ -171,6 +186,39 @@ for case in missing nonexec; do
         "stderr: $(head -2 "$TMP/err")"
   fi
 done
+
+echo
+echo "=== 2.6a  an override set to the EMPTY STRING is treated as unset ==="
+# RECORDED DECISION, not an oversight (Stage-2 finding 6, second half). The
+# contract says an override that is "set" but unusable must not fall through, and
+# `FOO=` is set as far as the shell is concerned. It still falls through here,
+# because `FOO=` is the conventional way to neutralise a variable — it is how an
+# operator says "no override", not how they name a broken one. Reporting it as an
+# invalid override would make the ordinary way of clearing the kill switch print
+# an error on every matched call.
+#
+# The reading of the requirement is therefore: "set" means set to a NON-EMPTY
+# value. It was a decision either way, and the finding's real complaint was that
+# nothing wrote it down. This assertion is where it is written down — behaviour
+# nothing asserts is behaviour nobody chose.
+cat > "$BIN/database-sentinel.sh" <<'EOF'
+#!/usr/bin/env bash
+echo SHARED > "$IMPL_SAW"; exit 0
+EOF
+chmod +x "$BIN/database-sentinel.sh"
+rm -f "$TMP/saw"; rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+run_shim "$SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw" DATABASE_SENTINEL_OVERRIDE=; rc=$?
+if [ "$(cat "$TMP/saw" 2>/dev/null)" = "SHARED" ] && [ "$rc" -eq 0 ]; then
+  ok "an empty override falls through to the shared install, silently"
+else
+  bad "an empty override falls through to the shared install, silently" \
+      "exit $rc, implementation reached: $(cat "$TMP/saw" 2>/dev/null)"
+fi
+if grep -qi 'override' "$TMP/err"; then
+  bad "an empty override reports nothing" "stderr: $(head -2 "$TMP/err")"
+else
+  ok "an empty override reports nothing"
+fi
 
 echo
 echo "=== 2.11c  the invalid-override report is NOT rate limited; the unresolvable one is ==="
@@ -266,6 +314,123 @@ if head -10 "$TEMPLATE" | grep -qE '^# shim-contract: [0-9]+\.[0-9]+\.[0-9]+$'; 
 else
   bad "template carries '# shim-contract: <semver>' within the first 10 lines" \
       "head -10: $(head -10 "$TEMPLATE" | grep -c .) lines, no match"
+fi
+
+echo
+echo "=== 4b  the gate shim is a sibling of the template, not a render of it ==="
+# It is hand-maintained — the two must be edited together — and until now nothing
+# drove it at all. Every assertion above was made of the template only, so the
+# file carrying the §18 gate's one blocking condition had no coverage of the
+# resolution order it implements. Finding 6 landed in both files for exactly that
+# reason: the template's assertions could not reach the sibling.
+GATE_SHIM="$TMP/openspec-change-gate.sh"
+cp "$ROOT/reference-implementations/project-hooks/openspec-change-gate.shim.sh" "$GATE_SHIM"
+chmod +x "$GATE_SHIM"
+
+cat > "$BIN/openspec-change-gate.sh" <<'EOF'
+#!/usr/bin/env bash
+echo SHARED > "$IMPL_SAW"; exit 0
+EOF
+chmod +x "$BIN/openspec-change-gate.sh"
+
+for case in missing nonexec directory; do
+  case "$case" in
+    missing)   OV="$TMP/no-such-gate.sh" ;;
+    nonexec)   OV="$TMP/gate-not-executable.sh"; echo '#!/bin/sh' > "$OV"; chmod 644 "$OV" ;;
+    directory) OV="$TMP/gate-plain-subdir"; mkdir -p "$OV" ;;   # neutral name — see above
+  esac
+  rm -f "$TMP/saw"; rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+  run_shim "$GATE_SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw" OPENSPEC_GATE="$OV"; rc=$?
+
+  [ "$rc" -eq 1 ] && ok "gate shim, override $case: exits 1" \
+                  || bad "gate shim, override $case: exits 1" "got exit $rc"
+  [ "$rc" -ne 2 ] && ok "gate shim, override $case: does not block" \
+                  || bad "gate shim, override $case: does not block" "got exit 2"
+  if [ ! -f "$TMP/saw" ]; then
+    ok "gate shim, override $case: does not fall through to the shared install"
+  else
+    bad "gate shim, override $case: does not fall through to the shared install" \
+        "the shared install ran anyway ($(cat "$TMP/saw"))"
+  fi
+  if grep -qi 'OPENSPEC_GATE' "$TMP/err" && grep -qF "$OV" "$TMP/err"; then
+    ok "gate shim, override $case: reports the override specifically, naming the path"
+  else
+    bad "gate shim, override $case: reports the override specifically, naming the path" \
+        "stderr: $(head -2 "$TMP/err")"
+  fi
+done
+
+# And the two candidates it does resolve, in order.
+rm -f "$TMP/saw"
+cat > "$TMP/gate-override-ok.sh" <<'EOF'
+#!/usr/bin/env bash
+echo OVERRIDE > "$IMPL_SAW"; exit 0
+EOF
+chmod +x "$TMP/gate-override-ok.sh"
+run_shim "$GATE_SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw" OPENSPEC_GATE="$TMP/gate-override-ok.sh"
+[ "$(cat "$TMP/saw" 2>/dev/null)" = "OVERRIDE" ] \
+  && ok "gate shim: a usable override is preferred over the shared install" \
+  || bad "gate shim: a usable override is preferred over the shared install" \
+         "implementation reached: $(cat "$TMP/saw" 2>/dev/null)"
+
+rm -f "$TMP/saw"
+run_shim "$GATE_SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw"
+[ "$(cat "$TMP/saw" 2>/dev/null)" = "SHARED" ] \
+  && ok "gate shim: with no override, the shared install runs" \
+  || bad "gate shim: with no override, the shared install runs" \
+         "implementation reached: $(cat "$TMP/saw" 2>/dev/null)"
+
+# The empty-override case, against the SIBLING. The 2.6a block above asserts it
+# of the template, and the template's assertions do not reach this file — which
+# is the whole reason finding 6 was present in both and caught in neither. An
+# assertion made of one of two hand-synchronised files is an assertion about one
+# of them.
+rm -f "$TMP/saw"; rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+run_shim "$GATE_SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw" OPENSPEC_GATE=; rc=$?
+if [ "$(cat "$TMP/saw" 2>/dev/null)" = "SHARED" ] && [ "$rc" -eq 0 ]; then
+  ok "gate shim: an empty override falls through to the shared gate, silently"
+else
+  bad "gate shim: an empty override falls through to the shared gate, silently" \
+      "exit $rc, implementation reached: $(cat "$TMP/saw" 2>/dev/null)"
+fi
+if grep -qi 'OPENSPEC_GATE is set' "$TMP/err"; then
+  bad "gate shim: an empty override reports nothing" "stderr: $(head -2 "$TMP/err")"
+else
+  ok "gate shim: an empty override reports nothing"
+fi
+
+# CORE'S OWN BINDER carries the same defect, and the exemption would be the
+# finding-12 mistake repeated: a rule with an unstated exemption for the
+# repository that defines it is advisory.
+#
+# Its profile is self-hosting, so the expected answer is NOT the shim's exit 1.
+# This file resolves ONE path — $OPENSPEC_GATE or its working-tree default — and
+# its stated behaviour when that path is not usable is to warn, name it, and fail
+# open. A directory there must reach that branch instead of being `exec`ed.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+CORE_BINDER="$ROOT/.claude/hooks/openspec-change-gate.sh"
+run_shim "$CORE_BINDER" "$PAYLOAD" OPENSPEC_GATE="$TMP/gate-plain-subdir"; rc=$?
+if [ "$rc" -eq 0 ] && grep -qi 'not found\|WARNING' "$TMP/err"; then
+  ok "core's self-hosting binder: a directory at the gate path warns and fails open"
+else
+  bad "core's self-hosting binder: a directory at the gate path warns and fails open" \
+      "got exit $rc — 126 means it exec'd the directory" \
+      "stderr: $(head -1 "$TMP/err")"
+fi
+
+# The three files carry the same contract and must be bumped together. A sibling
+# left behind is the drift the marker exists to surface, and it would surface it
+# in the fleet rather than here.
+TPL_V=$(head -10 "$TEMPLATE" | grep -m1 '^# shim-contract:' | awk '{print $3}')
+GATE_V=$(head -10 "$ROOT/reference-implementations/project-hooks/openspec-change-gate.shim.sh" \
+         | grep -m1 '^# shim-contract:' | awk '{print $3}')
+CORE_V=$(head -10 "$ROOT/.claude/hooks/openspec-change-gate.sh" \
+         | grep -m1 '^# shim-contract:' | awk '{print $3}')
+if [ -n "$TPL_V" ] && [ "$TPL_V" = "$GATE_V" ] && [ "$TPL_V" = "$CORE_V" ]; then
+  ok "template, gate shim and core's self-hosting binder all carry $TPL_V"
+else
+  bad "template, gate shim and core's self-hosting binder all carry one contract version" \
+      "template=$TPL_V  gate-shim=$GATE_V  core-binder=$CORE_V"
 fi
 
 echo

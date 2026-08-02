@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Hook — OpenSpec Change Gate (PreToolUse), core's own copy.
 #
-# shim-contract: 1.0.0
+# shim-contract: 1.1.0
 # Profile: self-hosting.
 #
 # The marker binds BOTH profiles — it, the behaviour-free rule and
@@ -89,7 +89,16 @@ GATE="${OPENSPEC_GATE:-$ROOT/reference-implementations/openspec-change-gate/open
 # tooling is absent takes every edit in the session with it, and trains people
 # to disable the hook permanently. CI fails CLOSED on the same condition, which
 # is where an unanswerable question should be treated as a defect.
-if [ ! -x "$GATE" ]; then
+#
+# REGULAR FILE, not merely `-x`. `-x` on a directory tests the search bit, which
+# every ordinary directory has, so a directory at $GATE — most easily an
+# OPENSPEC_GATE pointing at one — was called executable and `exec`ed, and bash
+# exited 126 with its own "is a directory" message instead of the warning below
+# (shim-contract 1.1.0, Stage-2 finding 6). The published-resolution shims answer
+# this with the invalid-override report and exit 1; this profile has one
+# candidate rather than two, so the usable-path branch is where it belongs.
+# Exempting core's own binder would be finding 12 repeated.
+if [ ! -f "$GATE" ] || [ ! -x "$GATE" ]; then
   printf 'openspec-gate: WARNING — gate not found at %s; this edit is not gated.\n' "$GATE" >&2
   exit 0
 fi

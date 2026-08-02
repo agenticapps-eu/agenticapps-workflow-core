@@ -202,30 +202,76 @@ else
 fi
 
 echo
+echo "=== 7.6a  the fleet is DECLARED, and --fleet makes propagation reproducible ==="
+# Stage-2 remediation follow-up. A contract bump must be "verified rather than
+# assumed to have been reached" in every binder — but the verification was a
+# scratchpad script and a list of paths typed into this file, so nothing in the
+# repository could re-run it, and a repo missing from the list would have been
+# indistinguishable from a repo that passed.
+#
+# This is finding 7 one level up: an expected set discovered from what you found
+# cannot detect a missing member. ARTIFACTS and SHIMMED-HOOKS exist for that
+# reason; FLEET is the same answer for the repositories.
+FDECL="$ROOT/reference-implementations/project-hooks/FLEET"
+if [ -f "$FDECL" ]; then
+  ok "a fleet declaration exists at $(basename "$FDECL")"
+  for r in agenticapps-dashboard agenticapps-roadmap agents-task-viewer \
+           callbot cparx fbc-platform fx-signal-agent; do
+    grep -qx "$r" "$FDECL" && ok "…and declares $r" || bad "…and declares $r"
+  done
+else
+  bad "a fleet declaration exists" "no file at $FDECL"
+fi
+
+# --fleet resolves the declared repositories under a root and reports any that
+# are ABSENT. Absent must be a finding, not silence: silence is what makes a
+# missing repo look like a passing one.
+FROOT="$TMP/fleetroot"
+mkdir -p "$FROOT/famA" "$FROOT/famB"
+P=$(mkproject fleet-present "$TEMPLATE_VERSION")
+mv "$P" "$FROOT/famA/agenticapps-dashboard"
+OUT=$("$TOOL" --fleet "$FROOT" 2>&1)
+has "$OUT" "agenticapps-dashboard" "--fleet reports a declared repository it found"
+has_re "$OUT" 'FLEET.*(callbot|cparx).*(not found|absent|missing)' \
+  "--fleet reports a declared repository that is ABSENT under the root"
+
+# A declaration that is missing entirely must refuse, for the same reason the
+# shimmed-hook declaration does: scanning an empty set reports everything green.
+OUT=$(FLEET_DECL="$TMP/no-such-fleet-file" "$TOOL" --fleet "$FROOT" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "--fleet refuses when the declaration is missing (exit $rc)" \
+                || bad "--fleet refuses when the declaration is missing" "exited 0"
+
+echo
 echo "=== 2.7d  the baseline: the real seven start green on this vector ==="
 # Verifies the "no project sets env today" claim rather than restating it.
 # Scoped honestly: this asserts the settings.json vector across the real repos
 # only when they are present on this machine.
+# The repositories come from FLEET, not from a list typed here. This block used
+# to hardcode seven absolute paths — a third enumeration of a set that ARTIFACTS
+# and SHIMMED-HOOKS had already been created to stop duplicating, and one that
+# would have gone on reporting the baseline green if a repository were quietly
+# dropped from it.
+SRCROOT="${FLEET_SEARCH_ROOT:-$(cd "$ROOT/../.." 2>/dev/null && pwd)}"
+DECLARED=0
 REAL=()
-for d in /Users/donald/Sourcecode/agenticapps/agenticapps-dashboard \
-         /Users/donald/Sourcecode/agenticapps/agenticapps-roadmap \
-         /Users/donald/Sourcecode/agenticapps/agents-task-viewer \
-         /Users/donald/Sourcecode/factiv/callbot \
-         /Users/donald/Sourcecode/factiv/cparx \
-         /Users/donald/Sourcecode/factiv/fbc-platform \
-         /Users/donald/Sourcecode/factiv/fx-signal-agent; do
-  [ -d "$d/.claude" ] && REAL+=("$d")
-done
-if [ "${#REAL[@]}" -eq 7 ]; then
+while IFS= read -r line; do
+  line="${line%%#*}"
+  line="$(printf '%s' "$line" | tr -d '[:space:]')"
+  [ -n "$line" ] || continue
+  DECLARED=$((DECLARED + 1))
+  d=$(find "$SRCROOT" -maxdepth 2 -type d -name "$line" 2>/dev/null | head -1)
+  [ -n "$d" ] && [ -d "$d/.claude" ] && REAL+=("$d")
+done < "$FDECL"
+if [ "$DECLARED" -gt 0 ] && [ "${#REAL[@]}" -eq "$DECLARED" ]; then
   OUT=$("$TOOL" --overrides-only "${REAL[@]}" 2>&1)
   if printf '%s' "$OUT" | grep -q 'OVERRIDE-VECTOR'; then
     bad "the seven real projects set no override today" \
         "found: $(printf '%s' "$OUT" | grep 'OVERRIDE-VECTOR' | head -3)"
   else
-    ok "the seven real projects set no override today (all known vectors)"
+    ok "the $DECLARED declared repositories set no override today (all known vectors)"
   fi
 else
-  echo "  SKIP  baseline across the real seven — found ${#REAL[@]} of 7 on this machine"
+  echo "  SKIP  baseline across the declared fleet — found ${#REAL[@]} of $DECLARED on this machine"
 fi
 
 echo
