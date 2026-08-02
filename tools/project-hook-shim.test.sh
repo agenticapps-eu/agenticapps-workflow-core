@@ -188,13 +188,22 @@ done
 
 rm -f "$BIN/database-sentinel.sh"
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+h0=$(( $(date +%s) / 3600 ))
 n=0
 for i in 1 2 3; do
   run_shim "$SHIM" "$PAYLOAD" || true
   [ -s "$TMP/err" ] && n=$((n + 1))
 done
-[ "$n" -eq 1 ] && ok "unresolvable-implementation report is rate limited (1/3)" \
-              || bad "unresolvable-implementation report is rate limited (1/3)" "reported $n/3"
+h1=$(( $(date +%s) / 3600 ))
+if [ "$h0" -ne "$h1" ]; then
+  # The policy is once per hour; a run straddling the boundary legitimately
+  # reports twice. Say so rather than failing or silently accepting 2.
+  echo "  SKIP  unresolvable-implementation report is rate limited — run crossed an hour boundary"
+elif [ "$n" -eq 1 ]; then
+  ok "unresolvable-implementation report is rate limited (1/3)"
+else
+  bad "unresolvable-implementation report is rate limited (1/3)" "reported $n/3"
+fi
 
 echo
 echo "=== 2.8  behaviour-free: stdin reaches the implementation untouched ==="

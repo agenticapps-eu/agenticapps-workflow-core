@@ -32,6 +32,51 @@ There is **no third `<repo>/bin/` candidate.** A repo-local copy is the drift
 this directory exists to remove; keeping it as a fallback keeps the drift and
 hides it, because the fallback only runs on the machines nobody is looking at.
 
+### The reporting channel, verified per event class (task 2.10)
+
+The `PreToolUse` exit-1 convention must not be reused for `PostToolUse`
+untested — the two events do not share exit semantics, and this change wrote
+that requirement into its own delta. So it was checked rather than assumed.
+
+**Verified against the host's hook documentation on 2026-08-02.** Two rules
+that are easy to conflate, kept apart here deliberately:
+
+| | `PreToolUse` | `PostToolUse` |
+|---|---|---|
+| exit `0` | proceed; stdout parsed for JSON | proceed; stdout parsed for JSON |
+| exit `2` | **blocks** the tool call; stderr → **Claude** | cannot block (the tool already ran); stderr → **Claude** |
+| any other non-zero | non-blocking error; transcript shows a `<hook> hook error` notice plus **the first line of stderr**; full stderr → debug log | same general rule | 
+
+The exit-2 row is a per-event table. The any-other-non-zero row is a single
+general rule the docs state once, qualified as applying "**for most** hook
+events" — that qualifier is why the empirical check below is not redundant.
+
+**Consequences, which the shims implement:**
+
+1. **Exit 1, never 2, on both event classes.** Exit 2 from `PreToolUse` blocks,
+   which is the one thing an unresolvable shim must not do. Exit 2 from
+   `PostToolUse` cannot block but routes the message to Claude rather than to
+   the operator's transcript — the wrong audience for a provisioning fault.
+2. **The first line carries the whole message.** Only the first stderr line
+   surfaces in the transcript; the rest reaches the debug log. Every report in
+   `shim-template.sh` is written that way.
+3. **`normalize-claude-md` uses the same exit code as the `PreToolUse` shims —
+   but by verification, not by inheritance.** The general rule is what makes it
+   correct, not the `PreToolUse` convention.
+
+**Still outstanding: the empirical leg (task 2.3a).** The docs say the notice
+reaches the operator; nobody on this fleet has watched it happen. The whole
+fail-open trade rests on the operator actually seeing the message, and the
+"for most hook events" qualifier leaves `PostToolUse` unconfirmed by the text
+alone. Until a live session is observed, describe `normalize-claude-md` as
+**failing open with its reporting channel established by documentation and not
+yet by observation** — not as warning anyone (task 2.10a).
+
+This cannot be verified from inside the session that writes the hook: hooks
+load at session start, so a newly registered probe does not fire until the next
+one. That is the same inherent self-gating property §18 discloses for the
+change gate, and it is why this task is carried rather than claimed.
+
 ### Unresolvable → fail open, and report
 
 If neither candidate resolves to an executable file, the shim **allows the tool
@@ -51,6 +96,41 @@ the installer verifies the implementations are present and executable, and a
 per-machine provisioning check reports the machine's state. Absence becomes a
 provisioning failure — caught once, visibly — rather than a per-tool-call
 outage.
+
+### The report's repetition policy (tasks 2.11, 2.11a, 2.11b, 2.11c)
+
+An unresolvable shim fires on **every** `Bash`, `Edit`, `Write` and `MultiEdit`,
+indefinitely, for as long as the machine stays unprovisioned. An unstated
+policy therefore defaults to the noisiest one — a hook-error notice on
+essentially every tool call — which is the same alarm fatigue this change uses
+to reject a fail-closed pre-commit wrapper, pointed at the transcript instead.
+
+**Policy: once per hour, per hook, per machine — and per-invocation for the
+override fault.** The two conditions are governed separately.
+
+| Condition | Repetition | Why |
+|---|---|---|
+| implementation unresolvable | once per hour | persistent, benign, self-correcting once the installer runs |
+| override set but unusable | **every invocation** | it is the kill switch — see below |
+
+**Why an interval and not a session (task 2.11a).** Once-per-session is the
+policy you would want. It is unreachable: the session identifier exists only in
+the `session_id` field of the stdin payload, the host exports no equivalent
+environment variable, and a shim that reads stdin to find it has consumed the
+implementation's input. The remaining options are per-interval and
+per-invocation. An hour approximates a session closely enough to serve, while
+guaranteeing that a long session sees the condition more than once. Recorded
+here rather than the option being dropped silently.
+
+**The marker stays inside the carve-out (task 2.11b).** One path —
+`${XDG_STATE_HOME:-$HOME/.local/state}/agenticapps/<hook>.unresolved-report` —
+read and written, holding an integer hour. No tool payload is inspected.
+
+**Why the override fault is exempt (task 2.11c).** An unusable override is the
+only signal that a hook has been deliberately switched off on an otherwise
+*healthy* machine. A single policy covering both conditions would mean a rate
+limit adopted to quiet the benign one also silences the kill switch. They are
+different signals with different urgency, so they get different policies.
 
 ### Behaviour-free — a closed list
 
