@@ -1,129 +1,101 @@
 # Session Handoff — 2026-08-02 (night)
 
-## Next session: run the §07 Stage-2 independent code review
+## Accomplished
 
-That is task **5.8**, the only open task of 114. This handoff exists to point you
-at the work, not to tell you what to think of it.
+- **Discharged task 7.6 — the last open box on `shim-project-hooks`.** The
+  operator decided *fix and propagate*, and *record the empty-override
+  behaviour as intended*. `tasks.md` now has **0** unchecked items.
+- **shim-contract 1.0.0 → 1.1.0.** An override is honoured only when it names an
+  executable **regular file**. Branch `fix/shim-contract-1.1.0`, core PR
+  **#63**, plus seven fleet PRs.
+- **Suites 155 → 177**, all green. Gate conformance 355/355, harness reporting
+  36 passed / 5 skipped, `openspec validate --all` 5/5, gate `--ci` OK.
 
-> **Read the diff, not this file.** Everything below the scope section is the
-> *author's* account of their own change. It names what was done and why the
-> author believed it was right, which is exactly the reasoning an independent
-> review is supposed to form on its own. If you find yourself agreeing with a
-> decision because this document explained it, you have not reviewed it.
+## What the fix actually was
 
-### Scope
+`[ -x "$OVERRIDE" ]` tests the search bit, which every ordinary directory has,
+so a directory override was `exec`'d: bash exited **126** with its own "is a
+directory" message, the invalid-override report never fired, and the exit code
+was not the 1 the contract states. Now `[ -f ] && [ -x ]` in all three binders.
 
-Nine open PRs, none merged. **Review `agenticapps-workflow-core` PR #61.** The
-other eight are propagation of files core owns — check they match core and that
-each repo's `settings.json` agrees with its `.claude/hooks/` contents, then move
-on.
+**Three corrections to what the deferral said**, all recorded in `CODE-REVIEW.md`:
 
-```
-core          https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/61
-scaffolder    https://github.com/agenticapps-eu/claude-workflow/pull/112
-dashboard 91 · roadmap 11 · agents-task-viewer 16 · callbot 98
-cparx 119 · fbc-platform 103 · fx-signal-agent 118
-```
+1. **21 binders, not eight.** "Eight files" counted `openspec-change-gate`
+   binders only (seven projects + core), but the fix is in the *template*, which
+   also renders `database-sentinel` and `normalize-claude-md`. The re-render
+   reached **20 project shims across seven repositories** plus core's
+   self-hosting binder. Still seven fleet PRs; wider diff in each.
+2. **Core's own binder had the same defect** and the deferral did not name it.
+   `.claude/hooks/openspec-change-gate.sh` tested `-x` on `$OPENSPEC_GATE` too.
+   Fixed per its own profile — it resolves one candidate, not two, so its answer
+   is warn-name-and-fail-open rather than the shim's exit 1. Exempting the
+   repository that defines the contract is finding 12 exactly.
+3. **The gate shim had no test coverage of any kind.** It is a hand-maintained
+   sibling of the template, so every existing assertion reached the template
+   only — which is precisely why finding 6 sat in both files and was caught in
+   neither. It now has the full override matrix plus both resolution candidates.
 
-Local branch: `feat/shim-project-hooks` (15 commits, pushed).
+## Decisions
 
-### What to review it against
+- **Empty override recorded, not changed.** `FOO=` still falls through, because
+  it is how an operator says "no override", not how they name a broken one. So
+  "set" in the requirement reads as *set to a non-empty value*. The requirement
+  text was **not** amended — the operator chose recording over a spec edit — so
+  the README and an assertion in `project-hook-shim.test.sh` are where the
+  reading lives. **If a future reviewer reads "set" literally, this is the
+  tension to point them at.**
+- The directory fixture in the suite is deliberately **not** named
+  `override-dir`. It was, and the "reports the override, naming the path"
+  assertion passed against the broken shim — bash's own `.../override-dir: is a
+  directory` contains both the word and the path.
+- Per-project verification is behavioural, not just byte-identity: each
+  installed shim is driven with its override pointed at a directory. The check
+  fails 3/3 at exit 126 against a 1.0.0 repo, so it discriminates.
 
-- `openspec/changes/shim-project-hooks/specs/project-hook-binding/spec.md` — the
-  delta this change is supposed to satisfy. **This is the contract; the code
-  either meets it or does not.**
-- `reference-implementations/project-hooks/README.md` — the shim contract as
-  built. Where it and the delta disagree, the delta wins.
-- `proposal.md`, `design.md`, `tasks.md`, `DELETION-RECORD.md` — same change dir.
-- spec §02, §07, §17, §18 under `spec/`.
+## Files modified
 
-### Worth pointing a reviewer at, without saying what to conclude
+- `reference-implementations/project-hooks/shim-template.sh` — `-f` guard, 1.1.0
+- `reference-implementations/project-hooks/openspec-change-gate.shim.sh` — same
+- `.claude/hooks/openspec-change-gate.sh` — same, self-hosting profile
+- `reference-implementations/project-hooks/README.md` — contract revisions
+  table, the binders named per profile, the empty-override decision
+- `tools/project-hook-shim.test.sh` — +22 assertions
+- `openspec/changes/shim-project-hooks/{tasks.md,CODE-REVIEW.md}` — 7.6 closed
 
-- The shims are `exec` wrappers on a broad matcher (`Bash|Edit|Write|MultiEdit`).
-  Blast radius and failure posture are the load-bearing questions.
-- `install-project-hooks.sh` writes a manifest and takes a lock. Crash and
-  concurrency behaviour are asserted in
-  `tools/project-hook-provisioning.test.sh` — check the assertions actually
-  pin what they claim.
-- Five hooks were deleted. `DELETION-RECORD.md` argues each one; the argument is
-  the thing to audit, not the outcome.
-- Two test suites were *moved* rather than deleted
-  (`tools/normalize-claude-md.test.sh`). Check nothing was lost in the move.
+## Next session: start here
 
-### Known-open, so you do not spend time rediscovering it
+**Merge the eight PRs, core first** (the fleet shims are byte-compared against
+core's template, so landing a fleet PR before core would make main disagree with
+its own authority for as long as the gap lasts):
 
-- **The fail-open report's channel is unverified and the evidence is negative.**
-  A live probe confirmed the shims run and allow, but the exit-1 report reached
-  neither the agent nor `stream-json`, while an exit-2 block did. See the README
-  section "The empirical leg (task 2.3a)".
-- `fx-signal-agent` PR #118 has two red checks, `pnpm-audit` and `gitleaks`,
-  both already red on `main` since 2026-07-28.
-- Merging was attempted and **blocked by the permission classifier**. Nothing is
-  merged. `gh pr merge --squash --delete-branch` per repo when authorised.
+| repo | PR |
+|---|---|
+| agenticapps-workflow-core | **#63** |
+| agenticapps-dashboard | #94 |
+| agenticapps-roadmap | #12 |
+| agents-task-viewer | #17 |
+| callbot | #99 |
+| cparx | #120 |
+| fbc-platform | #104 |
+| fx-signal-agent | #119 |
 
----
-
-## Author's account — read AFTER forming your own view
-
-### What was built
-
-113/114 tasks. Nine repos. The seven projects went from eight vendored
-`.claude/hooks/` scripts each to three (two in `agents-task-viewer`, documented
-opt-out), byte-identical everywhere. Executable hook logic per project fell
-351 → 102 lines; fleet total 4,396 → 1,944, net −1,877 after +575 to core.
-
-Core gained the two implementations, the shim template, the migrated gate shim,
-`install-project-hooks.sh`, `provisioning-check.sh`,
-`project-hook-conformance.sh`, five test suites (**128 assertions green**),
-`DELETION-RECORD.md` and ADR-0029.
-
-Green: `openspec validate --all` 5/5 · gate `--ci` OK · gate conformance 71/71 ·
-`check-snapshot-parity.sh` PASS · `migrations/run-tests.sh` 206 pass.
-
-### Decisions taken by the human, not by the author
-
-- `flock` (task 3.2b-ii) not implemented as named — absent on macOS 26.6. The
-  property it protects is implemented with atomic `mkdir` + dead-pid breaker.
-- Cross-family rollout approved, all seven repos including `factiv/`.
-
-### Places execution contradicted the plan
-
-1. The `migrations/` block was in **all seven** copies and live in **six**, not
-   `callbot` alone.
-2. `session-bootstrap` is **not** the only reader of `skill-router-*.jsonl`; the
-   dashboard globs `*.jsonl`. The conclusion survived for a different reason —
-   its schema requires a `hook` field the producer never writes.
-3. Three un-tasked `claude-workflow` sites, one of which
-   (`check-snapshot-parity.sh`) *required* `phase-sentinel` — the drift guard
-   demanding the drift.
-4. **The shims dropped `argv`**, which would have made `normalize-claude-md` a
-   silent no-op fleet-wide. PR #59's defect one file over.
-5. **4b.7's residual is discharged, not carried** — `OPENSPEC_GATE_SELF` ignored
-   since gate 1.5.0, companion change archived 2026-08-01.
-6. 5.5 measured **−1,877**, not the estimated −3,090.
-
-### Two regressions the author caused and CI caught
-
-- **`agents-task-viewer`'s build broke.** Its `bin/openspec-gate-ci.sh` requires
-  a vendored gate and fails closed. That file had two consumers — the shim's
-  third candidate and CI — and the task list conflated them. File restored,
-  shim candidate still removed.
-- **`claude-workflow`'s CI was green on main and the author broke it.** Its
-  migration suite drove `normalize-claude-md` goldens against the new shim.
-  Corpus moved to core; `phase-sentinel` tests removed with the hook.
-
-## Also done this session
-
-`~/.claude/CLAUDE.md` corrected: the §18 gate blocks on validation only, and
-review evidence is reported, never enforced.
+Then **archive the change** — `/opsx:archive shim-project-hooks`. It is the only
+open change and every box is checked.
 
 ## Open questions
 
-- **`agenticapps-dashboard` needs untangling.** Another session was working there
-  concurrently; creating `chore/shim-project-hooks` moved its HEAD, and that
-  session's two commits (18:36, 18:37, the `close-readiness-spec-gaps` Stage-2
-  triage) landed on that branch. `feat/close-readiness-spec-gaps` still points at
-  `c6bce4f`. PR #91 was cherry-picked clean via a worktree, so it is unaffected —
-  but that branch needs sorting before that change ships.
-- The convergence rule is still unwritten — fourth session.
-- Every machine is unprovisioned until it runs `install-project-hooks.sh`.
+- **No third-party review ran on this work.** As on #62, that is a discipline
+  question, not a gate one: since gate 2.0.0 nothing blocks on reviewer
+  evidence. Consider `run-plan-review.sh` before merging #63.
+- Six repos still have local `chore/shim-project-hooks*` branches, 3–4 commits
+  ahead of `origin/main` and **content-identical** to it — the pre-squash
+  originals. Safe to delete; not deleted, since they are not mine to discard.
+- **Every machine is still unprovisioned until it runs
+  `install-project-hooks.sh`** — unchanged, and now the shims on main expect a
+  newer contract than any older published implementation knows about. Nothing
+  prompts anyone to notice.
+- `agenticapps-dashboard`'s `feat/close-readiness-spec-gaps` still carries the
+  other session's two stray commits. Untouched this session — #94 branches from
+  `origin/main` and is unaffected.
+- The fail-open report's channel for `PostToolUse` remains unverified.
+- The convergence rule is still unwritten — sixth session.
