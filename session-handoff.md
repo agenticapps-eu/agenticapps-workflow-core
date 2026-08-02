@@ -8,8 +8,10 @@
 - **shim-contract 1.0.0 → 1.1.0.** An override is honoured only when it names an
   executable **regular file**. Branch `fix/shim-contract-1.1.0`, core PR
   **#63**, plus seven fleet PRs.
-- **Suites 155 → 177**, all green. Gate conformance 355/355, harness reporting
+- **Suites 155 → 190**, all green. Gate conformance 355/355, harness reporting
   36 passed / 5 skipped, `openspec validate --all` 5/5, gate `--ci` OK.
+- **CodeRabbit reviewed #63 and posted four findings. Three are fixed** in
+  `8c5c749`, one is declined on the thread — see Decisions.
 
 ## What the fix actually was
 
@@ -51,6 +53,18 @@ was not the 1 the contract states. Now `[ -f ] && [ -x ]` in all three binders.
 - Per-project verification is behavioural, not just byte-identity: each
   installed shim is driven with its override pointed at a directory. The check
   fails 3/3 at exit 126 against a 1.0.0 repo, so it discriminates.
+- **CodeRabbit's "make the empty-override exception normative" is DECLINED**,
+  because it asks for the option you explicitly did not choose. Recorded on the
+  thread rather than silently skipped. **This is now the second independent
+  reviewer pointing at the same tension** — Stage-2 finding 6 was the first. If
+  it is ever to be settled by amending the requirement, that is a fresh
+  decision, and the case for it is stronger than it was this morning.
+- **`--fleet` scores the working tree**, which is a real limitation discovered
+  the hard way: a concurrent session switched `agenticapps-dashboard`'s checkout
+  to `chore/retire-v1-surfaces-review-fixes` mid-rollout, and the next run
+  reported it stale while the propagated shims sat safely on the pushed branch.
+  The durable check is a byte-comparison against the pushed refs — that is what
+  the 20/20 figure below rests on, not on anyone's checkout.
 
 ## Files modified
 
@@ -59,7 +73,13 @@ was not the 1 the contract states. Now `[ -f ] && [ -x ]` in all three binders.
 - `.claude/hooks/openspec-change-gate.sh` — same, self-hosting profile
 - `reference-implementations/project-hooks/README.md` — contract revisions
   table, the binders named per profile, the empty-override decision
-- `tools/project-hook-shim.test.sh` — +22 assertions
+- `reference-implementations/project-hooks/FLEET` — **new.** The seven consuming
+  repositories, declared by name. Removes a third enumeration rather than adding
+  one: the test file's hardcoded absolute paths are gone
+- `tools/project-hook-conformance.sh` — `--fleet <root>` resolves the declaration
+  and reports a declared repo that resolves nowhere as a finding
+- `tools/project-hook-shim.test.sh` — +24 assertions
+- `tools/project-hook-conformance.test.sh` — +11, fleet declaration and `--fleet`
 - `openspec/changes/shim-project-hooks/{tasks.md,CODE-REVIEW.md}` — 7.6 closed
 
 ## Next session: start here
