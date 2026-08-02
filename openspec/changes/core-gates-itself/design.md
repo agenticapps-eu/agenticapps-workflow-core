@@ -97,24 +97,72 @@ Core therefore gets its own short `pre-commit`, written by
 that is invisible in the repository and absent in CI, and it would silently
 change the gate used by any other tool in the session that honours the variable.
 
-### Decision 3 — The commit floor ships as an installer, not a checked-in file
+### Decision 3 — The commit hook ships as an installer that resolves its target
 
-`.git/hooks/` cannot be populated by checkout. The installer is idempotent, and
-refuses rather than overwrites when it finds a `pre-commit` hook it did not
-write — clobbering a developer's existing hook to install a gate is a poor
-trade, and a refusal is recoverable where an overwrite is not.
+The hooks directory cannot be populated by checkout, so an installer is needed.
+Two things the first revision of this design got wrong, both caught in review:
 
-*Alternative considered — set `core.hooksPath` to a tracked directory.* This
-would deliver the hook by checkout and needs no installer. Rejected because
-`core.hooksPath` is repository-global: it redirects *every* hook, silently
-disabling any other `.git/hooks/` entry a developer relies on. That is a large
-side effect for one gate, and it is invisible from the working tree.
+**It must not write a literal `.git/hooks/` path.** In a linked git worktree
+`.git` is a *file*, not a directory, so that path does not exist. Verified on
+this machine against `agenticapps-dashboard-add-agent-board`: `.git` is ASCII
+text, and `git rev-parse --git-path hooks` resolves to
+`…/agenticapps-dashboard/.git/hooks` — the main checkout's directory. The
+installer therefore resolves the destination with `git rev-parse --git-path
+hooks`, and reports that a hook installed from a worktree is shared with the
+main checkout.
+
+**It must detect `core.hooksPath`.** If that setting is configured, git ignores
+the default hooks directory entirely, so an installer blind to it writes a hook
+that can never fire — worse than not installing, because it looks installed. The
+installer reports the conflict and exits non-zero.
+
+*Alternative considered — set `core.hooksPath` to a tracked directory ourselves.*
+Delivers the hook by checkout, needs no installer. Rejected because the setting
+is repository-global: it redirects *every* hook, silently disabling anything else
+a developer relies on. A large side effect for one gate, and invisible from the
+working tree.
 
 *Consequence, disclosed.* A clone where the installer has not run is not gated
-at commit time. This is the same limitation every repo in the fleet has, and it
-is exactly why §18 requires the CI floor as well.
+at commit time.
 
-### Decision 4 — A new capability, not an amendment
+### Decision 4 — Ownership by marker, not by byte equality
+
+Review split on this. codex asked for exact-byte or hash verification of
+installer ownership; opencode asked for a defined upgrade path when a hook core
+wrote has since gone stale. **Those two cannot both be satisfied by byte
+equality**: under it, a hook core wrote and later revised reads as foreign and is
+refused permanently, so the gate could never be advanced. That is the opposite
+of the intended behaviour, so this design takes the marker and makes its
+semantics explicit rather than leaving them implied — no hook, current hook,
+stale marked hook, and unmarked hook each get a defined outcome.
+
+*Accepted limit, recorded rather than implied.* A marker is an ownership claim,
+not an integrity proof. A hand-edited hook carrying the marker will be treated as
+core's and updated in place, and an adversarially marked hook likewise. For a
+repository-local convenience script whose whole purpose is to install a
+locally-bypassable `--no-verify`-able hook, that is proportionate; asserting
+otherwise would be security theatre.
+
+### Decision 5 — The scorer is bounded, because it scores itself into a corner
+
+The headline claim is that core proves the gate conformant. The harness that
+does the proving is a working-tree file executed from the same checkout as the
+gate it scores, so a change that guts the harness — deleting rows, inverting
+expected exit codes — yields a green job while certifying a drifting gate. The
+"named target is missing" case only covers zero-of-zero; it says nothing about a
+row count quietly falling from 71 to 3.
+
+The CI job therefore asserts a **minimum scored-row count** as a literal, and
+fails below it. A floor may be raised as rows are added; lowering it requires an
+explicit recorded decision, which is the point — the number is a tripwire that
+has to be edited deliberately and shows up in the diff.
+
+*Alternative considered — pin a digest of the harness.* Stronger, but it makes
+every legitimate harness edit a two-step dance and turns an honest row addition
+into a merge conflict. The row-count floor catches the failure mode that
+actually matters (silent weakening) at a fraction of the friction.
+
+### Decision 6 — A new capability, not an amendment
 
 `change-gate-enforcement` has six requirements and all six are parsing and
 verdict semantics: what counts as a reviewer, what the trailer grammar is, how a
@@ -148,7 +196,40 @@ spec with one crisp purpose a second, unrelated one.
 - **Adding a CI job to a repo that had almost none could surprise open work** →
   The job runs `openspec validate --all` and the harness, both of which pass on
   `main` today. Its first run is on this change's own pull request, where it is
-  observable before it can block anything else.
+  observable before it can affect anything else.
+
+- **CI is called a floor but does not block a merge** → Verified: core's `main`
+  has no branch protection and no rulesets, so a failing check is advisory. The
+  spec delta is worded to match reality — the job runs and reports — and the
+  absent floor is recorded as a §09 delta. Making the check required is a
+  repository setting, deliberately left outside this change.
+
+- **A missing `openspec` CLI blocks every edit** → Verified in the gate source:
+  the CLI-absent branch does `return 2`. Because core almost always has a change
+  open, a contributor without the CLI is hard-blocked locally. This is inherited
+  §18 behaviour and is preserved deliberately, not introduced — but the gate's
+  fail-open reputation makes it surprising, so it is now an explicit scenario
+  rather than a footnote.
+
+- **The `PreToolUse` hook is a new code-execution surface in core** → After this
+  change, editing a file executes a script from the working tree, so checking
+  out an untrusted branch and editing anything runs that branch's shell. Already
+  true of all four hosts; new to core. The trust boundary is the checkout, and
+  it is stated rather than left implicit. It also argues for landing the CI job
+  first, which the migration plan already does.
+
+- **The hook is not on every edit path** → Its matcher is
+  `Edit|Write|MultiEdit|NotebookEdit`, so `sed -i`, `tee` and redirects through
+  `Bash` bypass it entirely. Disclosed as a scenario so a later reader does not
+  mistake three interposition points for complete coverage.
+
+- **The CI job executes working-tree scripts after an unpinned global install** →
+  The job declares read-only `contents` permission, disables checkout credential
+  persistence, and pins the `openspec` CLI to the version core validated against
+  (1.6.0), so an upstream release cannot change the verdict for an unchanged
+  revision. Core's *published template* carries the same three weaknesses; no
+  host pins it, so it is safely fixable, but it is left to a follow-up because
+  editing it changes what every host scaffolds.
 
 ## Migration Plan
 
