@@ -157,9 +157,25 @@ repository the evidence cites.
 *Alternative — relocate storage outside `.planning/` and keep the feature.*
 Preserves session-start context warm-up and keeps the existing bats tests
 meaningful. Rejected: the logs are gitignored in every repo and tracked in
-none, so nothing durable is being preserved; the only consumer of the log is
-the other hook; and relocating is more work than deleting for a feature whose
-whole output is ephemeral and local.
+none, so nothing durable is being preserved; and relocating is more work than
+deleting for a feature whose whole output is ephemeral and local.
+
+**"The only consumer of the log is the other hook" was part of that rejection and
+is withdrawn until it is shown.** Round-8 opencode identified it as exactly the
+inference this change indicts three times over — `design-shotgun-gate`,
+`database-sentinel`'s middle column, and the `meta-observer` misattribution above
+— a consumer identified by name proximity rather than by a search. It is also the
+claim Decision 11's own transitive-consumer clause exists to require evidence
+for: "anything that invokes the hook, reads what it writes, or changes behaviour
+if it stops running." Applying that clause to every hook except the one whose
+deletion this decision argues is the exemption pattern Decision 9 rejects.
+
+The claim is therefore **pending**, and task 5.0c is what discharges it: the
+fleet-wide search for readers of `skill-router-*.jsonl` is run and cited, not
+implied. The deletion does not depend on the outcome — the hooks write into a
+frozen directory and that alone justifies it — but the *rejection of relocation*
+does, because a second consumer would mean deleting the producer breaks something
+that is not being deleted with it.
 
 *Alternative — keep in place and delimit on read.* Rejected: it closes the
 injection path but leaves both hooks writing into a folder that is supposed to
@@ -235,6 +251,22 @@ non-zero code is a *non-blocking* error whose first stderr line is shown. That
 gives exactly the primitive this design assumed existed — allow the call, tell
 the operator — and it is now specified rather than left to a stderr write whose
 visibility nobody had checked.
+
+**That finding covers `PreToolUse` only, and this decision's heading claims both
+shims.** Round-8 opencode found the gap: the delta requires a shim's warning
+channel to be verified against the host docs for *its own event class* before the
+shim is written, and `normalize-claude-md` is `PostToolUse`, whose exit semantics
+differ — exit 2 feeds stderr back to the model, other non-zero codes go to the
+operator, and there is no call left to block. Nothing here recorded that. So the
+change wrote the verification requirement and shipped a claim that violates it,
+in one revision.
+
+**Corrected:** "both shims fail open and warn" is true of `database-sentinel` and
+the change gate, both `PreToolUse`. For `normalize-claude-md` the posture is
+**fail open with the reporting channel unestablished** until task 2.10 records
+the verified `PostToolUse` behaviour. The distinction is not pedantic — it is the
+exact shape of the exit-0 defect this decision exists to fix, one event class
+over.
 
 ### Decision 5: `callbot`'s `database-sentinel` semantics are canonical — minus its dead clause
 
@@ -473,6 +505,37 @@ The general point: an unachievable guarantee is worse than a modest one, because
 it reads as stronger and is discovered only by whoever tries to implement it —
 or, if nobody checks, never.
 
+**Round 8 showed the achievable guarantee was still under-specified, in two
+ways.**
+
+*The interruption contract described two different algorithms.* "The manifest is
+either the pre-run version or the post-run version" is a manifest written **once
+per run**; "an artifact is renamed before the manifest row naming it" reads as a
+row **per artifact**. codex found both sentences in the same requirement. The
+algorithm is now written out — lock, read manifest, rename every artifact, then
+rewrite the manifest once, unlock — and the per-artifact ordering clause is
+satisfied by all of step 3 preceding step 4 rather than by interleaving.
+
+*And it covered a first install only.* Republishing over an artifact that already
+has a row leaves, on a crash, a **stale row rather than no row** — the artifact
+is at its new bytes and the manifest still attests the old ones. The previous
+text had no classification for that: "present but unattested" is wrong, because
+the row exists, and "clean" is wrong, because the digest does not match.
+
+That gap turned out to be the same one as codex's objection to the state table,
+approached from the other end. The three states were defined by **history** —
+"the installer has never run", "a publishing run completed" — which nothing on
+the machine records, and which classifies a completed-then-deleted or
+hand-edited install as *provisioned*: the precise condition the manifest check
+exists to detect, in the one place it could not be named.
+
+**Chosen:** define the states by what a check can **observe**, and add a fourth,
+**drifted** — bytes not matching a row, a row naming an absent file, or a present
+file with no row. The interrupted upgrade lands there, so does the tampered
+install, and the remedy for both is re-running the installer. Observational
+definitions are also what make the states computable at all; the earlier ones
+could only be asserted.
+
 ### Decision 13: The no-project-override rule moves from the shim to configuration validation
 
 Task 2.7b required a failing test proving the override is honoured "from the
@@ -485,11 +548,41 @@ and has no provenance to inspect.
 This is a requirement no test could fail, which is the same defect class as an
 unachievable guarantee: it reads as protection and delivers none.
 
-**Chosen:** keep the prohibition, move it to the only layer that can see
-provenance. A conformance check scans every project's settings for an `env` block
-defining any override variable and reports each occurrence against the
-repository. The value still takes effect at runtime — that is precisely why it
-must be visible in review rather than silently dropped.
+**Chosen:** keep the prohibition **as policy**, and move enforcement to the only
+layer that can see provenance — where it becomes detection rather than
+prevention. A conformance check scans every project for repository content that
+sets an override variable and reports each occurrence against the repository. The
+value still takes effect at runtime — that is precisely why it must be visible in
+review rather than silently dropped.
+
+**Round 8 found two things wrong with how that was written up.**
+
+*First, "a cloned repository must not be able to switch off the gate that governs
+it" survived into the delta as though the mechanism delivered it.* It does not:
+the override takes effect, and the check reports it afterwards. codex put it
+exactly right — detection is not prohibition. The sentence is struck. What
+remains is a policy (projects SHALL NOT set the variable) and a detection
+(violations are reported), with a live window between them that the delta now
+names instead of eliding.
+
+*Second, the scan covered one provenance vector out of several.* opencode noted
+that a repository can ship an `.envrc`, a bootstrap script, or setup instructions
+a human then runs, and the resulting environment is indistinguishable from an
+operator's own choice. The scan is broadened to those vectors — and, more
+importantly, it is now required to **report its own incompleteness**: a green
+result means *no known vector found*, never *no override is set*. A check that
+cannot be complete and says so is worth having; one that reads as complete is the
+same defect class as the unimplementable requirement it replaced.
+
+**And a third exposure was omitted entirely, on the other side of the same
+variable.** Both the kill-switch note and the invalid-override rule address an
+override pointing at a file that is *missing*. An override pointing at a file
+that **exists** is `exec`d — on every `Bash`, `Edit` and `Write` — with the
+operator's privileges. Combined with the provenance vectors above, that is
+repository-supplied code execution at the tool boundary, which is strictly worse
+than the hook being switched off and was nowhere in the coverage boundary. codex
+named it; it is now normative in the delta and belongs in the hook's documented
+boundary rather than only in a requirement.
 
 *Alternative — remove the override entirely*, as the reviewer also offered.
 Rejected: the override is what makes staged rollout and testing possible without
@@ -544,6 +637,110 @@ Higher-than-template counting as unrecognised rather than "newer, fine" is the
 non-obvious part: a project ahead of the tracked template is carrying something
 core cannot account for, which is drift in the direction nobody looks.
 
+### Decision 16: The fail-open report gets a repetition policy, chosen after checking what the host offers
+
+Round-8 opencode found a contradiction between two of this design's own
+arguments. Decision 14 rejects a fail-closed pre-commit wrapper because
+persistent unavoidable failure "trains people into `--no-verify`". Decision 4
+then adopts a posture that emits a non-blocking hook error on **every** `Bash`,
+`Edit` and `Write`, on every unprovisioned machine, indefinitely — the same
+conditioning pressure, applied to the transcript instead of the commit. No
+rate-limiting was specified, and none was rejected. That second half is the real
+finding: an unstated policy is not a considered one.
+
+The asymmetry the objection anticipates is real but only partial. A blocking
+pre-commit hook has a durable escape hatch that operators learn once and keep
+(`--no-verify` disables the floor permanently); a non-blocking notice has none,
+and ignoring it leaves the hook running. But "they will learn to ignore it" and
+"they will learn to suppress it" differ mainly in who performs the suppression,
+and the fleet-wide cost is the same: hook-error notices stop being read,
+including the ones that matter.
+
+**Chosen:** require the policy to be *stated*, name the three admissible values —
+per invocation, once per session, once per interval — and pick one at
+implementation after establishing what the host actually permits. Leaving it
+unstated is what the previous revision did, and an unstated policy silently
+defaults to the noisiest option.
+
+The obstacle is specific and is why this is not simply decided here. A
+per-session policy needs the session identifier, which the host delivers in the
+hook's **stdin payload** — the payload the shim must forward to its
+implementation intact. A shim that reads stdin to find the identifier has
+consumed the input its implementation needs, and re-supplying it is behaviour of
+exactly the kind the shim contract exists to forbid. So the choice is gated on a
+verification: if no session identifier is reachable without consuming stdin, the
+policy is per-interval (a dated marker) or per-invocation, and the reason is
+recorded rather than the option quietly dropped.
+
+Writing a marker at all is a carve-out from "behaviour-free". It is bounded — one
+marker path, read and written, never the tool payload — and it is stated as a
+carve-out so that it does not become a precedent for the payload inspection
+Decision 4 rules out.
+
+### Decision 17: Two shim profiles, because one contract cannot describe both bindings
+
+Round-8 codex found the contract asserting two things that cannot both hold:
+every shim resolves the shared install, and every shim is byte-identical to its
+siblings — while core deliberately resolves its own working tree, and does so for
+a reason this fleet documents in ADR-0028. One version marker was being asked to
+represent both bindings honestly.
+
+The change had half-answered this already, and that is the instructive part.
+Task 4b.10 recorded the applicability split correctly — 4b.1 does not apply to
+core, 4b.3 does not apply, 4b.6 does — and the delta's propagation requirement
+mentioned the inversion in passing. So the *tasks* knew, and the *normative text*
+did not. A split recorded only in the task list is a note; the rule it qualifies
+still reads as universal to anyone checking conformance against the delta.
+
+**Chosen:** two named profiles in the delta.
+
+- **published-resolution** — every project that consumes a shared hook: override,
+  then `~/.agenticapps/bin/<hook>.sh`.
+- **self-hosting** — the repository whose working tree is the authoritative
+  source: that file, directly.
+
+Each binder declares its profile; each requirement is evaluated against the
+declared profile; byte-identity is required within a profile and never across
+one. The marker, the behaviour-free rule and fail-open-and-report bind both,
+which is precisely what makes a single marker meaningful — it attests the clauses
+the two profiles share, and nothing else.
+
+At most one binder per hook is self-hosting. A second would be a second
+authority, which the capability's first requirement forbids, so the profile
+cannot be used to exempt a project from resolution by declaring itself special.
+
+*Alternative — exempt core by name.* Rejected: an exemption for one repository is
+the "rule with an unstated exemption for its own exemplar" that Decision 9
+rejects. A profile is a rule; an exception list is not.
+
+### Decision 18: What a missing gate loses is validation, not review
+
+Round-8 codex found this change stale against `change-gate-enforcement`. The
+delta and its prose repeatedly described a missing shim, or a typo'd override, as
+bypassing "§18's review requirement". The gate has no such requirement to bypass:
+it blocks on exactly one condition — `openspec validate --all` is not green —
+while the reviewer count, verdict grammar, independence and trailer are computed
+and **reported, never enforced**. Verified against
+`openspec/specs/change-gate-enforcement/spec.md` before correcting.
+
+So the loss on an unprovisioned machine is (1) validation enforcement, the only
+block there is, and (2) the *reporting* of review state, which was advisory
+before the gate went missing. Calling it lost review enforcement names a block
+that does not exist and passes over the one that does — which understates the
+change's own cost while sounding more alarming.
+
+**Chosen:** correct every site, and state the rule going forward: claims about
+what a missing, unresolvable or overridden gate costs are written against the
+blocking condition.
+
+Worth recording why this survived eight rounds. The phrasing was inherited from
+the era when the gate did block on the reviewer floor, and each revision edited
+the sentences *around* it. Nothing in a review of this change's internal
+coherence would surface it, because it is coherent — it is just describing a
+different gate than the one the fleet now ships. That is a distinct failure mode
+from the ones this change has been catching, and the only defence is checking
+prose against the current spec rather than against the previous revision.
+
 ### Refuted with evidence: the matchers are not escaped, our table is
 
 Round-8 opencode read the matcher column of the table above as `Bash\|Edit\|Write`
@@ -590,10 +787,25 @@ that found the two defects above.
 
 - **A shim is only as good as the install**, and both shims now fail open. A
   project on an unprovisioned machine loses `.env` and destructive-SQL matching
-  while appearing to have it. Mitigated by the stderr report on every
-  invocation, by installer verification, and by publishing before any project
-  copy is replaced — but not eliminated. This is the cost of Decision 4, and it
-  is smaller than the alternative only because Decision 7 is true.
+  while appearing to have it. Mitigated by the report on each invocation (subject
+  to Decision 16's repetition policy), by installer verification, and by
+  publishing before any project copy is replaced — but not eliminated. This is
+  the cost of Decision 4, and it is smaller than the alternative only because
+  Decision 7 is true.
+- **The protection stops travelling with the repository and starts travelling
+  with the machine, and only the first was ever automatic.** Round-8 opencode
+  named this as a regression rather than a trade-off, and it is right: today
+  `database-sentinel` runs on any clone with zero provisioning, because the
+  implementation is *in the clone*. After this change it runs only where the
+  installer has run, and **every existing developer machine enters the
+  unprovisioned state at the moment it pulls the shim** — via an ordinary
+  `git pull`, with nothing in the flow that would prompt anyone to install.
+  The mitigations listed above do not reach this: every check the change
+  specifies is per-*repository* (markers, byte-identity, the settings scan), and
+  publish-before-replace orders exactly one machine — the one doing the rollout.
+  Answered by a per-machine provisioning check in the delta, and by rollout
+  communication rather than by ordering, since no ordering on the rollout machine
+  constrains anyone else's.
 - **Deleting the telemetry pair loses session-start context warm-up.** Accepted
   — the data is ephemeral and gitignored, so nothing accumulates that anyone
   could later want.

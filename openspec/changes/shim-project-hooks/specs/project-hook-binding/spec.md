@@ -90,6 +90,39 @@ asserted as satisfied. What is achievable is specified instead:
   degrades to a reported warning, whereas a row pointing at nothing would make
   the check report a failure the operator cannot act on.
 
+**The publication algorithm is specified, not left to the implementer.** A
+reviewer showed the clauses above under-determine it and quietly conflict:
+"the manifest is either the pre-run version or the post-run version" describes a
+manifest written **once per run**, while the ordering clause describes a row
+published **per artifact**, and both cannot hold. The algorithm is therefore
+stated outright:
+
+1. Acquire the exclusive lock.
+2. Read the current manifest.
+3. For each artifact: write it to a temporary path **in the destination
+   directory** and `rename` it into place.
+4. Once **every** artifact is in place, rewrite the manifest in full to a
+   temporary path and `rename` it. The manifest is written **once per run**.
+5. Release the lock.
+
+Step 4 is what makes "pre-run or post-run, never a torn mixture" true of the
+manifest. The per-artifact ordering clause above is satisfied by the whole of
+step 3 preceding step 4, not by interleaving rows with renames.
+
+**Both crash windows are covered, and the second was missing.** The previous
+revision described only a first install:
+
+- **Initial install, interrupted** — the artifact is in place and the pre-run
+  manifest has no row for it. The check reports it **present but unattested**.
+- **Upgrade, interrupted** — the artifact is in place at its *new* bytes and the
+  pre-run manifest still carries its *old* row. The row is **stale, not
+  missing**; the digest comparison fails. A reviewer noted that republishing over
+  an existing artifact "leaves a stale row — not no row", which the previous text
+  neither described nor classified. It resolves to **drifted**.
+
+The remedy is identical in both cases — re-run the installer — which is why the
+distinction costs nothing to state and misclassifies a machine if omitted.
+
 **The reconciliation is the check's job, not the installer's.** Because the two
 renames cannot be joined, the manifest and the directory can disagree after a
 crash. The conformance check SHALL treat that disagreement as a reportable
@@ -105,12 +138,20 @@ into seven projects produced three distinct versions of
 - **THEN** exactly one file is edited, and the change is live in every project
   on that machine once republished, without any per-project edit or migration
 
-#### Scenario: Two projects are compared
+#### Scenario: Two binders in the same profile are compared
 
 - **WHEN** the same hook is compared byte-for-byte across any two projects that
-  bind it
+  bind it under the **published-resolution** profile
 - **THEN** the two files are identical, because both are shims naming the same
   implementation
+
+#### Scenario: A self-hosting binder is compared against a project shim
+
+- **WHEN** the repository that maintains an implementation is compared against
+  any project that consumes it
+- **THEN** the two files are expected to differ, and the difference is not drift
+  — they implement different profiles, and each is checked only against the
+  requirements its own profile carries
 
 #### Scenario: The executed copy has drifted from the maintained source
 
@@ -149,6 +190,21 @@ into seven projects produced three distinct versions of
 - **THEN** the check reports that implementation as unverifiable — present but
   unattested — rather than reporting it absent or reporting the install clean
 
+#### Scenario: A crash during an upgrade leaves a stale manifest row
+
+- **WHEN** an artifact that already had a row is republished at new bytes and the
+  run dies before the manifest is rewritten
+- **THEN** the check compares the new bytes against the **old** row, the digest
+  does not match, and the machine is reported **drifted** — not clean, and not
+  unattested, because the row exists and is wrong
+
+#### Scenario: An install completes and the implementation is later edited
+
+- **WHEN** a publishing run finished and someone hand-edits, replaces or deletes
+  a published implementation afterwards
+- **THEN** the machine is reported **drifted**, because the state is computed
+  from what is on disk now rather than from the fact that a run once completed
+
 ### Requirement: The shim contract itself has a propagation path
 
 A shim is duplicated across every project that binds the hook, so a change to
@@ -162,10 +218,17 @@ change a fleet-wide edit. This change is itself an instance — it edits the
 change-gate shim in the seven projects **and** in core, which gained its own
 copy on 2026-08-02. Core's copy resolves its working-tree reference
 implementation rather than the published one (ADR-0028's deliberate inversion),
-so contract clauses about *resolution order* do not reach it; the version marker
-does. Eight files, not seven, and the count is not uniform in what it owes —
-which is why this requirement says a contract change SHALL name the projects it
-must reach rather than assume the set.
+which is the **self-hosting** profile defined two requirements below: the
+resolution-order clauses do not reach it, while the version marker, the
+behaviour-free rule and the fail-open-and-report rule do. Eight files, not
+seven, and the count is not uniform in what it owes — which is why this
+requirement says a contract change SHALL name the projects it must reach rather
+than assume the set.
+
+A contract change SHALL also name **which profile each binder implements**, for
+the same reason it names the binders: a change that reaches all eight files and
+applies one profile's clauses to both has not been verified, it has been
+assumed uniform.
 
 A shim SHALL carry a version marker for the contract it implements, so a project
 running an older shim is detectable rather than discovered when it behaves
@@ -242,6 +305,46 @@ if it is the scaffolder's own checkout, a shim running inside a product repo has
 no defined way to locate it. Either way the entry contradicted something, so it
 is removed rather than clarified.
 
+**That order is the *published-resolution* profile, and it is not universal.** A
+reviewer showed the contract as previously written mandated shared-install
+resolution **and** byte-identical shims for every binder, while the repository
+that maintains an implementation deliberately resolves its own working tree — so
+one contract, attested by one version marker, was being asked to represent two
+incompatible bindings honestly. It cannot. Two profiles are therefore normative:
+
+| Profile | Bound by | Resolves | Why |
+|---|---|---|---|
+| **published-resolution** | every project that consumes a shared hook | the override, then `~/.agenticapps/bin/<hook>.sh` | one implementation, published once, executed identically everywhere |
+| **self-hosting** | the repository whose working tree is the authoritative source | that maintained file, directly | scoring the published copy tests whichever host's installer ran last, not the bytes this repository ships (ADR-0028) |
+
+Each binder SHALL declare its profile, and every requirement in this capability
+SHALL be evaluated against the declared profile:
+
+- The two-candidate resolution order binds **published-resolution** only. A
+  self-hosting binder has neither candidate to carry, and SHALL NOT be reported
+  as violating an order from which it is exempt.
+- Byte-identity is required **within** a profile, never across profiles.
+- The version marker, the behaviour-free rule, the fail-open-and-report rule and
+  its repetition policy bind **both**. They are what the two profiles have in
+  common, and they are the whole of what a single marker can honestly attest.
+
+For any one hook, **at most one binder is self-hosting** — the repository that
+maintains it. A second would be a second authority, which the first requirement
+in this capability forbids.
+
+#### Scenario: A self-hosting binder is audited against the resolution order
+
+- **WHEN** the two-candidate order is applied to the repository that maintains
+  the implementation
+- **THEN** it is recorded as out of profile rather than as non-conformant, and
+  the marker and fail-open clauses are still checked against it
+
+#### Scenario: A contract change reaches binders in both profiles
+
+- **WHEN** a shim-contract change is rolled out
+- **THEN** each binder's profile is named, and clauses are applied per profile
+  rather than uniformly across the file count
+
 **This two-candidate order governs tool-boundary shims only. The git
 `pre-commit` wrapper is a different artifact and is NOT brought under it.** A
 reviewer observed that the capability claimed the pre-commit hook as the fallback
@@ -296,11 +399,26 @@ Two consequences are normative:
   override to a path that does not exist disables that hook on a machine whose
   shared install is perfectly healthy: the shim reports an invalid override and
   allows the call. For the §18 change gate that is a one-variable bypass of the
-  review requirement at the tool boundary. This follows from fail-open — the
+  gate's **only blocking condition** — `openspec validate --all` — together with
+  the review *reporting* that accompanies it. (An earlier revision called it a
+  bypass of "the review requirement". Per `change-gate-enforcement`, reviews are
+  reported and never enforced, so that named an enforcement the gate does not
+  have and understated the one it does.) This follows from fail-open — the
   alternative is blocking every `Bash`, `Edit` and `Write` in the project on a
   typo'd variable — but it SHALL appear in the hook's stated coverage boundary
   rather than only in this requirement, so an operator reading what the hook
   protects also reads what turns it off.
+- **An override naming an existing executable is a code-execution path, and the
+  previous revision covered only the missing-file case.** The invalid-override
+  rule above makes a *broken* override safe: report and allow. A *working* one is
+  the opposite. Whatever the variable names is `exec`d at the tool boundary, on
+  every matched call, with the operator's privileges — and the matchers here are
+  `Bash`, `Edit` and `Write`, so that is most of what a session does. If the
+  value can be set by anything a repository ships (see the provenance clause
+  below, and note that it can), then a clone can choose the code that runs on
+  every matched call in it. That is a strictly larger exposure than switching the
+  hook off, it was omitted where the kill switch was named, and it SHALL appear
+  in the hook's stated coverage boundary beside it.
 - **The prohibition on project-set overrides SHALL be enforced by configuration
   validation, not by the shim.** The previous revision required the shim to
   honour the variable "from the process environment only" and not "out of any
@@ -311,19 +429,42 @@ Two consequences are normative:
   inspect. A behaviour-free shim cannot satisfy a rule about where a value came
   from, and specifying one produced a requirement no test could ever fail.
 
-  The prohibition is real and is retained — a cloned repository must not be able
-  to switch off the gate that governs it — but it moves to the only layer that
-  can see provenance, the configuration itself:
+  **The sentence that stood here claimed a prohibition this capability does not
+  deliver, and it is withdrawn.** It read: "a cloned repository must not be able
+  to switch off the gate that governs it." A reviewer showed the mechanism
+  contradicts it — a project-set override **does** take effect, and a check that
+  reports it afterwards is detection, not prevention. What survives is two
+  separate things, and they SHALL be stated separately:
 
-  - A conformance check SHALL scan every project's `.claude/settings.json` (and
-    any settings file the host merges) for an `env` block defining any shim's
-    override variable, and SHALL report each occurrence.
+  - a **policy**: a project SHALL NOT set any shim's override variable; and
+  - a **detection**: a conformance check reports violations against the
+    repository.
+
+  Between them lies a window in which the value is live and unreported, and this
+  capability SHALL NOT be read as closing it. Detection is what is on offer.
+
+  The detection is specified as follows:
+
+  - A conformance check SHALL scan every project for repository content that sets
+    any shim's override variable, or instructs an operator to set it. The
+    `.claude/settings.json` `env` block (and any settings file the host merges) is
+    the vector the host injects directly, and it is **not** the only one. The scan
+    SHALL also cover repository-shipped environment files (`.envrc` and
+    equivalents), bootstrap and setup scripts, task-runner definitions, and
+    documented setup instructions.
+  - **The scan is incomplete by construction and SHALL report itself as such.** A
+    reviewer noted that a repository can put the export in prose that a human then
+    runs, and the resulting process environment is byte-for-byte identical to one
+    the operator chose. Nothing distinguishes them, and no enumeration of file
+    types is closed. A green result SHALL be reported as *no known vector found*,
+    never as *no override is set*.
   - The finding is reported against the **repository**, not suppressed at
     runtime: the value still takes effect on a machine that has it, which is
     precisely why it must be visible in review rather than silently ignored.
   - No project in the fleet sets `env` in `.claude/settings.json` today —
-    verified across all seven — so this check starts green and exists to keep it
-    that way.
+    verified across all seven for **that vector only**. The wider scan above has
+    never been run, so its baseline is established by the task that implements
+    it rather than inherited from this sentence.
 
   This is a weaker guarantee than the previous wording claimed, and the weakening
   is the point: the strong version was unenforceable, so it guaranteed nothing
@@ -350,6 +491,22 @@ conflicting, which they will be unless the distinction is stated.
   operator-exported variable, so the defence is detection in review, not
   rejection at the tool boundary
 
+#### Scenario: A repository sets the override outside the settings file
+
+- **WHEN** a repository ships an `.envrc`, a bootstrap script, or setup
+  instructions that export a shim's override variable
+- **THEN** the scan covers those vectors too, and where the export reaches the
+  operator's shell by a route the scan cannot enumerate, the check reports **no
+  known vector found** rather than reporting the repository clean
+
+#### Scenario: A repository points the override at code it ships
+
+- **WHEN** the override names an executable file that exists — supplied by the
+  repository rather than by the operator
+- **THEN** the shim `exec`s it on every matched call, which is repository-chosen
+  code running at the tool boundary with the operator's privileges, and the
+  hook's coverage boundary SHALL name this alongside the kill switch
+
 #### Scenario: The shared install is present
 
 - **WHEN** a hook fires and `~/.agenticapps/bin/<hook>.sh` is executable
@@ -367,7 +524,7 @@ A shim that resolves no implementation SHALL allow the tool call and SHALL make
 the failure visible in the session transcript, naming the missing implementation
 and the installer that provides it.
 
-**A machine is in exactly one of three provisioning states, and the invariants
+**A machine is in exactly one of four provisioning states, and the invariants
 differ per state.** A reviewer found the capability asserting, under publication,
 that "no project binds a hook whose implementation is absent", while the
 clone-before-install scenario below explicitly permits exactly that. Both
@@ -375,11 +532,22 @@ sentences were true of different states and neither said which, so the pair read
 as a contradiction. The states are named here and every invariant elsewhere in
 this capability SHALL be read as qualified by one of them:
 
-| State | Definition | Invariant |
+| State | Observable definition | Invariant |
 |---|---|---|
-| **Unprovisioned** | the installer has never run on this machine | shims resolve nothing, report, and allow. Binding a hook whose implementation is absent is **expected and permitted** — it is the state a fresh clone is in |
-| **Partially provisioned** | a publishing run was interrupted, or only some artifacts were published | each published implementation is complete and each is either attested by a manifest row or reported unverifiable. Mixed is legal; torn is not |
-| **Provisioned** | a publishing run completed | every shimmed implementation is present, executable, and attested by a manifest row whose digest matches |
+| **Unprovisioned** | no shared install directory, or it holds none of the shimmed implementations | shims resolve nothing, report, and allow. Binding a hook whose implementation is absent is **expected and permitted** — it is the state a fresh clone is in |
+| **Partially provisioned** | some shimmed implementations are present and executable; others are absent | each present implementation is complete and is either attested by a matching manifest row or reported unverifiable. Mixed is legal; torn is not |
+| **Provisioned** | every shimmed implementation is present, executable, and attested by a manifest row whose digest matches | the state a completed publishing run is intended to produce, and the only state in which the fleet's protections are running as described |
+| **Drifted** | an implementation's bytes do not match its manifest row, **or** a row names a file that is absent, **or** a present implementation has no row | the check reports the specific disagreement and its direction. A drifted machine SHALL NOT be reported as provisioned, and SHALL NOT be reported as unprovisioned either — the files are there and the attestation does not hold, which is a distinct and actionable condition |
+
+**The states are defined by what a check can observe, never by what happened.**
+The previous revision defined *provisioned* as "a publishing run completed" and
+*partially provisioned* as "a publishing run was interrupted". A reviewer showed
+that history is not evaluable after the fact — nothing on the machine records
+it — and, worse, that a completed install later deleted, hand-edited, replaced
+or half-removed classified as **provisioned** under that definition. That is
+precisely the condition the manifest check exists to detect, and the state table
+was the one place it could not be named. Observational definitions are what let
+the check compute the state instead of trusting a claim about the past.
 
 The rule that a project must never bind a missing implementation applies to the
 **provisioned** state only. It is a post-condition of a completed install, not a
@@ -408,6 +576,44 @@ recorded alongside this requirement. Reusing the `PreToolUse` exit convention
 untested is the same unverified-assumption failure that produced the exit-0
 defect above.
 
+**Until that verification is recorded, no operator-visible warning SHALL be
+claimed for a shim in that class.** `normalize-claude-md` is the live instance:
+it is `PostToolUse`, this capability records a verified channel for `PreToolUse`
+only, and every statement that "both shims fail open with a loud warning"
+therefore asserts a channel for one of them that nobody has checked. A reviewer
+found this change writing the verification requirement and violating it in the
+same revision — which is the failure mode the requirement exists to prevent,
+demonstrated on its author. The rule is: fail-open-and-report binds every shim,
+but the *report* half is claimable per event class only once verified, and a
+shim whose class is unverified SHALL be described as failing open with its
+reporting channel **unestablished** rather than as warning anyone.
+
+**The report SHALL have a stated repetition policy.** A shim on an unprovisioned
+machine is unresolvable on *every* matched call, so an unqualified "report each
+time" emits a hook-error notice on every `Bash`, `Edit` and `Write`, indefinitely.
+A reviewer observed that this is the same conditioning pressure this capability
+uses to reject a fail-closed pre-commit wrapper: persistent unavoidable failure
+teaches operators to stop reading. The asymmetry is real but only partial — a
+non-blocking notice has no durable escape hatch to learn, where `--no-verify` is
+one action that disables the floor permanently — and it does not dispose of the
+objection, because an ignored notice and a suppressed one differ mainly in who is
+doing the suppressing.
+
+A shim SHALL state its repetition policy, and it SHALL be one of **per
+invocation**, **once per session**, or **once per interval**. Leaving it unstated
+is what the previous revision did, and an unstated policy defaults silently to
+the noisiest of the three.
+
+Per-session and per-interval both require a marker, which is behaviour beyond
+resolution and `exec`. That carve-out is permitted, is bounded to reading and
+writing a single marker path, and SHALL NOT extend to inspecting the tool
+payload. It carries one obstacle that SHALL be established against the host
+rather than assumed: the session identifier arrives in the hook's **stdin
+payload**, which the shim must forward to its implementation intact, so a shim
+that consumes stdin to read the identifier has taken the input the implementation
+needs. If no session identifier is reachable without consuming stdin, the policy
+SHALL be per-interval or per-invocation, and the reason SHALL be recorded.
+
 This is not a detail of presentation. Fail-open is acceptable *because* the loss
 of protection is announced; an unannounced fail-open is silent protection loss,
 which is the posture this capability rejected when it rejected fail-closed. A
@@ -433,9 +639,28 @@ whether an unprovisioned machine can be used.
 
 **This includes the §18 change gate, and the consequence SHALL be recorded
 rather than passed over.** On an unprovisioned machine, PreToolUse enforcement
-of the change gate is absent, so §18's review requirement is advisory at the
-tool boundary until the installer has run. That is not a regression — the gate
-shim already fails open, silently.
+of the change gate is absent. That is not a regression — the gate shim already
+fails open, silently.
+
+**What that actually loses, stated against the gate's real behaviour.** An
+earlier revision said "§18's review requirement is advisory at the tool boundary
+until the installer has run", and similar phrasing appeared wherever this
+capability described a missing or overridden gate. A reviewer showed it is stale
+against `change-gate-enforcement`, which is explicit: the gate blocks on exactly
+one condition — `openspec validate --all` is not green — while the reviewer
+count, the verdict grammar, reviewer independence, the trailer format and the
+binding of a review to what it reviewed are computed and **reported, never
+enforced**. So an absent gate loses two things, neither of them a review
+requirement:
+
+1. **validation enforcement** — the only condition on which the gate blocks; and
+2. **the reporting** of review state, which was advisory before the gate went
+   missing and is merely absent after.
+
+Calling the loss "review enforcement" names a block the gate does not perform,
+and passes over the one it does. Every statement in this capability about what a
+missing, unresolvable or overridden gate costs SHALL be written against the
+blocking condition.
 
 **What is beneath it, stated correctly.** An earlier revision of this paragraph
 said §18 "places the real guarantee in the git pre-commit hook and the CI floor,
@@ -482,6 +707,20 @@ run rather than an operator's session.
   message, rather than assumed from the fact that something was written to
   stderr
 
+#### Scenario: A shim's event class has no verified warning channel
+
+- **WHEN** a shim is written for an event class whose channel this capability has
+  not recorded as verified
+- **THEN** it is described as failing open with its reporting channel
+  unestablished, and no report of it claims the operator is warned
+
+#### Scenario: A machine stays unprovisioned for a long time
+
+- **WHEN** every matched tool call resolves nothing, session after session
+- **THEN** the shim's stated repetition policy governs how often the operator is
+  told, and the policy is recorded with the hook rather than left to whatever the
+  implementation happens to do
+
 #### Scenario: A project is cloned before the installer runs
 
 - **WHEN** a project is cloned onto a machine where the installer has never run
@@ -493,6 +732,45 @@ run rather than an operator's session.
 - **WHEN** the shared artifacts are installed
 - **THEN** the installer verifies each shimmed implementation is present and
   executable, and fails visibly if one is not
+
+### Requirement: Provisioning is checked per machine, not only per repository
+
+Every check this capability requires elsewhere is evaluated against a
+**repository** — shim markers, byte-identity within a profile, the
+override-provenance scan. None of them can observe whether the machine executing
+those shims holds the implementations. A conformance check SHALL therefore report
+the **machine's** provisioning state, computed observationally per the state
+table above, independently of any repository check.
+
+A reviewer found the gap by its consequence, which is a real regression this
+capability introduces. Before it, `database-sentinel` ran on any clone with zero
+provisioning, because the implementation was in the repository. After it, the
+protection exists only where the installer has run — and **every existing
+developer machine enters the unprovisioned state at the moment it pulls the
+shim**, through an ordinary `git pull`, with no step that would prompt anyone to
+notice. The change trades a protection that travelled with the repository for one
+that travels with the machine, and only the second needs a check that did not
+previously have to exist.
+
+The rollout ordering — publish and verify before replacing project copies —
+orders exactly **one** machine: the one performing the rollout. It says nothing
+about any other machine that later pulls the result, and SHALL NOT be cited as
+though it did.
+
+#### Scenario: A machine pulls the shim without running the installer
+
+- **WHEN** a developer pulls a project after its copies have been replaced with
+  shims, on a machine where the installer has never run
+- **THEN** that machine is unprovisioned and reports as such under the
+  per-machine check — rather than the condition being invisible because every
+  repository-level check passes
+
+#### Scenario: The rollout ordering is offered as fleet-wide assurance
+
+- **WHEN** publish-before-replace is cited as evidence that no binder is left
+  without an implementation
+- **THEN** the claim is limited to the rollout machine, and the per-machine check
+  is what covers every other one
 
 ### Requirement: A shared hook's protections are described as what they are
 
@@ -805,8 +1083,10 @@ indistinguishable.
 **This requirement binds hooks, and hooks are not the only writers — deleting
 the two named in this change does NOT end the violation.** Measured while
 revising: `agenticapps-workflow-core` carries 141 files under
-`.planning/skill-observations/` while having **no `.claude/hooks/` directory at
-all**. 137 of them are named `<stamp>--<sessionId>.{md,jsonl}`, which is the
+`.planning/skill-observations/` while carrying **no `.planning`-writing project
+hook** — no `.claude/hooks/` directory at all when this was measured, and since
+2026-08-02 exactly one `PreToolUse` change gate, which writes nothing there.
+137 of them are named `<stamp>--<sessionId>.{md,jsonl}`, which is the
 naming of a *global* `SessionEnd` hook registered in `~/.claude/settings.json`
 running `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`,
 whose own header states it "writes

@@ -97,7 +97,12 @@ does not require:
 - `skill-router-log.sh` — writes session telemetry into `.planning/`, contrary
   to the frozen-archive policy.
 - `session-bootstrap.sh` — reads that telemetry back into session context. The
-  sole consumer of the above; the pair is deleted together.
+  pair is deleted together. It is the only consumer *known*; review noted that
+  this was asserted from proximity rather than from a search, which is the
+  inference this change indicts elsewhere, so task 5.0c runs and cites the
+  fleet-wide search. The deletion does not turn on the result — these hooks write
+  into a frozen directory either way — but the decision not to relocate the
+  feature does.
 
 The telemetry logs are **gitignored in every repo and tracked in none**, so
 deleting the producers discards nothing durable.
@@ -134,7 +139,16 @@ deleting the producers discards nothing durable.
      handles `MultiEdit` does nothing in a repo whose matcher never delivers it.
      The rollout updates the matcher in the other six.
 
-**The fail posture is fail-open with a loud warning, for both hooks.** An
+**The fail posture is fail-open with a report — verified loud for one hook, not
+yet for the other.** `database-sentinel` is `PreToolUse`, where the channel is
+established: exit 1 surfaces the first stderr line in the transcript. Its
+`normalize-claude-md` counterpart is `PostToolUse`, whose exit semantics differ
+and which nobody has checked, so its posture is fail-open with the **reporting
+channel unestablished** until task 2.10 records it. Review found this change
+writing that verification requirement into its own delta and then claiming a
+warning for both hooks anyway. How often the report repeats is a separate
+question the delta now also requires answering — see the alarm-fatigue note under
+Rollout dependency. An
 earlier revision had `database-sentinel` fail **closed** on the reasoning that
 nothing backstops it. Review showed that does not work, and the numbers are
 unambiguous: the hook is registered on `Bash|Edit|Write` (`|MultiEdit` in
@@ -226,8 +240,11 @@ while the change was editing its hooks.
 exist yet.** On the current sketch a three-hook project keeps roughly 138 lines
 and `agents-task-viewer` keeps less, having two. So 4,396 lines today become
 roughly 950, the seven projects shed on the order of **−3,450**, and ~360 lines
-are added once to core as canonical implementations. No report of this change
-may quote those as measured until the shims are written and counted.
+are added once to core as canonical implementations — a fleet net of roughly
+**−3,090**, stated here because the two figures were previously given without
+their combination. No report of this change may quote any of them as measured
+until the shims are written and counted; task 5.5 checks the measurement against
+this estimate.
 
 A first version of this paragraph multiplied 138 by seven, two sentences after
 enumerating why the projects are not uniform — and review caught it. Writing the
@@ -253,10 +270,22 @@ count is now enumerated rather than generalised.
   telemetry pair.
 - `callbot` can edit `migrations/` again — blocked today by a sentinel no
   surviving command writes.
-- Six projects gain `MultiEdit` coverage on `database-sentinel`, which their
-  matchers have never delivered.
 - A machine without the shared install loses `.env` and destructive-SQL
-  protection, and says so on stderr each time. It does not block.
+  protection, and reports that it has. It does not block.
+
+**Not listed above: `MultiEdit` coverage.** A previous revision counted "six
+projects gain `MultiEdit` coverage on `database-sentinel`" as a delivered
+behaviour change. Review showed that violates this change's own delta, which says
+coverage of a tool the host no longer provides "SHALL NOT be reported as a
+delivered protection" — and design Decision 6 states that `MultiEdit` is absent
+from the tool set of the host running this change. The Impact section was
+claiming the protection while the design and the tasks both said it may be inert.
+
+The matcher edit still happens, in six repos: it costs one word, and a
+registration that matches the implementation's coverage is correct whether or not
+the tool exists today. It is forward-compatibility, not a gap closed. Task 4.8
+settles which it is against the host in use, and only that finding may be
+reported.
 
 **What `database-sentinel` is, stated accurately.** It is **best-effort
 defence in depth**, not a security boundary, and the delta says so rather than
@@ -276,9 +305,31 @@ that review then showed to be unworkable.
 
 **Rollout dependency:** shims are inert until `install-shared-artifact.sh` has
 published the implementations. A project whose install has not run silently
-loses the protection, with a warning on each invocation — which is why
+loses the protection, with a report on each invocation — which is why
 publish-and-verify precedes any project edit, and why the installer gains an
 explicit verification step rather than relying on the hook to notice.
+
+**That ordering covers one machine, and review was right that the gap matters.**
+Publish-before-replace orders the machine performing the rollout. Every *other*
+machine enters the unprovisioned state the moment it pulls the shim, through an
+ordinary `git pull`, with no step that prompts anyone to install. Today
+`database-sentinel` runs on any clone with zero provisioning because the
+implementation is in the clone; after this change the protection travels with the
+machine instead of the repository, and only the first arrangement was automatic.
+Every conformance check the change specifies is per-*repository*, so nothing
+observes this. The delta answers it with a **per-machine provisioning check**,
+and the rollout answers it by telling people to run the installer — not by an
+ordering that constrains only the operator doing the work.
+
+**And the report itself needs a repetition policy.** An unprovisioned machine is
+unresolvable on every `Bash`, `Edit` and `Write`, so "report each time" means a
+hook-error notice on essentially every tool call, indefinitely. Review pointed
+out that this is the same conditioning this change uses to reject a fail-closed
+pre-commit wrapper, pointed at the transcript instead of the commit. The delta
+now requires a stated policy — per invocation, per session, or per interval — and
+the choice is made at implementation, because a per-session marker needs the
+session identifier the host delivers in the stdin payload the shim must pass
+through untouched.
 
 **Install story:** `install-shared-artifact.sh` publishes one artifact per
 invocation, so provisioning both implementations needs an explicit
@@ -311,6 +362,19 @@ kind of exemption that makes a rule advisory. It is brought into conformance
 here; the identity line is removed by the companion change, which retires
 `OPENSPEC_GATE_SELF` as an identity source, so the two changes must not both
 edit that line.
+
+**Core's own copy is a different profile, and saying so is now normative rather
+than a footnote in the task list.** Core gained `.claude/hooks/openspec-change-gate.sh`
+on 2026-08-02; it resolves core's working-tree reference implementation, with no
+shared-install and no `<repo>/bin/` candidate, because ADR-0028 inverts it
+deliberately — core must score the bytes it ships, not whichever host's installer
+ran last. So the resolution order and the byte-identity rule cannot apply to it,
+and the delta previously said they applied to everything. Task 4b.10 had the
+split right; the normative text did not, which review correctly read as one
+contract claiming to describe two incompatible bindings. The delta now defines
+**published-resolution** and **self-hosting** profiles: the marker, the
+behaviour-free rule and fail-open-and-report bind both, resolution and
+byte-identity bind the first only.
 
 **No workflow content is re-vendored to the four hosts.** Per plan step 2, host
 *workflow content* is updated when preparing another machine or a release, not
@@ -382,7 +446,12 @@ change and by the follow-up.
 4. **Decide what backstops an unprovisioned machine.** This change establishes
    that the git `pre-commit` wrapper fails open exactly when the PreToolUse shim
    does — same missing shared install, same `exit 0` — leaving CI as the only
-   floor. That is recorded here as true rather than fixed: making the wrapper
+   floor. What is lost there is **validation enforcement**: per
+   `change-gate-enforcement`, `openspec validate --all` failing is the gate's only
+   blocking condition, and the reviewer count and verdicts are reported, never
+   enforced. Earlier revisions of this change called it a lost review requirement
+   in several places, which named a block the gate does not perform. That is
+   recorded here as true rather than fixed: making the wrapper
    fail closed re-creates the `--no-verify` training problem its comment
    documents, and the alternative (provisioning detection at clone time) is a new
    mechanism. The follow-up owns the choice; this change owns no longer
