@@ -54,6 +54,7 @@ echo "=== 3.2  the installer refuses a source that is absent or not executable =
 H=$(mkhome missing-src)
 mkdir -p "$TMP/badsrc"
 cp "$SRCDIR/database-sentinel.sh" "$TMP/badsrc/"      # normalize-claude-md absent
+cp "$SRCDIR/ARTIFACTS" "$TMP/badsrc/"                # …but still declared
 OUT=$(env HOME="$H" "$INSTALL" --source "$TMP/badsrc" 2>&1); rc=$?
 [ "$rc" -ne 0 ] && ok "absent implementation: installer exits non-zero" \
                 || bad "absent implementation: installer exits non-zero" "got exit 0"
@@ -61,7 +62,7 @@ has "$OUT" "normalize-claude-md" "absent implementation: the report names the mi
 
 H=$(mkhome nonexec-src)
 mkdir -p "$TMP/nonexecsrc"
-cp "$SRCDIR"/*.sh "$TMP/nonexecsrc/"
+cp "$SRCDIR"/*.sh "$SRCDIR/ARTIFACTS" "$TMP/nonexecsrc/"
 chmod 644 "$TMP/nonexecsrc/database-sentinel.sh"
 OUT=$(env HOME="$H" "$INSTALL" --source "$TMP/nonexecsrc" 2>&1); rc=$?
 [ "$rc" -ne 0 ] && ok "non-executable implementation: installer exits non-zero" \
@@ -150,7 +151,7 @@ echo "=== 3.2e-i  an interrupted UPGRADE leaves new bytes against an old row ===
 # both wrong.
 H=$(mkhome upgrade); inst "$H" >/dev/null
 mkdir -p "$TMP/v2"
-cp "$SRCDIR"/*.sh "$TMP/v2/"
+cp "$SRCDIR"/*.sh "$SRCDIR/ARTIFACTS" "$TMP/v2/"
 sed -i.bak 's/^# database-sentinel-version: .*/# database-sentinel-version: 2.0.0/' "$TMP/v2/database-sentinel.sh"
 rm -f "$TMP/v2"/*.bak; chmod +x "$TMP/v2"/*.sh
 env HOME="$H" INSTALL_PROJECT_HOOKS_TEST_ABORT_BEFORE_MANIFEST=1 \
@@ -186,6 +187,20 @@ OUT=$(check "$H")
 has "$OUT" "partial" "an interrupted run leaves the machine partially provisioned — a legitimate state, reported"
 
 echo
+echo "=== 3.2d  an artifact published by another installer is scoped out, not called drift ==="
+# The shared bin directory is shared. install-shared-artifact.sh publishes
+# openspec-change-gate, reviewer-cli and run-plan-review into the same place and
+# writes no row in this manifest. Found against the real machine: sweeping them
+# in reported a healthy install as drifted.
+H=$(mkhome foreign); inst "$H" >/dev/null
+cp "$SRCDIR/database-sentinel.sh" "$H/$BIN/reviewer-cli.sh"
+OUT=$(check "$H")
+has  "$OUT" "reviewer-cli"  "an undeclared artifact is named in the report"
+has  "$OUT" "not covered"   "…and scoped out rather than judged"
+has  "$OUT" "attested"      "the declared artifacts are still attested"
+hasnt "$OUT" "INTEGRITY     drifted" "an undeclared artifact does not make the machine drifted"
+
+echo
 echo "=== 3.2b-ii  concurrent publishing runs do not lose each other's rows ==="
 # A lost-update defect, which atomicity alone does not address.
 H=$(mkhome concurrent)
@@ -193,6 +208,7 @@ mkdir -p "$TMP/other"
 cp "$SRCDIR/database-sentinel.sh" "$TMP/other/"
 sed 's/^# database-sentinel-version: .*/# other-hook-version: 1.0.0/' \
     "$SRCDIR/database-sentinel.sh" > "$TMP/other/other-hook.sh"
+cp "$SRCDIR/ARTIFACTS" "$TMP/other/"
 chmod +x "$TMP/other"/*.sh
 env HOME="$H" "$INSTALL" --source "$SRCDIR" >/dev/null 2>&1 &
 p1=$!

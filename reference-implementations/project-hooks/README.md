@@ -239,6 +239,67 @@ export the override into the operator's shell. A green result therefore reads
 
 ---
 
+## Provisioning — and the regression it answers
+
+Publish with `install-project-hooks.sh`; check with `tools/provisioning-check.sh`.
+
+**The state is a pair, not one of four** (design Decision 12):
+`completeness ∈ {none, partial, complete}` × `integrity ∈ {attested, drifted}`.
+The flat list overlapped — a manifest whose files are all absent is both
+*unprovisioned* and *drifted* — and every state here is **observed**, never
+inferred from history. "The installer has never run" is not evaluable after the
+fact, and a history-based definition calls a completed-then-hand-edited install
+*provisioned*: the exact condition the manifest exists to detect.
+
+### The regression this answers (task 3.6a)
+
+State it plainly, because the change makes something worse before the check
+makes it visible.
+
+**Before:** `database-sentinel` ran on any clone with **zero provisioning**,
+because the implementation was *in the clone*.
+**After:** the protection travels with the **machine** instead of the
+repository — and **every existing developer machine enters the unprovisioned
+state the moment it pulls the shim.** An ordinary `git pull`. No prompt, no
+install step, no error. Only the first arrangement was automatic.
+
+Every other conformance check this change specifies is per-*repository*, so
+none of them can see it. That is why a per-machine check exists at all.
+
+### Publish-and-verify orders exactly one machine (task 3.6b)
+
+The rollout publishes before it replaces any project copy. **That constrains the
+rollout machine and nothing else.** It is not fleet-wide assurance, and must not
+be cited as any. Other machines are ordered by being *told to run the
+installer* — and by the shim reporting, once an hour, that it could not resolve.
+
+### Verified behaviour of the published copies (tasks 3.4, 3.5)
+
+Ten payloads, run against the published implementation and against the two
+project copies it replaces. Exit 2 = blocked, 0 = allowed.
+
+| payload | canonical | `callbot` | `dashboard` |
+|---|---|---|---|
+| `Bash` `DROP TABLE users` | 2 | 2 | 2 |
+| `Bash` `DELETE FROM users;` | 2 | 2 | 2 |
+| `Bash` `DELETE FROM users WHERE id=1;` | 0 | 0 | 0 |
+| `Edit` `.env` | 2 | 2 | 2 |
+| `Edit` `.env.production` | 2 | 2 | 2 |
+| `Edit` `.env.example` | 0 | 0 | 0 |
+| `Edit` `src/app.ts` | 0 | 0 | 0 |
+| `Edit` `migrations/001.sql` | **0** | **2** | **2** |
+| `Edit` `.env.vercel` | **2** | 2 | **0** |
+| `MultiEdit` `.env` | **2** | 2 | **0** |
+
+Against `callbot` — the copy reconciled as canonical — the only difference is
+the dropped `migrations/` clause, which is what task 3.4 admits. Against
+`dashboard` — an enumerated-list copy — the two further differences are the
+novel `.env` suffix now caught (task 3.5) and `MultiEdit` coverage, which is
+forward-compatibility until task 4.8 settles whether the host provides that
+tool.
+
+---
+
 ## Reconciliation record
 
 Task 1.3a requires that each behavioural difference between project copies be
