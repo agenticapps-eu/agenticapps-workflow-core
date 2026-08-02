@@ -224,6 +224,34 @@ IMPL_EXIT_TEST=$(run_shim "$SHIM" "$BIG" IMPL_SAW="$TMP/saw" IMPL_EXIT=2; echo $
 [ "$IMPL_EXIT_TEST" -eq 2 ] && ok "the implementation's exit code is passed through unchanged" \
                             || bad "the implementation's exit code is passed through unchanged" "got $IMPL_EXIT_TEST"
 
+# REGRESSION. normalize-claude-md is registered as
+#   .../normalize-claude-md.sh "$CLAUDE_PROJECT_DIR/CLAUDE.md"
+# so the hook is invoked WITH an argument, and the implementation falls back to
+# ./CLAUDE.md relative to CWD when it does not get one — reporting "input not
+# found" and doing nothing. A shim that execs without "$@" therefore turns the
+# hook into a silent no-op in every repo that binds it.
+#
+# This is the same defect as PR #59, where the change-gate wrapper discarded its
+# arguments and made --ci a silent green. Caught here by the rollout, not by the
+# suite, which is why it is now in the suite.
+cat > "$BIN/database-sentinel.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s' "$*" > "$IMPL_SAW"
+EOF
+chmod +x "$BIN/database-sentinel.sh"
+rm -f "$TMP/saw"
+run_shim "$SHIM" "$PAYLOAD" IMPL_SAW="$TMP/saw" -- /project/CLAUDE.md >/dev/null 2>&1 || true
+env -i PATH="$PATH" HOME="$TMP/home" XDG_STATE_HOME="$TMP/state" IMPL_SAW="$TMP/saw" \
+    "$SHIM" /project/CLAUDE.md <<<"$PAYLOAD" >/dev/null 2>&1 || true
+if [ "$(cat "$TMP/saw" 2>/dev/null)" = "/project/CLAUDE.md" ]; then
+  ok "the shim forwards its arguments to the implementation"
+else
+  bad "the shim forwards its arguments to the implementation" \
+      "the implementation saw: '$(cat "$TMP/saw" 2>/dev/null)'" \
+      "a dropped argv makes normalize-claude-md a silent no-op (cf. PR #59)"
+fi
+cp "$TMP/impl-echo.sh" "$BIN/database-sentinel.sh"
+
 if grep -qE 'tool_name|tool_input|file_path|jq[[:space:]]|\.command' "$TEMPLATE"; then
   bad "the shim inspects no tool payload" "template references payload fields:" \
       "$(grep -nE 'tool_name|tool_input|file_path|jq[[:space:]]|\.command' "$TEMPLATE" | head -3)"

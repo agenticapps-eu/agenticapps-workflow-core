@@ -171,12 +171,23 @@ A shim does exactly these five things and nothing else:
 
 1. resolves the implementation,
 2. host self-identification (the change-gate shim only; being retired),
-3. `exec`s the implementation, passing stdin through **untouched**,
+3. `exec`s the implementation, passing **stdin and argv** through untouched,
 4. reports when it cannot resolve, or when an override is set but unusable,
 5. reads and writes **one** repetition marker, if its report is rate-limited.
 
 In particular it **inspects no tool payload**. A shim that reads stdin to look
 at the payload has consumed the implementation's input.
+
+**Forwarding argv is part of handing over, and it is not optional.**
+`normalize-claude-md` is registered as
+`.../normalize-claude-md.sh "$CLAUDE_PROJECT_DIR/CLAUDE.md"` — with an
+argument. Given none, the implementation falls back to `./CLAUDE.md` relative to
+the hook's CWD, reports `input not found`, and does nothing. A shim that `exec`s
+without `"$@"` therefore turns the hook into a **silent no-op in every repo that
+binds it**. That is the PR #59 defect exactly — the change-gate wrapper
+discarded its arguments and made `--ci` a silent green — and it was reintroduced
+here and caught by the first repo's rollout rather than by the suite. It is in
+the suite now.
 
 ### Profiles
 

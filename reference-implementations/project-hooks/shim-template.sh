@@ -71,7 +71,7 @@ report_rate_limited() {
 # self-correcting condition above must not also silence it.
 if [ -n "$OVERRIDE" ]; then
   if [ -x "$OVERRIDE" ]; then
-    exec "$OVERRIDE"
+    exec "$OVERRIDE" "$@"
   fi
   report "$HOOK hook: $OVERRIDE_VAR is set to '$OVERRIDE', which is not an executable file — this hook did NOT run, and no fallback was used" \
          "  Unset $OVERRIDE_VAR to use the shared install at $SHARED," \
@@ -81,7 +81,7 @@ fi
 
 # --- candidate 2: the shared install ----------------------------------------
 if [ -x "$SHARED" ]; then
-  exec "$SHARED"
+  exec "$SHARED" "$@"
 fi
 
 # --- unresolvable: allow, and report ----------------------------------------
