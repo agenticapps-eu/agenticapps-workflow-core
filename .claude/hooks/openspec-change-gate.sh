@@ -86,4 +86,10 @@ fi
 # asserting otherwise was the actual defect, and the gate's own header names
 # that hazard by name: the conformance harness once set this in every
 # self-exclusion row and those rows passed on an unrelated mechanism.
-exec "$GATE"
+# FORWARD "$@". PreToolUse passes no arguments, so this looks redundant and an
+# earlier revision omitted it. It is not: the gate has an argument-driven `--ci`
+# mode, and without forwarding, `bash .claude/hooks/openspec-change-gate.sh --ci`
+# ran the gate as a hook with no payload and exited 0 in silence — a green that
+# checked nothing, from the file whose whole purpose is to make core's own
+# non-compliance visible.
+exec "$GATE" "$@"
