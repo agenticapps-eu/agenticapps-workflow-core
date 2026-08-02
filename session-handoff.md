@@ -1,81 +1,70 @@
-# Session Handoff — 2026-08-02 (evening)
+# Session Handoff — 2026-08-02 (night)
 
 ## Accomplished
 
-Implemented `shim-project-hooks` from **0 → 67 of 114 tasks** on branch
-`feat/shim-project-hooks` (6 commits, unpushed). PR #60 was already merged, so
-the handoff's "merge #60" step was done before this session started.
+`shim-project-hooks` implemented **0 → 113 of 114 tasks**. Only **5.8, the
+Stage-2 independent code review, is open** — it requires an independent context
+by §07, so it is not mine to close.
 
-**All core-side work is complete and verified. 106 assertions green across four
-suites.** What remains is the multi-repo rollout.
+Nine repos changed, all on unpushed branches. Core: `feat/shim-project-hooks`
+(13 commits). The other eight: `chore/shim-project-hooks`.
 
-- **§1 canonical implementations** — `reference-implementations/project-hooks/`
-  with both hooks, a README carrying the shim contract, and a per-difference
-  reconciliation record. `tools/project-hooks.test.sh` 30/30.
-- **§2 the shim** — `shim-template.sh`, fail-open-and-report, two candidates, no
-  `<repo>/bin/`. RED→GREEN pair committed. `project-hook-shim.test.sh` 21/21.
-- **§2 conformance scan** — `tools/project-hook-conformance.sh`, marker states
-  plus five override vectors. `project-hook-conformance.test.sh` 21/21.
-- **§3 publication** — `install-project-hooks.sh` + `tools/provisioning-check.sh`,
-  manifest, two-axis provisioning state. `project-hook-provisioning.test.sh` 45/45.
-  **Published for real on this machine**; check reports complete + attested.
-- **§5.0 deletion record** — `DELETION-RECORD.md`, three clauses per hook against
-  §02/§17/§18 and every capability spec. This gates the §4 deletions.
+- **Core** — `reference-implementations/project-hooks/` (2 implementations, shim
+  template, gate shim, `ARTIFACTS`, README), `install-project-hooks.sh`,
+  `tools/{provisioning-check,project-hook-conformance}.sh`, four test suites
+  (**119 assertions, all green**), `DELETION-RECORD.md`, ADR-0029.
+- **The seven projects** — 8 hooks → 3 (2 in `agents-task-viewer`), all
+  byte-identical. 5 deleted, 2 shimmed, gate shim migrated.
+- **`claude-workflow`** — both vendored hook dirs, both settings templates,
+  `bin/check-hooks.sh`, `migrations/check-snapshot-parity.sh`, 3 bats files.
 
-## Decisions
+**Green:** parity PASS · `check-hooks` 15/0 · gate conformance 71/71 ·
+`openspec validate --all` 5/5 · gate `--ci` OK.
 
-- **`flock` (task 3.2b-ii) is not implemented as named** — your call. `flock(1)`
-  does not exist on macOS 26.6. The property it protects, "a lock that does not
-  outlive its holder", is implemented with atomic `mkdir` + owning pid + dead-owner
-  breaker, matching `install-shared-artifact.sh`. Deviation recorded in the script;
-  the suite tests the behaviour, not the primitive.
-- **Cross-family rollout approved** — your call. All seven repos including the
-  four in `factiv/`.
-- **The expected artifact set is declared, not discovered** — `ARTIFACTS`. Both
-  tools derived it from what they found, which cannot detect a missing artifact.
+## Decisions (yours)
 
-## Four corrections to the change's own artifacts
+- **`flock` not implemented as named** — absent on macOS 26.6. The property
+  (a lock that does not outlive its holder) is implemented with atomic `mkdir` +
+  dead-pid breaker; the deviation is recorded in the script.
+- **Cross-family rollout approved** — all seven repos including `factiv/`.
 
-1. **The `migrations/` clause is in all seven copies and live in six**, not
-   `callbot` alone. Only `cparx` holds the sentinel. `proposal.md` corrected.
-2. **`session-bootstrap` is NOT the only reader of `skill-router-*.jsonl`** —
-   `agenticapps-dashboard`'s `readSkillObservations()` globs `*.jsonl`. The
-   conclusion survives for a *different* reason: `HookFiringSchema` requires a
-   `hook` field the producer never writes, so those records are discarded.
-3. **Two `claude-workflow` files were in no task** — `bin/check-hooks.sh` and
-   `templates/claude-settings.json`. Added as 4c.7, 4c.8.
-4. `design-shotgun-gate` re-argued on unreachability (5.0a-i), as the plan required.
+## Six corrections to the change's own artifacts
 
-## Files modified
-
-- `reference-implementations/project-hooks/` — new: 2 implementations, shim
-  template, `ARTIFACTS`, README
-- `reference-implementations/shared-install/install-project-hooks.sh` — new
-- `tools/{provisioning-check,project-hook-conformance}.sh` + 4 `*.test.sh` — new
-- `openspec/changes/shim-project-hooks/{tasks,proposal}.md`, `DELETION-RECORD.md`
+1. The `migrations/` block was in **all seven** copies, live in **six** — not
+   `callbot` alone.
+2. **`session-bootstrap` is not the only reader** of `skill-router-*.jsonl`;
+   the dashboard globs `*.jsonl`. Conclusion survives for a different reason —
+   its schema requires a `hook` field the producer never writes.
+3. Three un-tasked `claude-workflow` sites: `bin/check-hooks.sh`,
+   `templates/claude-settings.json`, `migrations/check-snapshot-parity.sh`
+   (which *required* `phase-sentinel` — the guard demanded the drift).
+4. **The shims dropped argv**, which would have made `normalize-claude-md` a
+   silent no-op fleet-wide. PR #59's defect, one file over.
+5. **4b.7's residual is discharged, not carried** — `OPENSPEC_GATE_SELF` has
+   been ignored since gate 1.5.0 and the companion change archived 2026-08-01,
+   so 4b.4's "leave it alone" premise had expired. Three of three violations
+   fixed, not two.
+6. **5.5 measured: −1,877 net, not −3,090.** Estimate assumed a 13-line shim.
+   Executable logic per project still falls 351 → 102 (−71%).
 
 ## Next session: start here
 
-**Section 4 — the per-repo rollout**, one repo at a time, verified before the
-next. Per repo: replace two copies with shims, delete the five hooks, remove
-their `settings.json` entries, add `MultiEdit` to the `database-sentinel`
-matcher. Then §4b (the gate shim, with **4b.1a sequenced behind 3.6 — 3.6 is now
-done, so `agents-task-viewer` can be verified provisioned before its third
-candidate is removed**), then §4c (scaffolder, now 8 tasks not 6).
-
-**Do task 4.8a first.** It is the baseline nothing has measured: does the
-existing `Bash|Edit|Write` matcher actually fire today? Every claim that
-unprovisioned machines "lose" protection presumes it.
+**Task 5.8 — Stage-2 independent code review**, then push and open nine PRs.
+Nothing is pushed. Run `/code-review` or CodeRabbit against
+`feat/shim-project-hooks` in core first; the other eight are mechanical
+propagation of files core owns.
 
 ## Open questions
 
-- **2.3a and 4.8a need a FRESH session.** Both require observing a hook fire
-  live, and hooks load at session start — a probe registered now does not fire
-  now. Until then `normalize-claude-md` is described as failing open with its
-  channel *established by documentation, not by observation*. Do not upgrade
-  that wording without the observation.
-- Branch is **unpushed**; no PR opened. Say the word.
-- The convergence rule is still unwritten — third session running.
-- Your global `~/.claude/CLAUDE.md` still says commits are blocked until
-  `REVIEWS.md` carries ≥2 reviewers. Per `change-gate-enforcement` the gate
-  blocks only on validation. Still untouched — it is your instruction file.
+- **The fail-open reporting channel is UNVERIFIED and the evidence is
+  negative.** A live headless probe confirmed the shims run and allow, but the
+  exit-1 report reached neither the agent nor `stream-json`, while an exit-2
+  block did. The one check that settles it: on a machine with
+  `~/.agenticapps/bin/database-sentinel.sh` absent, edit any file in one of the
+  seven repos interactively and look for a `hook error` notice. **If nothing
+  appears, reopen the fail-open trade — it is a design problem, not a doc nit.**
+- **Every other machine is now unprovisioned** until it runs
+  `install-project-hooks.sh`. Protection travels with the machine, not the repo.
+- The convergence rule is still unwritten — fourth session.
+- Your global `~/.claude/CLAUDE.md` still says commits block on ≥2 reviewers;
+  the gate blocks only on validation. Untouched — it is your file.
