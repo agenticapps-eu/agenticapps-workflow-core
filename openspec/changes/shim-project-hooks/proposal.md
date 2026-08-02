@@ -137,6 +137,20 @@ deleting the producers discards nothing durable.
      directory, so **every migration edit in that repo is blocked today**. This
      is the same dead-sentinel mechanism as `design-shotgun-gate`, in the hook
      the earlier draft classified as healthy; naming this copy canonical without
+
+     **CORRECTED AT IMPLEMENTATION (2026-08-02, task 1.3a): the clause is in all
+     seven copies, and live in six.** This paragraph attributed it to `callbot`
+     alone. Measured on this machine across all seven repos: every
+     `database-sentinel.sh` carries the arm, and only `cparx` holds a
+     `.planning/current-phase/migrations-approved` sentinel. So migration edits
+     are blocked **today** in `agenticapps-dashboard`, `agenticapps-roadmap`,
+     `agents-task-viewer`, `callbot`, `fbc-platform` and `fx-signal-agent` —
+     six repos, not one. The remedy is unchanged; the reported impact is six
+     times larger, and the framing "`callbot`'s copy" understated a fleet-wide
+     defect as a one-repo variant. Recorded in
+     `reference-implementations/project-hooks/README.md` under "Reconciliation
+     record", difference 3.
+
      the correction would have propagated a live blocking defect to all seven
      repos. Its replacement is the deferred advisory database-review prompt,
      already recorded below.
@@ -243,8 +257,36 @@ while the change was editing its hooks.
 - **8 → 2** in `agents-task-viewer`, which receives no `normalize-claude-md`
   file (see the opt-out above).
 
-**The line figures are an estimate and are marked as one — the shims do not
-exist yet.** On the current sketch a three-hook project keeps roughly 138 lines
+> **MEASURED AT IMPLEMENTATION (task 5.5), and the estimate below was wrong by
+> about 60%.** The shims exist now, so these are counts, not projections:
+>
+> | | estimated | measured |
+> |---|---|---|
+> | the seven, before | 4,396 | **4,396** (exact) |
+> | the seven, after | ~950 | **1,944** |
+> | the seven, delta | −3,450 | **−2,452** |
+> | added to core | ~360 | **+575** |
+> | fleet net | ≈ −3,090 | **−1,877** |
+>
+> **Why the estimate missed.** It assumed a ~13-line shim, the size of the
+> original `openspec-change-gate.sh`, giving "roughly 138 lines" for a
+> three-hook project. The shims as built are ~93–105 lines each — 291 for a
+> three-hook project — because each one carries the contract it implements:
+> the resolution order and why there is no third candidate, the fail-open
+> reasoning, the repetition policy and why a session id is unreachable, and the
+> kill-switch warning.
+>
+> **The duplication argument is unaffected, and is stronger than the raw count
+> suggests.** Of those 291 lines, **102 are code and 189 are comments**. The
+> same repo before held **351 lines of code** across eight hooks, so executable
+> logic per project falls 351 → 102, a **−71%** reduction — and the 102 that
+> remain are byte-identical across all seven, whereas the 351 had drifted into
+> two or three versions in four of the eight files.
+>
+> No report of this change may quote the estimated figures. These are the
+> numbers.
+
+**The line figures below are the original estimate, kept for the record.** On the current sketch a three-hook project keeps roughly 138 lines
 and `agents-task-viewer` keeps less, having two. So 4,396 lines today become
 roughly 950, the seven projects shed on the order of **−3,450**, and ~360 lines
 are added once to core as canonical implementations — a fleet net of roughly
@@ -275,8 +317,13 @@ count is now enumerated rather than generalised.
 - Session-start no longer surfaces recent skill invocations, and skill
   invocations are no longer logged. This is the accepted cost of deleting the
   telemetry pair.
-- `callbot` can edit `migrations/` again — blocked today by a sentinel no
-  surviving command writes.
+- **Six repos** can edit `migrations/` again — `agenticapps-dashboard`,
+  `agenticapps-roadmap`, `agents-task-viewer`, `callbot`, `fbc-platform` and
+  `fx-signal-agent`, each blocked today by a sentinel no surviving command
+  writes. (`cparx` holds the sentinel, so it is unaffected.) An earlier revision
+  said "`callbot` can edit `migrations/` again", having read the clause as that
+  repo's variant; it is in all seven copies. Corrected at implementation,
+  task 1.3a.
 - A machine without the shared install loses `.env` and destructive-SQL
   protection, and reports that it has. It does not block.
 

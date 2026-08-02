@@ -78,6 +78,30 @@ re-vendor. That red is informational, not a defect.
 
 ### 3. Make projects carry almost nothing  *(the real lever)*
 
+> **Step 3a — hooks — DONE, 2026-08-02.** `shim-project-hooks`, ADR-0029. The
+> seven projects went from eight vendored hooks each to three (two in
+> `agents-task-viewer`, which keeps a documented opt-out): five hooks deleted,
+> two shimmed, and the change-gate shim migrated onto the same contract.
+> Executable hook logic per project fell 351 → 102 lines, byte-identical
+> everywhere; fleet total 4,396 → 1,944, net −1,877 after +575 to core.
+>
+> Two live defects were fixed on the way: `design-shotgun-gate` blocked every
+> `.tsx`/`.css` edit in `callbot` and `fbc-platform`, and a `migrations/` clause
+> blocked every migration edit in **six** of the seven, both on sentinels no
+> surviving command writes.
+>
+> `claude-workflow` was updated in the same change, or the next
+> `/setup-agenticapps-workflow` would have handed a new project every hook the
+> fleet had just deleted.
+>
+> **Carried, not closed:** the fail-open report's channel is unverified — a live
+> probe showed the shims run and allow, but the exit-1 notice reached neither the
+> agent nor the stream-json surface. See ADR-0029's last consequence.
+>
+> **Still open in step 3:** the four copies of core content per project —
+> `.claude/claude-md/workflow.md`, `.claude/workflow-config.md`, the vendored
+> `SKILL.md`, and the embedded §11 block. Hooks were the easy third.
+
 Today each project carries `.claude/claude-md/workflow.md`,
 `.claude/workflow-config.md`, a vendored `SKILL.md`, and an embedded §11 block —
 four copies of core content per project, 20+ across the fleet, and the reason
@@ -113,6 +137,24 @@ should land first, because a thin project makes a thin host almost automatic.
 Nineteen sections, several describing machinery that steps 1–4 remove. A spec
 section that no longer has an implementation is a maintenance obligation with no
 payer.
+
+**§02's GSD vocabulary is the root cause this step owns**, and step 3a named it
+rather than fixing it. GSD was removed on 2026-07-28; §02 still describes its
+gates in its terms, which is why a hook could share a name with a §02 gate
+(`design-shotgun-gate`) while that gate's actual binding was a gstack skill, and
+why the deletions had to be argued from what the host instruction file binds
+rather than from §02's own list. Two further inheritances found while clearing
+the hooks, both recorded and deliberately left for this step:
+
+- `normalize-claude-md`'s `profile` branch still emits
+  `Run /gsd-profile-user to generate` into `CLAUDE.md` — a remedy naming a
+  command removed with GSD.
+- The same hook rewrites `CLAUDE.md` to **link into `.planning/`**, the
+  directory fleet policy designates frozen archive. It only reads, so it breaks
+  no rule, but it points the live instruction file at frozen history.
+
+See `reference-implementations/project-hooks/README.md`, "Audit: other checks
+with dead preconditions".
 
 ## What NOT to do
 

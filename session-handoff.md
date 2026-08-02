@@ -1,86 +1,129 @@
-# Session Handoff — 2026-08-02 (late)
+# Session Handoff — 2026-08-02 (night)
 
-## Accomplished
+## Next session: run the §07 Stage-2 independent code review
 
-- **PR #59 merged** (`c334d05`, squash). The change-gate wrapper now forwards
-  `"$@"`, so `--ci` is no longer a silent green.
-- **PR #60 opened** — `chore/shim-project-hooks-reconcile`, rebased onto main.
-  Review rounds **8 (11 objections) and 9 (12 objections)** answered across all
-  four artifacts. `openspec validate --all` green, 5/5. **112 tasks, 0 done.**
+That is task **5.8**, the only open task of 114. This handoff exists to point you
+at the work, not to tell you what to think of it.
 
-### Three claims verified on disk rather than trusted
+> **Read the diff, not this file.** Everything below the scope section is the
+> *author's* account of their own change. It names what was done and why the
+> author believed it was right, which is exactly the reasoning an independent
+> review is supposed to form on its own. If you find yourself agreeing with a
+> decision because this document explained it, you have not reviewed it.
 
-1. **`agents-task-viewer` ships an executable `bin/openspec-change-gate.sh`;
-   the other six do not.** Task 4b.1 strips that resolution candidate, so in
-   that one repo it takes an unprovisioned machine from *enforced validation*
-   to fail-open. "Not a regression" was true of six repos and asserted of
-   seven. Decision taken: keep the rule uniform, sequence 4b.1 behind the
-   per-machine check for that binder (task 4b.1a).
-2. **`.planning/skill-observations/` holds 29 files, all 29
-   `<stamp>--<sessionId>`, zero `skill-router-*`.** The recorded 141/137/4 is
-   not reproducible — gitignored per-machine state. Restated as dated
-   single-machine observation in all four sites. The conclusion *strengthens*:
-   the non-hook producer is now 29 of 29.
-3. **Refuted:** opencode's claim that Decision 9's table mis-describes core's
-   hook. It describes the seven *project* shims — `agents-task-viewer`,
-   `cparx`, `callbot` each still carry four `<repo>/bin/` refs and an
-   `OPENSPEC_GATE_SELF` export. Residue was real: the decision named no path
-   and core has a same-named file since 2026-08-02. Path now stated.
+### Scope
 
-### The corrections that changed the plan
+Nine open PRs, none merged. **Review `agenticapps-workflow-core` PR #61.** The
+other eight are propagation of files core owns — check they match core and that
+each repo's `settings.json` agrees with its `.claude/hooks/` contents, then move
+on.
 
-- **§18 framing was stale.** Per `change-gate-enforcement` + ADR-0027 the gate
-  blocks only on `openspec validate --all`; reviews are reported, never
-  enforced. Four sites called a missing gate a lost "review requirement".
-- **Two shim profiles** — `published-resolution` / `self-hosting`. The split
-  existed only in task 4b.10 while the delta read as universal.
-- **Provisioning is two axes** (completeness × integrity), because the flat
-  four-state list was not mutually exclusive.
-- **Deletion clause 3 broadened to enforcement by any means** — which reverses
-  the argument for deleting `design-shotgun-gate`: a sentinel is a proxy, so
-  the old argument convicts it. Re-argued on **unreachability** (task 5.0a-i).
-- Shared dir ownership/permission/symlink rules; `flock` named; implementation
-  version marker defined; invalid-override report carved out of rate limiting.
+```
+core          https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/61
+scaffolder    https://github.com/agenticapps-eu/claude-workflow/pull/112
+dashboard 91 · roadmap 11 · agents-task-viewer 16 · callbot 98
+cparx 119 · fbc-platform 103 · fx-signal-agent 118
+```
 
-## Decisions
+Local branch: `feat/shim-project-hooks` (15 commits, pushed).
 
-- **Round 10 deliberately not run** — your call. Four of round 9's twelve were
-  introduced by round 8's fixes; two consecutive rounds show each fix pass
-  seeds the next round's findings. Recorded as open risk in the PR body.
-- **`agents-task-viewer`: provision first, then strip** — your call. Keeps one
-  rule, closes the enforcement window by ordering rather than by exception.
-- Review digest on `REVIEWS.md` is **stale by construction** — answering a
-  review edits the artifacts it reviewed. The gate reports, does not block.
+### What to review it against
 
-## Files modified
+- `openspec/changes/shim-project-hooks/specs/project-hook-binding/spec.md` — the
+  delta this change is supposed to satisfy. **This is the contract; the code
+  either meets it or does not.**
+- `reference-implementations/project-hooks/README.md` — the shim contract as
+  built. Where it and the delta disagree, the delta wins.
+- `proposal.md`, `design.md`, `tasks.md`, `DELETION-RECORD.md` — same change dir.
+- spec §02, §07, §17, §18 under `spec/`.
 
-- `openspec/changes/shim-project-hooks/{proposal,design,tasks}.md` and
-  `specs/project-hook-binding/spec.md` — rounds 8 + 9
-- `openspec/changes/shim-project-hooks/REVIEWS.md` — round 9 (producer-written)
+### Worth pointing a reviewer at, without saying what to conclude
 
-## Next session: start here
+- The shims are `exec` wrappers on a broad matcher (`Bash|Edit|Write|MultiEdit`).
+  Blast radius and failure posture are the load-bearing questions.
+- `install-project-hooks.sh` writes a manifest and takes a lock. Crash and
+  concurrency behaviour are asserted in
+  `tools/project-hook-provisioning.test.sh` — check the assertions actually
+  pin what they claim.
+- Five hooks were deleted. `DELETION-RECORD.md` argues each one; the argument is
+  the thing to audit, not the outcome.
+- Two test suites were *moved* rather than deleted
+  (`tools/normalize-claude-md.test.sh`). Check nothing was lost in the move.
 
-**Merge PR #60** — it is green and clean (`gate` SUCCESS, CodeRabbit SUCCESS,
-`mergeStateStatus: CLEAN`), left unmerged only because the session's authority
-extended to opening it, not merging it. Then the change is ready to
-*implement* — 112 tasks, starting at task 1.1, and note the ordering
-constraint: 4b.1a is sequenced behind 3.6, so the per-machine provisioning
-check must exist before `agents-task-viewer`'s third candidate is removed.
+### Known-open, so you do not spend time rediscovering it
+
+- **The fail-open report's channel is unverified and the evidence is negative.**
+  A live probe confirmed the shims run and allow, but the exit-1 report reached
+  neither the agent nor `stream-json`, while an exit-2 block did. See the README
+  section "The empirical leg (task 2.3a)".
+- `fx-signal-agent` PR #118 has two red checks, `pnpm-audit` and `gitleaks`,
+  both already red on `main` since 2026-07-28.
+- Merging was attempted and **blocked by the permission classifier**. Nothing is
+  merged. `gh pr merge --squash --delete-branch` per repo when authorised.
+
+---
+
+## Author's account — read AFTER forming your own view
+
+### What was built
+
+113/114 tasks. Nine repos. The seven projects went from eight vendored
+`.claude/hooks/` scripts each to three (two in `agents-task-viewer`, documented
+opt-out), byte-identical everywhere. Executable hook logic per project fell
+351 → 102 lines; fleet total 4,396 → 1,944, net −1,877 after +575 to core.
+
+Core gained the two implementations, the shim template, the migrated gate shim,
+`install-project-hooks.sh`, `provisioning-check.sh`,
+`project-hook-conformance.sh`, five test suites (**128 assertions green**),
+`DELETION-RECORD.md` and ADR-0029.
+
+Green: `openspec validate --all` 5/5 · gate `--ci` OK · gate conformance 71/71 ·
+`check-snapshot-parity.sh` PASS · `migrations/run-tests.sh` 206 pass.
+
+### Decisions taken by the human, not by the author
+
+- `flock` (task 3.2b-ii) not implemented as named — absent on macOS 26.6. The
+  property it protects is implemented with atomic `mkdir` + dead-pid breaker.
+- Cross-family rollout approved, all seven repos including `factiv/`.
+
+### Places execution contradicted the plan
+
+1. The `migrations/` block was in **all seven** copies and live in **six**, not
+   `callbot` alone.
+2. `session-bootstrap` is **not** the only reader of `skill-router-*.jsonl`; the
+   dashboard globs `*.jsonl`. The conclusion survived for a different reason —
+   its schema requires a `hook` field the producer never writes.
+3. Three un-tasked `claude-workflow` sites, one of which
+   (`check-snapshot-parity.sh`) *required* `phase-sentinel` — the drift guard
+   demanding the drift.
+4. **The shims dropped `argv`**, which would have made `normalize-claude-md` a
+   silent no-op fleet-wide. PR #59's defect one file over.
+5. **4b.7's residual is discharged, not carried** — `OPENSPEC_GATE_SELF` ignored
+   since gate 1.5.0, companion change archived 2026-08-01.
+6. 5.5 measured **−1,877**, not the estimated −3,090.
+
+### Two regressions the author caused and CI caught
+
+- **`agents-task-viewer`'s build broke.** Its `bin/openspec-gate-ci.sh` requires
+  a vendored gate and fails closed. That file had two consumers — the shim's
+  third candidate and CI — and the task list conflated them. File restored,
+  shim candidate still removed.
+- **`claude-workflow`'s CI was green on main and the author broke it.** Its
+  migration suite drove `normalize-claude-md` goldens against the new shim.
+  Corpus moved to core; `phase-sentinel` tests removed with the hook.
+
+## Also done this session
+
+`~/.claude/CLAUDE.md` corrected: the §18 gate blocks on validation only, and
+review evidence is reported, never enforced.
 
 ## Open questions
 
-- **The convergence rule is still unwritten**, now for the third session. The
-  stopping rule "no further reproducible defect" is not met and rounds 8 and 9
-  both demonstrated the regress. This is the thing to write into
-  `docs/WORKFLOW.md` before the next change runs a plan review.
-- **Your global `~/.claude/CLAUDE.md` is stale**: it says commits are blocked
-  until `REVIEWS.md` carries ≥2 other-vendor reviewers. Per
-  `change-gate-enforcement` the gate blocks only on validation. Same defect I
-  just corrected inside the change; untouched because it is your instruction
-  file.
-- Carried forward, all still open: core's published CI template retains the
-  supply-chain weaknesses fixed in core's own copy; manifests disagree
-  (claude-workflow pins seven files, the other three pin five); hosts still
-  cite core spec 1.4.0 against core's 1.5.0; five family repos have no
-  workflow; gemini's argument that a missing `openspec` CLI should
-  warn-and-allow locally while CI fails closed is sound and unfiled.
+- **`agenticapps-dashboard` needs untangling.** Another session was working there
+  concurrently; creating `chore/shim-project-hooks` moved its HEAD, and that
+  session's two commits (18:36, 18:37, the `close-readiness-spec-gaps` Stage-2
+  triage) landed on that branch. `feat/close-readiness-spec-gaps` still points at
+  `c6bce4f`. PR #91 was cherry-picked clean via a worktree, so it is unaffected —
+  but that branch needs sorting before that change ships.
+- The convergence rule is still unwritten — fourth session.
+- Every machine is unprovisioned until it runs `install-project-hooks.sh`.
