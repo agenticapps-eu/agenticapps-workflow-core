@@ -137,6 +137,20 @@ deleting the producers discards nothing durable.
      directory, so **every migration edit in that repo is blocked today**. This
      is the same dead-sentinel mechanism as `design-shotgun-gate`, in the hook
      the earlier draft classified as healthy; naming this copy canonical without
+
+     **CORRECTED AT IMPLEMENTATION (2026-08-02, task 1.3a): the clause is in all
+     seven copies, and live in six.** This paragraph attributed it to `callbot`
+     alone. Measured on this machine across all seven repos: every
+     `database-sentinel.sh` carries the arm, and only `cparx` holds a
+     `.planning/current-phase/migrations-approved` sentinel. So migration edits
+     are blocked **today** in `agenticapps-dashboard`, `agenticapps-roadmap`,
+     `agents-task-viewer`, `callbot`, `fbc-platform` and `fx-signal-agent` —
+     six repos, not one. The remedy is unchanged; the reported impact is six
+     times larger, and the framing "`callbot`'s copy" understated a fleet-wide
+     defect as a one-repo variant. Recorded in
+     `reference-implementations/project-hooks/README.md` under "Reconciliation
+     record", difference 3.
+
      the correction would have propagated a live blocking defect to all seven
      repos. Its replacement is the deferred advisory database-review prompt,
      already recorded below.
@@ -275,8 +289,13 @@ count is now enumerated rather than generalised.
 - Session-start no longer surfaces recent skill invocations, and skill
   invocations are no longer logged. This is the accepted cost of deleting the
   telemetry pair.
-- `callbot` can edit `migrations/` again — blocked today by a sentinel no
-  surviving command writes.
+- **Six repos** can edit `migrations/` again — `agenticapps-dashboard`,
+  `agenticapps-roadmap`, `agents-task-viewer`, `callbot`, `fbc-platform` and
+  `fx-signal-agent`, each blocked today by a sentinel no surviving command
+  writes. (`cparx` holds the sentinel, so it is unaffected.) An earlier revision
+  said "`callbot` can edit `migrations/` again", having read the clause as that
+  repo's variant; it is in all seven copies. Corrected at implementation,
+  task 1.3a.
 - A machine without the shared install loses `.env` and destructive-SQL
   protection, and reports that it has. It does not block.
 

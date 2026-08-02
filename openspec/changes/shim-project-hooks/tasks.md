@@ -1,15 +1,15 @@
 ## 1. Establish the two canonical implementations
 
-- [ ] 1.1 Create `reference-implementations/project-hooks/` with a README stating the shim contract, the two-candidate resolution order, the fail-open-and-warn rule, and `database-sentinel`'s coverage boundary
-- [ ] 1.2 Diff all three `normalize-claude-md.sh` variants; adopt `agenticapps-dashboard`'s as canonical and fold in any genuine addition from `agents-task-viewer`'s 314-line variant (resolves design open question 1)
-- [ ] 1.3 Diff all three `database-sentinel.sh` variants and reconcile to the superset: `callbot`'s `.env` wildcard plus its `.env.example`/`.env.template` allowance, plus `MultiEdit` handling
-- [ ] 1.3a Per behavioural difference found in 1.3, record which variant is canonical **and why** — the superset is the default, not an unconditional rule. Escalate rather than union any difference that traces to no live gate or stated policy, and preserve deliberate project-specific differences as documented opt-outs
-- [ ] 1.4 **Drop the `migrations/` clause** (`callbot` lines 57–67) from the canonical implementation — it gates on `.planning/current-phase/migrations-approved` and prints a remedy naming `/gsd-discuss-phase`, removed 2026-07-28
-- [ ] 1.5 Verify against `callbot` that a `migrations/` edit is blocked before the change and allowed after — the defect is live, so the fix is demonstrable, not theoretical
-- [ ] 1.6 Verify the reconciled `database-sentinel` still blocks `DROP`/`TRUNCATE TABLE` and `DELETE FROM` without a `WHERE`, unchanged
-- [ ] 1.7 Confirm no variant contained a protection the reconciled version drops — enumerate every matched path and tool across all three before finalising
-- [ ] 1.8 Audit both canonical implementations for any **other** check whose precondition no surviving command can satisfy, the failure class 1.4 belongs to
-- [ ] 1.9 Document `database-sentinel`'s coverage boundary in the README: `Bash` can write `.env` directly, `psql -f` bypasses the SQL patterns, and the shared implementation is user-writable by anything running as this user
+- [x] 1.1 Create `reference-implementations/project-hooks/` with a README stating the shim contract, the two-candidate resolution order, the fail-open-and-warn rule, and `database-sentinel`'s coverage boundary
+- [x] 1.2 Diff all three `normalize-claude-md.sh` variants; adopt `agenticapps-dashboard`'s as canonical and fold in any genuine addition from `agents-task-viewer`'s 314-line variant (resolves design open question 1)
+- [x] 1.3 Diff all three `database-sentinel.sh` variants and reconcile to the superset: `callbot`'s `.env` wildcard plus its `.env.example`/`.env.template` allowance, plus `MultiEdit` handling
+- [x] 1.3a Per behavioural difference found in 1.3, record which variant is canonical **and why** — the superset is the default, not an unconditional rule. Escalate rather than union any difference that traces to no live gate or stated policy, and preserve deliberate project-specific differences as documented opt-outs
+- [x] 1.4 **Drop the `migrations/` clause** (`callbot` lines 57–67) from the canonical implementation — it gates on `.planning/current-phase/migrations-approved` and prints a remedy naming `/gsd-discuss-phase`, removed 2026-07-28
+- [x] 1.5 Verify against `callbot` that a `migrations/` edit is blocked before the change and allowed after — the defect is live, so the fix is demonstrable, not theoretical
+- [x] 1.6 Verify the reconciled `database-sentinel` still blocks `DROP`/`TRUNCATE TABLE` and `DELETE FROM` without a `WHERE`, unchanged
+- [x] 1.7 Confirm no variant contained a protection the reconciled version drops — enumerate every matched path and tool across all three before finalising
+- [x] 1.8 Audit both canonical implementations for any **other** check whose precondition no surviving command can satisfy, the failure class 1.4 belongs to
+- [x] 1.9 Document `database-sentinel`'s coverage boundary in the README: `Bash` can write `.env` directly, `psql -f` bypasses the SQL patterns, and the shared implementation is user-writable by anything running as this user
 
 ## 2. Author the shims
 
