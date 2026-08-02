@@ -285,6 +285,43 @@ systemic problem.
   rather than claimed. That is the change's own rule applied against its own
   interest.
 
+### Remediation — added 2026-08-02, after the change merged
+
+Ten of the eleven findings are fixed on `fix/stage-2-review-findings`, plus one
+found while fixing. Test count went 127 → 155 assertions, all green.
+
+| # | State | Note |
+|---|---|---|
+| 1 mode inversion | **fixed** | mode captured and re-applied around the `mv`; `normalize-claude-md-version` → 1.0.1. The RED test proved it: 0644 in, 0600 out |
+| 2 write surface unchecked | **fixed** | `WRITE-SURFACE` reporting in `provisioning-check.sh` over the directory, every artifact and the manifest; counts toward `--strict` |
+| 3 concurrency assertion | **fixed** | `INSTALL_PROJECT_HOOKS_TEST_HOLD_LOCK` widens the critical section; the rewritten case now fails 3/3 with the lock removed where the old one passed 15/15 |
+| 4 stale-lock race | **fixed** | break by `rename` + pid re-verify, restore rather than destroy on mismatch |
+| 5 content unchecked | **fixed** | `IDENTITY` check against the rendered template / the gate's reference shim; self-hosting binder recorded out of profile |
+| 6 override accepts a directory | **DEFERRED — needs a decision** | see below |
+| 7 two declarations | **fixed** | `SHIMMED-HOOKS`, with a header on why it is not `ARTIFACTS` |
+| 8 `--dest` crash | **fixed** | guarded, exits 64 like its sibling |
+| 9 comment overstates mode | **fixed** | comment now says 0755, which is what a fresh install measures |
+| 10 DELETE regex | **fixed** | schema-qualified, quoted, backticked and backslash-escaped identifiers; WHERE escape untouched; `database-sentinel-version` → 1.1.0 |
+| 11 no `jq` check | **fixed** | reports and exits 1 — non-blocking, and visible, which exit 0 would not be |
+| **12 the exemplar carried no marker** | **fixed** | found while fixing 5: core's own gate hook had no `# shim-contract:` line, so the tool reported the repository that *defines* the contract as `unrecognised`. The marker binds both profiles |
+
+**Why 6 is deferred rather than done.** The fix itself is one line —
+`[ -f "$OVERRIDE" ] && [ -x "$OVERRIDE" ]`. But it changes a shim's exit
+behaviour, and this capability requires that "bumping the contract version SHALL
+accompany any change to resolution order, exit behaviour or identification",
+with the contract change then named per binder and verified per project. So the
+one-line fix obliges `shim-contract: 1.0.0 → 1.1.0` and a re-render into eight
+files across seven repositories, each with its own PR — immediately after the
+rollout that just landed. That is a scope decision for the operator, not a
+reviewer's call to make silently. Nothing else in this remediation touches the
+shim template, so the fleet is byte-identical to core's authority right now and
+the new `IDENTITY` check verifies it.
+
+The implementation version bumps (10 and 1) do **not** propagate: they are
+published artifacts, not shims. Every machine picks them up by re-running
+`install-project-hooks.sh`, which the per-machine check will report as drift
+until it does — correctly.
+
 ### Verdict
 
 **pass-with-followups.**

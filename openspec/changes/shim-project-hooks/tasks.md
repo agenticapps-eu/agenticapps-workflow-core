@@ -147,3 +147,24 @@ unless 4.8 finds otherwise.
 - [x] 6.1 Write the ADR: shim-vs-symlink-vs-package; why the fail-closed posture was adopted and then withdrawn once the matcher scope was measured; why a hook's filename is not evidence of a §02 binding **in either direction**; and why superset reconciliation must also test whether each inherited clause can still fire
 - [x] 6.2 Update `docs/PLAN-lightweight-fleet.md` marking step 3a done, and record that §02's GSD vocabulary is the step 5 root cause
 - [x] 6.3 Confirm the two deferred advisory prompts remain recorded in the proposal for future pickup
+
+## 7. Stage-2 review remediation
+
+Defects the change's own Stage-2 review found in the change's own code. They
+belong to this change and are discharged before it archives. Full statements,
+evidence and the deferral argument are in `CODE-REVIEW.md`; the table there is
+the record, these are the tasks. 127 → 155 assertions, all green.
+
+- [x] 7.1 (finding 1) `normalize-claude-md` — capture and re-apply the file mode around the `mv`, since `rename(2)` gives `CLAUDE.md` the temp file's 0600. Bump `normalize-claude-md-version` to 1.0.1. RED first: measured 0644 in, 0600 out
+- [x] 7.2 (finding 2) `provisioning-check.sh` — report ownership and group/world-writability of the directory, every artifact and the manifest, as their own `WRITE-SURFACE` dimension counting toward `--strict`. NOT folded into `completeness`/`integrity`, whose definitions the capability spent a review round separating
+- [x] 7.3 (finding 3) Add `INSTALL_PROJECT_HOOKS_TEST_HOLD_LOCK` **after** the manifest read, and rewrite the concurrency case to assert both surviving rows and that the second run blocked. Verified the rewrite fails 3/3 with the lock removed, where the old case passed 15/15
+- [x] 7.4 (finding 4) `install-project-hooks.sh` — break a stale lock by `rename` and re-verify the pid, restoring rather than destroying a lock retaken mid-break. The old unconditional `rm -rf` let two waiters both enter the critical section
+- [x] 7.5 (finding 5) `project-hook-conformance.sh` — add the `IDENTITY` check comparing each shim against the rendered template (or the gate's reference shim), with the self-hosting binder recorded out of profile rather than as drift
+- [ ] 7.6 (finding 6) **DEFERRED, pending an operator decision.** Require an override to name a regular file. One line, but it changes shim exit behaviour, so it obliges `shim-contract: 1.0.0 → 1.1.0` and a verified re-render into eight files across seven repositories. Scope decision, not a reviewer's call
+- [x] 7.7 (finding 7) Declare the shimmed-hook set in `SHIMMED-HOOKS` instead of hardcoding it in the third tool, with a header on why it is not `ARTIFACTS`
+- [x] 7.8 (finding 8) Guard `provisioning-check.sh`'s option values — exit 64 like its sibling, not an `unbound variable` crash
+- [x] 7.9 (finding 9) Correct the installer comment claiming 0700 on a directory a fresh install measures at 0755
+- [x] 7.10 (finding 10) Widen `database-sentinel`'s DELETE identifier arm to schema-qualified, quoted, backticked and backslash-escaped tables. WHERE escape untouched. Bump `database-sentinel-version` to 1.1.0
+- [x] 7.11 (finding 11) `database-sentinel` — report a missing `jq` and exit 1 rather than dying at exit 127 with nothing explaining why
+- [x] 7.12 (finding 12, found while fixing 7.5) Add the `# shim-contract:` marker to core's own gate hook. The marker binds **both** profiles, and without it the tool reported the repository that defines the contract as `unrecognised` — the exemplar exemption the capability's last requirement exists to forbid
+- [x] 7.13 Re-run every surface: 5 suites 155/155, `openspec validate --all` 5/5, gate `--ci` OK, gate conformance 355/355, scaffolder `check-snapshot-parity.sh` PASS, and the `IDENTITY` check verified clean against the landed fleet

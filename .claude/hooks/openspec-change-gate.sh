@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 # Hook — OpenSpec Change Gate (PreToolUse), core's own copy.
 #
+# shim-contract: 1.0.0
+# Profile: self-hosting.
+#
+# The marker binds BOTH profiles — it, the behaviour-free rule and
+# fail-open-and-report are the whole of what one marker can honestly attest, and
+# they are what the two profiles have in common. This file carried no marker at
+# all, so project-hook-conformance.sh reported the repository that DEFINES the
+# contract as `unrecognised` (Stage-2 finding 12). A rule with an unstated
+# exemption for its own exemplar is advisory, which is the failure the
+# "rules bind every fleet-shared hook, including the gate" requirement exists to
+# prevent.
+#
+# Byte-identity against the project render does NOT bind this file: identity is
+# required within a profile, never across profiles. The resolution order below
+# is the deliberate inversion ADR-0028 requires, not drift.
+#
 # This is NOT the shim consuming projects install. Theirs resolves
 # ~/.agenticapps/bin/openspec-change-gate.sh — the published copy. Core resolves
 # its OWN working-tree reference implementation, which is the exact inverse.

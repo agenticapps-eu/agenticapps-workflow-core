@@ -70,6 +70,16 @@ ARTIFACTS=""
 TEST_ABORT_AFTER="${INSTALL_PROJECT_HOOKS_TEST_ABORT_AFTER:-0}"
 TEST_ABORT_BEFORE_MANIFEST="${INSTALL_PROJECT_HOOKS_TEST_ABORT_BEFORE_MANIFEST:-0}"
 
+# TEST ONLY. Seconds to hold the lock inside the critical section, so a second
+# run provably contends instead of finishing before the first one starts.
+#
+# Stage-2 finding 3: without this the concurrency test backgrounded two runs
+# that each completed in milliseconds and never overlapped — it passed 15/15
+# with the lock removed outright. An assertion that survives deletion of the
+# mechanism it names is not testing the mechanism. Same precedent as
+# install-shared-artifact.sh's SHARED_INSTALL_TEST_DELAY.
+TEST_HOLD_LOCK="${INSTALL_PROJECT_HOOKS_TEST_HOLD_LOCK:-0}"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --source)    [ $# -ge 2 ] || { echo "install-project-hooks: --source needs a value" >&2; exit 64; }; SOURCE_DIR="$2"; shift 2 ;;
@@ -165,9 +175,35 @@ waited=0
 while ! mkdir "$LOCKDIR" 2>/dev/null; do
   lpid="$(cat "$LOCKDIR/pid" 2>/dev/null || true)"
   if [ -n "$lpid" ] && ! kill -0 "$lpid" 2>/dev/null; then
-    note "breaking stale lock from dead pid $lpid"
-    rm -rf "$LOCKDIR"
-    continue
+    # BREAK BY RENAME, NOT BY rm -rf (Stage-2 finding 4).
+    #
+    # `rm -rf "$LOCKDIR"` here was unconditional once a dead pid had been read,
+    # and two waiters that both read the same dead pid raced: the first broke
+    # the lock and took it, the second then deleted the LIVE lock it had just
+    # taken and entered the critical section alongside it. Losing mutual
+    # exclusion is the failure `flock` would not have had, and it was not among
+    # the residuals recorded when flock was traded away for mkdir.
+    #
+    # rename is atomic, so only one waiter can win the break. The pid is then
+    # re-read from the directory actually moved: if it is not the pid judged
+    # dead, a third run took the lock between the read and the rename, and the
+    # lock is put back rather than destroyed.
+    stale="$LOCKDIR.stale.$$"
+    if mv "$LOCKDIR" "$stale" 2>/dev/null; then
+      if [ "$(cat "$stale/pid" 2>/dev/null || true)" = "$lpid" ]; then
+        note "breaking stale lock from dead pid $lpid"
+        rm -rf "$stale"
+      else
+        # Not the lock we judged dead. Restore it; if restoring fails, someone
+        # else already holds the path, so leave the moved copy alone rather
+        # than deleting a lock that is in use. It is visible litter beside the
+        # manifest, which is the safe direction to fail in.
+        mv "$stale" "$LOCKDIR" 2>/dev/null || \
+          note "left $stale in place: the lock was retaken while it was being broken"
+      fi
+      continue
+    fi
+    # Another waiter won the break. Fall through and contend for it normally.
   fi
   waited=$((waited + 1))
   [ "$waited" -ge "$LOCK_TIMEOUT" ] && die "timed out after ${LOCK_TIMEOUT}s waiting for $LOCKDIR"
@@ -188,9 +224,20 @@ if [ -f "$MANIFEST" ]; then
   done < "$MANIFEST"
 fi
 
+# TEST ONLY — hold the lock here, AFTER the manifest has been read and BEFORE
+# it is rewritten. That is where the read-modify-write window lives, so this is
+# the only placement under which an unlocked second run can be caught losing the
+# first run's rows. Held before the read, both runs would read fresh state and
+# the test would pass with no lock at all — which is the defect being fixed.
+[ "$TEST_HOLD_LOCK" != "0" ] && sleep "$TEST_HOLD_LOCK"
+
 # ── publish ─────────────────────────────────────────────────────────────────
-# 0700 on the directory, 0755 on the artifacts, and neither group- nor
-# world-writable. This directory is an arbitrary-code-execution concentration
+# 0755 on the directory and on the artifacts — readable and traversable, and
+# neither group- nor world-WRITABLE, which is the property that matters. (The
+# comment here said "0700 on the directory"; the code applies `go-w` and a fresh
+# install measures 0755. Stage-2 finding 9 — the comment claimed a stricter
+# posture than the code implements, which is the failure class this whole change
+# exists to remove.) This directory is an arbitrary-code-execution concentration
 # point: seven projects exec whatever is in it, so anyone who can write here
 # changes what all seven enforce (task 3.2a-v).
 mkdir -p "$DEST_DIR" 2>/dev/null || die "cannot create $DEST_DIR"

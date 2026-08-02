@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # database-sentinel — best-effort defence in depth at the tool-call boundary.
 #
-# database-sentinel-version: 1.0.0
+# database-sentinel-version: 1.1.0
 #
 # THIS IS THE CANONICAL IMPLEMENTATION. Projects bind it through a shim; see
 # ./README.md for the shim contract and ./shim-template.sh for the shim itself.
@@ -24,6 +24,21 @@
 
 set -e
 
+# jq is the only dependency, and its absence used to abort at the first command
+# substitution with exit 127 and nothing explaining why (Stage-2 finding 11).
+# The shim layer is meticulous about announcing an implementation it cannot
+# resolve; an implementation that cannot resolve its own dependency owes the
+# operator the same courtesy.
+#
+# Exit 1, not 0, and for the reason the shims exit 1: on this host a PreToolUse
+# hook exiting 0 has its stderr discarded from the transcript, so a warning on
+# exit 0 warns nobody. Exit 1 is a non-blocking error — the tool call proceeds.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "database-sentinel: jq is not installed — this hook did NOT run, and the tool call was allowed" >&2
+  echo "   Install jq to restore it. Until then this protection is absent, not silently passing." >&2
+  exit 1
+fi
+
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
@@ -41,7 +56,18 @@ if [ "$TOOL" = "Bash" ]; then
     echo "             reference an ADR that accepts the destructive operation" >&2
     exit 2
   fi
-  if echo "$COMMAND" | grep -qiE 'delete[[:space:]]+from[[:space:]]+[a-z_][a-z0-9_]*[[:space:]]*(;|$)'; then
+  # The identifier arm accepts an optional schema qualifier and optional quoting
+  # or backticks. It stopped at the first dot, so `DELETE FROM public.users;` —
+  # the plainest spelling of the statement this clause exists to catch — fell
+  # out of the match and was allowed (Stage-2 finding 10). Widened deliberately
+  # and narrowly: the WHERE-clause escape is untouched, so nothing that was
+  # allowed before is blocked now except a full-table delete that was always
+  # meant to be.
+  # The quoting class is [ ] ` " \ — MSSQL brackets, MySQL backticks, standard
+  # double quotes, and the BACKSLASH that survives in the payload when the SQL
+  # was nested inside a double-quoted shell argument: what the hook actually
+  # receives from `psql -c "DELETE FROM \"users\";"` contains \" literally.
+  if echo "$COMMAND" | grep -qiE 'delete[[:space:]]+from[[:space:]]+[][`"\]*[a-z_][a-z0-9_]*[][`"\]*(\.[][`"\]*[a-z_][a-z0-9_]*[][`"\]*)?[[:space:]]*(;|$)'; then
     echo "❌ Database Sentinel: blocked DELETE without WHERE clause" >&2
     echo "   Command: $COMMAND" >&2
     echo "   Reason: deletes all rows. Add a WHERE clause or run outside Claude Code." >&2

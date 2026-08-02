@@ -148,6 +148,60 @@ has_re "$OUT" 'no known vector|known vector' "a clean scan says 'no known vector
 hasnt  "$OUT" "no override is set"           "a clean scan does not claim no override is set"
 
 echo
+echo "=== Stage-2 finding 5  a shim's CONTENT is checked, not only its marker ==="
+# The template in core is "the authority", but the only thing compared was a
+# version string. A shim could be edited to add behaviour, reorder resolution,
+# or drop the fail-open path and still report `current`, because nothing read
+# the rest of the file. Byte-identity within a profile is normative and the
+# render is deterministic, so it is checkable.
+d=$(mkproject identity-clean "$TEMPLATE_VERSION")
+OUT=$("$TOOL" "$d" 2>&1)
+has "$OUT" "IDENTITY" "an untouched shim gets an identity verdict"
+has "$OUT" "matches the template" "…and it matches"
+
+# The case the marker cannot catch: current marker, edited body.
+d=$(mkproject identity-edited "$TEMPLATE_VERSION")
+printf 'echo "surprise" >&2\n' >> "$d/.claude/hooks/database-sentinel.sh"
+OUT=$("$TOOL" "$d" 2>&1)
+has_re "$OUT" "IDENTITY.*(DIFFERS|differs)" "an edited shim with a current marker is reported DIFFERS"
+has "$OUT" "current" "…while its marker still reads current — which is the point"
+"$TOOL" --strict "$d" >/dev/null 2>&1; rc=$?
+[ "$rc" -ne 0 ] && ok "--strict fails on an edited shim" \
+                || bad "--strict fails on an edited shim" "got exit 0"
+
+echo
+echo "=== Stage-2 finding 5  the self-hosting binder is out of profile, not non-conformant ==="
+# Core's own gate hook resolves its working tree by design (ADR-0028). Byte
+# identity is required WITHIN a profile, never across profiles, so scoring core
+# against the project render would report the deliberate inversion as drift.
+OUT=$("$TOOL" "$ROOT" 2>&1)
+has_re "$OUT" "IDENTITY.*(self-hosting|out of profile)" \
+  "core's own gate hook is recorded as self-hosting rather than DIFFERS"
+
+echo
+echo "=== Stage-2 finding 12  the exemplar carries the marker that binds both profiles ==="
+# The version marker, the behaviour-free rule and fail-open-and-report bind BOTH
+# profiles — they are the whole of what one marker can honestly attest. Core's
+# own copy carried no marker at all, so the tool reported the repository that
+# defines the contract as `unrecognised`. A rule with an unstated exemption for
+# its own exemplar is advisory.
+hasnt "$OUT" "unrecognised" "core's gate hook is not reported unrecognised"
+
+echo
+echo "=== Stage-2 finding 7  the shimmed-hook set is declared, not hardcoded ==="
+# The installer and the provisioning check both read a declaration because a set
+# derived in more than one place drifts. The conformance tool hardcoded its own.
+DECL="$ROOT/reference-implementations/project-hooks/SHIMMED-HOOKS"
+if [ -f "$DECL" ]; then
+  ok "a shimmed-hook declaration exists at $(basename "$DECL")"
+  for h in database-sentinel normalize-claude-md openspec-change-gate; do
+    grep -qx "$h" "$DECL" && ok "…and declares $h" || bad "…and declares $h"
+  done
+else
+  bad "a shimmed-hook declaration exists" "no file at $DECL"
+fi
+
+echo
 echo "=== 2.7d  the baseline: the real seven start green on this vector ==="
 # Verifies the "no project sets env today" claim rather than restating it.
 # Scoped honestly: this asserts the settings.json vector across the real repos
