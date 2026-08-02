@@ -40,6 +40,24 @@
 # preferred when present because it is what the host says the project is.
 SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd -P)"
 ROOT="${CLAUDE_PROJECT_DIR:-$SELF_ROOT}"
+
+# TWO DIFFERENT FAILURES, TWO DIFFERENT ANSWERS. Fail-open below is for a gate
+# that is genuinely absent — tooling not installed, which must not brick a
+# session. Not knowing WHERE to look is a different thing: it would reach that
+# same branch and report an ungated edit for a repository whose gate is present
+# and working. An unresolvable root is a defect, so it fails CLOSED.
+#
+# Only an explicit OPENSPEC_GATE override skips this, because it makes the
+# question moot by naming the gate outright.
+if [ -z "${OPENSPEC_GATE:-}" ] && [ ! -d "$ROOT" ]; then
+  printf 'openspec-gate: ERROR — could not resolve the project root.\n' >&2
+  printf '  CLAUDE_PROJECT_DIR=%s\n' "${CLAUDE_PROJECT_DIR:-<unset>}" >&2
+  printf '  fallback (this hook'"'"'s own location)=%s\n' "${SELF_ROOT:-<empty>}" >&2
+  printf '  Blocking rather than allowing: an edit cannot be reported as gated\n' >&2
+  printf '  when the gate could not be located. Set OPENSPEC_GATE to override.\n' >&2
+  exit 2
+fi
+
 GATE="${OPENSPEC_GATE:-$ROOT/reference-implementations/openspec-change-gate/openspec-change-gate.sh}"
 
 # FAIL OPEN if the gate cannot be located. A hook that hard-fails because

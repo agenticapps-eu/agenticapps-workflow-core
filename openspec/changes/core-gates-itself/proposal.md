@@ -67,6 +67,9 @@ it there would give a spec with a crisp single purpose a second, unrelated one.
   run by the CI job. Added because the job scored the gate 71/71 green while the
   installer carried four live defects: the harness scores the artifact core
   publishes, not the code core runs
+- `tools/test-claude-hook-wrapper.sh` — regression tests for the `PreToolUse`
+  wrapper and its registration, run by the CI job. The wrapper fires on every
+  edit and both its defects were silent ungating
 - `adrs/0028-core-gates-itself.md` — the resolution decision
 
 **Files modified**

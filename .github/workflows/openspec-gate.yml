@@ -113,6 +113,12 @@ jobs:
             exit 1
           fi
 
+      - name: Test the PreToolUse wrapper and its registration
+        # The wrapper runs on every edit, and both of its defects were SILENT
+        # UNGATING — the one failure a gate may not have. Neither the harness
+        # nor the installer suite executes it.
+        run: bash tools/test-claude-hook-wrapper.sh
+
       - name: Test the hook installer
         # The harness above scores the GATE. It does not execute this
         # repository's own interposition points, and that gap is not academic:

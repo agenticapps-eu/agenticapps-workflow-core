@@ -98,24 +98,32 @@ x=0; [ -e "$d/created-in-worktree" ] && x=1
 check "dangling symlink is refused, not followed" 1 "$r" "wrote through symlink into worktree" "$x"
 
 # --- containment ------------------------------------------------------------
+# SETUP IS NOT THE MEASUREMENT. Folding `mkdir`/`git config` into the same
+# subshell as the installer makes a failed SETUP indistinguishable from a
+# correct refusal: `r` is non-zero either way, and "no hook was written" is
+# equally true when the installer never ran. Setup aborts the suite; only the
+# installer's own status reaches `r`.
+setup(){ ( cd "$1" && shift && "$@" ) || { printf 'SETUP FAILED in %s: %s\n' "$1" "$*" >&2; exit 1; }; }
+
 d="$(fresh_repo intree_exists)" || exit 1
-( cd "$d" && mkdir -p .githooks && git config core.hooksPath .githooks \
-  && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
+setup "$d" mkdir -p .githooks
+setup "$d" git config core.hooksPath .githooks
+( cd "$d" && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
 x=0; [ -e "$d/.githooks/pre-commit" ] && x=1
 check "in-tree hooksPath (existing) is refused" 1 "$r" "wrote into worktree" "$x"
 
 # REGRESSION: canonicalisation could not resolve an absent path and the
 # single-level parent fallback failed too, yielding a path outside the tree.
 d="$(fresh_repo intree_missing)" || exit 1
-( cd "$d" && git config core.hooksPath .githooks/missing/hooks \
-  && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
+setup "$d" git config core.hooksPath .githooks/missing/hooks
+( cd "$d" && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
 x=0; [ -e "$d/.githooks/missing/hooks/pre-commit" ] && x=1
 check "in-tree hooksPath (deep-missing) is refused" 1 "$r" "wrote into worktree" "$x"
 
 d="$(fresh_repo outside_missing)" || exit 1
 out="$WORK/outside/a/b"
-( cd "$d" && git config core.hooksPath "$out" \
-  && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
+setup "$d" git config core.hooksPath "$out"
+( cd "$d" && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
 x=0; [ -x "$out/pre-commit" ] || x=1
 check "outside-tree hooksPath (deep-missing) installs" 0 "$r" "hook missing or not executable" "$x"
 
@@ -133,9 +141,14 @@ check "linked worktree installs into main checkout" 0 "$r" "hook not in main che
 # The gate has IGNORED OPENSPEC_GATE_SELF since 1.5.0; exporting it while
 # claiming it excludes a host's own reviews is the hazard the gate names.
 d="$(fresh_repo generated)" || exit 1
-( cd "$d" && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 )
-x=0; grep -q "OPENSPEC_GATE_SELF=" "$d/.git/hooks/pre-commit" && x=1
-check "generated hook exports no dead OPENSPEC_GATE_SELF" 0 0 "dead export present" "$x"
+( cd "$d" && bash tools/install-core-git-hooks.sh >/dev/null 2>&1 ); r=$?
+# Assert the hook EXISTS before grepping it. Passing a hardcoded 0 and grepping
+# a file that may not be there made this case green whenever the installer had
+# silently done nothing — absence of a bad string is not evidence.
+x=0; [ -f "$d/.git/hooks/pre-commit" ] || x=1
+check "generated hook is written" 0 "$r" "no hook to inspect" "$x"
+x=0; grep -q "OPENSPEC_GATE_SELF=" "$d/.git/hooks/pre-commit" 2>/dev/null && x=1
+check "generated hook exports no dead OPENSPEC_GATE_SELF" 0 "$r" "dead export present" "$x"
 
 x=0; ( cd "$d" && OPENSPEC_GATE=/nonexistent/gate .git/hooks/pre-commit >/dev/null 2>&1 ) || x=$?
 check "generated hook fails OPEN on a missing gate" 0 "$x"

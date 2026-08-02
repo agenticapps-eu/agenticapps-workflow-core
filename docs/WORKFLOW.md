@@ -161,10 +161,15 @@ hosts produced.
   boundary is the checkout.
 - **The commit hook needs the installer per clone**, and its ownership marker is
   a claim, not an integrity proof.
-- **The `PreToolUse` wrapper has no CI coverage.** The suite covers the
-  installer and the commit hook it generates. The wrapper's cwd-independence and
-  its `settings.json` registration were verified by hand; nothing would catch
-  their regression automatically.
+Both interposition points are pinned by suites the CI job runs —
+`tools/test-install-core-git-hooks.sh` and `tools/test-claude-hook-wrapper.sh`.
+Every case in each is a regression test for a defect that was actually
+reproduced, and both are verified to fail against the code they describe.
+
+An **unresolvable project root fails closed** (exit 2). Fail-open is reserved
+for tooling that is genuinely absent; not knowing where to look is a defect, and
+reporting an ungated edit for a repository whose gate is present and working is
+the outcome this wrapper may not have.
 
 ## Where prose lives (§19)
 

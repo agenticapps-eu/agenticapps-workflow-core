@@ -213,11 +213,49 @@ carried as followups rather than silently closed:
 
 1. **Findings 1 and 5 are fixed but not reproduced** — argued above. Neither is
    covered by an executing test.
-2. **The `PreToolUse` wrapper still has no CI coverage.** The new suite tests
-   the installer and the hook it generates; the wrapper's cwd-independence was
-   verified by hand, including a sentinel proving exit 2 propagates from a
-   foreign working directory, but nothing in CI would catch its regression.
-   `settings.json` registration is likewise untested.
+2. ~~The `PreToolUse` wrapper still has no CI coverage.~~ **Closed** — see the
+   CodeRabbit round below.
 
 Both are recorded rather than implied, per §06.
+
+## Stage 2, second round — CodeRabbit
+
+CodeRabbit reviewed the Stage-2 fixes on push and returned six inline findings.
+It ran a real review, not a rate-limited green — the distinction that mattered
+earlier on this branch. Three were genuine, and two of those were cases where
+**this change's own spec delta was already stricter than its implementation**:
+
+- **The wrapper still failed open on an unresolvable root** (Major). A bogus
+  `CLAUDE_PROJECT_DIR` reached the missing-gate branch, which reports an ungated
+  edit. The delta already said "failing open because the wrapper could not work
+  out where it was is a defect", so the code was wrong, not the requirement.
+  Root resolution now fails **closed** with exit 2; `OPENSPEC_GATE` still
+  overrides, since naming the gate makes the question moot.
+
+- **CI exercised the installer but not the wrapper** (Major). Also already
+  required: "Core's CI SHALL therefore also exercise the interposition code this
+  capability adds." I had recorded this as a followup, which was the wrong
+  disposition for a requirement already written. Added
+  `tools/test-claude-hook-wrapper.sh` — 9 cases covering block/allow
+  propagation from a foreign cwd, fail-closed on unresolvable root, fail-open on
+  genuinely absent tooling, override precedence, the dead-export check, and the
+  `settings.json` quoting and matcher.
+
+- **Two installer cases could pass without the installer running** (Minor).
+  Setup commands shared a subshell with the installer, so a failed `mkdir` was
+  indistinguishable from a correct refusal; and one case grepped a hook it never
+  asserted existed. Setup now aborts the suite, and existence is asserted before
+  inspection.
+
+The two `session-handoff.md` findings were stale-document notes, resolved by
+rewriting the handoff. Nothing was accepted on CodeRabbit's say-so — each
+finding was reproduced before being fixed, and the two Major ones were
+cross-checked against the delta text they cited.
+
+**A test that passed for the wrong reason.** The new wrapper suite initially
+went green against the *pre-fix* wrapper on its headline case, because that case
+asserted exit 0 and the broken wrapper also returned 0 — by failing open. Exit
+status cannot distinguish "resolved and allowed" from "never found the gate", so
+the case now asserts the gate was located. Both suites are verified to fail
+against the code they describe: installer 4 of 13, wrapper 4 of 9.
 
