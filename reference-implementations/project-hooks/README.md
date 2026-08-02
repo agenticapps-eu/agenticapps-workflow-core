@@ -25,12 +25,56 @@ over to it.
 
 **Two candidates, in order:**
 
-1. `$<HOOK>_OVERRIDE` — an explicit path, when set.
+1. `$<HOOK>_OVERRIDE` — an explicit path naming an **executable regular file**,
+   when set to a non-empty value.
 2. `~/.agenticapps/bin/<hook>.sh` — the shared install.
 
 There is **no third `<repo>/bin/` candidate.** A repo-local copy is the drift
 this directory exists to remove; keeping it as a fallback keeps the drift and
 hides it, because the fallback only runs on the machines nobody is looking at.
+
+**Regular file, and the word is load-bearing (shim-contract 1.1.0).** `-x` on a
+directory tests the search bit, which every ordinary directory has. Until 1.1.0
+the shims tested `-x` alone, so an override naming a directory was called
+executable and `exec`ed: bash exited **126** with its own "is a directory"
+message, the invalid-override report never fired, and the exit code was not the
+1 this contract states. Fail-open was preserved throughout, so this was a
+conformance and diagnostics defect rather than a safety one — but the report is
+the whole mechanism by which an operator learns a hook is switched off, and it
+was the one thing that did not happen.
+
+**An override set to the empty string falls through, deliberately.** `FOO=` is
+the conventional way to neutralise a variable — it is how an operator says "no
+override", not how they name a broken one — so **"set" in this contract means
+set to a non-empty value.** Reporting `FOO=` as invalid would make the ordinary
+way of clearing the kill switch print an error on every matched call. This was
+the second half of Stage-2 finding 6, whose actual complaint was that the
+behaviour was a decision nobody had written down. It is asserted in
+`tools/project-hook-shim.test.sh`; behaviour nothing asserts is behaviour nobody
+chose.
+
+#### Contract revisions
+
+| Version | Change | Binders updated |
+|---|---|---|
+| 1.0.0 | initial — two-candidate order, fail-open-and-report, the marker | 21 |
+| 1.1.0 | an override must name an executable **regular file**; empty means unset | 21 |
+
+A contract change must name **which profile each binder implements**, because a
+change that reaches every file and applies one profile's clauses to both has not
+been verified, only assumed uniform. For 1.1.0 that is **20 `published-resolution`
+binders** — three each in `agenticapps-dashboard`, `agenticapps-roadmap`,
+`callbot`, `cparx`, `fbc-platform` and `fx-signal-agent`, and two in
+`agents-task-viewer`, which ships no `normalize-claude-md` file at all (design
+Decision 8) — plus **one `self-hosting` binder**, core's own
+`.claude/hooks/openspec-change-gate.sh`.
+
+The two profiles answer an unusable override differently, and 1.1.0 does not
+change that. A published-resolution shim has two candidates, so it reports the
+invalid override and exits 1 without falling through. The self-hosting binder
+resolves one path, and its stated answer to a path it cannot use is to warn,
+name it, and fail open; a directory now reaches that branch instead of exiting
+126. What 1.1.0 makes uniform is that **no binder `exec`s a directory**.
 
 ### The reporting channel, verified per event class (task 2.10)
 
@@ -263,8 +307,11 @@ production configuration mechanism, and it cuts two ways:
 - **Pointing it at a non-existent path disables that hook on a healthy
   machine.** For the §18 change gate that is a one-variable bypass of the gate
   at the tool boundary.
-- **Pointing it at a file that *exists* gets that file `exec`d** on every
-  `Bash`/`Edit`/`Write`/`MultiEdit`, with the operator's privileges. Combined
+- **Pointing it at an executable regular file that *exists* gets that file
+  `exec`d** on every `Bash`/`Edit`/`Write`/`MultiEdit`, with the operator's
+  privileges. Since shim-contract 1.1.0 a directory is not such a file and is
+  reported rather than run; that narrows the diagnostics gap, not the exposure,
+  because a directory was never something an attacker would point this at. Combined
   with the vectors below, that is repository-supplied code running at the tool
   boundary. The missing-file case is the *safe* one.
 

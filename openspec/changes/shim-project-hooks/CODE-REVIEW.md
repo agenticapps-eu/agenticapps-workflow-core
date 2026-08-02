@@ -297,7 +297,7 @@ found while fixing. Test count went 127 → 155 assertions, all green.
 | 3 concurrency assertion | **fixed** | `INSTALL_PROJECT_HOOKS_TEST_HOLD_LOCK` widens the critical section; the rewritten case now fails 3/3 with the lock removed where the old one passed 15/15 |
 | 4 stale-lock race | **fixed** | break by `rename` + pid re-verify, restore rather than destroy on mismatch |
 | 5 content unchecked | **fixed** | `IDENTITY` check against the rendered template / the gate's reference shim; self-hosting binder recorded out of profile |
-| 6 override accepts a directory | **DEFERRED — needs a decision** | see below |
+| 6 override accepts a directory | **fixed** | decided 2026-08-02: fix and propagate. `[ -f ] && [ -x ]` in all three binders, `shim-contract: 1.0.0 → 1.1.0`, re-rendered into 20 fleet shims. The empty-override half is recorded as intended, not changed — see below |
 | 7 two declarations | **fixed** | `SHIMMED-HOOKS`, with a header on why it is not `ARTIFACTS` |
 | 8 `--dest` crash | **fixed** | guarded, exits 64 like its sibling |
 | 9 comment overstates mode | **fixed** | comment now says 0755, which is what a fresh install measures |
@@ -305,7 +305,7 @@ found while fixing. Test count went 127 → 155 assertions, all green.
 | 11 no `jq` check | **fixed** | reports and exits 1 — non-blocking, and visible, which exit 0 would not be |
 | **12 the exemplar carried no marker** | **fixed** | found while fixing 5: core's own gate hook had no `# shim-contract:` line, so the tool reported the repository that *defines* the contract as `unrecognised`. The marker binds both profiles |
 
-**Why 6 is deferred rather than done.** The fix itself is one line —
+**Why 6 was deferred, and how it was decided.** The fix itself is one line —
 `[ -f "$OVERRIDE" ] && [ -x "$OVERRIDE" ]`. But it changes a shim's exit
 behaviour, and this capability requires that "bumping the contract version SHALL
 accompany any change to resolution order, exit behaviour or identification",
@@ -316,6 +316,37 @@ rollout that just landed. That is a scope decision for the operator, not a
 reviewer's call to make silently. Nothing else in this remediation touches the
 shim template, so the fleet is byte-identical to core's authority right now and
 the new `IDENTITY` check verifies it.
+
+**Decided 2026-08-02: fix and propagate.** Discharged as task 7.6. Two things
+the deferral argument above got wrong, corrected here rather than left standing:
+
+- **It is 21 binders, not eight.** "Eight files" is the count of
+  `openspec-change-gate` binders — seven projects plus core — which is what the
+  capability's profile clause is about. The template also renders into
+  `database-sentinel` and `normalize-claude-md` shims, and the fix is in the
+  template, so the re-render reaches **20 project shims across seven
+  repositories** plus core's self-hosting binder. The propagation is still seven
+  PRs; the diff inside each is wider than the deferral estimated.
+- **The self-hosting binder carried the same defect**, and the deferral did not
+  name it. `.claude/hooks/openspec-change-gate.sh` resolved `$OPENSPEC_GATE` and
+  tested `-x`, so a directory there `exec`ed and exited 126 too. Exempting the
+  repository that defines the contract is finding 12 exactly. Its profile
+  answers differently — one candidate, so warn-name-and-fail-open rather than
+  the shim's exit 1 — but no binder `exec`s a directory now.
+
+The empty-override half is **recorded as intended, not fixed**: `FOO=` still
+falls through, because it is how an operator says "no override" rather than how
+they name a broken one, so "set" in the requirement reads as set to a non-empty
+value. The requirement text is unchanged; the reading is now written down in
+this directory's README and asserted in `project-hook-shim.test.sh`. The
+finding's complaint was that it was an unrecorded decision, and that is the part
+that is discharged.
+
+The gate shim also gained its first coverage of any kind. It is a
+hand-maintained sibling of the template rather than a render of it, so every
+assertion in the suite reached the template only — which is precisely why
+finding 6 was present in both files and caught in neither. Suites went 155 →
+177.
 
 The implementation version bumps (10 and 1) do **not** propagate: they are
 published artifacts, not shims. Every machine picks them up by re-running
