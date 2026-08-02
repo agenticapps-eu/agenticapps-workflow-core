@@ -140,7 +140,7 @@ unless 4.8 finds otherwise.
 - [x] 5.5 Measure the net line change and record it against the proposal's estimate: **−3,450 across the seven projects, +~360 to core, ≈ −3,090 net**. All three are estimates until the shims exist and are counted
 - [x] 5.6 Run `openspec validate --all` green
 - [x] 5.7 Run `openspec-change-gate.sh --ci` green
-- [ ] 5.8 Stage-2 independent code review per §07
+- [x] 5.8 Stage-2 independent code review per §07 — `CODE-REVIEW.md`, authored in a cleared session with no implementation context. Verdict **pass-with-followups**: 11 findings, 3 recommended before archive (the `mv` mode inversion in `normalize-claude-md`, the never-checked ownership/writability rules, and a concurrency assertion that passes 15/15 with the lock removed)
 
 ## 6. Record
 
