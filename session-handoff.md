@@ -1,133 +1,130 @@
-# Session Handoff — 2026-08-02 (afternoon)
+# Session Handoff — 2026-08-02 (evening)
 
 ## Accomplished
 
-**PR #56 finished the two review tasks it owed (6.5, 6.8) — and they found
-eleven real defects between them. Merged (`919f4e9`), then archived via #57
-(`84b286e`).** Core now runs the §18 gate against itself on `main`, and
-`core-self-enforcement` is durable spec under `openspec/specs/`.
+**Two branches pushed, neither merged.**
 
-Verified on `main` after both merges: wrapper 10/10, installer 16/16, harness
-71/71, `openspec validate --all` 5/5. `shim-project-hooks` is the only open
-change.
+- **PR #59 `fix/wrapper-forwards-arguments`** — green (gate pass, CodeRabbit
+  pass). Ready to merge.
+- **`chore/shim-project-hooks-reconcile`** — pushed, no PR. Artifact
+  reconciliation + plan review round 8. Left open because the artifacts will
+  keep moving; open a PR when the objections below are settled.
 
-**Task 6.5 — §07 Stage-2 code review.** Run in fresh vendor-CLI processes via
-`reviewer-cli.sh`, `claude` excluded as implementing host. Recorded in
-`openspec/changes/core-gates-itself/CODE-REVIEW.md` (new artifact; there was no
-prior convention — `REVIEWS.md` is producer-owned and must not be hand-edited).
-gemini `pass-with-followups`; codex **`block`, 7 findings**. All reproduced and
-fixed. Four had the installer write where it must not or destroy what it did not
-own, each exiting 0 and printing success. Two silently ungated edits. One
-re-exported `OPENSPEC_GATE_SELF`, which the gate has ignored since 1.5.0 — and
-whose header names documenting it as live as the hazard. Core published that
-warning and this branch reintroduced it.
+### The wrapper discarded its arguments (PR #59)
 
-**Task 6.8 — plan review, round 2.** gemini / codex / opencode, **all three
-REQUEST-CHANGES**. Two more reproducible bugs, both fixed.
+`.claude/hooks/openspec-change-gate.sh` ended in `exec "$GATE"` — no `"$@"`. So
+`bash .claude/hooks/openspec-change-gate.sh --ci` exited **0, silently, having
+checked nothing**. The flag never reached the gate; it ran as a PreToolUse hook
+with no stdin payload and allowed.
 
-**CodeRabbit** also ran a real review (not a rate-limited green) and found three
-genuine issues, two of which were cases where this change's own delta was
-already stricter than its implementation.
+Latent, not live: CI invokes the reference implementation directly, pre-commit
+resolves the gate itself, and PreToolUse passes no arguments. Nothing was
+mis-gated. What was broken is the one invocation a person reaches for to ask
+core whether it is compliant — from the file whose entire purpose is making
+core's non-compliance visible. Same class as #56's "harness scores an artifact
+it never runs".
 
-### The through-line
+Fixed TDD: `test(RED)` `ad4c1eb` verified failing (10 passed, 1 failed), then
+`fix(GREEN)` `5e06e4f`. The test asserts on **what the gate received**, not exit
+status — both wrappers exit 0, so an exit-code assertion would have passed
+against the bug, which is the trap this suite already documents for the
+cwd-derived-root case.
 
-The containment guard in `tools/install-core-git-hooks.sh` was wrong **three
-times**, each time answering a question adjacent to the one being asked:
+Evidence: wrapper 11/11, installer 16/16, harness 71/71, validate 5/5.
 
-1. tracking status instead of path containment (CodeRabbit, earlier session)
-2. couldn't resolve a path that doesn't exist yet (gemini + codex)
-3. compared an unnormalised path, so `..` re-entering the tree read as outside
-   (codex) — the first pointing outward-and-back rather than inward
+### shim-project-hooks reconciliation
 
-And CI was green at 71/71 through all of it, because the harness scores the
-artifact core *publishes* and never executed the code core *runs*.
+Re-measured the fleet. **`agenticapps-dashboard` carries seven hooks, not
+eight** — it deleted `design-shotgun-gate.sh` itself on 2026-08-01 (its PR #88,
+"it blocks every fresh clone"). This change's argument, made independently, by
+the one repo that acted on it. `claude-workflow` still vendors the file twice.
+
+Three premises corrected:
+
+1. "Core has no `.claude/hooks/` at all" (3 sites) → carries no
+   `.planning`-**writing** project hook. The 137-of-141 meta-observer
+   attribution survives; only its supporting sentence moved.
+2. **"No host carries a `.claude/hooks/` directory of its own" was never true**
+   of `agenticapps-dashboard` — it is one of the four hosts *and* one of the
+   seven hook-carrying projects. The handoff flagged line ~182 as a core-hooks
+   site; the actual defect there was larger and about the dashboard.
+3. "Six projects receive the `normalize-claude-md` fix" → **five**. Dashboard
+   authored it; `agents-task-viewer` is shipped no file. This was codex's
+   round-7 objection #6, still unaddressed.
+
+**Verified intact, not assumed:** the drift claim (exactly four hooks in 2–3
+versions; the shimmed gate has 1 across all seven) and the `MultiEdit` matcher
+claim (callbot alone has it; six register `Bash|Edit|Write`).
+
+### Plan review round 8 — gemini APPROVE, codex + opencode REQUEST-CHANGES
+
+Two findings answered, **eleven open**.
+
+- opencode caught an error **I introduced** in this session's first draft:
+  138 × 7, two sentences after enumerating why the projects are not uniform.
+  Line figures are now marked as estimates — the shims do not exist yet.
+- opencode's matcher objection is **refuted with evidence**: it read
+  `Bash\|Edit\|Write` from the design table and inferred an inert control. Those
+  backslashes are our own markdown escaping; the JSON has real pipes in all
+  seven. Residue stands though — a well-formed matcher is not a firing hook —
+  so task **4.8a** now requires establishing the baseline before any claim that
+  protection is "lost".
 
 ## Decisions
 
-- **Two test suites added and wired into CI** —
-  `tools/test-install-core-git-hooks.sh` (16) and
-  `tools/test-claude-hook-wrapper.sh` (10). Every case is a regression test for
-  a defect actually reproduced. **Both verified to fail against the pre-fix
-  code**; a suite that passes against the bug it names is decoration. This
-  caught two of my own decorative tests.
-- **`MIN_ROW_CALLSITES=57`** — a second floor counted from the harness *source*.
-  The existing `MIN_SCORED_ROWS` is scraped from the harness's own stdout, so a
-  stub printing a passing TOTAL satisfied it. Neither floor bounds row
-  *correctness*; the delta now says so instead of claiming otherwise.
-- **`CLAUDE_PROJECT_DIR` is no longer consulted** by the wrapper. Its own
-  location is authoritative by construction, so the variable could only agree or
-  be wrong — and when wrong it silently ungated.
-- **Unresolvable root fails CLOSED**; genuinely absent tooling still fails open.
-- **§18 attribution corrected** — §18 names only `PreToolUse`. The `pre-commit`
-  hook and CI job are core's own additions, not §18 obligations.
-- **Declined, with reasons recorded in task 6.14**: deriving the row floor from
-  the harness (destroys its purpose), `--force` on stale-hook upgrade (makes the
-  gate unadvanceable), local fail-open on a missing `openspec` CLI (sound
-  ergonomics, but it lives in the gate every host consumes — worth raising
-  against the gate itself as a follow-up).
+- **The wrapper fix was kept out of `shim-project-hooks`.** Touching its
+  `tasks.md` would have invalidated the plan review running at the time. It
+  belongs to `core-self-enforcement`, which is archived.
+- **Plan review started before the wrapper work, not after** — artifacts had
+  settled, and last session's rule is that the review runs last relative to
+  *artifact* edits. Code edits outside the change dir do not disturb its digests.
+- **My own arithmetic error was fixed rather than deferred.** It is a
+  reproducible defect and it was mine.
 
 ## Files modified
 
-- `.claude/hooks/openspec-change-gate.sh` — root from own location; fail-closed
-  on unresolvable root; dead export removed
-- `.claude/settings.json` — command quoted (a path with a space exited 127,
-  which is not 2, so the edit proceeded)
-- `tools/install-core-git-hooks.sh` — normalising `canon()`, symlink refusal,
-  whole-line marker, atomic write
-- `tools/test-install-core-git-hooks.sh`, `tools/test-claude-hook-wrapper.sh` — new
-- `.github/workflows/openspec-gate.yml` — both suites + the source floor
-- `openspec/changes/core-gates-itself/` — CODE-REVIEW.md (new), spec delta,
-  tasks 6.5/6.8–6.14, proposal Impact
-- `docs/WORKFLOW.md` — resolution, fail-closed rule, suites
+- `.claude/hooks/openspec-change-gate.sh` — `exec "$GATE" "$@"` (PR #59)
+- `tools/test-claude-hook-wrapper.sh` — argument-forwarding regression, 11th
+  case (PR #59)
+- `openspec/changes/shim-project-hooks/{proposal,design,tasks}.md`,
+  `specs/project-hook-binding/spec.md` — reconciliation; `REVIEWS.md` — round 8
 
 ## Next session: start here
 
-**Do `shim-project-hooks`** (88 tasks, 0 done) — the only open change. #56 and
-#57 are both merged, so core's `.claude/hooks/` now exists on `main` and the
-reconciliation below is against settled ground rather than a moving branch.
+**Merge PR #59 first** — it is green and independent of everything else.
 
-**Reconcile `shim-project-hooks`'s premise first — #56 invalidates part of it.**
-Its proposal asserts in three places (lines ~22, ~182, ~329) that core has **no
-`.claude/hooks/` at all**. That is now false. Checked this session: the
-*conclusion* those lines support still holds — they are used to attribute core's
-`.planning/` writes to the global `meta-observer` SessionEnd hook rather than to
-`skill-router-log.sh`, and core's new hook is a `PreToolUse` gate that writes
-nothing there. So the fix is narrow: reword to "core carries no
-`.planning`-writing project hook". The 137-of-141 measurement survives intact.
+Then work the **eleven open review objections** on `shim-project-hooks`
+(`REVIEWS.md`, round 8). Start with the two that are contradictions inside the
+change's own text, because they are cheapest and both are self-inflicted:
+opencode's **`MultiEdit` Impact bullet** (the Impact section claims a delivered
+protection that the change's own delta forbids reporting, since the tool is
+absent from the host's tool set) and its **`PostToolUse` warning-channel**
+finding (the delta mandates verifying the channel for non-`PreToolUse` events
+before writing the shim; `normalize-claude-md` is `PostToolUse` and only
+`PreToolUse` is recorded). Both are the change violating a rule it writes.
 
-For section 4b, core's own shim is **not** a migration target for 4b.1 or 4b.3 —
-it has no `<repo>/bin/` candidate and makes no `>= 2 reviewers` claim, by
-construction (ADR-0028 inverts its resolution deliberately). **4b.6 does apply**:
-core's shim carries no contract version marker.
+Then codex's **shim-contract contradiction**: the universal contract mandates
+shared-install resolution and byte-identical shims, while core deliberately
+resolves its working tree. Task 4b.10 records the applicability split; the
+*delta* still needs a normative exception or a separate profile.
 
-**Then re-run its plan review.** Its two REQUEST-CHANGES verdicts date from
-2026-07-30, before round 7 rewrote the text they object to.
-
-    REVIEW_TIMEOUT=900 bash ~/.agenticapps/bin/run-plan-review.sh shim-project-hooks --implementing-host claude
+Still **0/88 tasks**. No code has been written for this change.
 
 ## Open questions
 
-- **Run the plan review LAST, after every artifact edit has settled.** Three runs
-  were wasted this session: one refused to publish because artifacts changed
-  mid-run (correctly — it will not bind stale evidence), one I stopped
-  deliberately rather than let it publish something CodeRabbit's fixes would
-  immediately invalidate, one was killed. Detached `nohup` survived; the tool
-  background task did not.
-- **The staleness regress is inherent.** Fixes made in response to a review leave
-  that review stale, and reviewing again produces more revisions. The stopping
-  rule applied here was *no further reproducible defect*, not *a round returned
-  APPROVE*. Worth stating in the workflow docs — it is not obvious and the gate's
-  NOTE invites the opposite reading.
-- **Follow-up against the gate itself**: gemini's argument that a missing
-  `openspec` CLI should warn-and-allow locally while CI fails closed is sound.
-  Out of scope here because that file is consumed by every host.
-- **Core's published CI template** still carries the supply-chain weaknesses
-  fixed in core's own copy (unpinned `npm i -g`, no permissions block, persisted
-  credentials). No host pins it, so it is safely fixable.
-- **Manifests disagree**: claude-workflow pins seven files, the other three pin
-  five. Any "all seven" claim is wrong for three of four hosts.
-- **Hosts still cite core spec 1.4.0**; core is at 1.5.0. Documentary only.
-- **Five family repos have no workflow at all**: agenticapps-observability,
-  agentlinter, open-design, dotclaude, agenticapps-shared.
-- **A concurrent session may still be live in `agenticapps-dashboard`** (branch
-  `feat/repo-readiness-vocabulary`, never pushed). Do not touch that checkout.
+- **The staleness regress is now demonstrated, not theorised.** Round 8 found an
+  error introduced by the very edit that answered round 7. The stopping rule
+  remains *no further reproducible defect*, not *a round returned APPROVE* —
+  worth writing into `docs/WORKFLOW.md`, still not done.
+- **CodeRabbit passed PR #59 in 0s.** Possibly a real green on a two-file diff,
+  possibly rate-limited. Last session saw both.
+- Carried forward, all still open: core's published CI template retains the
+  supply-chain weaknesses fixed in core's own copy; manifests disagree
+  (claude-workflow pins seven files, the other three pin five); hosts still cite
+  core spec 1.4.0 against core's 1.5.0; five family repos have no workflow
+  (agenticapps-observability, agentlinter, open-design, dotclaude,
+  agenticapps-shared); gemini's argument that a missing `openspec` CLI should
+  warn-and-allow locally while CI fails closed is sound and unfiled.
+- **`agenticapps-dashboard` is on `main`, not the `feat/repo-readiness-vocabulary`
+  branch the last handoff warned about.** That checkout looks free now; its #88
+  is merged. Only read it, though, until someone confirms.
