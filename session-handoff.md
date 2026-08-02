@@ -3,8 +3,13 @@
 ## Accomplished
 
 **PR #56 finished the two review tasks it owed (6.5, 6.8) — and they found
-eleven real defects between them.** Branch `feat/core-gates-itself`, all checks
-green, ready to merge pending the operator's call.
+eleven real defects between them. Merged (`919f4e9`), then archived via #57
+(`84b286e`).** Core now runs the §18 gate against itself on `main`, and
+`core-self-enforcement` is durable spec under `openspec/specs/`.
+
+Verified on `main` after both merges: wrapper 10/10, installer 16/16, harness
+71/71, `openspec validate --all` 5/5. `shim-project-hooks` is the only open
+change.
 
 **Task 6.5 — §07 Stage-2 code review.** Run in fresh vendor-CLI processes via
 `reviewer-cli.sh`, `claude` excluded as implementing host. Recorded in
@@ -77,9 +82,9 @@ artifact core *publishes* and never executed the code core *runs*.
 
 ## Next session: start here
 
-**Decide whether to merge #56, then do `shim-project-hooks`** (88 tasks, 0 done).
-#56 is green on every check and every task is closed; merging is an operator
-call that was deliberately not taken unilaterally.
+**Do `shim-project-hooks`** (88 tasks, 0 done) — the only open change. #56 and
+#57 are both merged, so core's `.claude/hooks/` now exists on `main` and the
+reconciliation below is against settled ground rather than a moving branch.
 
 **Reconcile `shim-project-hooks`'s premise first — #56 invalidates part of it.**
 Its proposal asserts in three places (lines ~22, ~182, ~329) that core has **no
