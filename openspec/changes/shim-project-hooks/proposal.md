@@ -1,10 +1,16 @@
 ## Why
 
-Seven repos each carry eight `.claude/hooks/*.sh` files — 634 lines per repo,
-roughly 4,440 lines total, copied byte-for-byte from a single origin. The
-copies have already drifted: four of the eight exist in two or three distinct
-versions, and `agenticapps-dashboard` carries a `normalize-claude-md.sh` fix
-(2026-07-26) that the other six never received. The one hook that is *not*
+Seven repos each carry a `.claude/hooks/` directory copied from a single origin
+— 4,396 lines in total, 586 to 654 per repo. Six carry eight `*.sh` files;
+`agenticapps-dashboard` carries seven, having deleted `design-shotgun-gate.sh`
+on 2026-08-01 in its own PR #88, "it blocks every fresh clone". That deletion is
+this change's argument made by someone else: one repo fixing locally what is
+wrong in six, while the scaffolder that produced all seven still vendors the
+file and would hand it straight back.
+
+The copies have already drifted: four of the eight exist in two or three
+distinct versions, and `agenticapps-dashboard` carries a `normalize-claude-md.sh`
+fix (2026-07-26) that the other six never received. The one hook that is *not*
 copied — `openspec-change-gate.sh`, whose ~13 lines of logic `exec`
 `~/.agenticapps/bin/openspec-change-gate.sh` — has zero drift across all seven.
 
@@ -19,12 +25,23 @@ fleet's own policy designates frozen archive, "never write to them".
 **That policy is being violated on every session, but not mainly by these two
 hooks — the earlier version of this paragraph blamed the wrong writer.** It read:
 "`skill-router-log.sh` wrote into core's `.planning/` at 08:39 on 2026-07-29,
-during the session that found it." Core has **no `.claude/hooks/` directory at
-all**, so no project hook ran there. Remeasured: core carries 141 files under
-`.planning/skill-observations/` — 137 in the `<stamp>--<sessionId>.{md,jsonl}`
+during the session that found it." Core carries **no `.planning`-writing project
+hook**, so none of its own hooks wrote them. (It carried no `.claude/hooks/` at
+all when this was measured. Since 2026-08-02 it carries exactly one — the
+`PreToolUse` change-gate installed by `core-self-enforcement` — which writes
+nothing under `.planning/`, so the inference is unchanged.) Observed on this
+machine on 2026-08-02: core holds **29** files under
+`.planning/skill-observations/`, **all 29** in the `<stamp>--<sessionId>.{md,jsonl}`
 naming of the **global** `SessionEnd` hook registered in
 `~/.claude/settings.json` (`agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`),
-and 4 in `skill-router-log.sh`'s `skill-router-{date}.jsonl`.
+and **none** in `skill-router-log.sh`'s `skill-router-{date}.jsonl`.
+
+**Stated as a dated single-machine observation, because that is what it is.** An
+earlier revision recorded 141 / 137 / 4 and cited it as a measurement of core.
+Review re-ran the count and got different numbers — this directory is gitignored
+local state, so it varies per machine, grows every session, and no reviewer can
+reproduce a figure from it. The conclusion survives the correction and is
+strengthened by it: the non-hook producer now accounts for 29 of 29.
 
 Both hooks are still deleted — they are hooks and they do write there — but this
 change **reduces** the violation rather than ending it, and says so rather than
@@ -87,7 +104,12 @@ does not require:
 - `skill-router-log.sh` — writes session telemetry into `.planning/`, contrary
   to the frozen-archive policy.
 - `session-bootstrap.sh` — reads that telemetry back into session context. The
-  sole consumer of the above; the pair is deleted together.
+  pair is deleted together. It is the only consumer *known*; review noted that
+  this was asserted from proximity rather than from a search, which is the
+  inference this change indicts elsewhere, so task 5.0c runs and cites the
+  fleet-wide search. The deletion does not turn on the result — these hooks write
+  into a frozen directory either way — but the decision not to relocate the
+  feature does.
 
 The telemetry logs are **gitignored in every repo and tracked in none**, so
 deleting the producers discards nothing durable.
@@ -96,7 +118,10 @@ deleting the producers discards nothing durable.
 `openspec-change-gate.sh` pattern:
 
 - `normalize-claude-md.sh` — `agenticapps-dashboard`'s version becomes
-  canonical; its 2026-07-26 fix reaches the other six.
+  canonical. Its 2026-07-26 fix reaches **five** of the other six;
+  `agents-task-viewer` is shipped no file at all, so it gains nothing here
+  (see the opt-out below). Saying "the other six" counted a repo the same
+  section then excludes.
 - `database-sentinel.sh` — reconciled to `callbot`'s semantics, which are the
   strict superset: a `.env` wildcard (`.env|.env.*|*/.env|*/.env.*`) with an
   explicit `.env.example`/`.env.template` allowance, plus `MultiEdit` handling.
@@ -121,7 +146,16 @@ deleting the producers discards nothing durable.
      handles `MultiEdit` does nothing in a repo whose matcher never delivers it.
      The rollout updates the matcher in the other six.
 
-**The fail posture is fail-open with a loud warning, for both hooks.** An
+**The fail posture is fail-open with a report — verified loud for one hook, not
+yet for the other.** `database-sentinel` is `PreToolUse`, where the channel is
+established: exit 1 surfaces the first stderr line in the transcript. Its
+`normalize-claude-md` counterpart is `PostToolUse`, whose exit semantics differ
+and which nobody has checked, so its posture is fail-open with the **reporting
+channel unestablished** until task 2.10 records it. Review found this change
+writing that verification requirement into its own delta and then claiming a
+warning for both hooks anyway. How often the report repeats is a separate
+question the delta now also requires answering — see the alarm-fatigue note under
+Rollout dependency. An
 earlier revision had `database-sentinel` fail **closed** on the reasoning that
 nothing backstops it. Review showed that does not work, and the numbers are
 unambiguous: the hook is registered on `Bash|Edit|Write` (`|MultiEdit` in
@@ -178,43 +212,87 @@ projects carrying hooks —
 `agenticapps-dashboard`, `agenticapps-roadmap`, `agents-task-viewer`,
 `callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`.
 
-**`claude-workflow` is touched; the other three hosts are not.** No host carries
-a `.claude/hooks/` directory of its own, so none is touched *as a hook-carrying
-project*. `claude-workflow` is nonetheless in scope because it **scaffolds** the
-projects that do: it vendors all eight hooks twice, plus stale matchers, so
-leaving it alone means the next `/setup-agenticapps-workflow` recreates
-everything this change deletes. See the `claude-workflow` subsection below for
-the specific edits. A previous revision said in one sentence that it was among
-the nine touched repos and in the next that it was untouched; both readings were
-in the text at once.
+**Of the four hosts, two are touched and two are not.**
+`agenticapps-dashboard` is a host *and* one of the seven hook-carrying projects
+listed above; it is touched in that second capacity and is already counted there.
+`codex-workflow` and `pi-agentic-apps-workflow` carry no `.claude/hooks/` of
+their own and are not touched at all. `claude-workflow` carries none either, but
+is in scope because it **scaffolds** the projects that do: it vendors all eight
+hooks twice, plus stale matchers, so leaving it alone means the next
+`/setup-agenticapps-workflow` recreates everything this change deletes —
+including the `design-shotgun-gate.sh` that `agenticapps-dashboard` has already
+had to delete once. See the `claude-workflow` subsection below for the specific
+edits.
+
+The scope of this repo has been mis-stated twice. One revision said in one
+sentence that `claude-workflow` was among the nine touched repos and in the next
+that it was untouched; both readings were in the text at once. The revision that
+fixed that introduced "no host carries a `.claude/hooks/` directory of its own",
+which was never true of `agenticapps-dashboard` and made a host look exempt
+while the change was editing its hooks.
 
 `agenticapps-dashboard-add-agent-board` is a git *worktree* of
 `agenticapps-dashboard` on another branch, not an eighth repo.
 
-**Result per project:** 8 hooks become 3 (`openspec-change-gate` plus two shims)
-in **six** of the seven; 634 lines become roughly 138. **`agents-task-viewer` is
-8 → 2**, since it receives no `normalize-claude-md` file (see the opt-out above).
-Across seven projects that is about −3,470 lines, plus ~360 lines added once to
-core as canonical implementations.
+**Result per project**, stated per repo because no single count covers all seven:
 
-The earlier text said "8 hooks become 3" without qualification, which review
-showed could not be true alongside an unresolved `agents-task-viewer`. The count
-is now stated per project rather than as a fleet uniformity that does not hold.
+- **8 → 3** (`openspec-change-gate` plus two shims) in **five** —
+  `agenticapps-roadmap`, `callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`.
+- **7 → 3** in `agenticapps-dashboard`, which already deleted
+  `design-shotgun-gate.sh` itself.
+- **8 → 2** in `agents-task-viewer`, which receives no `normalize-claude-md`
+  file (see the opt-out above).
+
+**The line figures are an estimate and are marked as one — the shims do not
+exist yet.** On the current sketch a three-hook project keeps roughly 138 lines
+and `agents-task-viewer` keeps less, having two. So 4,396 lines today become
+roughly 950, the seven projects shed on the order of **−3,450**, and ~360 lines
+are added once to core as canonical implementations — a fleet net of roughly
+**−3,090**, stated here because the two figures were previously given without
+their combination. No report of this change may quote any of them as measured
+until the shims are written and counted; task 5.5 checks the measurement against
+this estimate.
+
+A first version of this paragraph multiplied 138 by seven, two sentences after
+enumerating why the projects are not uniform — and review caught it. Writing the
+enumeration does not stop the next sentence from averaging it away, which is this
+change's thesis turned on its own text.
+
+Two earlier counts were wrong here, in the same way. "8 hooks become 3" was
+stated without qualification, which review showed could not be true alongside an
+unresolved `agents-task-viewer`; the replacement said "six of the seven", which
+stopped being true when `agenticapps-dashboard` dropped to seven hooks on
+2026-08-01. Both asserted a fleet uniformity that has never held for long, so the
+count is now enumerated rather than generalised.
 
 **Behaviour changes**, all of them fixes or deliberate removals:
 
 - `callbot` and `fbc-platform` can edit design files again.
-- Six projects receive the `normalize-claude-md` fix they lacked.
+- Five projects receive the `normalize-claude-md` fix they lacked —
+  `agenticapps-dashboard` already has it, and `agents-task-viewer` is shipped no
+  file.
 - Two projects gain `.env` protection for novel suffixes they currently miss.
 - Session-start no longer surfaces recent skill invocations, and skill
   invocations are no longer logged. This is the accepted cost of deleting the
   telemetry pair.
 - `callbot` can edit `migrations/` again — blocked today by a sentinel no
   surviving command writes.
-- Six projects gain `MultiEdit` coverage on `database-sentinel`, which their
-  matchers have never delivered.
 - A machine without the shared install loses `.env` and destructive-SQL
-  protection, and says so on stderr each time. It does not block.
+  protection, and reports that it has. It does not block.
+
+**Not listed above: `MultiEdit` coverage.** A previous revision counted "six
+projects gain `MultiEdit` coverage on `database-sentinel`" as a delivered
+behaviour change. Review showed that violates this change's own delta, which says
+coverage of a tool the host no longer provides "SHALL NOT be reported as a
+delivered protection" — and design Decision 6 states that `MultiEdit` is absent
+from the tool set of the host running this change. The Impact section was
+claiming the protection while the design and the tasks both said it may be inert.
+
+The matcher edit still happens, in six repos: it costs one word, and a
+registration that matches the implementation's coverage is correct whether or not
+the tool exists today. It is forward-compatibility, not a gap closed. Task 4.8
+settles which it is against the host in use, and only that finding may be
+reported.
 
 **What `database-sentinel` is, stated accurately.** It is **best-effort
 defence in depth**, not a security boundary, and the delta says so rather than
@@ -234,9 +312,31 @@ that review then showed to be unworkable.
 
 **Rollout dependency:** shims are inert until `install-shared-artifact.sh` has
 published the implementations. A project whose install has not run silently
-loses the protection, with a warning on each invocation — which is why
+loses the protection, with a report on each invocation — which is why
 publish-and-verify precedes any project edit, and why the installer gains an
 explicit verification step rather than relying on the hook to notice.
+
+**That ordering covers one machine, and review was right that the gap matters.**
+Publish-before-replace orders the machine performing the rollout. Every *other*
+machine enters the unprovisioned state the moment it pulls the shim, through an
+ordinary `git pull`, with no step that prompts anyone to install. Today
+`database-sentinel` runs on any clone with zero provisioning because the
+implementation is in the clone; after this change the protection travels with the
+machine instead of the repository, and only the first arrangement was automatic.
+Every conformance check the change specifies is per-*repository*, so nothing
+observes this. The delta answers it with a **per-machine provisioning check**,
+and the rollout answers it by telling people to run the installer — not by an
+ordering that constrains only the operator doing the work.
+
+**And the report itself needs a repetition policy.** An unprovisioned machine is
+unresolvable on every `Bash`, `Edit` and `Write`, so "report each time" means a
+hook-error notice on essentially every tool call, indefinitely. Review pointed
+out that this is the same conditioning this change uses to reject a fail-closed
+pre-commit wrapper, pointed at the transcript instead of the commit. The delta
+now requires a stated policy — per invocation, per session, or per interval — and
+the choice is made at implementation, because a per-session marker needs the
+session identifier the host delivers in the stdin payload the shim must pass
+through untouched.
 
 **Install story:** `install-shared-artifact.sh` publishes one artifact per
 invocation, so provisioning both implementations needs an explicit
@@ -260,7 +360,21 @@ and `migrations/check-snapshot-parity.sh` must stay green across the edit.
 apply to it, and it currently breaks three of them: it carries the
 `<repo>/bin/` fallback the resolution order now forbids, it fails open
 **silently** where the rule requires a report, and it hardcodes
-`OPENSPEC_GATE_SELF=claude`. Its header also states the `>= 2` floor, in all
+`OPENSPEC_GATE_SELF=claude`. (Verified across `agents-task-viewer`, `cparx` and
+`callbot` during round 9 — four `<repo>/bin/` references and one
+`OPENSPEC_GATE_SELF` export apiece. This describes the shims in the seven
+consuming projects, not core's own self-hosting copy, which a reviewer read it
+as; that file is covered by task 4b.10.)
+
+**Removing the `<repo>/bin/` fallback is not free everywhere, and an earlier
+revision said it was.** Checked in all seven: six carry no such file, and
+**`agents-task-viewer` carries one that is present and executable**. There the
+third candidate resolves today, so an unprovisioned machine gets enforced
+validation in that repo and would get fail-open after the removal. "Not a
+regression — the gate shim already fails open" was true of six repositories and
+asserted of seven. The rule is kept uniformly; the ordering changes, so that
+repo's machine is verified provisioned **before** its candidate is removed
+(task 4b.1a). No exception, no silent loss. Its header also states the `>= 2` floor, in all
 seven projects — a set of sites the companion change's enumeration missed
 because this change had classified the file as untouched.
 
@@ -269,6 +383,19 @@ kind of exemption that makes a rule advisory. It is brought into conformance
 here; the identity line is removed by the companion change, which retires
 `OPENSPEC_GATE_SELF` as an identity source, so the two changes must not both
 edit that line.
+
+**Core's own copy is a different profile, and saying so is now normative rather
+than a footnote in the task list.** Core gained `.claude/hooks/openspec-change-gate.sh`
+on 2026-08-02; it resolves core's working-tree reference implementation, with no
+shared-install and no `<repo>/bin/` candidate, because ADR-0028 inverts it
+deliberately — core must score the bytes it ships, not whichever host's installer
+ran last. So the resolution order and the byte-identity rule cannot apply to it,
+and the delta previously said they applied to everything. Task 4b.10 had the
+split right; the normative text did not, which review correctly read as one
+contract claiming to describe two incompatible bindings. The delta now defines
+**published-resolution** and **self-hosting** profiles: the marker, the
+behaviour-free rule and fail-open-and-report bind both, resolution and
+byte-identity bind the first only.
 
 **No workflow content is re-vendored to the four hosts.** Per plan step 2, host
 *workflow content* is updated when preparing another machine or a release, not
@@ -326,8 +453,9 @@ change and by the follow-up.
    `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, which
    writes `<projectRoot>/.planning/skill-observations/<stamp>--<sessionId>.{md,jsonl}`
    in **every** repository the operator opens — 137 of core's 141 such files,
-   in a repo with no `.claude/hooks/` at all. It is the fleet's dominant
-   frozen-archive violation and the reason this change cannot claim to end one.
+   in a repo whose only project hook is a `PreToolUse` gate that writes nothing
+   there. It is the fleet's dominant frozen-archive violation and the reason
+   this change cannot claim to end one.
 
    Out of scope here for three reasons, each of which also shapes the follow-up:
    it lives in `agenticapps-dashboard`, not in any of the seven hook-carrying
@@ -339,7 +467,12 @@ change and by the follow-up.
 4. **Decide what backstops an unprovisioned machine.** This change establishes
    that the git `pre-commit` wrapper fails open exactly when the PreToolUse shim
    does — same missing shared install, same `exit 0` — leaving CI as the only
-   floor. That is recorded here as true rather than fixed: making the wrapper
+   floor. What is lost there is **validation enforcement**: per
+   `change-gate-enforcement`, `openspec validate --all` failing is the gate's only
+   blocking condition, and the reviewer count and verdicts are reported, never
+   enforced. Earlier revisions of this change called it a lost review requirement
+   in several places, which named a block the gate does not perform. That is
+   recorded here as true rather than fixed: making the wrapper
    fail closed re-creates the `--no-verify` training problem its comment
    documents, and the alternative (provisioning detection at clone time) is a new
    mechanism. The follow-up owns the choice; this change owns no longer
