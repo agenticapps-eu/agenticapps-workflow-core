@@ -84,8 +84,13 @@ introduced. Codex times out at the 180s default; raise `REVIEW_TIMEOUT`.
 ## Open questions
 
 - **PR #56 still owes** the §07 Stage-2 independent code review (6.5) and a
-  review re-run against the implementation (6.8). CodeRabbit was PENDING at
-  hand-off — check it actually ran, given the recurring rate-limit false greens.
+  review re-run against the implementation (6.8). CodeRabbit **did** run a real
+  review (5 inline findings, not a rate-limited green) and its two Major
+  findings were genuine bugs in this branch, both since fixed: the in-worktree
+  refusal tested tracking status instead of path containment (an untracked
+  in-tree `core.hooksPath` wrote a hook into the working tree), and filesystem
+  failures printed success and exited 0. Its request to remove the
+  `OPENSPEC_GATE` override was declined with reasoning recorded in the commit.
 - **GitNexus is safe to remove** — verified nothing executes it: no hook,
   settings, MCP registration, crontab or shell rc; `.claude.json` lists it only
   under `disabledMcpServers`; no `.gitnexus` index anywhere under `~/Sourcecode`;
