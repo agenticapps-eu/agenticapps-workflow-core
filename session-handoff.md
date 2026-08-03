@@ -2,92 +2,105 @@
 
 ## Accomplished
 
-- **The 28-branch inspection is done and the reclaim is executed.** All 27
-  eligible branches deleted, 16 worktrees removed, nothing lost.
-  `brand-report/master` kept — default branch, only local branch, deleting it
-  leaves a detached HEAD.
-- **Merge status was re-derived, not inherited from the last handoff.** All 27
-  confirmed merged in substance, including three that the cheap checks called
-  unmerged.
-- **Two unignored secret-shaped files closed off** (gitignore only, files
-  untouched and unread): `neuroflash/api-documentation/.env` — that repo ignored
-  `.env.local` and three variants but **not plain `.env`** — and
-  `neuroflash/terraform/openssl rand -hex 32.txt`, a shell command captured as a
-  filename. Both were previously stageable by `git add -A`.
-- **Recovery record at `~/Sourcecode/.worktree-reclaim-2026-08-03/RECOVERY.md`**
-  — every deleted tip SHA plus the six preserved dirty worktrees. Deliberately
-  outside any repo and outside the session scratchpad, which does not survive
-  `/clear`.
+- **The 28-branch reclaim is done.** 27 branches deleted, 16 worktrees removed,
+  nothing lost. `brand-report/master` kept — default *and* only local branch.
+  Recovery record with every tip SHA at
+  `~/Sourcecode/.worktree-reclaim-2026-08-03/RECOVERY.md`, deliberately outside
+  any repo and outside the session scratchpad.
+- **The requirement-placement change shipped** — PR **#70**.
+  `project-hook-binding` goes 15 → 17 requirements; the ~480-line shim
+  requirement is split three ways, each heading naming what it governs. No
+  normative text changed: 116 normative sentences before and after.
+- **Two unignored secret-shaped files closed off** — PRs **api-docs #14** and
+  **terraform #185**. `api-documentation` ignored `.env.local` and three
+  variants but **not plain `.env`**; `terraform` held a file named
+  `openssl rand -hex 32.txt`, a shell command captured as a filename. Neither
+  file was read or moved.
+
+## Open PRs — none merged yet
+
+| PR | what |
+|---|---|
+| core **#69** | this handoff |
+| core **#70** | the requirement split |
+| api-docs **#14** | ignore plain `.env` |
+| terraform **#185** | ignore stray secret output |
 
 ## Decisions
 
-- **Re-verified merge status at deletion time rather than trusting yesterday's
-  classification** — the prior handoff's own lesson about dated claims. This
-  paid: `ai-engineering-framework/fuchsia-rock`'s PR was **CLOSED, not merged**,
-  which the inherited list recorded as merged.
-- **`brand-report/master` excluded** from an otherwise full sweep.
-- **`git worktree repair` before removal**, not `--force` through the error.
-  That is what exposed 4 genuinely dirty worktrees that had read as clean.
-- **Dirty worktrees backed up before removal even though all of it was tool
-  scratch** — copied rather than assumed worthless.
-- **`.gitignore` edits left uncommitted.** Never-commit-to-main applies; a
-  working-tree `.gitignore` already blocks `git add -A`, so the protection is
-  live without a commit. Committing them needs a branch + PR per repo — not done.
+- **Re-derived merge status instead of inheriting yesterday's classification.**
+  It paid: `ai-engineering-framework/fuchsia-rock`'s PR was **CLOSED, not
+  merged**, though its content had reached main another way.
+- **Moved the scenario, not the paragraph**, for the misfiled installer scenario.
+  The `installer SHALL verify` sentence is load-bearing inside the shim
+  requirement's absence-vs-misconfiguration carve-out.
+- **Left one real defect unfixed, deliberately.** The axes table's Currency cell
+  says an artifact the authority lacks is `stale`; the currency requirement says
+  an artifact absent from the machine is not judged on that axis at all. Real,
+  **pre-existing, byte-identical in `main`**. Fixing it is a normative change,
+  and smuggling one into a no-semantic-change refactor is what the change
+  promised not to do. **This is the next change.**
+- **Reordered the spec by hand after the fold**, via a committed idempotent
+  script, because `openspec archive` cannot express placement.
 
-## The two measurement bugs, which is the reusable part
+## Three tooling facts, none of them documented anywhere
 
-1. **`ancestor-of` and `tree-identical` both fail on squash merges.** They
-   marked 8 of 27 unmerged. Only the merged PR's **head SHA** resolved them.
-   Three had real commits past their PR head; all three had landed anyway.
-2. **12 worktrees' `.git` files still pointed at pre-reorganization paths**
-   (`~/Sourcecode/<repo>`, not `~/Sourcecode/<family>/<repo>`). `git status`
-   there **errored**, and my `2>/dev/null` swallowed the error into `"clean"`.
-   `git worktree repair` fixed the pointers and revealed 4 dirty worktrees.
+Established by probing `openspec archive` and resetting:
 
-Also worth keeping: `git diff base..branch --stat` renders **main's forward
-progress as branch deletions**. It made `claude-workflow` look like it deleted
-91,655 lines it never touched. Diff from the **merge-base** to see what a branch
-actually contributes.
+1. **`MODIFIED` cannot shed scenarios** — archive aborts. So no `MODIFIED`-based
+   delta can move a scenario between requirements.
+2. **A requirement may not appear in both `ADDED` and `REMOVED`** — so splitting
+   a requirement **forces a rename** of the surviving piece.
+3. **`ADDED` requirements are appended at end-of-file.** The delta cannot express
+   order at all.
 
-Same shape as last session's `IFS=` leak and its fixture-naming bug:
-**an error silently rendered as a passing observation.** Third instance.
+## The theme, now at five instances
+
+Every failure this session was a **check that lied**, not a broken artifact:
+
+- `ancestor-of` / `tree-identical` both fail on squash merges — marked 8 of 27
+  unmerged.
+- 12 worktrees' `.git` pointers were stale from the family reorganization;
+  `git status` **errored** and a `2>/dev/null` swallowed it into `"clean"`. Four
+  were actually dirty.
+- `git diff base..branch --stat` renders main's *forward progress* as branch
+  deletions — made `claude-workflow` look like it deleted 91,655 lines.
+- The normative-sentence check compared Python-sorted files with `comm`, which
+  uses locale collation. Mismatched orders **invented six differences**.
+- The line-multiset diff proved every line survived — and **cannot** detect a
+  line filed under the wrong heading. Three real misfilings got through it.
+
+**"Every line still exists" is a weaker property than "every line is in the right
+place."** Only the independent reviewer, reading for sense, closed that gap.
 
 ## Files modified
 
+- `openspec/specs/project-hook-binding/spec.md` — the split (PR #70)
+- `openspec/changes/archive/2026-08-03-place-provisioning-requirements/` — incl.
+  `REVIEW-RESPONSE.md` and `tools/reorder-requirements.py`
 - `~/Sourcecode/.worktree-reclaim-2026-08-03/` — **new**, recovery record + 6 backups
-- `neuroflash/api-documentation/.gitignore` — added `.env` (uncommitted)
-- `neuroflash/terraform/.gitignore` — added `openssl rand -hex *.txt` (uncommitted)
-- This repo: **untouched**. No code, spec or tool changes.
+- `neuroflash/api-documentation/.gitignore`, `neuroflash/terraform/.gitignore`
 
 ## Next session: start here
 
-**Nothing is in flight.** `main` clean and level with `origin/main`, no active
-OpenSpec change. The branch work is finished.
+**Merge the four open PRs first** — nothing is merged, and #70's branch holds the
+only copy of the split.
 
-The highest-value remaining work is the **requirement-placement change**,
-unchanged from the last handoff: the entire three-axis state model, every
-currency invariant and all six currency scenarios live under a requirement
-titled *"An unresolvable shim allows, and the operator sees it"* — two headings
-above one literally called *"Provisioning is checked per machine"*. opencode
-raised it as non-blocking; it is correct, pre-existing, and the currency change
-made it materially worse by adding ~200 lines under the wrong heading. Start
-with `/opsx:propose`; the reasoning is in
-`openspec/changes/archive/2026-08-03-check-implementation-currency/ARCHIVE-NOTE.md`.
+Then open the change for the **axes-table Currency contradiction** described
+under Decisions. It is a better-formed defect than the placement complaint that
+started this one: the spec says two different things about one condition
+(an artifact declared, absent from the machine, and absent from the authority).
+Reasoning is in `REVIEW-RESPONSE.md` round 2, which travels with the capability.
 
 ## Open questions
 
-- **Uncommitted `.gitignore` fixes in two neuroflash repos** need a branch + PR
-  each to become durable. Until then they protect this machine only.
+- **The axes-table Currency contradiction** — see above. The next change.
 - **`provisioning-check.sh` is not published to the shared bin.** Currency works
   and defaults on, but only where core is checked out. Nothing prompts anyone on
   a machine without a core checkout to discover their install is stale.
-- **The `cmp`-error branch is reasoned, not tested.** `cmp` exit 2 reports
-  `unknown`, not `stale`; the path *reaching* it is not portably constructible.
-  Negative evidence, not coverage.
-- **The `PostToolUse` fail-open channel remains unverified** — eighth session;
-  `normalize-claude-md` is the live instance.
-- **27 branches carry genuinely unmerged content** (the separate set the prior
-  sweep kept). Classified for reachability, **never for worth** — nobody has
-  judged whether any of it is wanted. `terraform` 6, `cparx` 5, `mcp-server` 6,
-  rest scattered.
+- **The `cmp`-error branch is reasoned, not tested.** Negative evidence, not
+  coverage.
+- **The `PostToolUse` fail-open channel remains unverified** — eighth session.
+- **27 branches carry genuinely unmerged content**, classified for reachability
+  and **never for worth**. Nobody has judged whether any of it is wanted.
 - The convergence rule is still unwritten — eighth session.
