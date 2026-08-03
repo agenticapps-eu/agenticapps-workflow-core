@@ -41,8 +41,14 @@ and **nothing compares it**. The source check compares bytes only, so it can say
   place in the state vocabulary.
 - **Default it on** when the authority is locatable from the tool's own location,
   which is inside core. `--source-check DIR` is retained as the explicit override;
-  `--no-source-check` opts out. **BREAKING for output format only**: a default run
-  gains a `CURRENCY` line.
+  `--no-source-check` opts out, and passing both is a usage error rather than a
+  silent last-one-wins. **This is a behaviour change, not only a format one** —
+  the first draft of this line said "BREAKING for output format only" and the
+  second review was right that it is false. A default run gains a `CURRENCY`
+  line, `--strict` gains conditions it can fail on, and `--no-source-check` does
+  **not** restore the old behaviour: it reports `unknown`, which `--strict`
+  fails. Opting out of the question and demanding a strict pass is a
+  contradiction, and it exits 1 every time.
 - **The summary stops overclaiming.** "This machine is provisioned" requires
   `complete` + `attested` + `current`. Under `unknown` it says which question was
   not asked, rather than reading like a clean bill.
@@ -52,9 +58,14 @@ and **nothing compares it**. The source check compares bytes only, so it can say
   compare". They are out of this manifest's scope and SHALL NOT be reported stale.
 - **Use the version markers for the message**: direction, both versions, and a
   remedy chosen per condition. Comparison stays byte-based; the marker supplies
-  the words. Ordering is component-wise numeric, reusing `semver_cmp` from
-  `project-hook-conformance.sh` — a lexical compare puts `1.10.0` below `1.9.0`
-  and would point the operator at the wrong remedy.
+  the words. Where either side has no readable marker the verdict still stands on
+  bytes and the message says the version could not be read, rather than inventing
+  one. Ordering is component-wise numeric — a lexical compare puts `1.10.0` below
+  `1.9.0` and would point the operator at the wrong remedy — and `semver_cmp` is
+  **extracted** from `project-hook-conformance.sh` into a shared library rather
+  than reused in place or copied. The second review was right that the first
+  draft had the direction inverted: nothing can import a function out of a script
+  that runs a full scan on execution.
 - **Narrow the claim honestly**: currency is measured against a *checkout*. An
   equally stale checkout and install agree and report `current`, so the axis says
   "matches this authority checkout", never "matches what core ships".
@@ -80,6 +91,16 @@ and **nothing compares it**. The source check compares bytes only, so it can say
   `unknown` sub-cases, the out-of-scope artifacts, and the summary text itself.
 - `reference-implementations/project-hooks/README.md` — the state vocabulary,
   documented there as a pair.
+- **`tools/lib/semver.sh` — new**, and the one structural change. `semver_cmp`
+  moves here from `project-hook-conformance.sh`; a second copy would be free to
+  drift and would fail silently, since nothing in either tool's output reveals a
+  wrong ordering.
+- **`tools/project-hook-conformance.sh` — modified**, and it gains a failure mode
+  it did not have: it now refuses (exit 65) when the library is absent, where
+  before it carried its own comparison and could not be missing one. Both callers
+  refuse rather than degrade, which matches how that tool already treats a
+  missing template — but it is a real change to an existing tool's robustness
+  profile and the first draft of this section omitted it entirely.
 - **`provisioning-check.sh` is not published to the shared bin** and is not in
   `ARTIFACTS`; it only runs where core is checked out. That makes `unknown` rare
   rather than common — the opposite of this proposal's first draft — and it means

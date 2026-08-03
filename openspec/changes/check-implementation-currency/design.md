@@ -78,6 +78,18 @@ override. `--no-source-check` opts out. **No new `--authority` flag**: the first
 draft proposed one, and the plan review pointed out it would overlap
 `--source-check` with no compatibility or conflict semantics defined.
 
+The second review found the same gap between the two flags that survived:
+**`--source-check DIR` together with `--no-source-check` is a usage error, exit
+64.** They are contradictory instructions — one names an authority, the other
+declines to consult one — and the implementation resolved them last-one-wins,
+which silently does the opposite of what half of a scripted invocation asked
+for. Refusing is the same posture the tool already takes for `--dest` with no
+value. Order does not decide it, and that is asserted.
+
+The path is `$SCRIPT_DIR/..` and then down: `reference-implementations/` is a
+sibling of `tools/` at the repository root, not "two levels up" as an earlier
+draft of this decision said.
+
 ### Decision 3 — currency judges the DECLARED set only
 
 `~/.agenticapps/bin` holds `openspec-change-gate`, `reviewer-cli` and
@@ -100,12 +112,33 @@ file whose bytes differ while its marker matches is exactly what a version-only
 comparison cannot see — the case already caught once for shims, where a marker
 attested "a string about the file rather than the file".
 
-Ordering is **component-wise numeric**, reusing `semver_cmp` from
-`project-hook-conformance.sh`. A lexical compare places `1.10.0` below `1.9.0`,
-inverting the reported direction and pointing the operator at the wrong remedy.
+Ordering is **component-wise numeric**. A lexical compare places `1.10.0` below
+`1.9.0`, inverting the reported direction and pointing the operator at the wrong
+remedy.
+
+`semver_cmp` is **extracted** into `tools/lib/semver.sh` and sourced by both
+callers. The first draft of this decision said "reusing `semver_cmp` from
+`project-hook-conformance.sh`", and the second review was right that the
+direction is inverted: that file runs a full fleet scan on execution and exits 65
+without a template, so nothing can import a function out of it. Extraction has a
+cost the reuse framing hid — `project-hook-conformance.sh` gains a failure mode,
+refusing when the library is absent — and that is accepted rather than
+overlooked, because the alternative failure is silent: a divergent second copy
+produces a wrong ordering that no output would reveal.
 
 Where either side has no parseable marker the verdict still stands on bytes and
-the message says the version could not be read, rather than inventing one.
+the message says the version could not be read, rather than inventing one. **The
+requirement to name both versions and a direction is therefore conditional on
+both being readable** — the second review found the delta demanding it
+unconditionally, which is unimplementable when an authority file carries no
+marker.
+
+**A failed comparison is not a difference.** `cmp` exits 1 for "they differ" and
+2 for "I could not compare them", and collapsing the two would report an I/O
+error as `stale` — the same mistake, one level down, as reporting an unasked
+question as a pass. Exit 2 reports `unknown` for that artifact. Found by the
+second review; the readability tests that precede the comparison catch the
+ordinary case but not a read that fails after them.
 
 ### Decision 5 — remedies per condition, because one remedy is wrong
 
@@ -170,6 +203,13 @@ part of an `unknown` report, this is a local developer tool that is not publishe
 to the shared bin, and `$HOME` appears throughout the existing output already.
 Recorded as a decision so it is a choice rather than an oversight.
 
+**Scope, corrected by the second review: it is wider than "an `unknown`
+report".** The `provisioned` summary names the authority it matched, because
+`current` is meaningless without saying *current against what*. So the path is
+disclosed on the success path too — which is the common one. The trade-off is
+unchanged and the reasoning still holds; the first draft of this decision just
+understated where it applies.
+
 ## Risks / Trade-offs
 
 - **The severity claim, corrected.** The first draft said "nothing here is a
@@ -191,7 +231,19 @@ Recorded as a decision so it is a choice rather than an oversight.
 
 `--source-check DIR` keeps working unchanged. A default run gains a `CURRENCY`
 line and may gain findings it did not previously report — which is the point.
-`--no-source-check` restores the old default for anyone who needs it.
+
+**`--no-source-check` does not restore the old default, and the first draft of
+this section claimed it did.** The old default asked nothing and exited 0;
+`--no-source-check` asks nothing and reports `unknown`, which `--strict` fails.
+So `--no-source-check --strict` exits 1 unconditionally.
+
+That is deliberate and is the decision this section exists to record. The
+alternative — carving the explicit opt-out out of `--strict` — would put back
+exactly what this change removes: a single flag that makes a CI job report a
+clean pass without the question being asked. There is no escape hatch under
+`--strict`, by design. A caller who wants a strict pass must let the question be
+asked; a caller who cannot reach an authority gets `unknown` and a non-zero exit,
+which is the honest answer rather than a convenient one.
 
 ## Open Questions
 

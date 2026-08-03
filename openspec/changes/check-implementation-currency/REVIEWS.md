@@ -7,57 +7,60 @@
 # Review record
 
 - requested: gemini codex claude opencode
-- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
+- counted:   gemini (APPROVE) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
 - excluded:  claude (declared implementing host)
 - failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-08-03T07:10:21Z · timeout 600s_
+_generated 2026-08-03T07:49:23Z · timeout 600s_
 
-VERDICT: REQUEST-CHANGES
+VERDICT: APPROVE
 
-*   The "Risks / Trade-offs" section contains a factual error that understates the importance of the change. It claims "A stale machine is still protected... Nothing here is a security fix", but the change is motivated by an observed failure of `database-sentinel` to block a destructive query, which is a security failure. The spec should be consistent about the severity of the problem it solves.
+*   The three-axis model (`Completeness`, `Integrity`, `Currency`) is robust and correctly separates concerns that were previously conflated. The distinction between `drifted` (tampering) and `stale` (outdated) is particularly valuable as it leads to different, correct remedies.
+*   The decision to scope the currency check to only the artifacts declared in the manifest is correct and avoids the false-positives that would arise from checking out-of-scope artifacts installed by other means.
+*   The proposed remedies are nuanced and condition-specific (e.g., handling a published version that is *newer* than the authority). This is a significant improvement over a single, often-incorrect, suggested fix.
+*   The proposal is honest about its limitations, correctly identifying that the check is against a local checkout, not a remote branch. Explicitly stating that an equally stale checkout and install will report as `current` is the right way to manage this boundary.
+*   The decision to make the check default-on, with a clear opt-out, is the correct response to the observed failure, shifting the posture from "trust but don't verify" to "verify by default".
 
 ## Reviewer: codex
-_generated 2026-08-03T07:12:47Z · timeout 600s_
+_generated 2026-08-03T07:53:03Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
 
-- A stale checkout matching an equally stale installation reports `current`, recreating the false green and granting “running as documented.” Either verify authority freshness or narrow the claim to “matches this checkout.”
-- The comparison set is undefined. The destination contains unrelated `.sh` artifacts intentionally excluded from this manifest; treating “no authority file” as stale may flag them, while restricting to current `ARTIFACTS` may miss renamed/removed hooks.
-- The universal remedy is wrong. Reinstalling cannot clear an ahead version when the installer must refuse downgrades, cannot fix a stale authority checkout, and is unsafe advice for `drifted` + `stale`. Specify remedies per condition.
-- `unknown` covers only an unreachable authority path. Unreadable files, malformed/missing markers, permission failures, and I/O errors have no defined result or aggregation precedence. The marker source—installed bytes versus manifest row—is also ambiguous when integrity is drifted.
-- The migration/interface claims are false: output format changes, `--strict` gains new failures, and `--authority` overlaps the existing `--source-check` option without compatibility or conflict semantics.
-- The check is not installed with the hooks, so the claimed machine-without-core/“most machines report unknown” scenario is not currently reachable unless someone manually copies the tool. Distribution or invocation must be specified.
-- Requiring the unknown report to print an absolute authority path can disclose usernames or workspace structure in CI logs; redact home-directory prefixes or document that exposure.
+- The final scenario universally names the installer as the remedy, contradicting the condition-specific remedy requirement and the explicit prohibition on that advice for ahead, equal-version, missing-authority, and drifted cases.
+- “Every stale artifact” must name both versions and a direction, but those values cannot exist when an authority file or version marker is missing. Make these fields conditional and define the fallback report normatively.
+- Currency states overlap when an artifact is absent both locally and from an otherwise valid authority: `current` holds vacuously over present implementations, while missing authority content requires `stale`. Define precedence and add partial/none-install scenarios.
+- `--source-check DIR` and `--no-source-check` conflict, but precedence is unspecified. Reject the combination or define and test deterministic semantics.
+- Compatibility claims are false: this is not “output format only”; `--strict` newly fails, `--source-check` output changes, and `--no-source-check` reports `unknown` rather than restoring the old default. The Impact section also omits the shared semver library and `project-hook-conformance.sh` refactor.
+- The `unknown` contract covers failed reads, but the test plan only checks permission bits. A readable file can still produce a comparison I/O error; require distinguishing “bytes differ” from comparison failure and test that path.
 
 ## Reviewer: opencode
-_generated 2026-08-03T07:15:39Z · timeout 600s_
+_generated 2026-08-03T07:55:49Z · timeout 600s_
 
-I'll verify a few factual claims against the repo before passing verdict.
+I'll verify the change's factual claims against the actual codebase before issuing a verdict.
+The implementation appears to already exist in the tree. Let me verify the remaining claims: the OpenSpec delta itself, README documentation, and the `semver_cmp` extraction.
+Tests pass (101/0) and the delta validates. One last check on the tasks/impact coverage of the semver extraction:
 VERDICT: REQUEST-CHANGES
 
-Concrete issues:
+The design itself is sound — decisions are well-reasoned, the implementation matches most of the spec, 101/101 tests pass, and `openspec validate` is green. But there are concrete mismatches between the delta artifacts and what was actually built:
 
-- **Version-ordering semantics unspecified.** Decision 3's "published marker lower/higher than the authority's" requires an ordering, and the markers are semver (`X.Y.Z`, enforced by the installer's `[0-9]+\.[0-9]+\.[0-9]+` regex). A lexical compare orders `1.10.0` below `1.9.0`, which would invert the reported direction and point the operator at the wrong remedy. The delta never states the comparison is component-wise numeric. Verdicts are byte-based, but the *message* contract ("names both versions and the direction") is only implementable if the ordering rule is pinned down.
+- **Impact section omits the one structural change.** `tools/lib/semver.sh` is a new untracked file and `tools/project-hook-conformance.sh` is modified — and neither appears in the proposal's Impact list. Worse, the modification gives `project-hook-conformance.sh` a **new failure mode**: it now hard-refuses (exit) when `lib/semver.sh` is missing, where before it carried its own comparison. `tasks.md` (lines 183–196) records this accurately, so the omission is in the proposal/design, not the work.
+- **"Reusing `semver_cmp` from `project-hook-conformance.sh`" is stale in both proposal.md and design.md.** The implementation moved the function *out of* that file into a shared lib; the reuse direction is inverted, and an existing tool's robustness profile changed as a side effect. The delta text should describe the extraction, not the reuse.
+- **`--no-source-check` + `--strict` is a guaranteed exit 1, undocumented.** `currency=unknown` fails `--strict`, so the Migration claim that "`--no-source-check` restores the old default for anyone who needs it" is false for any CI job running strict — that combination fails 100% of the time. Either the spec must state that `unknown` fails `--strict` (making the combination deliberately contradictory), or the implementation should carve out the explicit opt-out.
+- **Scenario "The authority holds no such artifact" overclaims.** It says any declared artifact with no authority counterpart is reported `stale`; the implementation checks `[ -f "$art" ] || continue` *first*, so a declared artifact that is absent on the machine AND absent in the authority is never judged for currency. Harmless in practice (completeness already reports `partial`), but the scenario text doesn't match the code.
 
-- **Decision 4 contradicts the no-such-artifact case.** "Every stale line ends with the command that clears it" cannot hold for "the authority holds no such file": the stated remedies ("check out core at the right commit, or stop publishing an artifact core no longer ships") are a git operation and a *fleet* action respectively — there is no machine-level command, and no uninstaller exists to name. Either carve this case out of Decision 4 explicitly or specify the command.
+Non-blocking observations:
 
-- **Missing/unparseable marker fallback undefined.** The installer refuses to publish unmarked files, so the published side is safe, but an authority file without a marker (or a hand-edited published file whose marker was stripped) makes "names both versions" unimplementable. Bytes still decide the verdict, but no scenario or requirement says what the message does when one side has no version to cite.
+- **Requirement placement:** the entire three-axis state model, the currency invariants, and all six currency scenarios live under the requirement titled "An unresolvable shim allows, and the operator sees it" — none of that is about unresolvable shims. This deepens a pre-existing organizational problem; a reader looking for the provisioning state contract will not find it under that heading.
+- **`marker_of` reads only the first 10 lines** of each file. If a marker ever drifts lower, the remedy text "was not published by this installer" accuses the wrong cause. Worth a comment or a wider window.
+- **"Two levels up" (Decision 2, and the code comment "two directories up") is imprecise** — the authority is a sibling of `tools/` at repo root (`$SCRIPT_DIR/..`). Cosmetic.
+- **Path disclosure extends to the success message**: the "provisioned" line prints the absolute `$AUTHORITY` path, not just `unknown` reports. Decision 8's recorded trade-off covers the spirit, but the scope is slightly wider than stated.
 
-- **Currency's artifact set is not pinned.** The spec says "every present implementation," but `provisioning-check.sh` already distinguishes the *declared* set, the *manifest* set, and undeclared files in the shared bin ("not covered — published by another installer"). It must say whether currency judges the declared set, the manifest-covered set, or everything present — otherwise an artifact published by `install-shared-artifact.sh` (same bin, same `manifest.tsv`) may or may not be currency-checked depending on reading.
-
-- **"Reachable" is undefined for `unknown`.** The spec splits "authority path not reachable" (`unknown`) from "authority holds no such file" (`stale`), but not the middle cases: directory exists but is empty or is not a core checkout (every artifact reports "no such file" → misleading `stale` instead of `unknown`), and file exists but is unreadable (hash fails — verdict unspecified). One definitional sentence fixes all three.
-
-- **Impact section under-enumerates tests.** `tools/project-hook-provisioning.test.sh` is listed with "cases for `current`, `stale` and `unknown`," but Decision 3 defines four distinct `stale` sub-cases (lower, higher, markers-equal-bytes-differ, authority-has-no-file), each with its own scenario and message contract. The test impact should name them, or the two non-obvious ones risk shipping untested.
-
-- Minor: the marker-ahead case is justified by analogy to the shim check's `unrecognised` verdict, then labelled `stale` — either reuse the vocabulary or note the deliberate divergence; as written the analogy argues for a name the spec then doesn't use.
-
-No PII/security concerns: the check reads a local authority path and prints artifact names, versions, and paths only. The checkout-as-authority decision (3a) is honestly stated and correct given the tool reads disk. The byte-identity-over-marker rule is the right call and is consistent with the installer publishing verbatim `cp` copies (verified: installed `database-sentinel.sh` is byte-identical to the reference implementation).
+Security/PII posture is otherwise honest: the stale-checkout false-green is disclosed rather than claimed away (Decision 6), byte-identity-over-marker is the right call, and the per-condition remedy table correctly blocks the "re-install over evidence" failure for `drifted`+`stale`.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:05595eac70c42cbe394a3506e4e9cabc53dea164b982b021de62158c46de1212
+digest: sha256:1d840d64748d3b205d0fdf5be6b046c774d0f4073ca7f3ef8a6b40d94cbd51d3
 producer-version: 1.2.0
-tasks-digest: sha256:fee7f4033b889daf852b0aa6d8063a45f9c0d3c567d2d194a1398343e46bbf9f
+tasks-digest: sha256:e2f67dc32ac2d274a8a3dfd5b3f1d09181695c2d6cac68111292d178a665d51c
 -->

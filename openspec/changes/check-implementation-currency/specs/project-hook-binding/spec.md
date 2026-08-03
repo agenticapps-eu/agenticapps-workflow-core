@@ -117,9 +117,15 @@ Invariants attach to a value on one axis, never to a state name:
   wherever the verdict is, rather than left for a reader to deduce — an
   unqualified `current` here would recreate, one level up, the false green this
   axis exists to remove.
-- **`stale`** — the check names each artifact, both versions and the direction,
-  and SHALL name a remedy **chosen for that condition**. A single universal
-  remedy is forbidden because it is wrong in most of them: re-running the
+- **`stale`** — the check names each artifact and SHALL name a remedy **chosen
+  for that condition**. It SHALL name both versions and the direction **where
+  both are readable**, and SHALL say the version could not be read rather than
+  inventing one where either side carries no parseable marker; the verdict stands
+  on bytes in both cases. The conditional matters because an authority file
+  without a marker makes the unconditional form unimplementable, and a
+  requirement that cannot be met is one an implementation quietly reinterprets.
+  A single universal remedy is forbidden because it is wrong in most of them:
+  re-running the
   installer cannot clear a published version *ahead* of the authority, since the
   installer refuses downgrades; cannot fix an authority checkout that is itself
   behind; and destroys evidence when a machine is `drifted` and `stale` at once.
@@ -130,9 +136,19 @@ Invariants attach to a value on one axis, never to a state name:
   dressed as a finding: the authority path is absent or unreadable; the path
   exists but holds no declared artifact at all, meaning it is not an authority
   checkout and reporting every artifact `stale` would be confidently wrong; or an
-  individual file cannot be read, a failed read being distinct from a difference.
+  individual file cannot be read, a failed read being distinct from a difference;
+  or the comparison itself fails, which is likewise distinct from the two files
+  differing and SHALL NOT be reported as a difference.
   Aggregation: any `stale` makes the machine `stale`, otherwise any `unknown`
-  makes it `unknown` — a known finding outranks an unasked question. It SHALL NOT install anything: this capability's
+  makes it `unknown` — a known finding outranks an unasked question.
+
+  **Currency is judged over the declared artifacts that are PRESENT.** An
+  artifact that is absent from the machine is completeness's finding and SHALL
+  NOT also be reported by this axis, whether or not the authority holds it —
+  reporting one fact on two axes is what made the flat four-state list
+  unusable. The consequence is that `current` holds vacuously when nothing
+  declared is installed, which is correct and harmless: the licence requires
+  `complete` as well. It SHALL NOT install anything: this capability's
   tools report and the installer installs, and a check that silently rewrote the
   shared bin would be doing the one thing `drifted` is forbidden to do.
   `unknown` SHALL NOT be reported as `current`. A result is a statement about
@@ -148,6 +164,16 @@ observed to be false: a machine held `complete` + `attested` while running two
 implementations missing three landed fixes, and was described as provisioned
 throughout. `unknown` does not grant the licence either — an unchecked claim and
 a verified one must not read the same.
+
+**A strict mode SHALL fail on any currency value but `current`, `unknown`
+included, and SHALL offer no flag that exempts it.** Declining to ask the
+question and demanding a clean strict result are contradictory, and the
+contradiction SHALL resolve as a failure rather than as a pass — an opt-out that
+produced a green strict run would restore, in one flag, precisely the silent
+pass this axis exists to remove. Two flags that contradict each other outright —
+naming an authority while declining to consult one — SHALL be a usage error
+rather than resolved by order of appearance, because last-one-wins silently
+performs the opposite of half the instruction it was given.
 
 **All three axes are computed from what is on disk, never from what happened.** The
 previous revision defined *provisioned* as "a publishing run completed" and
@@ -435,12 +461,15 @@ run rather than an operator's session.
 
 #### Scenario: The authority holds no such artifact
 
-- **WHEN** a **declared** artifact has no counterpart in an authority that does
-  hold other declared artifacts — the checkout predates it, or it was renamed
-  upstream
+- **WHEN** a **declared and installed** artifact has no counterpart in an
+  authority that does hold other declared artifacts — the checkout predates it,
+  or it was renamed upstream
 - **THEN** it is reported `stale` with its own message and its own remedy, **not
   `unknown`**: the authority was reached and holds the rest, so "this one is not
   in it" is a finding rather than an inability to check
+- **AND** a declared artifact that is absent from the machine *and* from the
+  authority is **not** judged for currency at all — completeness already reports
+  it, and a second report on a second axis says nothing new
 - **AND** an artifact the manifest does not declare — one published by a
   different installer into the same directory — is **not** judged at all, because
   the authority was never expected to hold it
@@ -497,6 +526,11 @@ the authority's tracked source and report the result, by artifact name.
 #### Scenario: The check is asked to fix what it found
 
 - **WHEN** a stale implementation is reported
-- **THEN** the check names the installer as the remedy and does not run it — this
-  capability's tools report and its installer installs, and a check that rewrote
-  the shared bin would resolve silently what it is required to surface
+- **THEN** the check names the remedy **for that condition** and does not run it
+  — this capability's tools report and its installer installs, and a check that
+  rewrote the shared bin would resolve silently what it is required to surface
+- **AND** where that remedy is the installer, naming it is still not running it;
+  where it is not the installer — a published version ahead, a lagging authority
+  checkout, or `drifted` and `stale` together — the installer SHALL NOT be named.
+  An earlier revision of this scenario said the check "names the installer as the
+  remedy", contradicting the `stale` invariant above in the same delta

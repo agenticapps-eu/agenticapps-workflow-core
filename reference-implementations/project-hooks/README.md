@@ -334,13 +334,110 @@ export the override into the operator's shell. A green result therefore reads
 
 Publish with `install-project-hooks.sh`; check with `tools/provisioning-check.sh`.
 
-**The state is a pair, not one of four** (design Decision 12):
-`completeness ∈ {none, partial, complete}` × `integrity ∈ {attested, drifted}`.
+**The state is a triple, not one of four** (design Decision 12, third axis added
+2026-08-03):
+
+| axis | values | asks |
+|---|---|---|
+| `completeness` | `none` / `partial` / `complete` | how much is installed |
+| `integrity` | `attested` / `drifted` | does it match what was installed |
+| `currency` | `current` / `stale` / `unknown` | is that still what the authority holds |
+
 The flat list overlapped — a manifest whose files are all absent is both
 *unprovisioned* and *drifted* — and every state here is **observed**, never
 inferred from history. "The installer has never run" is not evaluable after the
 fact, and a history-based definition calls a completed-then-hand-edited install
 *provisioned*: the exact condition the manifest exists to detect.
+
+### The counter-example that added the third axis (2026-08-03)
+
+Recorded with its date, because **a rule with a recorded counter-example is
+harder to quietly re-weaken** than one stated as a principle.
+
+This document said, of `attested`, that it was *"the only value on either axis
+under which the fleet's protections may be described as running as documented"*.
+On 2026-08-03 this machine held `complete` + `attested` and was described as
+provisioned — by this tool, in those words — while running:
+
+| artifact | published | core shipped | measured behaviour of the published copy |
+|---|---|---|---|
+| `normalize-claude-md` | 1.0.0 | 1.0.1 | `CLAUDE.md` 0644 in → **0600** out |
+| `database-sentinel` | 1.0.0 | 1.1.0 | `DELETE FROM public.users` **not blocked** |
+
+It held for fifteen hours. The check printed `attested v1.0.0` throughout: the
+number was on screen and **nothing compared it to anything**.
+
+The licence to describe the protections as running as documented now requires
+**`complete` + `attested` + `current`**, and no other combination grants it —
+`unknown` included, because an unchecked claim and a verified one must not read
+alike.
+
+### What made it possible, which was not a missing check
+
+The comparison already existed. `--source-check DIR` byte-compared each executed
+copy against core's maintained implementation and carried a comment stating the
+premise exactly — *a machine can be perfectly attested against a manifest that
+published last month's implementation.* Pointed at a stale tree it correctly
+reported `DIFFERS` on both artifacts, and the summary printed "This machine is
+provisioned. The shims will resolve." anyway, because the finding fed a separate
+block and no verdict.
+
+Three narrower defects, all fixed:
+
+1. the summary was computed without the comparison, so it could contradict it;
+2. the comparison was **opt-in and off by default**, and its absence was
+   undisclosed — a run without the flag read exactly like a run where the
+   stronger question was asked and passed;
+3. the vocabulary could not express the result, so code was ahead of spec.
+
+`currency` is on by default now, resolved from the tool's own location inside
+core. `--source-check DIR` names a different authority; `--no-source-check` opts
+out and says so.
+
+### What `current` does and does not license
+
+`current` means **byte-identical to this authority checkout**, never "matches
+what core ships". The check reads files on disk; it cannot know what a branch
+elsewhere contains, so an authority checkout that is itself behind agrees with an
+equally behind install and the pair reports `current`. That is the check being
+right about the disk rather than wrong about the world — and the limit is
+printed with the verdict, because an unqualified `current` would recreate the
+false green one level up. `git show <ref>:<path>` is how to ask the branch
+question, and is what the fleet's contract propagation used as its durable check.
+
+### `stale` names a remedy per condition — there is no universal one
+
+Re-running the installer is right in exactly one of these, and actively harmful
+in another:
+
+| condition | remedy |
+|---|---|
+| published **behind** the authority | re-run `install-project-hooks.sh` |
+| published **ahead** of the authority | **not** the installer — it refuses downgrades. Update the checkout, or investigate a build published from a tree nobody has |
+| versions equal, bytes differ | investigate: a build error or a hand-edit, not a lag |
+| the authority holds no file for a **declared** artifact | check out the authority at a commit that has it, or reconcile `ARTIFACTS` |
+| `drifted` **and** `stale` together | investigate first — re-installing overwrites the evidence of the edit |
+
+Direction is compared **component-wise numerically**. A lexical compare places
+`1.10.0` below `1.9.0` and would hand the operator the opposite remedy, which is
+worse than handing them none.
+
+### Scope, and the mistake that pinned it down
+
+Currency judges the artifacts named in `ARTIFACTS` and nothing else. The shared
+bin also holds `openspec-change-gate`, `reviewer-cli` and `run-plan-review`,
+published by `install-shared-artifact.sh`, which the manifest check already
+reports as *"not covered — published by another installer"*.
+
+This was learned rather than designed: an earlier revision made "the authority
+holds no such file" a `stale` finding **without** scoping it, and running it
+flagged exactly those three. Scoped to the declared set, an absent authority file
+is a genuine finding again, because every declared artifact must exist in the
+authority.
+
+`--strict` counts currency, `unknown` included. That makes it **newly able to
+fail** on a machine whose authority checkout lags or is absent — a behaviour
+change, not a reporting one.
 
 ### The regression this answers (task 3.6a)
 
