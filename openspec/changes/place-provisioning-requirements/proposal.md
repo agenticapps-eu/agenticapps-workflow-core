@@ -1,34 +1,35 @@
 ## Why
 
 `project-hook-binding`'s requirement **"An unresolvable shim allows, and the
-operator sees it"** is ~480 lines, and most of them are about something its
-heading does not name: the three-axis provisioning state model, the currency
-invariants, and eleven provisioning scenarios. Two headings below sits
-**"Provisioning is checked per machine, not only per repository"**, which is
-where a reader looks for exactly that material — and which already reaches
-upward for it, saying *"computed observationally per the state table above"*.
+operator sees it"** is ~480 lines — 30% of the capability — and most of them
+govern what its heading does not name: the three-axis provisioning state model,
+the currency contract, and eleven provisioning scenarios. Two headings below sits
+**"Provisioning is checked per machine"**, which already reaches up for that
+material, saying *"computed observationally per the state table above"*.
 
 opencode raised this in round 2 of `check-implementation-currency` as
-non-blocking. It is correct and pre-existing, but that change made it materially
-worse by adding ~200 lines of provisioning-state contract under a heading about
-shim resolution. Its archive note records the reason to open this change and the
-reason it grows with delay: *"the longer it waits the larger the move gets."*
+non-blocking. It is correct and pre-existing, and that change made it worse by
+adding ~200 lines under the wrong heading. Its archive note records why it grows
+with delay: *"the longer it waits the larger the move gets."*
 
-The cost is not cosmetic. A requirement is the unit a reviewer reads and a
-conformance check cites. When the licence governing whether the fleet's
-protections may be described as running as documented lives under a heading
-about shim resolution, the reader most likely to need it is the reader least
-likely to find it.
+A requirement is the unit a reviewer reads and a conformance check cites. The
+licence governing whether the fleet's protections may be described as running as
+documented is filed under shim resolution, so the reader most likely to need it
+is the reader least likely to find it.
 
 ## What Changes
 
 - **Split one requirement into three**, so each heading names what it governs.
-  Net: one requirement heading added (15 → 17 across the capability), and the
-  oversized requirement drops from ~480 to ~360 lines.
-- **`An unresolvable shim allows, and the operator sees it`** keeps shim
-  resolution, the non-blocking exit-code rule, warning-channel verification, the
-  repetition policy, the two-distinct-non-resolutions carve-out and the §18 gate
-  consequence. Six scenarios.
+  Net: 15 → 17 requirements across the capability, and the oversized requirement
+  drops from ~480 to ~230 lines.
+- **RENAMED — `An unresolvable shim allows, and the operator sees it` becomes
+  `A shim that resolves no implementation allows the call and reports it`.**
+  **The rename is forced by the tooling, not chosen**: OpenSpec rejects a
+  requirement present in both `ADDED` and `REMOVED`, so the surviving piece of a
+  split cannot keep its name. It keeps shim resolution, the non-blocking
+  exit-code rule, warning-channel verification, the repetition policy, the
+  two-distinct-non-resolutions carve-out and the §18 gate consequence. Six
+  scenarios.
 - **NEW — `A machine's provisioning is a triple, not a state name`** takes the
   three-axis table entire, the `none` / `partial` / `complete` / `attested` /
   `drifted` invariants, the "state is the triple" rule with the `none`+`drifted`
@@ -72,9 +73,15 @@ introduced.
   model and cite no heading at all.
 - **One positional reference must survive the move.** "Provisioning is checked
   per machine" says the state is *"computed observationally per the state table
-  above"*. The new requirement owning the table is ordered **above** it, so
-  "above" stays true. This is an invariant of the ordering, not an accident of
-  it, and is checked as a task.
+  above"*. The new requirement owning the table must end up **above** it. This
+  is an invariant of the ordering, not an accident of it, and is checked as a task.
+- **`openspec archive` appends ADDED requirements to the end of the spec and
+  cannot express placement.** Left alone it lands the three new requirements at
+  the bottom of the file, which falsifies "above" and exiles the shim
+  requirement 900 lines from its siblings — defeating the change. The spec is
+  therefore **reordered by hand after the fold**, as a disclosed step of this
+  change, re-verified by the same line-level multiset diff. Established by
+  probing `archive` and resetting, not assumed.
 - **Risk is concentrated in one failure mode**: silently dropping or reweighting
   a normative sentence during a ~290-line move. Mitigated by a mechanical
   set-difference of every `SHALL` / `MUST` / `MAY` sentence before and after,

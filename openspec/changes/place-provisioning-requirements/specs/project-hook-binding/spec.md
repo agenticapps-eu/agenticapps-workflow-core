@@ -1,6 +1,6 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: An unresolvable shim allows, and the operator sees it
+### Requirement: A shim that resolves no implementation allows the call and reports it
 
 A shim that resolves no implementation SHALL allow the tool call and SHALL make
 the failure visible in the session transcript, naming the missing implementation
@@ -213,57 +213,6 @@ run rather than an operator's session.
   told, and the policy is recorded with the hook rather than left to whatever the
   implementation happens to do
 
-
-### Requirement: Provisioning is checked per machine, not only per repository
-
-Every check this capability requires elsewhere is evaluated against a
-**repository** — shim markers, byte-identity within a profile, the
-override-provenance scan. None of them can observe whether the machine executing
-those shims holds the implementations. A conformance check SHALL therefore report
-the **machine's** provisioning state, computed observationally per the state
-table above, independently of any repository check.
-
-A reviewer found the gap by its consequence, which is a real regression this
-capability introduces. Before it, `database-sentinel` ran on any clone with zero
-provisioning, because the implementation was in the repository. After it, the
-protection exists only where the installer has run — and **every existing
-developer machine enters the unprovisioned state at the moment it pulls the
-shim**, through an ordinary `git pull`, with no step that would prompt anyone to
-notice. The change trades a protection that travelled with the repository for one
-that travels with the machine, and only the second needs a check that did not
-previously have to exist.
-
-The rollout ordering — publish and verify before replacing project copies —
-orders exactly **one** machine: the one performing the rollout. It says nothing
-about any other machine that later pulls the result, and SHALL NOT be cited as
-though it did.
-
-The rule that a project must never bind a missing implementation applies to the
-**provisioned** state only. It is a post-condition of a completed install, not a
-property of the fleet at all times — which is what made it look like it
-contradicted a usable fresh clone.
-
-
-A rollout SHALL move a machine to *provisioned* before any project's copy is
-replaced with a shim, because that ordering is what keeps the window in which a
-project has a shim but no implementation from being entered deliberately.
-
-#### Scenario: A machine pulls the shim without running the installer
-
-- **WHEN** a developer pulls a project after its copies have been replaced with
-  shims, on a machine where the installer has never run
-- **THEN** that machine is unprovisioned and reports as such under the
-  per-machine check — rather than the condition being invisible because every
-  repository-level check passes
-
-#### Scenario: The rollout ordering is offered as fleet-wide assurance
-
-- **WHEN** publish-before-replace is cited as evidence that no binder is left
-  without an implementation
-- **THEN** the claim is limited to the rollout machine, and the per-machine check
-  is what covers every other one
-
-## ADDED Requirements
 
 ### Requirement: A machine's provisioning is a triple, not a state name
 
@@ -541,3 +490,79 @@ performs the opposite of half the instruction it was given.
   the authority cannot account for — rather than passed as newer-and-fine, for
   the same reason a shim marker ahead of the template is `unrecognised`
 
+## MODIFIED Requirements
+
+### Requirement: Provisioning is checked per machine, not only per repository
+
+Every check this capability requires elsewhere is evaluated against a
+**repository** — shim markers, byte-identity within a profile, the
+override-provenance scan. None of them can observe whether the machine executing
+those shims holds the implementations. A conformance check SHALL therefore report
+the **machine's** provisioning state, computed observationally per the state
+table above, independently of any repository check.
+
+A reviewer found the gap by its consequence, which is a real regression this
+capability introduces. Before it, `database-sentinel` ran on any clone with zero
+provisioning, because the implementation was in the repository. After it, the
+protection exists only where the installer has run — and **every existing
+developer machine enters the unprovisioned state at the moment it pulls the
+shim**, through an ordinary `git pull`, with no step that would prompt anyone to
+notice. The change trades a protection that travelled with the repository for one
+that travels with the machine, and only the second needs a check that did not
+previously have to exist.
+
+The rollout ordering — publish and verify before replacing project copies —
+orders exactly **one** machine: the one performing the rollout. It says nothing
+about any other machine that later pulls the result, and SHALL NOT be cited as
+though it did.
+
+The rule that a project must never bind a missing implementation applies to the
+**provisioned** state only. It is a post-condition of a completed install, not a
+property of the fleet at all times — which is what made it look like it
+contradicted a usable fresh clone.
+
+
+A rollout SHALL move a machine to *provisioned* before any project's copy is
+replaced with a shim, because that ordering is what keeps the window in which a
+project has a shim but no implementation from being entered deliberately.
+
+#### Scenario: A machine pulls the shim without running the installer
+
+- **WHEN** a developer pulls a project after its copies have been replaced with
+  shims, on a machine where the installer has never run
+- **THEN** that machine is unprovisioned and reports as such under the
+  per-machine check — rather than the condition being invisible because every
+  repository-level check passes
+
+#### Scenario: The rollout ordering is offered as fleet-wide assurance
+
+- **WHEN** publish-before-replace is cited as evidence that no binder is left
+  without an implementation
+- **THEN** the claim is limited to the rollout machine, and the per-machine check
+  is what covers every other one
+
+## REMOVED Requirements
+
+### Requirement: An unresolvable shim allows, and the operator sees it
+
+**Reason**: Replaced by three requirements, each named for what it governs. At
+~480 lines it was 30% of the capability, and most of it — the three-axis
+provisioning state model, the currency contract and eleven provisioning
+scenarios — sat under a heading about shim resolution. The requirement two
+headings below already reached up for that material, saying the state is
+"computed observationally per the state table above".
+
+**Migration**: None for any consumer; no code, tool, test or template reads a
+requirement heading. Every normative sentence is preserved verbatim under one of
+the three ADDED requirements: shim resolution, the non-blocking exit-code rule,
+warning-channel verification and the repetition policy under "A shim that
+resolves no implementation allows the call and reports it"; the axes table and
+the completeness and integrity invariants under "A machine's provisioning is a
+triple, not a state name"; declared-set scoping, the currency invariants, the
+`complete`+`attested`+`current` licence and strict mode under "Currency is
+judged against an authority checkout". Verified by line-level multiset diff of
+the original region against the delta: zero content lines lost.
+
+The rename is forced, not chosen. OpenSpec rejects a requirement present in both
+ADDED and REMOVED, so the surviving piece of a split requirement cannot keep its
+name. The new name describes the narrowed scope.

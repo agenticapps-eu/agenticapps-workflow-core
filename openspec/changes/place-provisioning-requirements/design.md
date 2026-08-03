@@ -64,17 +64,56 @@ currency from the state model risks putting a definition and its axis in
 different requirements. Keeping the table whole is the mitigation, and it is the
 reason the split is safe rather than merely tidy.
 
-**Ordering is load-bearing, not cosmetic.** The new requirements are placed
-*between* the shim requirement and the per-machine one:
+**Three tooling constraints shape the encoding. All three were established by
+probing `openspec archive` and resetting, not by reading its help text.**
 
-1. An unresolvable shim allows, and the operator sees it
+1. **`MODIFIED` cannot shed scenarios.** Archive aborts with *"current spec
+   contains scenario(s) not present in the modified block"* — it cannot see that
+   the ten scenarios landed under sibling requirements in the same delta. So no
+   `MODIFIED`-based encoding can move a scenario between requirements. This is a
+   sound guard (it is what stops partial-content `MODIFIED` from silently losing
+   detail), and it simply does not model relocation.
+2. **A requirement may not appear in both `ADDED` and `REMOVED`.** Archive
+   rejects it outright. So the surviving piece of a split **cannot keep its
+   name** — the rename is forced by the tool, and calling it a choice would
+   misdescribe it.
+3. **`ADDED` requirements are appended to the end of the spec.** The delta has no
+   way to express position.
+
+Taken together: a requirement split is expressible only as `REMOVED` + three
+`ADDED`, with a forced rename and no control over placement.
+
+**The spec is reordered by hand after the fold.** Constraint 3 is the awkward
+one, because placement is the whole point of this change. Left alone, archive
+puts the three new requirements at lines ~1133/1345/1433 — below "Provisioning
+is checked per machine", falsifying its *"state table above"*, and moving the
+shim requirement from position 5 to 15, 900 lines from "A project binds a hook
+through a shim". That is a worse document than the one being fixed.
+
+The alternative considered was to accept the tool's ordering and replace the
+positional reference with a named one (*"the state table in <requirement>"*),
+which is arguably better engineering because named references survive any
+reordering. Rejected because it fixes the reference and leaves the readability
+regression: the change would then make the spec harder to read while claiming to
+make it easier.
+
+So: archive folds, then the three blocks are moved into positions 5–7 as a
+disclosed step, and the **same line-level multiset diff is re-run against the
+reordered file** — a reorder that loses a line is exactly as bad as a move that
+loses one, and is checked the same way.
+
+**Ordering is load-bearing, not cosmetic.** The intended final order is:
+
+1. A shim that resolves no implementation allows the call and reports it
+   *(renamed, reduced)*
 2. A machine's provisioning is a triple, not a state name *(new)*
 3. Currency is judged against an authority checkout *(new)*
 4. Provisioning is checked per machine, not only per repository
 
-This keeps "per the state table above" literally true — the table is now in
+This keeps "per the state table above" literally true — the table is in
 requirement 2, still above requirement 4. Any other ordering silently falsifies
-a positional reference. Checked explicitly as a task.
+a positional reference. Checked explicitly as a task, against the **applied**
+spec rather than the delta, because the delta cannot express order at all.
 
 **The delta was produced by slicing the source, not retyping it.** Each block is
 an exact line range from the current spec, concatenated in the new order. This is
