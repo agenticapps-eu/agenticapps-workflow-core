@@ -133,22 +133,21 @@ recording *how to re-derive* a fact over recording the fact.
 
 ## The methodological lesson, which cost the most time today
 
-Three separate wrong conclusions, all pointing the same way — toward keeping
-branches that were merged, and toward a fleet "finding" that did not exist:
+Three wrong conclusions, all pointing the same way — toward keeping branches that
+were merged, and toward a fleet "finding" that did not exist. Each was caught
+only by hand-checking one case:
 
-- **`git cherry` cannot see squash merges.** It marked 10 merged commits as
-  unique; the reliable signal is the merged PR's **head SHA == branch tip**.
-- **A stale `origin/main` ref** made `claude-workflow` look like 49 unmerged
-  files when its tree was byte-identical. Always `git fetch` first.
-- **`IFS=` leaked** out of a `while IFS= read` into a later `for`, so nothing
-  word-split and every branch classified as "keep".
+- **`git cherry` cannot see squash merges** — it marked 10 merged commits unique.
+  The reliable signal is the merged PR's **head SHA == branch tip**.
+- **A stale `origin/main`** made a byte-identical tree look like 49 unmerged
+  files. Always `git fetch` first.
+- **`IFS=` leaked** from a `while IFS= read` into a later `for`, so nothing
+  word-split and everything classified as "keep".
 
-And in the test suite: **five fixtures were named for the words their own
-assertions grep for**, so `has "$OUT" "behind"` matched the directory
-`…/auth-behind` against the *unfixed* tool — six assertions green on a broken
-build. That is the `override-dir` defect from the previous change, on the same
-suite, four days later. It was caught only by re-running the whole suite against
-the pre-change tool instead of trusting it to be red.
+And in the suite: **five fixtures were named for the words their own assertions
+grep for**, so `has "$OUT" "behind"` matched the directory `…/auth-behind`
+against the *unfixed* tool — six assertions green on a broken build. That is the
+`override-dir` defect from the previous change, same suite, four days later,
+caught only by re-running everything against the pre-change tool.
 
-**A test never observed failing is not evidence of anything.** This suite has
-now produced that error twice.
+**A test never observed failing is not evidence of anything.** Twice now.
