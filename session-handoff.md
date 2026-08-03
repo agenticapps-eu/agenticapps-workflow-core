@@ -65,20 +65,38 @@ review caught that and the change was rewritten (`bc1411a`, before this session)
 
 ## Next session: start here
 
-**Nothing is in flight.** No active OpenSpec change, no open PR, `main` clean and
-level with `origin/main`. The highest-value next piece of work is the
-**requirement-placement change**: the entire three-axis state model, every
-currency invariant and all six currency scenarios now live under a requirement
-titled *"An unresolvable shim allows, and the operator sees it"* — two headings
-above one literally called *"Provisioning is checked per machine"*. opencode
-raised it as non-blocking; it is correct, pre-existing, and **this change made it
-materially worse** by adding ~200 lines under the wrong heading. Start with
-`/opsx:propose` for that move. The reasoning is in the archive note.
+**Nothing is in flight** — no active OpenSpec change, `main` clean and level with
+`origin/main`. The operator's stated next task is to **inspect the 28 branches
+below**: each is verified merged but survived the sweep only because it is
+checked out somewhere, so deleting one means moving a checkout. Inspect before
+moving — check each for uncommitted work, and note that several are linked
+worktrees under `~/.config/superpowers/worktrees/`, where the checkout belongs to
+another agent session rather than to a person.
 
-If instead you want to finish the sweep: 28 verified-merged branches remain only
-because they are checked out. Clearing them means switching ~15 repos to their
-default branch — check each for uncommitted work first; several are linked
-worktrees under `~/.config/superpowers/worktrees/`.
+The list is written here rather than left in the scratchpad, which is
+session-scoped and does not survive `/clear`:
+
+| repo | branch |
+|---|---|
+| agenticapps-roadmap, agents-task-viewer, callbot, cparx, fbc-platform, fx-signal-agent | `fix/shim-contract-1.1.0` (one each — the 1.1.0 rollout, merged 2026-08-02) |
+| ai-engineering-framework | `almondine-passenger`, `freckle-reaction`, `fuchsia-rock`, `heathered-quicksand`, `mutual-beluga` |
+| mcp-server | `attachment-service-integr`, `docs/86c9ehe6a-workspace-bv-selection`, `DonaldVl/bucharest`, `feat/86c9ehe6a-execute-plan-dsl` |
+| fx-signal-agent | `debug-mcp-server-timeouts`, `dryrun/migration-0009`, `seasoned-cheetah`, `DonaldVl/i-want-to-use-superset-…` |
+| claude-workflow | `feat/programmatic-hooks-architecture-audit`, `feat/wire-go-impeccable-database-sentinel` |
+| opencode-workflow, pi-agentic-apps-workflow | `feat/publish-core-artifacts-from-a-pin` (one each) |
+| codex-workflow | `chore/repin-core-ef030d0` |
+| api-documentation | `docs/page-bottom-margin` |
+| factiv-website | `DonaldVl/asuncion` |
+| terraform | `feature/mcp-api-docs-redirect` |
+| brand-report | `master` — **its only local branch, and checked out.** Deleting it leaves a detached HEAD; probably leave alone |
+
+**After that**, the highest-value work is the **requirement-placement change**:
+the entire three-axis state model, every currency invariant and all six currency
+scenarios now live under a requirement titled *"An unresolvable shim allows, and
+the operator sees it"* — two headings above one literally called *"Provisioning
+is checked per machine"*. opencode raised it as non-blocking; it is correct,
+pre-existing, and **this change made it materially worse** by adding ~200 lines
+under the wrong heading. `/opsx:propose`; reasoning is in the archive note.
 
 ## Open questions
 
