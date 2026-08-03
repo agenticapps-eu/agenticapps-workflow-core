@@ -1,196 +1,136 @@
-# Session Handoff — 2026-08-03
+# Session Handoff — 2026-08-03 (afternoon)
 
-## Accomplished — the later half first, it is where the open work is
+## Accomplished
 
-- **`shim-project-hooks` is ARCHIVED** (PR #65). `project-hook-binding` is now
-  durable truth in `openspec/specs/` — a new capability, +14 requirements.
-  Archiving had to come first: the capability existed *only* in the open delta,
-  so nothing could amend it until it was folded.
-- **This machine's implementations were STALE and are now current.**
-  `database-sentinel` 1.0.0 → 1.1.0, `normalize-claude-md` 1.0.0 → 1.0.1, by
-  re-running `install-project-hooks.sh`. Verified behaviourally, not by version
-  string: `CLAUDE.md` now 644 in → **644** out (was 644 → 600), and
-  `DELETE FROM public.users` now **exits 2** (was unmatched).
-- **New change proposed: `check-implementation-currency`**, branch
-  `feat/check-implementation-currency`, commit `cf85572`. All four artifacts
-  complete, `openspec validate --all` **6/6**. No code written yet.
+- **`check-implementation-currency` is implemented, merged and archived.**
+  PR **#66 → `db02493`**, archive PR **#67 → `09f829e`**. `openspec list` reports
+  **no active changes**; the delta is folded into `openspec/specs/`.
+- **`project-hook-binding` lost a sentence that was observed false**, not merely
+  imprecise: *"`attested` … is the only value on either axis under which the
+  fleet's protections may be described as running as documented."* It gained a
+  third axis, `currency ∈ {current, stale, unknown}`, and the licence now
+  requires **`complete` + `attested` + `current`**. Plus a new requirement,
+  *"The implementation version marker is compared, not merely carried."*
+- **Project-hook suites 190 → 243**, all green. Validate 5/5 (change no longer
+  active), gate `--ci` OK, gate conformance **355/355**, harness 36/5.
+- **Branch sweep across the family.** 257 non-default local branches existed at
+  the start of the sweep. **202 deleted**, all verified merged; **28 skipped**
+  (merged but checked out in a worktree); **27 kept** (genuinely unmerged).
 
-## The defect that change exists for
+## The defect this change existed for, and what it actually was
 
-`provisioning-check.sh` reported this machine `COMPLETENESS complete`,
-`INTEGRITY attested`, "This machine is provisioned. The shims will resolve." —
-while running two implementations three landed fixes behind. It printed
-`attested v1.0.0` while doing it; the number was on screen and **nothing compared
-it to anything**.
+The comparison **already existed** as `--source-check`, worked, and reported
+`DIFFERS` on both artifacts — while the summary printed *"This machine is
+provisioned. The shims will resolve."* anyway. The finding fed a separate block
+and no verdict. So this was never "build a check"; it was three narrower things:
+the summary ignored it, it was opt-in and its absence undisclosed, and the spec
+vocabulary could not express the result.
 
-`attested` compares each published file to the **manifest row written when it was
-installed** — what *was* published, never what core *now* ships. So a machine can
-be attested against a stale build indefinitely.
-
-**The sharper shape:** the capability defines TWO version markers and built a
-comparison for ONE. `# shim-contract:` got `project-hook-conformance.sh`.
-`# <hook>-version:` was defined in the same change (task 3.2a-iv) and nothing has
-ever read it against core. That is "a marker with no check makes nothing
-detectable" left unapplied to its own second marker.
-
-The delta is a **MODIFIED** requirement, not only an ADDED one, because this
-sentence was false and had to go rather than be contradicted:
-
-> **`attested`** — … This is the only value on either axis under which the
-> fleet's protections may be described as running as documented.
-
-It held here for fifteen hours. The licence now needs
-`complete` + `attested` + `current`.
-
-## Earlier the same session — shim-contract 1.1.0, all merged
-
-- **Discharged task 7.6 — the last open box on `shim-project-hooks`.** The
-  operator decided *fix and propagate*, and *record the empty-override
-  behaviour as intended*. `tasks.md` now has **0** unchecked items.
-- **shim-contract 1.0.0 → 1.1.0.** An override is honoured only when it names an
-  executable **regular file**. Branch `fix/shim-contract-1.1.0`, core PR
-  **#63**, plus seven fleet PRs.
-- **Suites 155 → 190**, all green. Gate conformance 355/355, harness reporting
-  36 passed / 5 skipped, `openspec validate --all` 5/5, gate `--ci` OK.
-- **CodeRabbit reviewed #63 and posted four findings. Three are fixed** in
-  `8c5c749`, one is declined on the thread — see Decisions.
-
-## What the fix actually was
-
-`[ -x "$OVERRIDE" ]` tests the search bit, which every ordinary directory has,
-so a directory override was `exec`'d: bash exited **126** with its own "is a
-directory" message, the invalid-override report never fired, and the exit code
-was not the 1 the contract states. Now `[ -f ] && [ -x ]` in all three binders.
-
-**Three corrections to what the deferral said**, all recorded in `CODE-REVIEW.md`:
-
-1. **21 binders, not eight.** "Eight files" counted `openspec-change-gate`
-   binders only (seven projects + core), but the fix is in the *template*, which
-   also renders `database-sentinel` and `normalize-claude-md`. The re-render
-   reached **20 project shims across seven repositories** plus core's
-   self-hosting binder. Still seven fleet PRs; wider diff in each.
-2. **Core's own binder had the same defect** and the deferral did not name it.
-   `.claude/hooks/openspec-change-gate.sh` tested `-x` on `$OPENSPEC_GATE` too.
-   Fixed per its own profile — it resolves one candidate, not two, so its answer
-   is warn-name-and-fail-open rather than the shim's exit 1. Exempting the
-   repository that defines the contract is finding 12 exactly.
-3. **The gate shim had no test coverage of any kind.** It is a hand-maintained
-   sibling of the template, so every existing assertion reached the template
-   only — which is precisely why finding 6 sat in both files and was caught in
-   neither. It now has the full override matrix plus both resolution candidates.
+The first draft of the change proposed building the comparison. Round 1 of plan
+review caught that and the change was rewritten (`bc1411a`, before this session).
 
 ## Decisions
 
-- **Empty override recorded, not changed.** `FOO=` still falls through, because
-  it is how an operator says "no override", not how they name a broken one. So
-  "set" in the requirement reads as *set to a non-empty value*. The requirement
-  text was **not** amended — the operator chose recording over a spec edit — so
-  the README and an assertion in `project-hook-shim.test.sh` are where the
-  reading lives. **If a future reviewer reads "set" literally, this is the
-  tension to point them at.**
-- The directory fixture in the suite is deliberately **not** named
-  `override-dir`. It was, and the "reports the override, naming the path"
-  assertion passed against the broken shim — bash's own `.../override-dir: is a
-  directory` contains both the word and the path.
-- Per-project verification is behavioural, not just byte-identity: each
-  installed shim is driven with its override pointed at a directory. The check
-  fails 3/3 at exit 126 against a 1.0.0 repo, so it discriminates.
-- **CodeRabbit's "make the empty-override exception normative" is DECLINED**,
-  because it asks for the option you explicitly did not choose. Recorded on the
-  thread rather than silently skipped. **This is now the second independent
-  reviewer pointing at the same tension** — Stage-2 finding 6 was the first. If
-  it is ever to be settled by amending the requirement, that is a fresh
-  decision, and the case for it is stronger than it was this morning.
-- **`--fleet` scores the working tree**, which is a real limitation discovered
-  the hard way: a concurrent session switched `agenticapps-dashboard`'s checkout
-  to `chore/retire-v1-surfaces-review-fixes` mid-rollout, and the next run
-  reported it stale while the propagated shims sat safely on the pushed branch.
-  The durable check is a byte-comparison against the pushed refs — that is what
-  the 20/20 figure below rests on, not on anyone's checkout.
+- **`--no-source-check --strict` exits 1 unconditionally.** Kept deliberately;
+  the Migration Plan's claim that the flag "restores the old default" was false
+  and was corrected. Carving the opt-out out of `--strict` would restore, in one
+  flag, the silent pass this change removes. **If a future reviewer reads this as
+  a bug, that is the paragraph to point them at.**
+- **`--source-check` with `--no-source-check` is a usage error (exit 64)**, not
+  last-one-wins — which silently did the opposite of half the instruction.
+- **`semver_cmp` was EXTRACTED** to `tools/lib/semver.sh`, not copied. This gives
+  `project-hook-conformance.sh` a failure mode it lacked (refuses without the
+  lib). Accepted: a divergent copy fails *silently* — a lexical compare puts
+  `1.10.0` below `1.9.0` and hands the operator the opposite remedy.
+- **Currency judges the `ARTIFACTS` declaration only.** An earlier revision made
+  an absent authority file `stale` without scoping it; running it flagged the
+  three artifacts published by `install-shared-artifact.sh`.
+- **Synced the delta without prompting** at archive time. Not syncing would have
+  folded the known-false sentence into durable truth.
+- **Branch deletions re-verified at deletion time**, not on the classification.
+  Checked-out branches skipped rather than forcing anyone's working state.
 
 ## Files modified
 
-- `reference-implementations/project-hooks/shim-template.sh` — `-f` guard, 1.1.0
-- `reference-implementations/project-hooks/openspec-change-gate.shim.sh` — same
-- `.claude/hooks/openspec-change-gate.sh` — same, self-hosting profile
-- `reference-implementations/project-hooks/README.md` — contract revisions
-  table, the binders named per profile, the empty-override decision
-- `reference-implementations/project-hooks/FLEET` — **new.** The seven consuming
-  repositories, declared by name. Removes a third enumeration rather than adding
-  one: the test file's hardcoded absolute paths are gone
-- `tools/project-hook-conformance.sh` — `--fleet <root>` resolves the declaration
-  and reports a declared repo that resolves nowhere as a finding
-- `tools/project-hook-shim.test.sh` — +24 assertions
-- `tools/project-hook-conformance.test.sh` — +11, fleet declaration and `--fleet`
-- `openspec/changes/shim-project-hooks/{tasks.md,CODE-REVIEW.md}` — 7.6 closed
-
-## All eight PRs are MERGED — core first
-
-| repo | PR | | repo | PR |
-|---|---|---|---|---|
-| agenticapps-workflow-core | **#63** → `d225954` | | callbot | #99 |
-| agenticapps-dashboard | #94 | | cparx | #120 |
-| agenticapps-roadmap | #12 | | fbc-platform | #104 |
-| agents-task-viewer | #17 | | fx-signal-agent | #119 |
-
-Core landed first: the fleet shims are byte-compared against its template, so a
-fleet PR ahead of it would leave main disagreeing with its own authority.
-All squash-merged. **`--admin` was not used anywhere** — `fx-signal-agent` #119
-merged normally over its pre-existing red `gitleaks` / `pnpm-audit`.
-
-**Verified on `origin/main`, not on any working tree: 20/20 project shims
-byte-identical to core's authority at 1.1.0, 0 drifted**, plus core's
-self-hosting binder — 21. Suites 190/190 on merged main, `openspec validate
---all` 5/5, gate `--ci` OK.
+- `tools/provisioning-check.sh` — default-on authority resolution, the `CURRENCY`
+  verdict, per-condition remedies, corrected summary, `--no-source-check`
+- `tools/lib/semver.sh` — **new**, sourced by both callers
+- `tools/project-hook-conformance.sh` — sources the lib; refuses without it
+- `tools/project-hook-provisioning.test.sh` — 56 → 109 assertions
+- `reference-implementations/project-hooks/README.md` — the triple, the dated
+  counter-example, the per-condition remedy table
+- `openspec/specs/project-hook-binding/spec.md` — the delta, synced
+- `openspec/changes/archive/2026-08-03-check-implementation-currency/` — incl.
+  `ARCHIVE-NOTE.md` and `CODE-REVIEW.md`
 
 ## Next session: start here
 
-**`check-implementation-currency` is proposed and unimplemented.** Stage 2 of the
-lifecycle is where it sits: `openspec validate --all` is green (6/6), and
-`run-plan-review.sh check-implementation-currency --implementing-host claude` was
-started this session — **check whether `REVIEWS.md` landed** before writing any
-code, and read it. That review is the cheapest point to find out the design is
-wrong, and the gate will not make you run it.
+**Nothing is in flight.** No active OpenSpec change, no open PR, `main` clean and
+level with `origin/main`. The highest-value next piece of work is the
+**requirement-placement change**: the entire three-axis state model, every
+currency invariant and all six currency scenarios now live under a requirement
+titled *"An unresolvable shim allows, and the operator sees it"* — two headings
+above one literally called *"Provisioning is checked per machine"*. opencode
+raised it as non-blocking; it is correct, pre-existing, and **this change made it
+materially worse** by adding ~200 lines under the wrong heading. Start with
+`/opsx:propose` for that move. The reasoning is in the archive note.
 
-Then `/opsx:apply check-implementation-currency`. Task 1.1 is a RED test that
-must fail today by reporting `complete` + `attested` on a synthetic stale
-install — if it passes on first run, the fixture is wrong, not the defect absent.
-
-Design open question 1 is unresolved and is a task-2.1 decision: does
-`provisioning-check.sh` locate the authority automatically from its own location
-(the gate hook's fixed-point argument) or take `--authority DIR`? Proposed: both,
-automatic by default.
-
-**Archive with the residual named, not silently.** Every task is checked, but
-task 2.3a's empirical leg is recorded with *negative* evidence: the fail-open
-report's channel for `PostToolUse` was never verified, and the README's "The
-empirical leg (task 2.3a)" section is where that is written down. Archiving is
-correct — the change does not claim the channel is proven — but the archive note
-should carry the residual forward rather than let "0 open boxes" read as "no open
-questions". CodeRabbit raised exactly this on #63, and it is a fair reading of an
-unqualified "next session: archive".
+If instead you want to finish the sweep: 28 verified-merged branches remain only
+because they are checked out. Clearing them means switching ~15 repos to their
+default branch — check each for uncommitted work first; several are linked
+worktrees under `~/.config/superpowers/worktrees/`.
 
 ## Open questions
 
-- **No third-party review ran on this work.** As on #62, that is a discipline
-  question, not a gate one: since gate 2.0.0 nothing blocks on reviewer
-  evidence. Consider `run-plan-review.sh` before merging #63.
-- Six repos still have local `chore/shim-project-hooks*` branches, 3–4 commits
-  ahead of `origin/main` and **content-identical** to it — the pre-squash
-  originals. Safe to delete; not deleted, since they are not mine to discard.
-- **Every machine is still unprovisioned until it runs
-  `install-project-hooks.sh`** — unchanged, and now the shims on main expect a
-  newer contract than any older published implementation knows about. Nothing
-  prompts anyone to notice.
-- **`agenticapps-dashboard`'s local checkout is on another session's branch**,
-  `chore/retire-v1-surfaces-review-fixes`, which predates the merge — so its
-  working tree still holds 1.0.0 shims and `--fleet` reports it stale. `origin/main`
-  is correct; that branch picks up 1.1.0 when it merges main. **Deliberately not
-  touched** — it is not this session's branch to move.
-- `agenticapps-dashboard`'s `feat/close-readiness-spec-gaps` still carries the
-  other session's two stray commits. Untouched this session — #94 branched from
-  `origin/main` and is unaffected.
-  (The `fix/shim-contract-1.1.0` branches were deleted on merge; the older
-  `chore/shim-project-hooks*` ones above were not.)
-- The fail-open report's channel for `PostToolUse` remains unverified.
-- The convergence rule is still unwritten — sixth session.
+- **The `cmp`-error branch is reasoned, not tested.** `cmp` exit 2 (*could not
+  compare*) reports `unknown` rather than `stale`. Exit 2 is verified against a
+  real invocation; the path that *reaches* it — a mid-read I/O error on a file
+  that passed `-r` a microsecond earlier — cannot be constructed portably here.
+  Negative evidence, deliberately not counted as coverage.
+- **The `PostToolUse` fail-open channel remains unverified.** Seventh session.
+  `normalize-claude-md` is still the live instance.
+- **`provisioning-check.sh` is not published to the shared bin.** Currency works
+  and defaults on, but only where core is checked out. **Nothing prompts anyone
+  on a machine without a core checkout to discover their install is stale.** The
+  change states this honestly; it does not fix it.
+- **27 branches carry unmerged content** — `terraform` 6 (all MCP-related,
+  1 ahead / 200+ behind), `cparx` 5 (two are explicit `backup/*` safety copies),
+  `mcp-server` 6, rest scattered. Classified for reachability, **not for worth**.
+  Full data in this session's scratchpad `verdicts.tsv` / `deleted.tsv`; if that
+  is gone, the classification is reproducible from the two scripts' method:
+  ancestor → tree-identical → merged-PR-head-SHA → post-merge-commits-in-main.
+- The convergence rule is still unwritten — seventh session.
+
+## Two corrections to the previous handoff, and why they matter
+
+1. It said the `chore/shim-project-hooks*` branches were "content-identical to
+   `origin/main` — safe to delete." **True when written, false by the time it was
+   read**: main moved to shim-contract 1.1.0 afterwards. It stayed safe for 12 of
+   16 and would have destroyed unmerged work in the rest.
+2. It described `check-implementation-currency` as "proposed and unimplemented",
+   which was two commits stale on arrival.
+
+**A dated claim about a moving tree is a claim with a shelf life.** Prefer
+recording *how to re-derive* a fact over recording the fact.
+
+## The methodological lesson, which cost the most time today
+
+Three separate wrong conclusions, all pointing the same way — toward keeping
+branches that were merged, and toward a fleet "finding" that did not exist:
+
+- **`git cherry` cannot see squash merges.** It marked 10 merged commits as
+  unique; the reliable signal is the merged PR's **head SHA == branch tip**.
+- **A stale `origin/main` ref** made `claude-workflow` look like 49 unmerged
+  files when its tree was byte-identical. Always `git fetch` first.
+- **`IFS=` leaked** out of a `while IFS= read` into a later `for`, so nothing
+  word-split and every branch classified as "keep".
+
+And in the test suite: **five fixtures were named for the words their own
+assertions grep for**, so `has "$OUT" "behind"` matched the directory
+`…/auth-behind` against the *unfixed* tool — six assertions green on a broken
+build. That is the `override-dir` defect from the previous change, on the same
+suite, four days later. It was caught only by re-running the whole suite against
+the pre-change tool instead of trusting it to be red.
+
+**A test never observed failing is not evidence of anything.** This suite has
+now produced that error twice.
