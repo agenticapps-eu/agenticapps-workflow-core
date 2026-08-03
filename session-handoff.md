@@ -82,25 +82,29 @@ was not the 1 the contract states. Now `[ -f ] && [ -x ]` in all three binders.
 - `tools/project-hook-conformance.test.sh` — +11, fleet declaration and `--fleet`
 - `openspec/changes/shim-project-hooks/{tasks.md,CODE-REVIEW.md}` — 7.6 closed
 
+## All eight PRs are MERGED — core first
+
+| repo | PR | | repo | PR |
+|---|---|---|---|---|
+| agenticapps-workflow-core | **#63** → `d225954` | | callbot | #99 |
+| agenticapps-dashboard | #94 | | cparx | #120 |
+| agenticapps-roadmap | #12 | | fbc-platform | #104 |
+| agents-task-viewer | #17 | | fx-signal-agent | #119 |
+
+Core landed first: the fleet shims are byte-compared against its template, so a
+fleet PR ahead of it would leave main disagreeing with its own authority.
+All squash-merged. **`--admin` was not used anywhere** — `fx-signal-agent` #119
+merged normally over its pre-existing red `gitleaks` / `pnpm-audit`.
+
+**Verified on `origin/main`, not on any working tree: 20/20 project shims
+byte-identical to core's authority at 1.1.0, 0 drifted**, plus core's
+self-hosting binder — 21. Suites 190/190 on merged main, `openspec validate
+--all` 5/5, gate `--ci` OK.
+
 ## Next session: start here
 
-**Merge the eight PRs, core first** (the fleet shims are byte-compared against
-core's template, so landing a fleet PR before core would make main disagree with
-its own authority for as long as the gap lasts):
-
-| repo | PR |
-|---|---|
-| agenticapps-workflow-core | **#63** |
-| agenticapps-dashboard | #94 |
-| agenticapps-roadmap | #12 |
-| agents-task-viewer | #17 |
-| callbot | #99 |
-| cparx | #120 |
-| fbc-platform | #104 |
-| fx-signal-agent | #119 |
-
-Then **archive the change** — `/opsx:archive shim-project-hooks`. It is the only
-open change and every box is checked.
+**Archive the change** — `/opsx:archive shim-project-hooks`. It is the only open
+change, every box is checked, and the entire rollout is on main.
 
 **Archive with the residual named, not silently.** Every task is checked, but
 task 2.3a's empirical leg is recorded with *negative* evidence: the fail-open
@@ -123,8 +127,15 @@ unqualified "next session: archive".
   `install-project-hooks.sh`** — unchanged, and now the shims on main expect a
   newer contract than any older published implementation knows about. Nothing
   prompts anyone to notice.
+- **`agenticapps-dashboard`'s local checkout is on another session's branch**,
+  `chore/retire-v1-surfaces-review-fixes`, which predates the merge — so its
+  working tree still holds 1.0.0 shims and `--fleet` reports it stale. `origin/main`
+  is correct; that branch picks up 1.1.0 when it merges main. **Deliberately not
+  touched** — it is not this session's branch to move.
 - `agenticapps-dashboard`'s `feat/close-readiness-spec-gaps` still carries the
-  other session's two stray commits. Untouched this session — #94 branches from
+  other session's two stray commits. Untouched this session — #94 branched from
   `origin/main` and is unaffected.
+  (The `fix/shim-contract-1.1.0` branches were deleted on merge; the older
+  `chore/shim-project-hooks*` ones above were not.)
 - The fail-open report's channel for `PostToolUse` remains unverified.
 - The convergence rule is still unwritten — sixth session.
