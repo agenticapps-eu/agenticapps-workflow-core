@@ -2,8 +2,9 @@
 # project-hook-provisioning.test.sh — multi-artifact publication and the
 # per-machine provisioning check.
 #
-# Covers change tasks 3.2, 3.2a, 3.2a-v, 3.2b-ii, 3.2c, 3.2c-i, 3.2d-ii,
-# 3.2e-i, 3.6 — all tdd="true".
+# Covers shim-project-hooks tasks 3.2, 3.2a, 3.2a-v, 3.2b-ii, 3.2c, 3.2c-i,
+# 3.2d-ii, 3.2e-i, 3.6, and check-implementation-currency tasks 1.1–1.6 — all
+# tdd="true".
 #
 # Everything runs against a temp HOME. The suite never reads or writes the real
 # ~/.agenticapps.
@@ -28,6 +29,12 @@ ok()  { echo "  PASS  $1"; pass=$((pass + 1)); }
 bad() { echo "  FAIL  $1"; shift; for l in "$@"; do echo "        $l"; done; fail=$((fail + 1)); }
 has()   { printf '%s' "$1" | grep -qiF -- "$2" && ok "$3" || bad "$3" "expected output to contain: $2" "got: $(printf '%s' "$1" | head -4)"; }
 hasnt() { printf '%s' "$1" | grep -qiF -- "$2" && bad "$3" "expected output NOT to contain: $2" || ok "$3"; }
+sha_sum() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'; }
+# The version an implementation declares, read from the implementation. A
+# literal here would assert a fact about a release rather than about the
+# mechanism, and would go red the next time an implementation is legitimately
+# bumped — which has already happened once in this suite.
+verof() { grep -m1 -oE "^#[[:space:]]*$2-version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+" "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'; }
 
 for t in "$INSTALL" "$CHECK"; do
   if [ ! -x "$t" ]; then
@@ -321,7 +328,7 @@ echo "=== Stage-2 finding 2  the write surface is CHECKED, not merely establishe
 # and "database-sentinel" appear in this tool's normal output, so a substring
 # match would pass against the unfixed tool for the wrong reason.
 #
-# The two axes are NOT overloaded. `integrity` is defined by the delta as
+# None of the three axes is overloaded. `integrity` is defined by the delta as
 # whether present artifacts match their rows; a group-writable file whose
 # digest still matches is `attested` and saying otherwise would corrupt a
 # vocabulary the delta spent a review round pinning down. The write surface is
@@ -368,12 +375,279 @@ OUT=$(env HOME="$TMP" "$CHECK" --dest 2>&1); rc=$?
 hasnt "$OUT" "unbound variable" "…and does not report a shell error to the operator"
 
 echo
-echo "=== 3.2a-ii  the manifest check and the source check are reported apart ==="
+echo "=== 3.2a-ii  the manifest check and the currency check are reported apart ==="
 H=$(mkhome sourcecheck); inst "$H" >/dev/null
 printf '\n# local edit\n' >> "$H/$BIN/database-sentinel.sh"
 OUT=$(check "$H" --source-check "$SRCDIR")
 has "$OUT" "MANIFEST" "the manifest check (executed vs published) is labelled"
-has "$OUT" "SOURCE"   "the source check (executed vs core) is labelled separately"
+has "$OUT" "CURRENCY" "the currency check (executed vs the authority) is labelled separately"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# check-implementation-currency
+#
+# The comparison these cases exercise ALREADY EXISTED as --source-check. What
+# did not exist was a verdict: the comparison reported DIFFERS into its own
+# block, the summary was computed without it, and the tool printed "This machine
+# is provisioned" anyway. Every assertion below is about the summary being
+# obliged to agree with the comparison, not about the comparison itself.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# An authority tree is a directory holding declared implementations. mkauth
+# copies the real ones and applies whatever the case needs.
+# $1 = case name -> echoes the path.
+#
+# CASE NAMES ARE DELIBERATELY NOT THE WORDS THE ASSERTIONS LOOK FOR — no
+# "behind", "ahead", "stale", "current", "unknown". They were, and the direction
+# assertions passed against the UNFIXED tool: the old --source-check line ends
+# with the authority path, so `has "$OUT" "behind"` matched ".../auth-behind".
+# This is the override-dir fixture lesson, repeated four months later on the
+# same suite. Directions are also asserted against the artifact's own CURRENCY
+# line rather than the whole report, so a stray path cannot satisfy them again.
+mkauth() {
+  local a="$TMP/fixture-$1"
+  mkdir -p "$a"
+  cp "$SRCDIR"/*.sh "$SRCDIR/ARTIFACTS" "$a/"
+  chmod +x "$a"/*.sh
+  printf '%s' "$a"
+}
+# The CURRENCY report for one artifact: its verdict line plus its remedy line.
+curline() { printf '%s' "$1" | grep -A1 "CURRENCY  $2  "; }
+# Rewrite an artifact's version marker in place, and change its bytes with it.
+setver() { # $1 = file, $2 = artifact name, $3 = version
+  sed -i.bak "s/^# $2-version: .*/# $2-version: $3/" "$1"
+  rm -f "$1.bak"
+}
+
+echo
+echo "=== 1.1  a machine attested against a stale authority is NOT provisioned ==="
+# Against the REAL history, not a fixture: an authority tree built from the
+# commit before the fixes, installed from, then checked against today's tree.
+# This is the exact condition observed on 2026-08-03 — complete + attested while
+# running builds three landed fixes behind.
+OLD="$TMP/old-authority"
+mkdir -p "$OLD"
+if git -C "$ROOT" archive f6e4b64~1 reference-implementations/project-hooks 2>/dev/null \
+     | tar -x -C "$OLD" --strip-components=2 2>/dev/null && [ -f "$OLD/database-sentinel.sh" ]; then
+  chmod +x "$OLD"/*.sh
+  H=$(mkhome stale-real)
+  env HOME="$H" "$INSTALL" --source "$OLD" >/dev/null 2>&1
+  OUT=$(check "$H")
+  has   "$OUT" "complete"  "a stale install is still reported complete — currency is a separate axis"
+  has   "$OUT" "attested"  "…and still attested; it matches the row it was published from"
+  has   "$OUT" "stale"     "…and reported STALE against the authority"
+  hasnt "$OUT" "This machine is provisioned" \
+        "the summary no longer claims provisioned while the comparison says otherwise"
+  # --strict is what CI runs, and this is a real behaviour change.
+  check "$H" --strict >/dev/null 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && ok "--strict fails on a stale machine" \
+                  || bad "--strict fails on a stale machine" "got exit 0"
+else
+  bad "1.1 fixture: an authority tree could be built from f6e4b64~1" \
+      "git archive failed — this case asserts against real history and cannot be skipped silently"
+fi
+
+echo
+echo "=== 1.2  the question is asked by default, and its absence is disclosed ==="
+# Before this change a default run read identically to a run where the stronger
+# question was asked and passed. Both halves are asserted: that the default now
+# asks, and that a run which cannot ask says so instead of reading clean.
+H=$(mkhome default-asks); inst "$H" >/dev/null
+OUT=$(check "$H")
+has "$OUT" "CURRENCY" "a default run asks the currency question without being told to"
+has "$OUT" "current"  "…and a machine installed from the authority reports current"
+
+H=$(mkhome opted-out); inst "$H" >/dev/null
+OUT=$(check "$H" --no-source-check)
+# Matched on the axis line, not the bare word: against the unfixed tool
+# --no-source-check is an unknown OPTION, and "unknown" alone passed on the
+# usage error it printed while exiting 64.
+has   "$OUT" "CURRENCY      unknown" "--no-source-check reports currency unknown"
+hasnt "$OUT" "This machine is provisioned" \
+      "…and withholds the provisioned summary — an unasked question is not a clean bill"
+has   "$OUT" "not asked" "…naming the question that went unanswered"
+
+echo
+echo "=== 1.3  the four stale sub-cases, asserted on the MESSAGE ==="
+# A single "differs" assertion would pass on all four. The messages are where
+# the remedy lives, and Decision 5 makes three of the four remedies differ.
+
+# (a) published BEHIND the authority — the ordinary lag, and the one case where
+#     re-running the installer is the right advice.
+A=$(mkauth a); setver "$A/database-sentinel.sh" database-sentinel 9.9.9
+H=$(mkhome case-a); inst "$H" >/dev/null
+L=$(curline "$(check "$H" --source-check "$A")" database-sentinel)
+PUBV=$(verof "$SRCDIR/database-sentinel.sh" database-sentinel)
+has "$L" "stale"               "behind: reported stale"
+has "$L" "$PUBV"               "behind: names the published version ($PUBV)"
+has "$L" "9.9.9"               "behind: names the authority's version"
+has "$L" "(behind)"            "behind: names the direction"
+has "$L" "install-project-hooks.sh" "behind: the remedy is the installer"
+
+# (b) published AHEAD of the authority — the installer refuses downgrades, so
+#     naming it here would be advice that cannot work.
+A=$(mkauth b)
+V="$TMP/v-b"; mkdir -p "$V"; cp "$SRCDIR"/*.sh "$SRCDIR/ARTIFACTS" "$V/"
+setver "$V/database-sentinel.sh" database-sentinel 9.9.9; chmod +x "$V"/*.sh
+H=$(mkhome case-b); env HOME="$H" "$INSTALL" --source "$V" >/dev/null 2>&1
+L=$(curline "$(check "$H" --source-check "$A")" database-sentinel)
+has "$L" "stale"   "ahead: reported stale"
+has "$L" "(ahead)" "ahead: names the direction — not passed as newer-and-fine"
+# The precise thing the review objected to: one universal remedy.
+hasnt "$L" "Re-run install-project-hooks.sh" \
+      "ahead: the remedy is NOT the installer, which refuses downgrades"
+
+# (c) versions equal, bytes differ — a build error or a hand-edit, not a lag.
+A=$(mkauth c); printf '\n# authority-side edit\n' >> "$A/database-sentinel.sh"
+H=$(mkhome case-c); inst "$H" >/dev/null
+L=$(curline "$(check "$H" --source-check "$A")" database-sentinel)
+has "$L" "stale"          "versions-equal-bytes-differ: reported stale"
+has "$L" "versions agree" "…and the message says the versions agree while the bytes do not"
+hasnt "$L" "Re-run install-project-hooks.sh" \
+      "…and the remedy is to investigate, not to re-install over a build error"
+
+# (d) the authority holds no file for a DECLARED artifact. The authority still
+#     holds the other one, so it IS a checkout — this is a finding, not unknown.
+A=$(mkauth d); rm -f "$A/normalize-claude-md.sh"
+H=$(mkhome case-d); inst "$H" >/dev/null
+OUT=$(check "$H" --source-check "$A")
+L=$(curline "$OUT" normalize-claude-md)
+has   "$L" "stale"                   "no-authority-file: reported stale, not skipped"
+has   "$L" "holds no file"           "no-authority-file: the message says the authority lacks it"
+has   "$L" "ARTIFACTS"               "no-authority-file: the remedy names the declaration to reconcile"
+hasnt "$OUT" "CURRENCY      unknown" "no-authority-file: not unknown — the authority was reached"
+
+echo
+echo "=== 1.4  the unknown sub-cases, and none of them reads as current ==="
+# Asserting only the absence of `stale` passes on a silent green, so every case
+# below asserts positively that the machine is not reported current.
+H=$(mkhome unk-absent); inst "$H" >/dev/null
+OUT=$(check "$H" --source-check "$TMP/no-such-authority")
+has   "$OUT" "unknown" "authority path absent: unknown"
+has   "$OUT" "no-such-authority" "…and the report names the path it looked for"
+hasnt "$OUT" "CURRENCY      current" "…and does not read as current"
+hasnt "$OUT" "This machine is provisioned" "…and withholds the provisioned summary"
+
+# A directory that exists but is not an authority checkout. Reporting every
+# declared artifact stale against it would be confidently wrong.
+A="$TMP/auth-empty"; mkdir -p "$A"; : > "$A/reviewer-cli.sh"
+H=$(mkhome unk-notcheckout); inst "$H" >/dev/null
+OUT=$(check "$H" --source-check "$A")
+has   "$OUT" "unknown" "a directory holding no declared artifact: unknown"
+hasnt "$OUT" "CURRENCY      stale"   "…not stale — it is not an authority checkout"
+hasnt "$OUT" "CURRENCY      current" "…and not current"
+
+# A file that exists but cannot be read. A failed read is not a difference.
+A=$(mkauth g); chmod 000 "$A/database-sentinel.sh"
+H=$(mkhome case-g); inst "$H" >/dev/null
+OUT=$(check "$H" --source-check "$A")
+if [ -r "$A/database-sentinel.sh" ]; then
+  echo "  SKIP  unreadable authority file — running as a user who can read 000 (root?)"
+else
+  has   "$OUT" "unknown" "an unreadable authority file: unknown for that artifact"
+  hasnt "$OUT" "CURRENCY      current" "…and the machine is not reported current"
+fi
+chmod 644 "$A/database-sentinel.sh" 2>/dev/null
+
+echo
+echo "=== 1.5  artifacts published by another installer are not judged ==="
+# A regression fence. An earlier revision of the delta made an absent authority
+# file stale WITHOUT scoping it to the declared set, and running it flagged
+# exactly these three — each of which the manifest check already reports as
+# "not covered — published by another installer".
+H=$(mkhome outofscope); inst "$H" >/dev/null
+for foreign in openspec-change-gate reviewer-cli run-plan-review; do
+  cp "$SRCDIR/database-sentinel.sh" "$H/$BIN/$foreign.sh"
+done
+OUT=$(check "$H")
+for foreign in openspec-change-gate reviewer-cli run-plan-review; do
+  hasnt "$OUT" "CURRENCY  $foreign" "$foreign is not judged for currency"
+done
+has "$OUT" "CURRENCY      current" "…and the declared artifacts still report current"
+
+echo
+echo "=== 1.6  version ordering is component-wise numeric, never lexical ==="
+# A lexical compare places 1.10.0 below 1.9.0, inverting the direction and
+# pointing the operator at the opposite remedy.
+A=$(mkauth e);   setver "$A/database-sentinel.sh" database-sentinel 1.9.0
+V="$TMP/v-e"; mkdir -p "$V"; cp "$SRCDIR"/*.sh "$SRCDIR/ARTIFACTS" "$V/"
+setver "$V/database-sentinel.sh" database-sentinel 1.10.0; chmod +x "$V"/*.sh
+H=$(mkhome case-e); env HOME="$H" "$INSTALL" --source "$V" >/dev/null 2>&1
+L=$(curline "$(check "$H" --source-check "$A")" database-sentinel)
+has   "$L" "(ahead)"  "1.10.0 against 1.9.0 is reported AHEAD"
+hasnt "$L" "(behind)" "…and not behind, which is what a lexical compare would say"
+
+echo
+echo "=== Decision 5  drifted AND stale is investigate-first, not re-install ==="
+# Re-installing over a hand-edited file overwrites the evidence of the edit.
+A=$(mkauth f); setver "$A/database-sentinel.sh" database-sentinel 9.9.9
+H=$(mkhome case-f); inst "$H" >/dev/null
+printf '\n# tampered\n' >> "$H/$BIN/database-sentinel.sh"
+OUT=$(check "$H" --source-check "$A")
+L=$(curline "$OUT" database-sentinel)
+has   "$OUT" "drifted"      "drifted+stale: integrity still reports drifted"
+has   "$L" "investigate"    "drifted+stale: the remedy is to investigate first"
+hasnt "$L" "Re-run install-project-hooks.sh" \
+      "drifted+stale: the installer is NOT named — it would overwrite the evidence"
+
+echo
+echo "=== 2.5  current is qualified as matching THIS checkout ==="
+# An equally stale checkout and install agree and report current. The verdict is
+# right about the disk; the qualification is what stops it recreating the false
+# green one level up.
+H=$(mkhome qualified); inst "$H" >/dev/null
+OUT=$(check "$H")
+has "$OUT" "this authority checkout" "current is qualified as matching this authority checkout"
+
+echo
+echo "=== 2.8  the check installs nothing ==="
+A=$(mkauth h); setver "$A/database-sentinel.sh" database-sentinel 9.9.9
+H=$(mkhome case-h); inst "$H" >/dev/null
+BEFORE=$(sha_sum "$H/$BIN/database-sentinel.sh")
+check "$H" --source-check "$A" >/dev/null 2>&1
+AFTER=$(sha_sum "$H/$BIN/database-sentinel.sh")
+[ "$BEFORE" = "$AFTER" ] && ok "a stale artifact is reported, never repaired" \
+                         || bad "a stale artifact is reported, never repaired" "the check rewrote the shared bin"
+
+echo
+echo "=== post-implementation review round 2 ==="
+# Four behaviours the second plan review found unspecified. All four were
+# reproduced against the implementation before being fixed, so none of these is
+# a hypothetical.
+
+# codex: naming an authority and declining to consult one are contradictory, and
+# last-one-wins silently did the opposite of what half the invocation asked.
+H=$(mkhome conflict); inst "$H" >/dev/null
+OUT=$(check "$H" --source-check "$SRCDIR" --no-source-check); rc=$?
+[ "$rc" -eq 64 ] && ok "--source-check with --no-source-check is a usage error (64)" \
+                 || bad "--source-check with --no-source-check is a usage error (64)" "got exit $rc"
+has "$OUT" "contradict" "…and says why, rather than silently picking one"
+OUT=$(check "$H" --no-source-check --source-check "$SRCDIR"); rc=$?
+[ "$rc" -eq 64 ] && ok "…in either order — order does not decide it" \
+                 || bad "…in either order — order does not decide it" "got exit $rc"
+
+# opencode: `unknown` fails --strict, so opting out and demanding a strict pass
+# is a contradiction that always exits 1. Asserted so the contradiction is a
+# property of the tool rather than an accident of the aggregation.
+H=$(mkhome optout-strict); inst "$H" >/dev/null
+check "$H" --no-source-check --strict >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 1 ] && ok "--no-source-check with --strict always fails — an opt-out is not a pass" \
+                || bad "--no-source-check with --strict always fails" "got exit $rc"
+# …and the same machine passes --strict when the question IS asked.
+check "$H" --strict >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && ok "…while the same machine passes --strict when currency is checked" \
+                || bad "…while the same machine passes --strict when currency is checked" "got exit $rc"
+
+# opencode: a declared artifact absent on the machine AND absent from the
+# authority is not judged at all. Completeness already reports it; currency
+# reporting it too would double-count one fact on two axes.
+A=$(mkauth i); rm -f "$A/normalize-claude-md.sh"
+H=$(mkhome case-i); inst "$H" >/dev/null
+rm -f "$H/$BIN/normalize-claude-md.sh"
+grep -v 'normalize-claude-md' "$H/$MAN" > "$H/$MAN.new" && mv "$H/$MAN.new" "$H/$MAN"
+OUT=$(check "$H" --source-check "$A")
+has   "$OUT" "partial" "absent-on-both: completeness reports it"
+hasnt "$OUT" "CURRENCY  normalize-claude-md" "absent-on-both: currency does not judge it"
+hasnt "$OUT" "CURRENCY      stale" "absent-on-both: the machine is not reported stale for it"
 
 echo
 echo "  passed: $pass   failed: $fail"

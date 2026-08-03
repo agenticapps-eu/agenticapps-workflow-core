@@ -1,6 +1,48 @@
-# Session Handoff — 2026-08-02 (night)
+# Session Handoff — 2026-08-03
 
-## Accomplished
+## Accomplished — the later half first, it is where the open work is
+
+- **`shim-project-hooks` is ARCHIVED** (PR #65). `project-hook-binding` is now
+  durable truth in `openspec/specs/` — a new capability, +14 requirements.
+  Archiving had to come first: the capability existed *only* in the open delta,
+  so nothing could amend it until it was folded.
+- **This machine's implementations were STALE and are now current.**
+  `database-sentinel` 1.0.0 → 1.1.0, `normalize-claude-md` 1.0.0 → 1.0.1, by
+  re-running `install-project-hooks.sh`. Verified behaviourally, not by version
+  string: `CLAUDE.md` now 644 in → **644** out (was 644 → 600), and
+  `DELETE FROM public.users` now **exits 2** (was unmatched).
+- **New change proposed: `check-implementation-currency`**, branch
+  `feat/check-implementation-currency`, commit `cf85572`. All four artifacts
+  complete, `openspec validate --all` **6/6**. No code written yet.
+
+## The defect that change exists for
+
+`provisioning-check.sh` reported this machine `COMPLETENESS complete`,
+`INTEGRITY attested`, "This machine is provisioned. The shims will resolve." —
+while running two implementations three landed fixes behind. It printed
+`attested v1.0.0` while doing it; the number was on screen and **nothing compared
+it to anything**.
+
+`attested` compares each published file to the **manifest row written when it was
+installed** — what *was* published, never what core *now* ships. So a machine can
+be attested against a stale build indefinitely.
+
+**The sharper shape:** the capability defines TWO version markers and built a
+comparison for ONE. `# shim-contract:` got `project-hook-conformance.sh`.
+`# <hook>-version:` was defined in the same change (task 3.2a-iv) and nothing has
+ever read it against core. That is "a marker with no check makes nothing
+detectable" left unapplied to its own second marker.
+
+The delta is a **MODIFIED** requirement, not only an ADDED one, because this
+sentence was false and had to go rather than be contradicted:
+
+> **`attested`** — … This is the only value on either axis under which the
+> fleet's protections may be described as running as documented.
+
+It held here for fifteen hours. The licence now needs
+`complete` + `attested` + `current`.
+
+## Earlier the same session — shim-contract 1.1.0, all merged
 
 - **Discharged task 7.6 — the last open box on `shim-project-hooks`.** The
   operator decided *fix and propagate*, and *record the empty-override
@@ -103,8 +145,21 @@ self-hosting binder — 21. Suites 190/190 on merged main, `openspec validate
 
 ## Next session: start here
 
-**Archive the change** — `/opsx:archive shim-project-hooks`. It is the only open
-change, every box is checked, and the entire rollout is on main.
+**`check-implementation-currency` is proposed and unimplemented.** Stage 2 of the
+lifecycle is where it sits: `openspec validate --all` is green (6/6), and
+`run-plan-review.sh check-implementation-currency --implementing-host claude` was
+started this session — **check whether `REVIEWS.md` landed** before writing any
+code, and read it. That review is the cheapest point to find out the design is
+wrong, and the gate will not make you run it.
+
+Then `/opsx:apply check-implementation-currency`. Task 1.1 is a RED test that
+must fail today by reporting `complete` + `attested` on a synthetic stale
+install — if it passes on first run, the fixture is wrong, not the defect absent.
+
+Design open question 1 is unresolved and is a task-2.1 decision: does
+`provisioning-check.sh` locate the authority automatically from its own location
+(the gate hook's fixed-point argument) or take `--authority DIR`? Proposed: both,
+automatic by default.
 
 **Archive with the residual named, not silently.** Every task is checked, but
 task 2.3a's empirical leg is recorded with *negative* evidence: the fail-open

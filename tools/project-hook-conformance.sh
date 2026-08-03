@@ -147,19 +147,17 @@ if ! printf '%s' "$TEMPLATE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
   exit 65
 fi
 
-# semver compare. Echoes -1, 0 or 1 for $1 <, =, > $2.
-semver_cmp() {
-  local a="$1" b="$2" i x y
-  local -a A B
-  IFS=. read -r -a A <<<"$a"
-  IFS=. read -r -a B <<<"$b"
-  for i in 0 1 2; do
-    x=${A[$i]:-0}; y=${B[$i]:-0}
-    if [ "$x" -lt "$y" ]; then echo -1; return; fi
-    if [ "$x" -gt "$y" ]; then echo 1; return; fi
-  done
-  echo 0
-}
+# semver compare, shared with provisioning-check.sh. It moved out of this file
+# when a second caller appeared: two copies would have been free to drift, and a
+# divergent ordering fails silently — a lexical compare puts 1.10.0 below 1.9.0
+# and hands the operator the opposite remedy.
+if [ ! -f "$SCRIPT_DIR/lib/semver.sh" ]; then
+  echo "project-hook-conformance: $SCRIPT_DIR/lib/semver.sh is missing." >&2
+  echo "  Marker direction cannot be computed without it. Refusing to report." >&2
+  exit 65
+fi
+# shellcheck source=lib/semver.sh
+. "$SCRIPT_DIR/lib/semver.sh"
 
 # The variable the shim template derives for a hook. The shim derives it the
 # same way, so the two cannot drift apart.
