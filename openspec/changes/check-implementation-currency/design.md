@@ -1,180 +1,200 @@
 ## Context
 
-`tools/provisioning-check.sh` computes two axes and reports a machine
-`complete` + `attested` when every declared implementation is present and every
-present implementation matches its manifest row. Both axes are computed from the
-machine alone. Neither asks whether the installed build is the build core
-currently ships, so a machine attested against a stale row is described as
-"provisioned" and as running "as documented".
+`tools/provisioning-check.sh` computes two axes and prints "This machine is
+provisioned. The shims will resolve." on `complete` + `attested`. Observed
+2026-08-03, and this change exists because of the observation rather than in
+anticipation of it:
 
-Observed 2026-08-03, and this change exists because of the observation rather
-than in anticipation of it:
-
-| artifact | published | core | measured behaviour of the published copy |
+| artifact | published | core ships | measured behaviour of the published copy |
 |---|---|---|---|
 | `normalize-claude-md` | 1.0.0 | 1.0.1 | `CLAUDE.md` 0644 in → **0600** out |
 | `database-sentinel` | 1.0.0 | 1.1.0 | `DELETE FROM public.users` **not blocked** |
 
-The published copies were written at 18:09; the fixes merged at 21:25 the same
-evening. The check reported the machine provisioned for the fifteen hours
-between, and printed `attested v1.0.0` while doing so — the number was on screen
-and nothing compared it to anything.
+**The first draft of this design was wrong about the cause**, and the plan review
+is what caught it. It proposed building a comparison that already exists.
+`--source-check DIR` was built by task 3.2a-ii, does byte-comparison against
+core's maintained implementations, and carries a comment stating the premise
+exactly: *"A machine can be perfectly attested against a manifest that published
+last month's implementation."*
+
+Reproduced against a deliberately stale authority tree:
+
+```
+SOURCE    database-sentinel  DIFFERS from the maintained implementation in <tree>
+SOURCE    normalize-claude-md  DIFFERS from the maintained implementation in <tree>
+COMPLETENESS  complete   (2 of 2 expected artifact(s) present)
+INTEGRITY     attested
+This machine is provisioned. The shims will resolve.
+```
+
+The check found it and the summary said "provisioned" anyway. That is the defect,
+and it is much narrower than "no currency check exists".
 
 ## Goals / Non-Goals
 
 **Goals**
 
-- Make staleness observable, by name, with both versions and the direction.
-- Keep an uncomputable answer distinguishable from a good one.
-- Narrow the spec's "running as documented" claim to what the check can support.
+- Give the existing comparison a verdict the summary is obliged to respect.
+- Default it on, since the tool lives inside the authority it needs.
+- Say which question was *not* asked when it cannot run.
+- Make the message actionable: direction, versions, and a remedy per condition.
 
 **Non-Goals**
 
-- **Auto-updating.** The check reports; it does not install. This capability's
-  tools report and the installer installs, and a check that silently rewrote
-  `~/.agenticapps/bin` would be doing the one thing `drifted` is forbidden to do
-  ("SHALL NOT resolve it silently").
-- **Blocking.** Default exit stays 0. Currency counts toward `--strict` like the
-  other axes, for CI.
-- **Touching the fleet.** No shim, no project, no published artifact changes.
-  This is a defect in core's own reporting.
-- **Changing the manifest format.** The manifest records what was published and
-  that is the right thing for it to record. Currency is a different question
-  asked of a different authority.
+- **A new comparison.** The comparison exists. This is a reporting change.
+- **Auto-updating.** The tools report and the installer installs.
+- **Blocking.** Default exit stays 0; currency counts toward `--strict`.
+- **Touching the fleet.** Core's own tooling only.
 
 ## Decisions
 
-### Decision 1 — a third axis, not a third value on an existing one
+### Decision 1 — a third axis, not a fourth report block
 
-Currency is independent of both existing axes. A machine can be `partial` +
-`attested` + `stale`, or `complete` + `drifted` + `current`. Folding it into
-integrity would recreate exactly the defect a reviewer found in the original flat
-four-state list: members that overlap cannot classify anything. The capability
-already made this argument once when it split completeness from integrity; this
-is the same argument, and the same answer.
-
-**Alternative rejected — extend `drifted` to mean "differs from the manifest OR
-from core".** It collapses two conditions with different remedies. `drifted`
-means someone edited or replaced a published file and the remedy is to
-investigate; `stale` means the machine did what it was told and the world moved
-on, and the remedy is one command. Reporting both as `drifted` would train
-people to answer every occurrence by re-running the installer, which is the wrong
-response to real tampering.
-
-### Decision 2 — `unknown` is a value, not an error
-
-Currency needs an authority to compare against: core's tracked
-`reference-implementations/project-hooks/`. A machine that has installed the
-hooks need not have core checked out at all, and the check must still run there.
-
-So the axis is `current` / `stale` / `unknown`, and `unknown` is reported when
-the authority is not reachable. It is **never** silently `current`. This is the
-same honesty rule the override scan already applies — it reports "no known vector
-found" rather than "no override is set", because a green result is a statement
-about what was searched and not about the machine.
-
-`unknown` counts toward `--strict`. In CI the authority is always reachable, so
-`unknown` there means the check could not do its job, which CI should hear about.
-
-**Alternative rejected — pin the expected versions into a tracked file in core.**
-It would make currency computable without a checkout, and it would be a fourth
-place the version is written down, guaranteed to drift from the markers it
-describes. The authority is the tracked implementation, exactly as the shim
-template is the authority for shims.
-
-### Decision 3 — compare bytes, and report the version
-
-Comparison is byte-identity against the authority's file, with the version
-markers used for the *message* rather than the verdict. A file whose bytes differ
-while its marker matches is the case a version-only comparison cannot see — and
-it is the same case Stage-2 finding 5 caught for shims, where a marker attested
-"a string about the file rather than the file".
-
-Ordering, so the report is actionable rather than merely correct:
-
-- bytes equal → `current`
-- published marker **lower** than the authority's → `stale`, name both
-- published marker **higher** → `stale`, and say so in that direction: the
-  machine carries a build core cannot account for, which is what a shim marker
-  ahead of the template already reports as `unrecognised`
-- markers equal, bytes differ → `stale`, and say the versions agree while the
-  bytes do not, because that is a build error or a hand-edit rather than an
-  ordinary lag
-- **the authority has no such file at all** → `stale`, with its own message.
-  Raised by the gemini plan review, and the first draft had no answer for it. It
-  happens when core is checked out at a commit predating the artifact, or when
-  the artifact was renamed or removed upstream. It is not `unknown`: the
-  authority *was* reached, and "this artifact is not in it" is a definite finding
-  rather than an inability to check. The remedy differs from an ordinary lag —
-  check out core at the right commit, or stop publishing an artifact core no
-  longer ships — so the message differs too
-
-### Decision 3a — the authority is the checkout, not the branch
-
-**Currency is evaluated against the content on disk in the authority path at the
-time of the check.** Not against core's `main`, not against any remote: the tool
-reads files and has no way to know what a branch elsewhere contains, and a design
-that implied otherwise would be promising something unimplementable.
-
-The consequence is stated rather than hidden: **a stale checkout of core produces
-a stale reading**, and that is the tool being right about the disk rather than
-wrong about the world. This exact thing was observed hours before this change was
-written — `project-hook-conformance.sh --fleet` reported a repository stale
-because a concurrent session had switched its checkout to an unrelated branch,
-while the shims sat correct on the pushed branch. That caveat went into
-`--fleet`'s header and then the first draft of this design reintroduced the same
-ambiguity in the phrase "the authority's tracked source". The plan review caught
+`--source-check` output is a `SOURCE` block that increments `findings` and
+changes no verdict, which is why the summary could contradict it. Currency
+becomes an axis so the summary line is computed from it and cannot disagree with
 it.
 
-Anyone wanting currency against a branch rather than a checkout compares
-`git show <ref>:<path>` themselves, which is what the fleet propagation ended up
-doing and is the durable check.
+Independence is the same argument that split completeness from integrity: a
+reviewer showed overlapping states cannot classify a machine. Completeness asks
+how much is installed, integrity whether it still matches what was installed,
+currency whether that is still what the authority holds. Three questions.
 
-### Decision 4 — name the remedy in the report
+`stale` and `drifted` stay distinct. `drifted` means a published file was edited
+or replaced — investigate. `stale` means the machine did what it was told and the
+world moved on — one command. Merging them trains an operator to answer real
+tampering by re-running the installer.
 
-Every stale line ends with the command that clears it. A check that detects a
-condition nobody knows how to clear is a check people learn to ignore, and this
-capability has already recorded that reasoning once, as the argument for why the
-gate's fail-open must not train people into `--no-verify`.
+### Decision 2 — default on, resolved from the tool's own location
 
-### Decision 5 — the "running as documented" clause changes
+The tool is `tools/provisioning-check.sh` inside core; the authority is
+`reference-implementations/project-hooks/` two levels up. Same fixed-point
+argument the gate hook makes about its own path, and for the same reason: an
+environment variable or a working directory can be stale or wrong, and the file's
+own location cannot.
 
-The sentence "This is the only value on either axis under which the fleet's
-protections may be described as running as documented" attaches that licence to
-`attested`. It is demonstrably too strong: this machine held it while running
-implementations missing three landed fixes. The licence moves to
-`complete` + `attested` + `current`, and `unknown` explicitly does not grant it.
+`--source-check DIR` is retained — it is the existing flag and the explicit
+override. `--no-source-check` opts out. **No new `--authority` flag**: the first
+draft proposed one, and the plan review pointed out it would overlap
+`--source-check` with no compatibility or conflict semantics defined.
 
-This is why the change modifies an existing requirement rather than only adding
-one. Adding the currency rule while leaving that sentence standing would leave
-two sentences that are true of different conditions with neither saying which —
-the precise failure mode the requirement's own opening paragraph was written to
-correct.
+### Decision 3 — currency judges the DECLARED set only
+
+`~/.agenticapps/bin` holds `openspec-change-gate`, `reviewer-cli` and
+`run-plan-review` beside the project hooks. They are published by
+`install-shared-artifact.sh`, are outside this manifest's scope, and the existing
+check already says so — "not covered — published by another installer".
+
+Currency judges the artifacts declared in `ARTIFACTS`, and nothing else. This
+matters because of a mistake made in this very change: the review's first round
+asked for "the authority holds no such file" to be reported `stale`, that was
+accepted, and running it showed it would flag those three out-of-scope artifacts,
+each of which correctly reports "no maintained file — cannot compare". Scoped to
+the declared set, "no authority file" is a genuine finding again, because every
+declared artifact must exist in the authority.
+
+### Decision 4 — bytes decide, markers speak
+
+Verdict is byte-identity. `# <hook>-version:` supplies the message, because a
+file whose bytes differ while its marker matches is exactly what a version-only
+comparison cannot see — the case already caught once for shims, where a marker
+attested "a string about the file rather than the file".
+
+Ordering is **component-wise numeric**, reusing `semver_cmp` from
+`project-hook-conformance.sh`. A lexical compare places `1.10.0` below `1.9.0`,
+inverting the reported direction and pointing the operator at the wrong remedy.
+
+Where either side has no parseable marker the verdict still stands on bytes and
+the message says the version could not be read, rather than inventing one.
+
+### Decision 5 — remedies per condition, because one remedy is wrong
+
+The first draft said every stale line names `install-project-hooks.sh`. The review
+showed that is wrong in three of five cases:
+
+| condition | remedy |
+|---|---|
+| published **older** than authority | re-run `install-project-hooks.sh` |
+| published **newer** than authority | **not** the installer — it refuses downgrades. Update the checkout, or investigate a build published from a tree nobody has |
+| versions equal, bytes differ | investigate: a build error or a hand-edit, not a lag |
+| authority has no file for a **declared** artifact | check out the authority at a commit that has it, or reconcile `ARTIFACTS` |
+| `drifted` **and** `stale` together | investigate first; re-installing overwrites the evidence |
+
+A check that names a remedy which cannot work is worse than one that names none.
+
+### Decision 6 — the axis measures a checkout, and says so
+
+Currency is evaluated against the authority path's content on disk when the check
+runs. Never core's `main`, never a remote: the tool reads files and cannot know
+what a branch elsewhere contains.
+
+**The honest limit, raised by the review: an equally stale checkout and install
+agree, and report `current`.** That recreates the false green one level up. Two
+responses, and the second is deliberately not taken:
+
+- **Taken** — the axis claims only "matches this authority checkout", and the
+  summary says so. It never claims "matches what core ships".
+- **Not taken** — verifying the checkout's own freshness against a remote. That
+  needs network from a local reporting tool, fails differently when offline, and
+  would make an offline machine's verdict depend on connectivity. Recorded as a
+  known limit instead, with `git show <ref>:<path>` named as the way to ask the
+  branch question — which is what the fleet's contract propagation actually used.
+
+This limit was observed for real hours before this change: `--fleet` reported a
+repository stale because a concurrent session had moved its checkout, while the
+shims sat correct on the pushed branch.
+
+### Decision 7 — `unknown` is defined by its sub-cases
+
+The review found `unknown` covering only "path not reachable". The middle cases
+were undefined and would each have produced a misleading `stale`:
+
+| condition | verdict |
+|---|---|
+| authority path absent or not a directory | `unknown`, naming the path |
+| path exists but holds no declared artifact at all | `unknown` — it is not an authority checkout, and reporting every artifact stale would be confidently wrong |
+| some declared artifacts present, some absent | `stale` for the absent ones; the path is an authority |
+| a file exists but cannot be read | `unknown` for that artifact, naming the reason; a failed read is not a difference |
+
+Aggregation: any `stale` makes the machine `stale`; otherwise any `unknown` makes
+it `unknown`; otherwise `current`. `stale` outranks `unknown` because a known
+finding outranks an unasked question.
+
+`unknown` never reads as `current`, and the report names the path it looked for.
+
+### Decision 8 — path disclosure, recorded rather than silently accepted
+
+The review noted an absolute authority path in output can disclose a username or
+workspace layout in CI logs. The path is printed anyway: it is the actionable
+part of an `unknown` report, this is a local developer tool that is not published
+to the shared bin, and `$HOME` appears throughout the existing output already.
+Recorded as a decision so it is a choice rather than an oversight.
 
 ## Risks / Trade-offs
 
-- **Most machines will report `unknown`.** Only machines with core checked out
-  can compute currency, which is the developer machines — the ones that run the
-  hooks. Accepted: `unknown` is honest, and the alternative is a green that means
-  nothing.
-- **`--strict` gets stricter.** CI on a machine without core would newly fail.
-  Mitigated by the fact that core's own CI has core, and no other repository runs
-  this tool.
-- **A stale machine is still protected, just not as documented.** Nothing here is
-  a security fix; the shims resolve and the implementations run. The change makes
-  a false statement stop being made.
+- **The severity claim, corrected.** The first draft said "nothing here is a
+  security fix". A reviewer objected that the observed failure was
+  `database-sentinel` not blocking a destructive query. Both overstate. The
+  capability's own coverage boundary calls that hook "best-effort defence in
+  depth, not a security boundary", so its miss is not a security breach — but a
+  stale install silently disables a control the fleet believes is running, and
+  calling that merely cosmetic is the same overclaim this change exists to fix.
+- **`--strict` gets stricter**, and this is a real behaviour change rather than a
+  pure reporting one. A CI job on a machine whose checkout lags would newly fail.
+  Core's CI has core, so the case is narrow.
+- **The output format changes** on a default run. The first draft claimed "no
+  interface changes"; that was false and the review caught it.
+- **A stale machine is still running the hooks.** Nothing here changes what
+  executes; it changes what the machine is willing to claim about itself.
 
 ## Migration Plan
 
-None. No interface, format or published artifact changes. The check gains an
-axis and a line of output; a machine that was `complete` + `attested` and current
-reports exactly as it did before, with `CURRENCY current` added.
+`--source-check DIR` keeps working unchanged. A default run gains a `CURRENCY`
+line and may gain findings it did not previously report — which is the point.
+`--no-source-check` restores the old default for anyone who needs it.
 
 ## Open Questions
 
-- Should `provisioning-check.sh` locate core automatically (walking up from its
-  own location, which is inside core) or take an explicit `--authority DIR`?
-  Automatic covers the common case and is what the gate hook already does with
-  its own path as the fixed point; explicit covers a machine checking a foreign
-  install. Proposed: automatic by default from the script's own location, with
-  `--authority` to override, resolved during implementation rather than now.
+None outstanding. The first draft's open question — automatic authority
+resolution versus an explicit flag — is settled by Decision 2: automatic, with the
+existing `--source-check` as the override, and no new overlapping flag.

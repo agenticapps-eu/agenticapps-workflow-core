@@ -28,7 +28,25 @@ three vary independently:
 |---|---|---|
 | **Completeness** | `none` / `partial` / `complete` | how many shimmed implementations are present and executable: none of them, some of them, all of them |
 | **Integrity** | `attested` / `drifted` | `attested` when every present implementation matches a manifest row; `drifted` when any present implementation's bytes disagree with its row, any row names an absent file, or any present implementation has no row |
-| **Currency** | `current` / `stale` / `unknown` | `current` when every present implementation is byte-identical to the authority's file **as it exists on disk at the time of the check**; `stale` when any present implementation differs from it or the authority holds no such file; `unknown` when the authority path itself is not reachable |
+| **Currency** | `current` / `stale` / `unknown` | judged over the **declared** artifact set only. `current` when every declared, present implementation is byte-identical to the authority's file **as it exists on disk at the time of the check**; `stale` when any differs, or the authority holds no file for a declared artifact; `unknown` when the authority cannot be read or is not an authority checkout |
+
+**Currency names a comparison the tooling already performs.** `--source-check`
+compares each executed copy against the maintained implementation and its own
+header states the case: *a machine can be perfectly attested against a manifest
+that published last month's implementation.* What was missing is a **verdict**.
+The comparison reported findings into a separate block, the summary was computed
+without it, and so the tool printed "This machine is provisioned. The shims will
+resolve." while that block read `DIFFERS` on every project hook. Reproduced. An
+axis is what obliges the summary to agree with the comparison.
+
+**The declared set, and nothing else.** The shared bin also holds artifacts
+published by a different installer — the change gate, the reviewer CLI, the plan
+review runner — which this manifest already reports as "not covered". They SHALL
+NOT be judged for currency, and "the authority holds no such file" is a finding
+only for an artifact this manifest declares. Stated because the opposite was
+tried: an earlier revision of this delta made an absent authority file `stale`
+without scoping it, and running it flagged three artifacts that were correctly
+outside scope.
 
 **The authority is a checkout, not a branch.** Currency is evaluated against the
 content on disk in the authority path when the check runs — never against core's
@@ -61,10 +79,11 @@ anything.
 
 `stale` and `drifted` are deliberately **not** merged. They have different causes
 and different remedies: `drifted` means a published file was edited or replaced
-and the remedy is to investigate, `stale` means the machine did exactly what it
-was told and the world moved on, and the remedy is one command. Reporting both as
-`drifted` would train an operator to answer every occurrence by re-running the
-installer, which is the wrong response to real tampering.
+and the remedy is to investigate, `stale` most often means the machine did
+exactly what it was told and the world moved on. Reporting both as `drifted`
+would train an operator to answer every occurrence by re-running the installer,
+which is the wrong response to real tampering — and, per the `stale` invariant
+below, is also the wrong response to several kinds of staleness.
 
 A machine's state is the **triple**. `none` + `drifted` is the all-files-deleted
 case that broke the flat list, and it is now expressible: nothing is installed
@@ -90,21 +109,37 @@ Invariants attach to a value on one axis, never to a state name:
   whether those were the right bytes to publish.
 - **`drifted`** — the check reports the specific disagreement and its direction,
   and SHALL NOT resolve it silently.
-- **`current`** — every present implementation is byte-identical to the
-  authority's file as it exists on disk when the check runs.
+- **`current`** — every **declared**, present implementation is byte-identical to
+  the authority's file as it exists on disk when the check runs. It licenses the
+  claim *"matches this authority checkout"* and never *"matches what core
+  ships"*: an authority checkout that is itself behind agrees with an equally
+  behind install, and the pair reports `current`. That limit SHALL be stated
+  wherever the verdict is, rather than left for a reader to deduce — an
+  unqualified `current` here would recreate, one level up, the false green this
+  axis exists to remove.
 - **`stale`** — the check names each artifact, both versions and the direction,
-  and SHALL name the remedy. Where the authority holds no such file at all, it
-  says that instead of citing a version, because the remedy is different. It SHALL NOT install anything: this capability's
+  and SHALL name a remedy **chosen for that condition**. A single universal
+  remedy is forbidden because it is wrong in most of them: re-running the
+  installer cannot clear a published version *ahead* of the authority, since the
+  installer refuses downgrades; cannot fix an authority checkout that is itself
+  behind; and destroys evidence when a machine is `drifted` and `stale` at once.
+  Direction is compared **component-wise numerically**, never lexically —
+  a lexical compare places `1.10.0` below `1.9.0` and would point the operator at
+  the opposite remedy.
+- **`unknown`** — reported per its sub-cases, so that an unasked question is never
+  dressed as a finding: the authority path is absent or unreadable; the path
+  exists but holds no declared artifact at all, meaning it is not an authority
+  checkout and reporting every artifact `stale` would be confidently wrong; or an
+  individual file cannot be read, a failed read being distinct from a difference.
+  Aggregation: any `stale` makes the machine `stale`, otherwise any `unknown`
+  makes it `unknown` — a known finding outranks an unasked question. It SHALL NOT install anything: this capability's
   tools report and the installer installs, and a check that silently rewrote the
   shared bin would be doing the one thing `drifted` is forbidden to do.
-- **`unknown`** — the authority path was not reachable, so currency was not
-  computed. It SHALL NOT be reported as `current`. A result is a statement about
+  `unknown` SHALL NOT be reported as `current`. A result is a statement about
   what was checked, never about the machine — the same rule the override scan
   follows when it reports *no known vector found* rather than *no override is
-  set*. The report SHALL name the path it looked for and SHALL say that this is
-  the expected reading on a machine that holds the implementations without
-  holding the authority, so an operator can tell an ordinary condition from a
-  broken one.
+  set*. The report SHALL name the path it looked for and which question went
+  unanswered, so an operator can tell an ordinary condition from a broken one.
 
 **The licence to describe the fleet's protections as running as documented
 requires `complete` + `attested` + `current`, and no other combination grants
@@ -374,14 +409,41 @@ run rather than an operator's session.
   bytes do not, because that is a build error or a hand-edit rather than the
   ordinary lag a lower version indicates
 
+#### Scenario: The comparison reports a difference and the summary does not
+
+- **WHEN** the source comparison reports that an executed copy differs from the
+  maintained implementation
+- **THEN** the machine's summary SHALL reflect it. Reproduced before this
+  revision: the comparison printed `DIFFERS` for every project hook while the
+  summary printed "This machine is provisioned. The shims will resolve.",
+  because the finding fed a separate block and no verdict
+
+#### Scenario: The stronger question is never asked
+
+- **WHEN** the currency comparison does not run
+- **THEN** the report says which question went unanswered, and the summary does
+  not read as it would had the question been asked and answered. A comparison
+  that is optional and silently skipped is indistinguishable from one that passed
+
+#### Scenario: The authority checkout is as old as the installation
+
+- **WHEN** the authority checkout and the installed copies are equally behind, so
+  they agree
+- **THEN** the verdict is `current` **qualified as matching this authority
+  checkout**, and SHALL NOT be stated as matching what the project ships — the
+  check reads a checkout and cannot see a branch
+
 #### Scenario: The authority holds no such artifact
 
-- **WHEN** a present implementation has no counterpart in the authority — the
-  authority is checked out at a commit predating it, or the artifact was renamed
-  or removed upstream
-- **THEN** it is reported `stale` with its own message, **not `unknown`**: the
-  authority was reached, so "this artifact is not in it" is a finding rather than
-  an inability to check, and its remedy differs from an ordinary version lag
+- **WHEN** a **declared** artifact has no counterpart in an authority that does
+  hold other declared artifacts — the checkout predates it, or it was renamed
+  upstream
+- **THEN** it is reported `stale` with its own message and its own remedy, **not
+  `unknown`**: the authority was reached and holds the rest, so "this one is not
+  in it" is a finding rather than an inability to check
+- **AND** an artifact the manifest does not declare — one published by a
+  different installer into the same directory — is **not** judged at all, because
+  the authority was never expected to hold it
 
 #### Scenario: The machine carries a build ahead of the authority
 
