@@ -1,150 +1,93 @@
-# Session Handoff — 2026-08-03 (afternoon)
+# Session Handoff — 2026-08-03 (evening)
 
 ## Accomplished
 
-- **`check-implementation-currency` is implemented, merged and archived.**
-  PR **#66 → `db02493`**, archive PR **#67 → `09f829e`**. `openspec list` reports
-  **no active changes**; the delta is folded into `openspec/specs/`.
-- **`project-hook-binding` lost a sentence that was observed false**, not merely
-  imprecise: *"`attested` … is the only value on either axis under which the
-  fleet's protections may be described as running as documented."* It gained a
-  third axis, `currency ∈ {current, stale, unknown}`, and the licence now
-  requires **`complete` + `attested` + `current`**. Plus a new requirement,
-  *"The implementation version marker is compared, not merely carried."*
-- **Project-hook suites 190 → 243**, all green. Validate 5/5 (change no longer
-  active), gate `--ci` OK, gate conformance **355/355**, harness 36/5.
-- **Branch sweep across the family.** 257 non-default local branches existed at
-  the start of the sweep. **202 deleted**, all verified merged; **28 skipped**
-  (merged but checked out in a worktree); **27 kept** (genuinely unmerged).
-
-## The defect this change existed for, and what it actually was
-
-The comparison **already existed** as `--source-check`, worked, and reported
-`DIFFERS` on both artifacts — while the summary printed *"This machine is
-provisioned. The shims will resolve."* anyway — the finding fed a separate block
-and no verdict. So this was never "build a check"; it was three narrower things:
-the summary ignored it, it was opt-in and its absence undisclosed, and the spec
-vocabulary could not express the result. The first draft proposed building the
-comparison; round 1 of plan review caught that (`bc1411a`, before this session).
+- **The 28-branch inspection is done and the reclaim is executed.** All 27
+  eligible branches deleted, 16 worktrees removed, nothing lost.
+  `brand-report/master` kept — default branch, only local branch, deleting it
+  leaves a detached HEAD.
+- **Merge status was re-derived, not inherited from the last handoff.** All 27
+  confirmed merged in substance, including three that the cheap checks called
+  unmerged.
+- **Two unignored secret-shaped files closed off** (gitignore only, files
+  untouched and unread): `neuroflash/api-documentation/.env` — that repo ignored
+  `.env.local` and three variants but **not plain `.env`** — and
+  `neuroflash/terraform/openssl rand -hex 32.txt`, a shell command captured as a
+  filename. Both were previously stageable by `git add -A`.
+- **Recovery record at `~/Sourcecode/.worktree-reclaim-2026-08-03/RECOVERY.md`**
+  — every deleted tip SHA plus the six preserved dirty worktrees. Deliberately
+  outside any repo and outside the session scratchpad, which does not survive
+  `/clear`.
 
 ## Decisions
 
-- **`--no-source-check --strict` exits 1 unconditionally.** Kept deliberately;
-  the Migration Plan's claim that the flag "restores the old default" was false
-  and was corrected. Carving the opt-out out of `--strict` would restore, in one
-  flag, the silent pass this change removes. **If a future reviewer reads this as
-  a bug, that is the paragraph to point them at.**
-- **`--source-check` with `--no-source-check` is a usage error (exit 64)**, not
-  last-one-wins — which silently did the opposite of half the instruction.
-- **`semver_cmp` was EXTRACTED** to `tools/lib/semver.sh`, not copied. This gives
-  `project-hook-conformance.sh` a failure mode it lacked (refuses without the
-  lib). Accepted: a divergent copy fails *silently* — a lexical compare puts
-  `1.10.0` below `1.9.0` and hands the operator the opposite remedy.
-- **Currency judges the `ARTIFACTS` declaration only.** An earlier revision made
-  an absent authority file `stale` without scoping it; running it flagged the
-  three artifacts published by `install-shared-artifact.sh`.
-- **Synced the delta without prompting** at archive time. Not syncing would have
-  folded the known-false sentence into durable truth.
-- **Branch deletions re-verified at deletion time**, not on the classification.
-  Checked-out branches skipped rather than forcing anyone's working state.
+- **Re-verified merge status at deletion time rather than trusting yesterday's
+  classification** — the prior handoff's own lesson about dated claims. This
+  paid: `ai-engineering-framework/fuchsia-rock`'s PR was **CLOSED, not merged**,
+  which the inherited list recorded as merged.
+- **`brand-report/master` excluded** from an otherwise full sweep.
+- **`git worktree repair` before removal**, not `--force` through the error.
+  That is what exposed 4 genuinely dirty worktrees that had read as clean.
+- **Dirty worktrees backed up before removal even though all of it was tool
+  scratch** — copied rather than assumed worthless.
+- **`.gitignore` edits left uncommitted.** Never-commit-to-main applies; a
+  working-tree `.gitignore` already blocks `git add -A`, so the protection is
+  live without a commit. Committing them needs a branch + PR per repo — not done.
+
+## The two measurement bugs, which is the reusable part
+
+1. **`ancestor-of` and `tree-identical` both fail on squash merges.** They
+   marked 8 of 27 unmerged. Only the merged PR's **head SHA** resolved them.
+   Three had real commits past their PR head; all three had landed anyway.
+2. **12 worktrees' `.git` files still pointed at pre-reorganization paths**
+   (`~/Sourcecode/<repo>`, not `~/Sourcecode/<family>/<repo>`). `git status`
+   there **errored**, and my `2>/dev/null` swallowed the error into `"clean"`.
+   `git worktree repair` fixed the pointers and revealed 4 dirty worktrees.
+
+Also worth keeping: `git diff base..branch --stat` renders **main's forward
+progress as branch deletions**. It made `claude-workflow` look like it deleted
+91,655 lines it never touched. Diff from the **merge-base** to see what a branch
+actually contributes.
+
+Same shape as last session's `IFS=` leak and its fixture-naming bug:
+**an error silently rendered as a passing observation.** Third instance.
 
 ## Files modified
 
-- `tools/provisioning-check.sh` — default-on authority resolution, the `CURRENCY`
-  verdict, per-condition remedies, corrected summary, `--no-source-check`
-- `tools/lib/semver.sh` — **new**, sourced by both callers
-- `tools/project-hook-conformance.sh` — sources the lib; refuses without it
-- `tools/project-hook-provisioning.test.sh` — 56 → 109 assertions
-- `reference-implementations/project-hooks/README.md` — the triple, the dated
-  counter-example, the per-condition remedy table
-- `openspec/specs/project-hook-binding/spec.md` — the delta, synced
-- `openspec/changes/archive/2026-08-03-check-implementation-currency/` — incl.
-  `ARCHIVE-NOTE.md` and `CODE-REVIEW.md`
+- `~/Sourcecode/.worktree-reclaim-2026-08-03/` — **new**, recovery record + 6 backups
+- `neuroflash/api-documentation/.gitignore` — added `.env` (uncommitted)
+- `neuroflash/terraform/.gitignore` — added `openssl rand -hex *.txt` (uncommitted)
+- This repo: **untouched**. No code, spec or tool changes.
 
 ## Next session: start here
 
-**Nothing is in flight** — no active OpenSpec change, `main` clean and level with
-`origin/main`. The operator's stated next task is to **inspect the 28 branches
-below**: each is verified merged but survived the sweep only because it is
-checked out somewhere, so deleting one means moving a checkout. Inspect before
-moving — check each for uncommitted work, and note that several are linked
-worktrees under `~/.config/superpowers/worktrees/`, where the checkout belongs to
-another agent session rather than to a person.
+**Nothing is in flight.** `main` clean and level with `origin/main`, no active
+OpenSpec change. The branch work is finished.
 
-The list is written here rather than left in the scratchpad, which is
-session-scoped and does not survive `/clear`:
-
-| repo | branch |
-|---|---|
-| agenticapps-roadmap, agents-task-viewer, callbot, cparx, fbc-platform, fx-signal-agent | `fix/shim-contract-1.1.0` (one each — the 1.1.0 rollout, merged 2026-08-02) |
-| ai-engineering-framework | `almondine-passenger`, `freckle-reaction`, `fuchsia-rock`, `heathered-quicksand`, `mutual-beluga` |
-| mcp-server | `attachment-service-integr`, `docs/86c9ehe6a-workspace-bv-selection`, `DonaldVl/bucharest`, `feat/86c9ehe6a-execute-plan-dsl` |
-| fx-signal-agent | `debug-mcp-server-timeouts`, `dryrun/migration-0009`, `seasoned-cheetah`, `DonaldVl/i-want-to-use-superset-…` |
-| claude-workflow | `feat/programmatic-hooks-architecture-audit`, `feat/wire-go-impeccable-database-sentinel` |
-| opencode-workflow, pi-agentic-apps-workflow | `feat/publish-core-artifacts-from-a-pin` (one each) |
-| codex-workflow | `chore/repin-core-ef030d0` |
-| api-documentation | `docs/page-bottom-margin` |
-| factiv-website | `DonaldVl/asuncion` |
-| terraform | `feature/mcp-api-docs-redirect` |
-| brand-report | `master` — **its only local branch, and checked out.** Deleting it leaves a detached HEAD; probably leave alone |
-
-**After that**, the highest-value work is the **requirement-placement change**:
-the entire three-axis state model, every currency invariant and all six currency
-scenarios now live under a requirement titled *"An unresolvable shim allows, and
-the operator sees it"* — two headings above one literally called *"Provisioning
-is checked per machine"*. opencode raised it as non-blocking; it is correct,
-pre-existing, and **this change made it materially worse** by adding ~200 lines
-under the wrong heading. `/opsx:propose`; reasoning is in the archive note.
+The highest-value remaining work is the **requirement-placement change**,
+unchanged from the last handoff: the entire three-axis state model, every
+currency invariant and all six currency scenarios live under a requirement
+titled *"An unresolvable shim allows, and the operator sees it"* — two headings
+above one literally called *"Provisioning is checked per machine"*. opencode
+raised it as non-blocking; it is correct, pre-existing, and the currency change
+made it materially worse by adding ~200 lines under the wrong heading. Start
+with `/opsx:propose`; the reasoning is in
+`openspec/changes/archive/2026-08-03-check-implementation-currency/ARCHIVE-NOTE.md`.
 
 ## Open questions
 
-- **The `cmp`-error branch is reasoned, not tested.** `cmp` exit 2 (*could not
-  compare*) reports `unknown`, not `stale`. Exit 2 is verified against a real
-  invocation; the path *reaching* it — a mid-read I/O error on a file that passed
-  `-r` — is not portably constructible. Negative evidence, not coverage.
-- **The `PostToolUse` fail-open channel remains unverified** — seventh session;
-  `normalize-claude-md` is the live instance.
+- **Uncommitted `.gitignore` fixes in two neuroflash repos** need a branch + PR
+  each to become durable. Until then they protect this machine only.
 - **`provisioning-check.sh` is not published to the shared bin.** Currency works
-  and defaults on, but only where core is checked out. **Nothing prompts anyone
-  on a machine without a core checkout to discover their install is stale.** The
-  change states this honestly; it does not fix it.
-- **27 branches carry unmerged content** — `terraform` 6 (all MCP-related,
-  1 ahead / 200+ behind), `cparx` 5 (two are explicit `backup/*` safety copies),
-  `mcp-server` 6, rest scattered. Classified for reachability, **not for worth**.
-  Full data in this session's scratchpad `verdicts.tsv` / `deleted.tsv`; if that
-  is gone, the classification is reproducible from the two scripts' method:
-  ancestor → tree-identical → merged-PR-head-SHA → post-merge-commits-in-main.
-- The convergence rule is still unwritten — seventh session.
-
-## Two corrections to the previous handoff, and why they matter
-
-1. It said the `chore/shim-project-hooks*` branches were "content-identical to
-   `origin/main` — safe to delete." **True when written, false by the time it was
-   read**: main moved to shim-contract 1.1.0 afterwards. It stayed safe for 12 of
-   16 and would have destroyed unmerged work in the rest.
-2. It described `check-implementation-currency` as "proposed and unimplemented",
-   two commits stale on arrival.
-
-**A dated claim about a moving tree has a shelf life.** Prefer recording *how to
-re-derive* a fact over recording the fact.
-
-## The methodological lesson, which cost the most time today
-
-Three wrong conclusions, all pointing one way — toward keeping merged branches
-were merged, and toward a fleet "finding" that did not exist. Each was caught
-only by hand-checking one case:
-
-- **`git cherry` cannot see squash merges** — it marked 10 merged commits unique.
-  The reliable signal is the merged PR's **head SHA == branch tip**.
-- **A stale `origin/main`** made a byte-identical tree look like 49 unmerged
-  files. Always `git fetch` first.
-- **`IFS=` leaked** from a `while IFS= read` into a later `for`, so nothing
-  word-split and everything classified as "keep".
-
-And in the suite: **five fixtures were named for the words their own assertions
-grep for**, so `has "$OUT" "behind"` matched the directory `…/auth-behind`
-against the *unfixed* tool — six assertions green on a broken build. That is the
-`override-dir` defect from the previous change, same suite, four days later,
-caught only by re-running everything against the pre-change tool.
-
-**A test never observed failing is not evidence of anything.** Twice now.
+  and defaults on, but only where core is checked out. Nothing prompts anyone on
+  a machine without a core checkout to discover their install is stale.
+- **The `cmp`-error branch is reasoned, not tested.** `cmp` exit 2 reports
+  `unknown`, not `stale`; the path *reaching* it is not portably constructible.
+  Negative evidence, not coverage.
+- **The `PostToolUse` fail-open channel remains unverified** — eighth session;
+  `normalize-claude-md` is the live instance.
+- **27 branches carry genuinely unmerged content** (the separate set the prior
+  sweep kept). Classified for reachability, **never for worth** — nobody has
+  judged whether any of it is wanted. `terraform` 6, `cparx` 5, `mcp-server` 6,
+  rest scattered.
+- The convergence rule is still unwritten — eighth session.
