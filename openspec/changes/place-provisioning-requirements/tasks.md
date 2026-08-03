@@ -9,64 +9,70 @@
   resetting. Three constraints found: `MODIFIED` cannot shed scenarios; a
   requirement may not be in both `ADDED` and `REMOVED` (so the rename is forced);
   `ADDED` requirements are appended at end-of-file.
-- [x] 1.4 Re-encode as `REMOVED` + three `ADDED` + one `MODIFIED`, with
-  `Reason`/`Migration` on the removal.
-- [x] 1.5 `openspec validate place-provisioning-requirements --type change` — green.
+- [x] 1.4 Re-encode as `REMOVED` + three `ADDED` + one `MODIFIED`.
+- [x] 1.5 `openspec validate ... --type change` — green.
 
 ## 2. Prove the delta is content-preserving
 
-- [x] 2.1 Line-level multiset diff, original region (605–1124) vs delta.
-  **Lines lost MUST be empty.** Result: empty.
-- [x] 2.2 Lines gained are structural only — delta headers, the three new
-  requirement headings, the `Reason`/`Migration` metadata (which never lands in
-  the spec), and the non-normative lead-in `Invariants on the currency axis:`.
+- [x] 2.1 Line-level multiset diff, region 605–1124 vs delta. **Lines lost MUST
+  be empty.** Result: empty. (Region ends at 1124, not 1085, because the
+  per-machine requirement is also modified — see design.)
+- [x] 2.2 Lines gained MUST be exactly 26: 3 delta section headers + 3 new
+  requirement headings + 1 lead-in + 19 lines of REMOVED `Reason`/`Migration`
+  metadata that never enters the spec. Result: 26.
 - [x] 2.3 Scenario inventory identical. Result: 18 = 18, `diff` clean.
 - [x] 2.4 All three axes-table rows present verbatim. Result: 3.
 - [x] 2.5 Defect found and fixed by 2.1: the first build sliced the last currency
   scenario to 1084 instead of 1085, dropping one line.
-- [x] 2.6 Every requirement has ≥1 scenario (6 / 2 / 2 / 8); no malformed
+- [x] 2.6 Every requirement has ≥1 scenario (6 / 2 / 8 / 2); no malformed
   3-hashtag scenarios; the nested `Currency is judged over ... PRESENT` block
   kept its two-space indentation, which a trimmed-line diff cannot see.
 
 ## 3. Review before code
 
-- [ ] 3.1 `run-plan-review.sh place-provisioning-requirements` — two or more
-  independent other-vendor reviewers, writing `REVIEWS.md`. Not enforced by the
-  gate since 2.0.0; run it anyway.
-- [ ] 3.2 Address every objection or record a reason against it.
+- [x] 3.1 `run-plan-review.sh place-provisioning-requirements --implementing-host
+  claude` — 3 other-vendor reviewers (gemini APPROVE, codex REQUEST-CHANGES,
+  opencode REQUEST-CHANGES). `claude` excluded as implementing host.
+- [x] 3.2 Every objection dispositioned in `REVIEW-RESPONSE.md`: 9 accepted and
+  fixed, 2 rejected on verified grounds, 1 partially accepted.
 
 ## 4. Apply and reorder
 
 - [ ] 4.1 `openspec archive place-provisioning-requirements -y` to fold the delta.
-- [ ] 4.2 **Reorder by hand**: move the three new requirement blocks from
-  end-of-file into positions 5–7, so the order is `A project binds a hook through
-  a shim` → `A shim that resolves no implementation…` → `A machine's provisioning
-  is a triple` → `Currency is judged against an authority checkout` →
-  `Provisioning is checked per machine`.
-- [ ] 4.3 Confirm `"computed observationally per the state table above"` is true
-  of the reordered file — the table's requirement must precede the one citing it.
+- [ ] 4.2 Run `tools/reorder-requirements.py` on the applied spec — moves whole
+  blocks by heading name, refuses if the line multiset changes, idempotent.
+- [ ] 4.3 `tools/reorder-requirements.py --check` confirms the final order.
+- [ ] 4.4 Verify **all three** cross-boundary references, not just the first:
+  - `"per the state table above"` — cited in (4), table in (2). Must be upward.
+  - `"per the `stale` invariant below"` — cited in (2), invariant in (3). Downward.
+  - `"contradicting the `stale` invariant above"` — cited in the last
+    requirement, invariant in (3). Upward.
 
 ## 5. Prove the applied spec is content-preserving
 
-- [ ] 5.1 Re-run the line-level multiset diff against the **reordered spec**, not
-  the delta. A reorder that drops a line fails exactly like a move that does.
+- [ ] 5.1 Re-run the line-level multiset diff against the **reordered spec**. A
+  reorder that drops a line fails exactly like a move that does.
 - [ ] 5.2 Whole-file counts: 116 normative sentences, 67 scenarios, **17**
-  requirements (15 + 3 added − 1 removed), three axes rows.
-- [ ] 5.3 `openspec validate --all` green.
-- [ ] 5.4 `git diff --stat` shows exactly one file changed under `openspec/specs/`.
+  requirements, three axes rows.
+- [ ] 5.3 **Per-requirement** check, because totals cannot detect content filed
+  under the wrong heading: scenario inventory per requirement is 6 / 2 / 8 / 2,
+  and each requirement contains its defining marker — the axes table ONLY under
+  the triple, the `complete`+`attested`+`current` licence ONLY under currency,
+  the non-blocking exit-code rule ONLY under the shim requirement.
+- [ ] 5.4 `openspec validate --all` green.
+- [ ] 5.5 `git diff --stat` shows exactly one file changed under `openspec/specs/`.
 
 ## 6. Verify nothing outside the spec moved
 
 - [ ] 6.1 Project-hook suites still green (243 assertions at last run).
-- [ ] 6.2 `project-hook-conformance.sh` still passes — it implements the state
-  model and must be unaffected by a heading move.
+- [ ] 6.2 `project-hook-conformance.sh` still passes.
 - [ ] 6.3 `bash ~/.agenticapps/bin/openspec-change-gate.sh --ci` clean.
-- [ ] 6.4 Confirm no file outside `openspec/` references the removed requirement
-  name (re-run the search that justified "no consumer reads headings").
+- [ ] 6.4 Confirm no **executable** consumer references the removed requirement
+  name. `session-handoff.md` and the archived `check-implementation-currency`
+  change do cite it and are deliberately left alone as historical records — this
+  task asserts the absence of a *dangling* reference, not of every mention.
 
 ## 7. Independent review, then ship
 
 - [ ] 7.1 `superpowers:requesting-code-review` in an independent context.
-  `openspec validate` does not discharge it.
-- [ ] 7.2 `superpowers:finishing-a-development-branch` — PR. Archive and ship are
-  two separate acts; the archive happens at 4.1.
+- [ ] 7.2 `superpowers:finishing-a-development-branch` — PR.

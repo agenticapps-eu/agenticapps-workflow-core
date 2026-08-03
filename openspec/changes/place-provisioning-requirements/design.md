@@ -55,9 +55,22 @@ heading that does not announce it.
 moves with the other two even though a separate requirement governs currency.
 The table defines the *state space* — splitting a three-row table across two
 requirements would be a worse version of the problem being fixed. The currency
-requirement then elaborates only *how a machine gets a currency value*. The
-reference runs one direction (currency → table), which is what makes it
-survivable.
+requirement then elaborates only *how a machine gets a currency value*.
+
+**There are three textual cross-references across the new boundaries, not one.**
+An earlier draft of this design claimed the reference "runs one direction
+(currency → table)". That was false, and a reviewer caught it. Enumerated:
+
+| reference | lives in | points at | direction | still true after reorder? |
+|---|---|---|---|---|
+| *"computed observationally per the state table above"* | Provisioning is checked per machine (4) | the axes table (2) | upward | yes — 2 precedes 4 |
+| *"per the `stale` invariant below"* | the `stale`/`drifted` non-merger, which moves to the triple (2) | the `stale` invariant, which moves to currency (3) | downward | yes — 3 follows 2 |
+| *"contradicting the `stale` invariant above"* | The implementation version marker is compared (last requirement) | the `stale` invariant (3) | upward | yes — 3 precedes it |
+
+All three survive the intended ordering, but none of them survives it *by
+accident*: each constrains where the three requirements may go. That is the real
+reason ordering is load-bearing, and each is checked as a task rather than
+assumed.
 
 This was the live objection when the three-way split was chosen: separating
 currency from the state model risks putting a definition and its axis in
@@ -127,39 +140,72 @@ it cannot alter the normative set.
 
 ## Risks / Trade-offs
 
-**A normative sentence is silently dropped or reweighted during a ~290-line
+**A normative sentence is silently dropped or reweighted during the ~250-line
 move.** → This is the entire risk of the change, and it is the exact failure
 shape this repo has hit three sessions running: an error rendered as a passing
-observation. Mitigation is a **line-level multiset diff** between the original
-region (lines 605–1124) and the delta: the set of non-blank content lines lost
-MUST be empty, and the set gained MUST be exactly the four structural headings
-plus the one lead-in. A sentence-level check was tried first and rejected — it
-produced false lost/gained pairs, because reordering blocks changes which
-neighbour a wrapped sentence joins to. Sorting whole lines is immune to that.
+observation.
+
+**The compared region is lines 605–1124, and that boundary is deliberate.** The
+removed requirement is 605–1085; the region extends to 1124 because
+*"Provisioning is checked per machine"* (1086–1124) is also modified by this
+change and gains two paragraphs from upstream. Comparing only 605–1085 would
+leave the MODIFIED requirement's text unchecked. An earlier draft stated the
+boundary two different ways, which a reviewer correctly flagged as making the
+check's provenance unverifiable.
+
+**The expected result, stated exactly so a reviewer can re-derive it.** Lines
+lost MUST be **zero**. Lines gained MUST be **26**, and only these:
+
+| count | what |
+|---|---|
+| 3 | delta section headers — `## ADDED` / `## MODIFIED` / `## REMOVED Requirements` |
+| 3 | the new `### Requirement:` headings |
+| 1 | the non-normative lead-in `Invariants on the currency axis:` |
+| 19 | the `**Reason**` / `**Migration**` metadata on the REMOVED block, which is change metadata and never enters the spec |
+
+A sentence-level check was tried first and rejected — it produced false
+lost/gained pairs, because reordering blocks changes which neighbour a wrapped
+sentence joins to. Sorting whole lines is immune to that.
 
 This already caught one real defect: the first build sliced the final currency
 scenario to line 1084 instead of 1085, dropping *"the same reason a shim marker
 ahead of the template is `unrecognised`"*. A reading would very plausibly have
-missed a single dropped line in a 543-line file.
+missed one dropped line in the 568-line delta.
 
-**The shim requirement's MODIFIED block is ~230 lines of unchanged text.** →
-Unavoidable: OpenSpec requires MODIFIED requirements to carry full content, and
-partial content loses detail at archive time. The verification is what
-distinguishes "carried unchanged" from "carried with an edit nobody noticed".
+**A sorted line-multiset cannot detect content attached to the WRONG
+requirement.** → Raised by a reviewer and correct: a mis-cut block preserves
+every line and every global count while filing the currency invariants under the
+state model. Totals are therefore not sufficient. Mitigation is a
+**per-requirement** check after applying — scenario inventory *per requirement*
+(expected 6 / 2 / 8 / 2) and a spot-check that each requirement's body contains
+its defining marker (the axes table only under the triple; the licence sentence
+only under currency; the exit-code rule only under the shim requirement).
 
-**A reader of the archived change sees a very large diff and skims it.** →
-The line-level diff result is recorded in `tasks.md` as the reviewable artifact,
-so a reviewer can check the property rather than re-read 543 lines.
+**The reorder is a hand-edit of durable truth, done after the fold, and so sits
+outside the reviewed delta.** → Raised by a reviewer. Mitigation: the reorder is
+performed by a **committed script** that moves whole `### Requirement:` blocks by
+heading name, not by hand-dragging lines, so it is deterministic and re-runnable;
+and the same multiset diff is re-run against its output. The delta genuinely
+cannot express order — that is a property of the tool, not a shortcut taken here.
 
-**Two new requirements make the capability 17 requirements long.** → Accepted.
+**Three new requirements make the capability 17 requirements long.** → Accepted.
 Requirement count is not the thing being optimised; a reader's ability to find a
 governing rule is.
 
 ## Migration Plan
 
-None required. No consumer reads these headings, and `openspec archive` folds the
-delta into `specs/` as a whole-file replacement of the affected requirements.
-Rollback is `git revert` of a single commit touching one file.
+No consumer migration required: nothing executable reads a requirement heading.
+
+Rollback is `git revert` of the commits on this branch. Note it is **not** a
+single-file revert, as an earlier draft claimed: archiving moves the whole change
+directory into `openspec/changes/archive/`, so the revert spans the spec file,
+the change directory's old path and its new one.
+
+Two historical documents cite the removed heading by its old name —
+`session-handoff.md` and the archived `check-implementation-currency` change.
+Those are **records of what was true when written** and are deliberately left
+alone; correcting them would falsify a dated account. This is why the
+"no consumer reads headings" check is scoped to executable consumers.
 
 ## Open Questions
 

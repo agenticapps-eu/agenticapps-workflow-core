@@ -3,7 +3,7 @@
 `project-hook-binding`'s requirement **"An unresolvable shim allows, and the
 operator sees it"** is ~480 lines — 30% of the capability — and most of them
 govern what its heading does not name: the three-axis provisioning state model,
-the currency contract, and eleven provisioning scenarios. Two headings below sits
+the currency contract, and ten provisioning scenarios. Two headings below sits
 **"Provisioning is checked per machine"**, which already reaches up for that
 material, saying *"computed observationally per the state table above"*.
 
@@ -56,21 +56,41 @@ introduced.
 
 ### Modified Capabilities
 
-- `project-hook-binding`: three requirements replace two. No requirement's
-  normative content changes — the delta is placement only, plus the two new
-  headings and the sentences that carry material across the new boundaries.
+- `project-hook-binding`: one requirement is removed and three added; one is
+  modified. No normative content changes — the delta is placement only.
+
+**Scenario accounting, stated rather than left to be inferred:**
+
+| requirement | before | after |
+|---|---|---|
+| An unresolvable shim allows, and the operator sees it | 16 | *(removed)* |
+| A shim that resolves no implementation allows the call and reports it | — | 6 |
+| A machine's provisioning is a triple, not a state name | — | 2 |
+| Currency is judged against an authority checkout | — | 8 |
+| Provisioning is checked per machine, not only per repository | 2 | 2 |
+| **total** | **18** | **18** |
+
+The per-machine requirement neither gains nor loses a scenario; it gains two
+paragraphs of prose only. All 16 of the removed requirement's scenarios land in
+the three new ones — 6 stay with shim behaviour, 10 move.
 
 ## Impact
 
 - `openspec/specs/project-hook-binding/spec.md` — the only file whose content
   changes.
-- **No code, tool, test or template is affected.** Verified by search: no file
-  under `tools/`, `reference-implementations/` or `migrations/` cites a
-  requirement *heading*. `tools/project-hook-shim.test.sh` contains the phrase
-  "unresolvable shim" in test descriptions, but as behavioural prose, not as a
-  reference to the heading — the assertions are on exit codes and stderr.
-  `provisioning-check.sh` and `project-hook-conformance.sh` implement the state
-  model and cite no heading at all.
+- **No executable consumer is affected.** Verified by search: no file under
+  `tools/`, `reference-implementations/` or `migrations/` cites a requirement
+  *heading*. `tools/project-hook-shim.test.sh` contains the phrase "unresolvable
+  shim" in test descriptions, but as behavioural prose, not as a reference to the
+  heading — the assertions are on exit codes and stderr. `provisioning-check.sh`
+  and `project-hook-conformance.sh` implement the state model and cite no heading
+  at all.
+- **Two prose documents do cite the removed heading by name**, found by a
+  reviewer after an earlier draft of this proposal overstated the search:
+  `session-handoff.md` and the archived `check-implementation-currency` change.
+  Both are **historical records of what was true when written** and are left
+  unchanged; editing them would falsify a dated account. The renamed heading is
+  therefore not a dangling reference but a superseded one.
 - **One positional reference must survive the move.** "Provisioning is checked
   per machine" says the state is *"computed observationally per the state table
   above"*. The new requirement owning the table must end up **above** it. This
