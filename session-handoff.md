@@ -21,13 +21,11 @@
 
 The comparison **already existed** as `--source-check`, worked, and reported
 `DIFFERS` on both artifacts — while the summary printed *"This machine is
-provisioned. The shims will resolve."* anyway. The finding fed a separate block
+provisioned. The shims will resolve."* anyway — the finding fed a separate block
 and no verdict. So this was never "build a check"; it was three narrower things:
 the summary ignored it, it was opt-in and its absence undisclosed, and the spec
-vocabulary could not express the result.
-
-The first draft of the change proposed building the comparison. Round 1 of plan
-review caught that and the change was rewritten (`bc1411a`, before this session).
+vocabulary could not express the result. The first draft proposed building the
+comparison; round 1 of plan review caught that (`bc1411a`, before this session).
 
 ## Decisions
 
@@ -126,10 +124,10 @@ under the wrong heading. `/opsx:propose`; reasoning is in the archive note.
    read**: main moved to shim-contract 1.1.0 afterwards. It stayed safe for 12 of
    16 and would have destroyed unmerged work in the rest.
 2. It described `check-implementation-currency` as "proposed and unimplemented",
-   which was two commits stale on arrival.
+   two commits stale on arrival.
 
-**A dated claim about a moving tree is a claim with a shelf life.** Prefer
-recording *how to re-derive* a fact over recording the fact.
+**A dated claim about a moving tree has a shelf life.** Prefer recording *how to
+re-derive* a fact over recording the fact.
 
 ## The methodological lesson, which cost the most time today
 
