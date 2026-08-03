@@ -10,10 +10,23 @@
   messages and a single "differs" assertion would pass on all of them: published
   **lower** than the authority, published **higher** than the authority, and
   markers **equal with bytes differing**
+- [ ] 1.2a **(gemini plan review)** Assert the case the first draft had no answer
+  for: a published artifact with **no counterpart in the authority** — core
+  checked out before it existed, or the artifact renamed or removed upstream. It
+  is `stale` with its own message and **not `unknown`**; the authority was
+  reached, so this is a finding rather than an inability to check
 - [ ] 1.3 `tdd="true"` — RED: with the authority unreachable, assert `unknown`
   and assert **specifically that it is not `current`**. A test that only checks
   for the absence of `stale` passes on a silent green, which is the failure mode
   this value exists to prevent
+- [ ] 1.3a **(gemini plan review)** Assert the `unknown` report names the path it
+  looked for and says the reading is expected on a machine without the authority.
+  An operator has to be able to tell an ordinary condition from a broken one
+- [ ] 1.3b **(gemini plan review)** Assert the authority is read as a **checkout,
+  not a branch**: with the authority path pointed at a tree holding older
+  implementations, the machine reports `stale` — the check being right about the
+  disk. Observed for real hours earlier, when `--fleet` called a repository stale
+  because a concurrent session had moved its checkout
 - [ ] 1.4 Assert the licence sentence operationally: a `complete` + `attested` +
   `stale` machine SHALL NOT be described as provisioned in the summary line.
   Grep the summary text, since that string is what an operator actually reads

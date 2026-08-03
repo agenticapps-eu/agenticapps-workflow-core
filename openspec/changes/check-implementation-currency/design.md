@@ -100,6 +100,35 @@ Ordering, so the report is actionable rather than merely correct:
 - markers equal, bytes differ → `stale`, and say the versions agree while the
   bytes do not, because that is a build error or a hand-edit rather than an
   ordinary lag
+- **the authority has no such file at all** → `stale`, with its own message.
+  Raised by the gemini plan review, and the first draft had no answer for it. It
+  happens when core is checked out at a commit predating the artifact, or when
+  the artifact was renamed or removed upstream. It is not `unknown`: the
+  authority *was* reached, and "this artifact is not in it" is a definite finding
+  rather than an inability to check. The remedy differs from an ordinary lag —
+  check out core at the right commit, or stop publishing an artifact core no
+  longer ships — so the message differs too
+
+### Decision 3a — the authority is the checkout, not the branch
+
+**Currency is evaluated against the content on disk in the authority path at the
+time of the check.** Not against core's `main`, not against any remote: the tool
+reads files and has no way to know what a branch elsewhere contains, and a design
+that implied otherwise would be promising something unimplementable.
+
+The consequence is stated rather than hidden: **a stale checkout of core produces
+a stale reading**, and that is the tool being right about the disk rather than
+wrong about the world. This exact thing was observed hours before this change was
+written — `project-hook-conformance.sh --fleet` reported a repository stale
+because a concurrent session had switched its checkout to an unrelated branch,
+while the shims sat correct on the pushed branch. That caveat went into
+`--fleet`'s header and then the first draft of this design reintroduced the same
+ambiguity in the phrase "the authority's tracked source". The plan review caught
+it.
+
+Anyone wanting currency against a branch rather than a checkout compares
+`git show <ref>:<path>` themselves, which is what the fleet propagation ended up
+doing and is the durable check.
 
 ### Decision 4 — name the remedy in the report
 

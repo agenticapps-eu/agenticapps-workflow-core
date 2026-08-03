@@ -28,7 +28,19 @@ three vary independently:
 |---|---|---|
 | **Completeness** | `none` / `partial` / `complete` | how many shimmed implementations are present and executable: none of them, some of them, all of them |
 | **Integrity** | `attested` / `drifted` | `attested` when every present implementation matches a manifest row; `drifted` when any present implementation's bytes disagree with its row, any row names an absent file, or any present implementation has no row |
-| **Currency** | `current` / `stale` / `unknown` | `current` when every present implementation is byte-identical to the authority's tracked source; `stale` when any present implementation differs from it; `unknown` when the authority is not reachable from this machine |
+| **Currency** | `current` / `stale` / `unknown` | `current` when every present implementation is byte-identical to the authority's file **as it exists on disk at the time of the check**; `stale` when any present implementation differs from it or the authority holds no such file; `unknown` when the authority path itself is not reachable |
+
+**The authority is a checkout, not a branch.** Currency is evaluated against the
+content on disk in the authority path when the check runs — never against core's
+`main` and never against any remote, because the check reads files and cannot
+know what a branch elsewhere contains. A design implying otherwise would promise
+something unimplementable.
+
+The consequence is normative rather than hidden: **a stale checkout of the
+authority yields a stale reading**, and that is the check being right about the
+disk rather than wrong about the world. Currency against a *branch* is a
+different question, answered by comparing `git show <ref>:<path>` — which is what
+the fleet's own contract propagation used as its durable check.
 
 **Currency is a third axis and not a value on either of the others**, for the
 reason completeness and integrity were split from each other. Both of those are
@@ -79,15 +91,20 @@ Invariants attach to a value on one axis, never to a state name:
 - **`drifted`** — the check reports the specific disagreement and its direction,
   and SHALL NOT resolve it silently.
 - **`current`** — every present implementation is byte-identical to the
-  authority's tracked source.
+  authority's file as it exists on disk when the check runs.
 - **`stale`** — the check names each artifact, both versions and the direction,
-  and SHALL name the remedy. It SHALL NOT install anything: this capability's
+  and SHALL name the remedy. Where the authority holds no such file at all, it
+  says that instead of citing a version, because the remedy is different. It SHALL NOT install anything: this capability's
   tools report and the installer installs, and a check that silently rewrote the
   shared bin would be doing the one thing `drifted` is forbidden to do.
-- **`unknown`** — the authority was not reachable, so currency was not computed.
-  It SHALL NOT be reported as `current`. A result is a statement about what was
-  checked, never about the machine — the same rule the override scan follows when
-  it reports *no known vector found* rather than *no override is set*.
+- **`unknown`** — the authority path was not reachable, so currency was not
+  computed. It SHALL NOT be reported as `current`. A result is a statement about
+  what was checked, never about the machine — the same rule the override scan
+  follows when it reports *no known vector found* rather than *no override is
+  set*. The report SHALL name the path it looked for and SHALL say that this is
+  the expected reading on a machine that holds the implementations without
+  holding the authority, so an operator can tell an ordinary condition from a
+  broken one.
 
 **The licence to describe the fleet's protections as running as documented
 requires `complete` + `attested` + `current`, and no other combination grants
@@ -357,6 +374,15 @@ run rather than an operator's session.
   bytes do not, because that is a build error or a hand-edit rather than the
   ordinary lag a lower version indicates
 
+#### Scenario: The authority holds no such artifact
+
+- **WHEN** a present implementation has no counterpart in the authority — the
+  authority is checked out at a commit predating it, or the artifact was renamed
+  or removed upstream
+- **THEN** it is reported `stale` with its own message, **not `unknown`**: the
+  authority was reached, so "this artifact is not in it" is a finding rather than
+  an inability to check, and its remedy differs from an ordinary version lag
+
 #### Scenario: The machine carries a build ahead of the authority
 
 - **WHEN** a present implementation's version marker is higher than the
@@ -383,11 +409,14 @@ discharged by the report existing rather than by the marker being present.
 A conformance check SHALL therefore compare every present implementation against
 the authority's tracked source and report the result, by artifact name.
 
-- **Authority** — the tracked implementation under
-  `reference-implementations/project-hooks/` in core. No published copy and no
-  manifest row is authoritative for its own currency, for the same reason no
-  project-local shim is authoritative for its own conformance.
-- **Comparison** — byte-identity against the authority's file. The version
+- **Authority** — the implementation file under
+  `reference-implementations/project-hooks/` in core, **as it exists on disk in
+  the authority path when the check runs**. No published copy and no manifest row
+  is authoritative for its own currency, for the same reason no project-local
+  shim is authoritative for its own conformance. The authority is a checkout: if
+  it is old, the reading is old, and the check is reporting the disk correctly.
+- **Comparison** — byte-identity against the authority's file, with an absent
+  authority file reported `stale` in its own right rather than skipped. The version
   markers supply the *message*, never the verdict: a file whose bytes differ while
   its marker matches is exactly the case a version-only comparison cannot see, and
   it is the case that was already caught once for shims, where a marker attested
