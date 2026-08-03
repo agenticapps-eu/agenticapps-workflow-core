@@ -74,7 +74,9 @@
 
 ## 7. Independent review, then ship
 
-- [ ] 7.1 `superpowers:requesting-code-review` in an independent context.
+- [x] 7.1 `superpowers:requesting-code-review` in an independent context —
+  found 4 attachment defects the multiset diff cannot see; 3 fixed, 1 recorded
+  as the seed for the next change. See `REVIEW-RESPONSE.md` round 2.
 - [ ] 7.2 `superpowers:finishing-a-development-branch` — PR.
 
 ## Verification results (measured, not asserted)
@@ -91,7 +93,8 @@
   `Reason`/`Migration` metadata correctly did **not** enter the spec.
 - **5.2** 116 normative sentences, 67 scenarios, 17 requirements, 3 axes rows —
   all equal to baseline except requirements 15 → 17.
-- **5.3** per-requirement scenarios **6 / 2 / 8 / 2**; axes table, the licence and
+- **5.3** per-requirement scenarios **7 / 1 / 8 / 2** after the round-2 fixes
+  (6/2/8/2 before them); axes table, the licence and
   the exit-code rule each appear under exactly one requirement, the correct one.
 - **6.1** 7 suites: **297 passed, 0 failed, 5 skipped** (provisioning 109, shim
   46, conformance 43, project-hooks 34, harness 36, drift 18, normalize 11).

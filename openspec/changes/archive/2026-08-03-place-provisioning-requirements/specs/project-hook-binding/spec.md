@@ -205,7 +205,6 @@ run rather than an operator's session.
 - **THEN** it is described as failing open with its reporting channel
   unestablished, and no report of it claims the operator is warned
 
-
 #### Scenario: A machine stays unprovisioned for a long time
 
 - **WHEN** every matched tool call resolves nothing, session after session
@@ -213,6 +212,11 @@ run rather than an operator's session.
   told, and the policy is recorded with the hook rather than left to whatever the
   implementation happens to do
 
+#### Scenario: The installer runs
+
+- **WHEN** the shared artifacts are installed
+- **THEN** the installer verifies each shimmed implementation is present and
+  executable, and fails visibly if one is not
 
 ### Requirement: A machine's provisioning is a triple, not a state name
 
@@ -248,6 +252,12 @@ can ask whether what was installed is still what the authority ships, because th
 manifest records a publication that already happened. A machine can therefore be
 `complete` + `attested` against a stale row indefinitely.
 
+This was found by its consequence, not predicted. On 2026-08-03 a machine
+reported `complete` + `attested` — "This machine is provisioned. The shims will
+resolve." — while running `normalize-claude-md` 1.0.0 against core's 1.0.1 and
+`database-sentinel` 1.0.0 against core's 1.1.0. Measured on the published copies:
+`CLAUDE.md` went 0644 in and **0600** out, and `DELETE FROM public.users` was
+
 `stale` and `drifted` are deliberately **not** merged. They have different causes
 and different remedies: `drifted` means a published file was edited or replaced
 and the remedy is to investigate, `stale` most often means the machine did
@@ -266,6 +276,11 @@ files, so nothing to be stale), *provisioned* is `complete`+`attested`+`current`
 classification in their own right. **`complete`+`attested`+`stale` is not
 "provisioned"**, and calling it that is the specific error this revision exists
 to stop.
+
+The rule that a project must never bind a missing implementation applies to the
+**provisioned** state only. It is a post-condition of a completed install, not a
+property of the fleet at all times — which is what made it look like it
+contradicted a usable fresh clone.
 
 Invariants attach to a value on one axis, never to a state name:
 
@@ -290,21 +305,11 @@ or half-removed classified as **provisioned** under that definition. That is
 precisely the condition the manifest check exists to detect, and the state table
 was the one place it could not be named.
 
-
 #### Scenario: A project is cloned before the installer runs
 
 - **WHEN** a project is cloned onto a machine where the installer has never run
 - **THEN** the project is usable, every shimmed hook reports itself missing, and
   no protection is claimed that is not running
-
-
-#### Scenario: The installer runs
-
-- **WHEN** the shared artifacts are installed
-- **THEN** the installer verifies each shimmed implementation is present and
-  executable, and fails visibly if one is not
-
-
 
 ### Requirement: Currency is judged against an authority checkout
 
@@ -317,11 +322,6 @@ without it, and so the tool printed "This machine is provisioned. The shims will
 resolve." while that block read `DIFFERS` on every project hook. Reproduced. An
 axis is what obliges the summary to agree with the comparison.
 
-This was found by its consequence, not predicted. On 2026-08-03 a machine
-reported `complete` + `attested` — "This machine is provisioned. The shims will
-resolve." — while running `normalize-claude-md` 1.0.0 against core's 1.0.1 and
-`database-sentinel` 1.0.0 against core's 1.1.0. Measured on the published copies:
-`CLAUDE.md` went 0644 in and **0600** out, and `DELETE FROM public.users` was
 **not** blocked. Both are defects the fleet believed were fixed. The check printed
 `attested v1.0.0` throughout; the number was on screen and nothing compared it to
 anything.
@@ -399,7 +399,6 @@ Invariants on the currency axis:
   set*. The report SHALL name the path it looked for and which question went
   unanswered, so an operator can tell an ordinary condition from a broken one.
 
-
 **The licence to describe the fleet's protections as running as documented
 requires `complete` + `attested` + `current`, and no other combination grants
 it.** It previously attached to `attested` alone. That was too strong and was
@@ -407,7 +406,6 @@ observed to be false: a machine held `complete` + `attested` while running two
 implementations missing three landed fixes, and was described as provisioned
 throughout. `unknown` does not grant the licence either — an unchecked claim and
 a verified one must not read the same.
-
 
 **A strict mode SHALL fail on any currency value but `current`, `unknown`
 included, and SHALL offer no flag that exempts it.** Declining to ask the
@@ -418,7 +416,6 @@ pass this axis exists to remove. Two flags that contradict each other outright �
 naming an authority while declining to consult one — SHALL be a usage error
 rather than resolved by order of appearance, because last-one-wins silently
 performs the opposite of half the instruction it was given.
-
 
 #### Scenario: The installed build is older than the one the authority ships
 
@@ -515,12 +512,6 @@ The rollout ordering — publish and verify before replacing project copies —
 orders exactly **one** machine: the one performing the rollout. It says nothing
 about any other machine that later pulls the result, and SHALL NOT be cited as
 though it did.
-
-The rule that a project must never bind a missing implementation applies to the
-**provisioned** state only. It is a post-condition of a completed install, not a
-property of the fleet at all times — which is what made it look like it
-contradicted a usable fresh clone.
-
 
 A rollout SHALL move a machine to *provisioned* before any project's copy is
 replaced with a shim, because that ordering is what keeps the window in which a
