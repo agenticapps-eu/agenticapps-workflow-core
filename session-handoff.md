@@ -99,12 +99,11 @@ under the wrong heading. `/opsx:propose`; reasoning is in the archive note.
 ## Open questions
 
 - **The `cmp`-error branch is reasoned, not tested.** `cmp` exit 2 (*could not
-  compare*) reports `unknown` rather than `stale`. Exit 2 is verified against a
-  real invocation; the path that *reaches* it — a mid-read I/O error on a file
-  that passed `-r` a microsecond earlier — cannot be constructed portably here.
-  Negative evidence, deliberately not counted as coverage.
-- **The `PostToolUse` fail-open channel remains unverified.** Seventh session.
-  `normalize-claude-md` is still the live instance.
+  compare*) reports `unknown`, not `stale`. Exit 2 is verified against a real
+  invocation; the path *reaching* it — a mid-read I/O error on a file that passed
+  `-r` — is not portably constructible. Negative evidence, not coverage.
+- **The `PostToolUse` fail-open channel remains unverified** — seventh session;
+  `normalize-claude-md` is the live instance.
 - **`provisioning-check.sh` is not published to the shared bin.** Currency works
   and defaults on, but only where core is checked out. **Nothing prompts anyone
   on a machine without a core checkout to discover their install is stale.** The
@@ -131,7 +130,7 @@ re-derive* a fact over recording the fact.
 
 ## The methodological lesson, which cost the most time today
 
-Three wrong conclusions, all pointing the same way — toward keeping branches that
+Three wrong conclusions, all pointing one way — toward keeping merged branches
 were merged, and toward a fleet "finding" that did not exist. Each was caught
 only by hand-checking one case:
 
