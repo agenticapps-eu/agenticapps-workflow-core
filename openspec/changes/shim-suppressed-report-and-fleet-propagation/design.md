@@ -26,6 +26,24 @@ across the seven binders declared in `reference-implementations/project-hooks/FL
 This corrects the README's own propagation note, written 2026-08-04, which said
 three repos in one family. The instrument says five, across two.
 
+**The instrument excludes core, and the first draft of this change accepted its
+zero as proof.** `FLEET` omits `agenticapps-workflow-core` deliberately — it is
+the authority, and `--fleet` would otherwise compare the template against itself.
+Correct as an exclusion, false as a clearance: "the fleet reports 0" means every
+binder except the one holding the rule. Stage-2 review caught it, and following
+it into `.claude/hooks/openspec-change-gate.sh` found the authority's own binder
+at 1.1.0 doing this on an unresolvable gate:
+
+```
+printf 'openspec-gate: WARNING — gate not found at %s; this edit is not gated.\n' "$GATE" >&2
+exit 0
+```
+
+`spec.md:611-615` names that exact construction as warning nobody, because a
+`PreToolUse` hook exiting 0 has its stderr discarded from the transcript. It has
+been in the repository that publishes the rule, unreportable by the repository's
+own instrument.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -119,12 +137,33 @@ land through their own repos' gates, not this one's.
   identity.** It cannot tell whether a converted repo still *works*. → The
   `--fleet` run proves propagation, not correctness; each PR additionally shows
   the hook resolving and exiting 0 on a benign call in that repo.
+- **No instrument reads hook matchers at fleet scope.** Verified:
+  `project-hook-conformance.sh:306-309` opens `settings.json` only to enumerate
+  override env vectors, and nothing else under `tools/` reads matchers. So the
+  `MultiEdit` half of this change has no automated check, and "`--fleet` reports
+  0" would have been cited as covering it. → The matcher assertion is a named
+  manual task per repo, and the tooling gap is recorded here rather than left to
+  be rediscovered.
+- **The marker is racy between concurrent hooks.** Two matched calls entering
+  `report_rate_limited` together can both read a stale marker. → Not mitigated.
+  The worst outcome is one extra full report or one extra suppressed line;
+  neither loses a signal, and locking a file that must stay behaviour-free costs
+  more than the failure it prevents.
+- **The `agenticapps-dashboard-add-agent-board` checkout is not in `FLEET` and
+  its hooks do fire when that worktree is used.** The README's re-measurement
+  counted it among the defective copies, so silence here would read as a
+  contradiction. → Named, left unconverted, and the reasoning is in Open
+  Questions rather than implied by omission.
 
 ## Migration Plan
 
-1. Core: template + gate shim + spec delta + tests, at 1.2.0. Merged first — the
-   template is the authority the other seven are compared against, so any other
-   order compares them to a version that does not exist yet.
+1. Core: template + gate shim + **core's own self-hosting binder** + spec delta +
+   tests, at 1.2.0. Merged first — the template is the authority the other seven
+   are compared against, so any other order compares them to a version that does
+   not exist yet. Core's binder is bumped and its `exit 0` corrected in the same
+   pass, because a change that fixes the fleet's reporting while leaving the
+   authority's own binder warning nobody would be this capability's own failure
+   mode shipped once more.
 2. `agenticapps-dashboard` and `cparx`: re-issue three shims each at 1.2.0.
 3. The five inlining repos: convert, update `settings.json` matchers to
    `Bash|Edit|Write|MultiEdit`, and handle the `agents-task-viewer`

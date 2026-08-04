@@ -5,12 +5,22 @@
       line. Run it and record it RED against today's shim — the RED is the
       evidence that the test sees the defect, not that it compiles.
 - [ ] 1.2 Add the invariant test: for every shim file under
-      `reference-implementations/project-hooks/`, no path exits non-zero with
-      empty stderr. Enumerate the paths rather than testing the one that
-      motivated this — an unresolvable override, an unresolvable shared install,
-      and a suppressed repeat of each.
-- [ ] 1.3 `tdd=true` — commit both as `test(RED): …` before any implementation
-      edit.
+      `reference-implementations/project-hooks/`, no **pre-`exec`** path exits
+      non-zero with empty stderr. Enumerate the paths rather than testing the one
+      that motivated this — an unresolvable override, an unresolvable shared
+      install, and a suppressed repeat of each. Post-`exec` exits belong to the
+      implementation and are out of scope (codex 3).
+- [ ] 1.3 Add the marker-failure test: with the state directory unwritable, every
+      call reports in full and none is suppressed (opencode 4).
+- [ ] 1.4 Add the ordering test: the report is written before the marker, so a
+      run that dies after reporting leaves a marker consistent with a notice that
+      was actually emitted (codex 4).
+- [ ] 1.5 Extend the invariant test to core's own binder,
+      `.claude/hooks/openspec-change-gate.sh`. It is excluded from `--fleet` by
+      design, so it must be named explicitly or it is tested by nothing (codex 1).
+      Expect RED: it exits 0 today.
+- [ ] 1.6 `tdd=true` — commit all of the above as `test(RED): …` before any
+      implementation edit.
 
 ## 2. The fix in core
 
@@ -26,7 +36,16 @@
 - [ ] 2.4 Update the comment block above `report_rate_limited` in both files: it
       currently justifies the interval policy as reducing how often the operator
       is told, which the exit code takes back. State verbosity.
-- [ ] 2.5 Run 1.1 and 1.2 GREEN. Commit as `feat(GREEN): …`.
+- [ ] 2.5 Reorder `report_rate_limited` to report **then** write the marker, and
+      make a failed marker write leave the next call reporting in full.
+- [ ] 2.6 Core's self-hosting binder, `.claude/hooks/openspec-change-gate.sh`:
+      replace `printf … >&2; exit 0` with a report and a non-blocking error code.
+      This is a live violation of the fail-open-and-report rule in the repository
+      that publishes it — `spec.md:611-615` calls exit 0 with a stderr warning
+      "warns nobody", and `spec.md:251-253` puts core's copy in scope for that
+      rule while exempting it only from the resolution-order clauses.
+- [ ] 2.7 Bump core's binder marker to 1.2.0.
+- [ ] 2.8 Run 1.1–1.5 GREEN. Commit as `feat(GREEN): …`.
 
 ## 3. Live verification, not just tests
 
@@ -58,17 +77,29 @@
 
 ## 6. Propagate — the five repos carrying inlined copies
 
-Each repo: convert three hooks to 1.2.0 shims, update the `settings.json`
-matcher to `Bash|Edit|Write|MultiEdit`, own branch and PR, and state in the PR
-body that `migrations/*` edits stop being blocked and the
+Each repo: convert three hooks to 1.2.0 shims, own branch and PR, and state in
+the PR body that `migrations/*` edits stop being blocked and the
 `Migration 0009 not yet applied` stub stops being injected.
+
+**The matcher edit is scoped to the `database-sentinel` entry only** (codex 5).
+Each repo's `settings.json` carries several matchers; the gate's is
+`Edit|Write|MultiEdit|NotebookEdit`, and applying `Bash|Edit|Write|MultiEdit`
+across the file would strip the gate's `NotebookEdit` coverage. Change one entry,
+and diff the file to prove only that entry moved.
 
 - [ ] 6.1 `agenticapps-roadmap`
 - [ ] 6.2 `callbot`
 - [ ] 6.3 `fbc-platform`
 - [ ] 6.4 `fx-signal-agent`
 - [ ] 6.5 `agents-task-viewer` — `database-sentinel` and `openspec-change-gate`
-      only.
+      only. Before converting the gate, verify the shared install resolves on
+      this machine: that repo's current shim falls back to a repo-local
+      `bin/openspec-change-gate.sh` (17k, verified present) and the contract's
+      two-candidate order deliberately drops it (codex 2).
+- [ ] 6.5a `agents-task-viewer`: dispose of the now-orphaned
+      `bin/openspec-change-gate.sh` explicitly — removed, or kept with a note
+      saying what still invokes it. A 17k copy that nothing calls and no
+      instrument reports is the drift the shim contract exists to end.
 - [ ] 6.6 `agents-task-viewer`: relocate the 26-line opt-out rationale from
       `normalize-claude-md.sh` into that repo's `CLAUDE.md`, preserving the
       2026-07-21 date and the warning against re-registering the hook.
@@ -80,9 +111,19 @@ body that `migrations/*` edits stop being blocked and the
 
 - [ ] 7.1 `tools/project-hook-conformance.sh --fleet ~/Sourcecode` reports 0
       findings, down from 30. Paste the output.
-- [ ] 7.2 In each converted repo, show the hook resolving: one benign matched
+- [ ] 7.2 Score core's binder **explicitly**, by passing
+      `agenticapps-workflow-core` as a positional argument, and report its version
+      beside the fleet's. `--fleet` excludes core by design, so 7.1 alone cannot
+      cover it and must not be cited as if it did (codex 1).
+- [ ] 7.3 Assert the matcher change per repo: `database-sentinel`'s entry reads
+      `Bash|Edit|Write|MultiEdit` **and** the gate's still reads
+      `Edit|Write|MultiEdit|NotebookEdit`. No instrument reads matchers at fleet
+      scope — verified: `project-hook-conformance.sh:306-309` reads
+      `settings.json` only for override env vectors — so this check is manual and
+      its absence from the tooling is recorded, not papered over (opencode 3).
+- [ ] 7.4 In each converted repo, show the hook resolving: one benign matched
       call, exit 0. The instrument proves propagation, not that anything works.
-- [ ] 7.3 Record which binders implement which profile, as the modified
+- [ ] 7.5 Record which binders implement which profile, as the modified
       requirement obliges — seven published-resolution, one self-hosting in core.
 
 ## 8. Close

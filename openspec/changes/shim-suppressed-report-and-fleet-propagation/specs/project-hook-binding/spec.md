@@ -8,6 +8,25 @@ error code **because** it is the only thing that surfaces stderr to the operator
 so an exit code with no accompanying line invokes the mechanism and supplies
 none of its content.
 
+**This binds the shim's own exits, before `exec`, and no others.** Once a shim
+`exec`s, the process is the implementation and its exit code is the
+implementation's to choose; a shim that tried to constrain it would have to stop
+`exec`ing and start wrapping, which the behaviour-free rule forbids. A stderr
+write that itself fails is likewise outside the rule — the shim SHALL attempt the
+line, not guarantee its delivery through a broken descriptor.
+
+**It binds an event class only where that class's channel is verified.** This
+capability records a verified warning channel for `PreToolUse` and requires the
+exit rule to "be re-established per event class, not assumed to generalise". The
+invariant is argued from `PreToolUse` rendering — a non-zero exit surfacing the
+first stderr line — so it is claimed for `PreToolUse` and for any class whose
+channel is later verified and recorded. For a class whose channel is unverified,
+`normalize-claude-md`'s `PostToolUse` being the live instance, a shim SHALL still
+write its line before exiting non-zero, and no report SHALL claim the operator
+sees it. Writing the line costs nothing and is what makes the claim available the
+day the channel is verified; claiming the operator was warned is what this
+capability forbids.
+
 The host renders such a call as `hook error — No stderr output`. That notice
 costs the operator exactly what a real report costs — it interrupts, it names a
 hook, it implies something is wrong — and returns nothing they can act on. It is
@@ -30,10 +49,24 @@ answer SHALL NOT be "leave it non-zero and say nothing".
 
 #### Scenario: A shim is audited for contentless exits
 
-- **WHEN** a shim's exit paths are enumerated
+- **WHEN** a shim's pre-`exec` exit paths are enumerated
 - **THEN** every path that exits non-zero is shown to write at least one stderr
-  line first, and a path that cannot is changed to exit 0 rather than left to
-  render as an empty notice
+  line first
+
+#### Scenario: An exit path has nothing to say
+
+- **WHEN** a pre-`exec` path would exit non-zero with nothing to report
+- **THEN** it exits 0 **only if** it carries no announcement obligation — a path
+  that fails open and loses protection SHALL be given a message rather than a
+  zero exit, because exit 0 discards stderr entirely and converts the announced
+  fail-open into the silent one this capability rejects
+
+#### Scenario: The class's channel is not verified
+
+- **WHEN** a shim binds an event class for which no warning channel is recorded
+- **THEN** it writes its line and exits by the contract anyway, and every report
+  of it says the channel is unestablished rather than that the operator was
+  warned
 
 ### Requirement: A rate limit governs verbosity, not the operator's notice
 
@@ -59,19 +92,84 @@ A shim MAY still choose **per invocation** and repeat the full report. What it
 SHALL NOT do is claim an interval policy and deliver a contentless notice for the
 rest of the interval.
 
+**The suppressed line SHALL carry four things**, so that "a line was written" is
+not discharged by a line that says nothing: the hook's name, that the condition
+is unchanged, that the call was allowed, and a reference to the full notice
+already made. A suppressed line that merely repeats the first line of the full
+report is non-conformant — the operator could not then tell a repeat from a fresh
+failure, which is the one fact the suppressed line exists to add.
+
+**The interval SHALL be described in the units the marker actually keeps.** A
+marker holding `epoch/3600` is a wall-clock **hour bucket**, not a rolling hour:
+two calls four seconds apart can fall in different buckets and both report in
+full. The suppressed line SHALL therefore say *this hour* rather than imply a
+rolling window, and any documentation of the policy SHALL do the same.
+
+**The report SHALL be emitted before the marker is written**, so that a failure
+between the two leaves the next call reporting in full rather than claiming a
+notice nobody received. Ordering it the other way makes the suppressed line's
+reference to an earlier notice a claim the shim cannot support.
+
+**A marker that cannot be written SHALL NOT suppress anything.** If the state
+directory or the marker file cannot be created, every matched call reports in
+full. The failure is loud rather than silent because an unwritable marker means
+the shim has no memory at all, and a policy that silently degrades to suppression
+would suppress on the basis of a state it never recorded.
+
 #### Scenario: A second unresolvable call arrives within the interval
 
-- **WHEN** a shim reported in full earlier in the interval and matches another
-  call whose implementation is still unresolvable
-- **THEN** it emits one line stating that the condition is unchanged and that the
-  call was allowed, refers to the full notice already made, and exits with the
-  same non-blocking code
+- **WHEN** a shim reported in full earlier this hour and matches another call
+  whose implementation is still unresolvable
+- **THEN** it emits one line naming the hook, stating that the condition is
+  unchanged and that the call was allowed, referring to the full notice already
+  made, and exits with the same non-blocking code
+
+#### Scenario: The marker cannot be written
+
+- **WHEN** the state directory or marker file cannot be created
+- **THEN** every matched call reports in full, rather than the policy degrading
+  to suppression on the basis of a state that was never recorded
 
 #### Scenario: An interval policy is described in a report or document
 
 - **WHEN** the effect of a once-per-interval policy is stated
 - **THEN** it is stated as a reduction in verbosity, not in how often the
   operator is interrupted, because the exit code is not subject to the interval
+
+### Requirement: The authority's own binder is scored, never assumed
+
+A fleet check that excludes the authority repository SHALL NOT be cited as
+evidence that the authority conforms. `--fleet` resolves the declared binders and
+deliberately omits core, because comparing the template against itself would
+score nothing — a correct exclusion that becomes a false clearance the moment a
+change reports "the fleet is clean" and means "every repo except the one holding
+the authority".
+
+A contract change SHALL therefore score the self-hosting binder explicitly, by
+naming it, and SHALL report its version and conformance beside the fleet's rather
+than inside a total that structurally cannot contain it.
+
+**This is not hypothetical.** At contract 1.1.0 the authority repo's own binder
+failed open by printing a warning to stderr and exiting **0** — the exact
+construction this capability names as warning nobody, since a `PreToolUse` hook
+exiting 0 has its stderr discarded. It sat in the repository that publishes the
+rule, and no run of the instrument could report it, because the instrument
+excludes core by design and the change that would have caught it accepted a
+fleet-wide zero as proof.
+
+#### Scenario: A contract change reports its propagation
+
+- **WHEN** a change states that every binder has been reached
+- **THEN** the self-hosting binder is named with its version and conformance
+  alongside the declared fleet, and a fleet-scoped zero is never presented as
+  covering it
+
+#### Scenario: The authority's binder violates a rule the authority publishes
+
+- **WHEN** the self-hosting binder is scored against the fail-open-and-report rule
+- **THEN** it is held to that rule exactly as a published-resolution shim is, its
+  exemption reaching only the resolution-order clauses, and a violation is a
+  finding rather than a profile difference
 
 ## MODIFIED Requirements
 
