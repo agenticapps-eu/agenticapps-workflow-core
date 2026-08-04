@@ -129,3 +129,121 @@ Live, per repo — the instrument proves propagation, not that anything works:
 
 Both PRs are open, not merged. The fleet total therefore has **not** moved yet,
 and group 7's re-run is the measurement that counts.
+
+---
+
+## The instrument measured this machine and called it the fleet
+
+Group 6's premise — *"the five repos carrying inlined copies"* — was **false of
+every one of them**, and the baseline above is what said otherwise.
+
+`project-hook-conformance.sh --fleet` scans **working trees**. Six of the seven
+checkouts on this machine were behind their remotes, some by eleven commits, and
+in five of them the commits not pulled were exactly the ones that had already
+converted the hooks to shims. Measured against `origin/main` instead:
+
+| Repo | local checkout behind | upstream `database-sentinel` | upstream matcher |
+|---|---:|---|---|
+| `agenticapps-dashboard` | 0 | 1.1.0 shim | `Bash\|Edit\|Write\|MultiEdit` |
+| `agenticapps-roadmap` | 11 | 1.1.0 shim | correct |
+| `agents-task-viewer` | 4 | 1.1.0 shim | correct |
+| `callbot` | 3 | 1.1.0 shim | correct |
+| `cparx` | 2 | 1.1.0 shim | correct |
+| `fbc-platform` | 3 | 1.1.0 shim | correct |
+| `fx-signal-agent` | 3 | 1.1.0 shim | correct |
+
+The entire fleet was already shimmed at 1.1.0 with correct matcher coverage. The
+inlined copies, the narrow `Bash|Edit|Write` registrations, the `migrations/`
+block with its `/gsd-discuss-phase` remedy — all of that was real, and all of it
+was **on this laptop**, in checkouts nobody had pulled since 2026-08-02.
+
+So of the baseline's 46 findings, the 15 unrecognised markers and 4 narrow
+matchers described stale local files. What the fleet actually needed was what
+group 5 needed: a 1.1.0 → 1.2.0 re-version, everywhere.
+
+### It cost a wrong PR before it was noticed
+
+`agenticapps-roadmap` PR #13 was opened claiming to convert inlined copies,
+unblock `migrations/*` and widen a matcher, with live before/after exit codes
+to prove it. The exit codes were real; they were produced by running the stale
+local files. The PR was corrected in place: merged with current `main`,
+conflicts resolved to it, and the body rewritten to name the mistake. Its net
+diff is now the same 149/25 re-version as the other six.
+
+### Why this belongs in this change rather than in a footnote
+
+It is the change's own subject, arriving from the direction the change was not
+looking. `--fleet reports 0` was already recorded as a false-clearance shape;
+`--fleet reports 46` turns out to be a false-*conviction* of the same kind. The
+instrument answered confidently, and the question it answered — *what is on this
+disk* — was not the question asked — *what is in the fleet*. Nothing in its
+output distinguishes the two. It does not read a git ref, does not fetch, and
+does not say how old the tree it just scored is.
+
+**Not fixed here.** The fix belongs to the instrument and wants its own change:
+report each project's checkout state (`ahead/behind`, or at minimum the HEAD date
+and whether a fetch is stale) beside its findings, so a reader can tell a fleet
+report from a laptop report. Recorded so that group 7's re-run is not read as
+covering it.
+
+---
+
+## Group 6 — the five repos that were said to carry inlined copies
+
+All five needed the same 1.1.0 → 1.2.0 re-version as group 5. No repo needed a
+matcher edit: upstream registrations already covered the declared sets, so task
+6's central instruction — widen one entry and diff to prove only that entry
+moved — had already been carried out before this change began.
+
+| Task | Repo | PR | Result |
+|---|---|---|---|
+| 6.1 | `agenticapps-roadmap` | [#13](https://github.com/agenticapps-eu/agenticapps-roadmap/pull/13) | corrected in place after being cut from a stale checkout |
+| 6.2 | `callbot` | [#100](https://github.com/agenticapps-eu/callbot/pull/100) | clean |
+| 6.3 | `fbc-platform` | [#105](https://github.com/agenticapps-eu/fbc-platform/pull/105) | prepared in a temporary worktree — that checkout sits on an in-progress design-system branch with uncommitted work |
+| 6.4 | `fx-signal-agent` | [#120](https://github.com/agenticapps-eu/fx-signal-agent/pull/120) | clean |
+| 6.5 | `agents-task-viewer` | [#18](https://github.com/agenticapps-eu/agents-task-viewer/pull/18) | two shims; plus 6.5a and 6.6 below |
+
+Each verified the same way: conformance against that repo alone (all axes
+clean), benign `Edit` through every bound shim → exit 0, `DROP TABLE` through
+`database-sentinel` → exit 2.
+
+### 6.5a — the premise was wrong, and the task's other branch was taken
+
+6.5a proposed disposing of `agents-task-viewer`'s `bin/openspec-change-gate.sh`
+as *"a 17k copy that nothing calls and no instrument reports"*. The second half
+is true. The first is not: the hook shim does not call it, but CI does —
+`.github/workflows/openspec-gate.yml` runs `change-gate-conformance.sh` against
+it, `bin/openspec-gate-ci.sh` fails without it, and `tools/core-vendor.manifest`
+pins its sha256 under core ADR-0023. CI has no `~/.agenticapps` to resolve from,
+so the gate has to be in the repository. Deleting it breaks CI.
+
+Kept, with a note beside it rather than inside it — the file is pinned by
+sha256, so editing it would break the pin.
+
+The note omits the override variable's **name** on purpose, and that is worth
+recording as a small tension in the instrument: the override-vector scan reports
+any repository file that merely *names* the variable, deliberately, because
+"over-reporting costs a glance". But a docs file naming it books that glance on
+every fleet scan from then on. Verified both ways — with the name, one finding
+against that repo; without it, zero. Documenting the contract inside a fleet repo
+currently costs a permanent finding.
+
+### 6.6 — the rationale was already lost, and is now recovered
+
+The 26-line opt-out banner lived at the top of `agents-task-viewer`'s
+`.claude/hooks/normalize-claude-md.sh`. That file was deleted upstream in
+`ac13485` when the hooks became shims — so the reason survived only in
+`git show ac13485^`. Task 6.6 exists to relocate the rationale **before** 6.7
+deletes the file; upstream, 6.7 happened first. The exact failure the ordering
+was written to prevent had already occurred.
+
+Recovered as ADR 0009 in that repo, linked from `CLAUDE.md`'s hand-written
+preamble — outside every GSD block, so the hook the ADR declines to run could not
+rewrite the link even if it were re-registered.
+
+### 6.6a and 6.7 — already satisfied
+
+6.6a: the opt-out is already declared in
+`reference-implementations/project-hooks/OPT-OUTS`, and the instrument reports it
+as an opt-out with its reason on both the marker and matcher axes. 6.7: the file
+is already gone upstream.

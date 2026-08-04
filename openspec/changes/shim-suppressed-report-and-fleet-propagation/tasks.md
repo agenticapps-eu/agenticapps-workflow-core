@@ -127,6 +127,22 @@ was touched: all six registrations already covered their declared matcher sets.
 
 ## 6. Propagate — the five repos carrying inlined copies
 
+> **This heading is wrong, and finding out how was the most useful thing in the
+> group.** None of the five carried inlined copies. All seven repos were already
+> at 1.1.0 shims with correct matcher coverage on `origin/main`; the inlined
+> copies existed only in the **stale local checkouts on this machine**, six of
+> which were behind their remotes by up to eleven commits.
+> `project-hook-conformance.sh --fleet` reads working trees and says nothing
+> about how old they are, so it described this laptop and called it the fleet.
+> The full account is in `PROPAGATION-EVIDENCE.md`; the instrument fix is
+> deliberately NOT taken here and wants its own change.
+>
+> Consequence for the instruction below: **no repo needed a matcher edit**, and
+> no PR could truthfully say `migrations/*` stops being blocked or the
+> `Migration 0009` stub stops being injected — both had already stopped when the
+> repos were shimmed at 1.1.0. Each of the five needed the same 1.1.0 → 1.2.0
+> re-version as group 5.
+
 Each repo: convert three hooks to 1.2.0 shims, own branch and PR, and state in
 the PR body that `migrations/*` edits stop being blocked and the
 `Migration 0009 not yet applied` stub stops being injected.
@@ -137,20 +153,35 @@ Each repo's `settings.json` carries several matchers; the gate's is
 across the file would strip the gate's `NotebookEdit` coverage. Change one entry,
 and diff the file to prove only that entry moved.
 
-- [ ] 6.1 `agenticapps-roadmap`
-- [ ] 6.2 `callbot`
-- [ ] 6.3 `fbc-platform`
-- [ ] 6.4 `fx-signal-agent`
-- [ ] 6.5 `agents-task-viewer` — `database-sentinel` and `openspec-change-gate`
+- [x] 6.1 `agenticapps-roadmap` — PR #13. Opened against a stale checkout with
+      claims that were false of the repo, then corrected in place: merged with
+      current `main`, conflicts resolved to it, body rewritten to name the
+      mistake. Net diff is now the same re-version as the other six.
+- [x] 6.2 `callbot` — PR #100.
+- [x] 6.3 `fbc-platform` — PR #105, prepared in a temporary worktree cut from
+      `origin/main`: that checkout sits on an in-progress design-system branch
+      with uncommitted work that must not be disturbed.
+- [x] 6.4 `fx-signal-agent` — PR #120.
+- [x] 6.5 `agents-task-viewer` — `database-sentinel` and `openspec-change-gate`
       only. Before converting the gate, verify the shared install resolves on
       this machine: that repo's current shim falls back to a repo-local
       `bin/openspec-change-gate.sh` (17k, verified present) and the contract's
       two-candidate order deliberately drops it (codex 2).
-- [ ] 6.5a `agents-task-viewer`: dispose of the now-orphaned
+      PR #18. The premise is stale in the same way: upstream that shim is already
+      the 1.1.0 two-candidate shim, so it has not fallen back to the repo-local
+      copy since 2026-08-02.
+- [x] 6.5a `agents-task-viewer`: dispose of the now-orphaned
       `bin/openspec-change-gate.sh` explicitly — removed, or kept with a note
       saying what still invokes it. A 17k copy that nothing calls and no
       instrument reports is the drift the shim contract exists to end.
-- [ ] 6.6 `agents-task-viewer`: relocate the 26-line opt-out rationale from
+      **Not orphaned — the second branch taken.** No instrument reports it, but
+      CI invokes it: `openspec-gate.yml` runs `change-gate-conformance.sh`
+      against it, `bin/openspec-gate-ci.sh` fails without it, and
+      `core-vendor.manifest` pins its sha256 (ADR-0023). CI has no
+      `~/.agenticapps` to resolve from. Kept, with `bin/README.md` saying so —
+      beside the file, not inside it, because editing a pinned file breaks
+      the pin.
+- [x] 6.6 `agents-task-viewer`: relocate the 26-line opt-out rationale from
       `normalize-claude-md.sh` into an **ADR in that repo**, preserving the
       2026-07-21 date and the warning against re-registering the hook, and link
       it from `CLAUDE.md`. An ADR rather than prose in `CLAUDE.md` because
@@ -158,11 +189,21 @@ and diff the file to prove only that entry moved.
       has already survived ~3 manual reverts by being hard to delete accidentally
       (gemini round 2). Not `settings.json` — it is strict JSON and cannot carry
       the comment.
-- [ ] 6.6a Add the opt-out to the declaration introduced in 2b.2, so the
-      instrument reports it as declared rather than skipping it.
-- [ ] 6.7 `agents-task-viewer`: delete `normalize-claude-md.sh`. Depends on 6.6
+      **Recovered rather than relocated**: upstream deleted the file in
+      `ac13485` before this ran, so the rationale existed only in
+      `git show ac13485^`. Now ADR 0009, linked from `CLAUDE.md`'s hand-written
+      preamble — outside every GSD block, so the hook it declines to run could
+      not rewrite the link even if re-registered.
+- [x] 6.6a Add the opt-out to the declaration introduced in 2b.2, so the
+      instrument reports it as declared rather than skipping it. Already present
+      in `OPT-OUTS`; verified reported as an opt-out on both the marker and the
+      matcher axis.
+- [x] 6.7 `agents-task-viewer`: delete `normalize-claude-md.sh`. Depends on 6.6
       — the file is the only record of why the opt-out exists, so deleting it
       first destroys the reason and invites the next migration to undo it.
+      **Already deleted upstream in `ac13485`, ahead of 6.6** — the dependency
+      this task states was violated before the task ran, which is why 6.6 became
+      a recovery from git history rather than a move.
 
 ## 7. Verify the propagation as a whole
 
@@ -199,8 +240,9 @@ One PR cannot be both (codex round 2).
 - [x] 8.1 Core PR 1 — implementation, spec delta, tests, instrument. Merged
       before any fleet repo's PR is opened. Merged as `8e7fcd4` (PR #73), and
       the first fleet PR was opened after it.
-- [ ] 8.2 The seven fleet PRs (groups 5 and 6). Two open: dashboard #99,
-      cparx #124.
+- [ ] 8.2 The seven fleet PRs (groups 5 and 6). All seven open, none merged:
+      dashboard #99, cparx #124, roadmap #13, callbot #100, fbc-platform #105,
+      fx-signal-agent #120, agents-task-viewer #18.
 - [ ] 8.3 Core PR 2 — the propagation evidence from group 7, the README
       corrections from group 4, and the archive. This is the PR the change is
       archived in, because archiving before the evidence exists would fold a
