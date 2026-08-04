@@ -31,6 +31,19 @@
 # role names; this is the same failure mode for the fence's info string as
 # a whole.
 #
+# FENCE STATE FIRST, ALWAYS. The L2/L4 scan below (and the L5 scan further
+# down) check `infence` BEFORE any step-boundary or heading logic, exactly
+# like extract.sh's mr_roles/mr_block/mr_steps. This is the THIRD time this
+# exact ordering mistake has had to be fixed in this plan (mr_roles/mr_block,
+# then mr_steps, then this file's first draft of the L2/L4 pass, which
+# checked "### Step " boundaries before checking whether a line was inside a
+# fence). Getting it backwards means a heredoc body containing the literal
+# text "### Step 2" turns a step "off" mid-fence, silently suppressing every
+# L2/L4 check for the rest of that step — including a role=aply fence that
+# would otherwise be caught. Confirmed by reproduction against
+# 0031-heredoc-step-heading.md; see the Task 3 fix-round report for the
+# RED/GREEN transcript.
+#
 # THE ID THRESHOLD.
 #
 # A migration's ID comes from its FILENAME BASENAME, never from frontmatter.
@@ -39,8 +52,11 @@
 # precisely because a filename cannot be forgotten. Reading `id:` from
 # frontmatter instead throws that away: delete one line and the file evades
 # the linter entirely. That was a real defect found in this plan's Stage 2
-# review; bad-no-frontmatter-id.md and bad-id-mismatch.md are its regression
-# guards. Do not "simplify" this back to reading frontmatter.
+# review; 0026-bad-no-frontmatter-id.md and 0027-bad-id-mismatch.md are its
+# regression guards, and 0030-scope-by-filename.md guards specifically
+# against "simplifying" scope back to reading frontmatter (its frontmatter id
+# would put it below every threshold; only its filename puts it in scope).
+# Do not "simplify" this back to reading frontmatter.
 #
 # A filename with no parseable leading `<digits>-` is a VIOLATION, never a
 # skip — an unreadable ID must not be a quiet route out of scope.
@@ -49,8 +65,9 @@
 # declaration file). `--threshold N` sets it directly. There is deliberately
 # NO path for "neither given": that would mean every migration is out of
 # scope, every lint trivially clean, and — because the runner lints before
-# executing — every migration runnable. An unknown host, and the absence of
-# both flags, are both errors, not defaults.
+# executing — every migration runnable. An unknown host, a non-numeric
+# threshold (from either source), and the absence of both flags, are all
+# errors, not defaults.
 #
 # Below the threshold and not opted in, a migration predates the format and
 # is skipped entirely (exit 0) rather than judged: retrofit scope is zero. A
@@ -79,7 +96,17 @@ while [ $# -gt 0 ]; do
       THRESHOLD="$(sed 's/#.*//' "$SCRIPT_DIR/THRESHOLDS" | awk -v h="$_h" '$1 == h { print $2; exit }')"
       [ -n "$THRESHOLD" ] || { echo "lint: no threshold declared for host '$_h'" >&2; exit 65; }
       ;;
-    *) DOC="$1"; shift ;;
+    --*)
+      echo "lint: unknown flag '$1'" >&2
+      exit 64
+      ;;
+    *)
+      if [ -n "$DOC" ]; then
+        echo "lint: unexpected extra argument '$1' (doc already set to '$DOC')" >&2
+        exit 64
+      fi
+      DOC="$1"; shift
+      ;;
   esac
 done
 : "${DOC:?usage: lint-migration.sh (--threshold N | --host NAME) <doc>}"
@@ -88,6 +115,20 @@ done
 # empty scope — see the header comment above. A caller who forgot --host
 # must not silently get "nothing in scope, everything passes."
 : "${THRESHOLD:?lint: --threshold or --host is required (no default; see THRESHOLDS) — with neither, every migration would be out of scope and every lint would pass trivially}"
+
+# Validate once, after both possible sources (a literal --threshold, or a row
+# resolved from THRESHOLDS via --host) have landed in the same variable. A
+# non-numeric value here — a typo'd CLI arg, or a typo'd THRESHOLDS row like
+# "O016" with a letter O — must not silently make every comparison against it
+# fail closed-as-open: bash arithmetic on a non-numeric string errors out,
+# `above` would stay 0, and every migration that doesn't separately declare
+# `executable` would exit 0 clean. That reopens the no-silent-threshold hole
+# one layer down, just moved from "no threshold" to "bad threshold".
+case "$THRESHOLD" in
+  ''|*[!0-9]*) echo "lint: threshold '$THRESHOLD' is not numeric" >&2; exit 65 ;;
+esac
+
+[ -f "$DOC" ] || { echo "lint: $DOC: no such file" >&2; exit 66; }
 
 violations=0
 report() { echo "$*" >&2; violations=$((violations + 1)); }
@@ -136,9 +177,20 @@ fi
 # Frontmatter `id:` is a human-readable assertion, cross-checked against the
 # filename that actually decides scope. The two can only disagree in the
 # direction of "frontmatter is wrong", never in a way that changes what got
-# judged — scope was already decided above, from the filename alone.
-if [ -n "$fm_id" ] && [ "$((10#$fm_id))" -ne "$((10#$file_id))" ]; then
-  report "id-mismatch: $DOC: frontmatter id '$fm_id' does not match filename id '$file_id'"
+# judged — scope was already decided above, from the filename alone. A
+# non-numeric frontmatter id (e.g. `id: abc`) is reported directly rather
+# than handed to bash arithmetic, which would error out and report nothing.
+if [ -n "$fm_id" ]; then
+  case "$fm_id" in
+    *[!0-9]*)
+      report "id-mismatch: $DOC: frontmatter id '$fm_id' is not numeric"
+      ;;
+    *)
+      if [ "$((10#$fm_id))" -ne "$((10#$file_id))" ]; then
+        report "id-mismatch: $DOC: frontmatter id '$fm_id' does not match filename id '$file_id'"
+      fi
+      ;;
+  esac
 fi
 
 steps="$(bash "$SCRIPT_DIR/extract.sh" steps "$DOC")"
@@ -171,8 +223,13 @@ for s in $steps; do
     report "L3: step $s: role '$d' appears more than once"
   done
 
-  # L2 + L4 — one pass, tracking the most recent **Label:** heading.
-  bad="$(awk -v stepp="### Step ${s}" -v nextp="### Step $((s + 1))" '
+  # L2 + L4 — one pass, tracking the most recent **Label:** heading. FENCE
+  # STATE IS CHECKED FIRST, before step-boundary logic — see the header
+  # comment. Bounded on "the next `### Step ` heading of any number", not
+  # `nextp`/N+1, for the same reason mr_steps is: a numbering gap must not
+  # extend a step past where it should actually end (L6 above is what
+  # penalises the gap itself).
+  bad="$(awk -v stepp="### Step ${s}" '
     function delim_ok(line, plen,   d) {
       d = substr(line, plen + 1, 1)
       return (d == "" || d == ":" || d == " ")
@@ -184,21 +241,25 @@ for s in $steps; do
       want["verify"]       = "**Verify:**"
       want["rollback"]     = "**Rollback:**"
     }
-    index($0, stepp) == 1 && delim_ok($0, length(stepp)) { in_step = 1; next }
-    index($0, nextp) == 1 && delim_ok($0, length(nextp)) { in_step = 0 }
-    !in_step { next }
-    inb && index($0, "```") == 1 { inb = 0; next }
-    inb { next }
-    index($0, "**") == 1 { label = $0; sub(/[ \t]+$/, "", label); next }
-    index($0, "```") == 1 {
-      inb = 1
+    !infence && index($0, "```") == 1 {
+      infence = 1
       info = substr($0, 4); sub(/[ \t]+$/, "", info)
+      if (!in_step) next
       if (info !~ /^bash[ \t]+role=/) next
       r = info; sub(/^bash[ \t]+role=/, "", r)
       if (!(r in want)) { printf "L4|%s\n", r; next }
       if (label != want[r]) printf "L2|%s|%s|%s\n", r, want[r], label
       next
     }
+    infence && index($0, "```") == 1 { infence = 0; next }
+    infence { next }
+    index($0, "### Step ") == 1 {
+      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
+      label = ""
+      next
+    }
+    !in_step { next }
+    index($0, "**") == 1 { label = $0; sub(/[ \t]+$/, "", label); next }
   ' "$DOC")"
 
   while IFS='|' read -r rule a b c; do
@@ -220,10 +281,6 @@ done
 while IFS= read -r line; do
   [ -n "$line" ] && report "$line"
 done < <(awk '
-  function delim_ok(line, plen,   d) {
-    d = substr(line, plen + 1, 1)
-    return (d == "" || d == ":" || d == " ")
-  }
   !infence && index($0, "```") == 1 {
     infence = 1
     info = substr($0, 4); sub(/[ \t]+$/, "", info)
