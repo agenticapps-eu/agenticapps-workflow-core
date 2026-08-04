@@ -241,6 +241,57 @@ Recovered as ADR 0009 in that repo, linked from `CLAUDE.md`'s hand-written
 preamble — outside every GSD block, so the hook the ADR declines to run could not
 rewrite the link even if it were re-registered.
 
+### 7.1 — the fleet, after merging and pulling: 46 → 0
+
+All seven PRs merged (squash), then every checkout brought current. The pull is
+not housekeeping: the scan reads working trees, so skipping it would have
+re-measured the same stale files the baseline did.
+
+```
+$ tools/project-hook-conformance.sh --fleet ~/Sourcecode
+
+OK — no known vector found, and every marker read is current.
+```
+
+**The intermediate reading is the more interesting one.** Immediately after the
+merges, with five checkouts pulled and two still on other branches, the scan
+reported **7** — and all seven findings were `fbc-platform`, whose checkout sat
+on an unpushed feature branch cut before the hooks were shimmed. Three
+unrecognised markers, three identity mismatches, one narrow matcher: the exact
+signature the baseline showed for five repos, now isolated to the one tree that
+had not moved. The instrument was, again, reporting a checkout rather than a
+repository — and this time it was possible to watch it do so, because the
+repository was known to be current.
+
+`agenticapps-dashboard`'s checkout was also on another branch, but reported
+clean: that branch had been cut from this work's own shim commit, so it already
+carried 1.2.0. Same situation, opposite reading, for reasons the instrument
+cannot see and does not mention.
+
+Resolved by merging `main` into the `fbc-platform` branch (conflict-free,
+4 commits behind), which is what took the fleet to 0.
+
+`callbot` needed a different resolution: its local `main` carried an unpushed
+commit proposing a change **already on `origin/main`**, differing only in
+markdown emphasis style. Merged rather than rebased or reset, so the commit
+stays in history rather than being rewritten away; all four conflicts resolved to
+`origin/main`, and the resulting tree is identical to it.
+
+### 7.4 — re-run after the merges
+
+Task 7.4 was satisfied before the merges, on each branch's working tree. Re-run
+across all seven merged checkouts, because a hook that resolves on a branch is
+not evidence about the tree the operator actually works in:
+
+| Repo | benign `Edit` × each bound shim | `DROP TABLE` | `migrations/*` edit |
+|---|---|---:|---:|
+| all seven | exit 0 | 2 | 0 |
+
+`agents-task-viewer` runs two shims, not three — its `normalize-claude-md` is the
+declared opt-out. The `migrations/*` column is the one behaviour change the
+conversion was supposed to deliver to the five repos, and it now reads 0
+everywhere, including `fbc-platform`, where it read 2 an hour ago.
+
 ### 7.2 — core, scored explicitly, reports 33
 
 `--fleet` excludes core by design, so it is passed positionally. The number needs

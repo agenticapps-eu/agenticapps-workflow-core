@@ -207,13 +207,15 @@ and diff the file to prove only that entry moved.
 
 ## 7. Verify the propagation as a whole
 
-- [ ] 7.1 `tools/project-hook-conformance.sh --fleet ~/Sourcecode` reports 0
+- [x] 7.1 `tools/project-hook-conformance.sh --fleet ~/Sourcecode` reports 0
       findings, down from 30. Paste the output.
-      **Blocked on the seven PRs merging, and on something the task did not
-      anticipate: the scan reads working trees, so the seven checkouts must also
-      be PULLED after merge or the re-run measures the same stale files the
-      baseline did.** The baseline was 46, not 30 — 21 marker, 21 identity, 4
-      matcher.
+      **0, down from 46** — the stated 30 was never the baseline. Output in
+      `PROPAGATION-EVIDENCE.md`, along with the intermediate reading of 7, which
+      is the more informative one: after the merges but before the last checkout
+      was brought current, every remaining finding belonged to the single tree
+      that had not moved. The pull is part of the task, not cleanup after it —
+      the scan reads working trees, so skipping it would have re-measured the
+      same stale files the baseline did.
 - [x] 7.2 Score core's binder **explicitly**, by passing
       `agenticapps-workflow-core` as a positional argument, and report its version
       beside the fleet's. `--fleet` excludes core by design, so 7.1 alone cannot
@@ -248,7 +250,9 @@ and diff the file to prove only that entry moved.
       for it, since the question is whether the shim resolves, not whether the PR
       merged. `DROP TABLE` through `database-sentinel` was run alongside each,
       returning exit 2: exit 0 alone is also what a hook that does nothing
-      returns.
+      returns. **Re-run across all seven merged checkouts afterwards**, because a
+      hook that resolves on a branch says nothing about the tree the operator
+      actually works in. Benign 0, `DROP TABLE` 2, `migrations/*` 0 everywhere.
 - [x] 7.5 Record which binders implement which profile, as the modified
       requirement obliges — seven published-resolution, one self-hosting in core.
       Recorded in `PROPAGATION-EVIDENCE.md` per hook, because the summary is only
@@ -266,9 +270,12 @@ One PR cannot be both (codex round 2).
 - [x] 8.1 Core PR 1 — implementation, spec delta, tests, instrument. Merged
       before any fleet repo's PR is opened. Merged as `8e7fcd4` (PR #73), and
       the first fleet PR was opened after it.
-- [ ] 8.2 The seven fleet PRs (groups 5 and 6). All seven open, none merged:
+- [x] 8.2 The seven fleet PRs (groups 5 and 6). All seven merged (squash):
       dashboard #99, cparx #124, roadmap #13, callbot #100, fbc-platform #105,
-      fx-signal-agent #120, agents-task-viewer #18.
+      fx-signal-agent #120, agents-task-viewer #18. `fx-signal-agent` merged with
+      two red checks — `pnpm-audit` and `gitleaks`, both failing on `main` since
+      2026-07-29, neither reachable from a three-file hook diff. Named here
+      rather than left for a reader to rediscover.
 - [ ] 8.3 Core PR 2 — the propagation evidence from group 7, the README
       corrections from group 4, and the archive. This is the PR the change is
       archived in, because archiving before the evidence exists would fold a
