@@ -110,6 +110,15 @@
       `FLEET`.
 - [x] 4.3 Update the README's rate-limit finding, which currently records the
       defect as open, to record it as fixed and name the version that fixes it.
+- [x] 4.4 **Close the contract table's open row.** 4.1–4.3 shipped in core PR 1,
+      while 1.2.0 was genuinely still in flight, so the revision table recorded
+      its own row as `in progress` — true when written, fiction the moment the
+      seventh fleet PR merged. Now 21, and the profile split 1.2.0 is required to
+      state is stated per hook rather than inherited from 1.1.0's paragraph.
+      The twenty were **counted out of the checkouts** after the merges, not
+      carried forward: three each in six repos, two in `agents-task-viewer`,
+      plus core's own binder read from core. Assuming the count is the specific
+      mistake this change spent a session finding.
 
 ## 5. Propagate — the two repos already carrying shims
 

@@ -75,16 +75,31 @@ chose.
 |---|---|---|
 | 1.0.0 | initial — two-candidate order, fail-open-and-report, the marker | 21 |
 | 1.1.0 | an override must name an executable **regular file**; empty means unset | 21 |
-| 1.2.0 | a suppressed report still emits one line; **candidate 2** must also name an executable regular file, and an occupied path is reported as occupied | in progress |
+| 1.2.0 | a suppressed report still emits one line; **candidate 2** must also name an executable regular file, and an occupied path is reported as occupied | 21 |
 
 A contract change must name **which profile each binder implements**, because a
 change that reaches every file and applies one profile's clauses to both has not
-been verified, only assumed uniform. For 1.1.0 that is **20 `published-resolution`
-binders** — three each in `agenticapps-dashboard`, `agenticapps-roadmap`,
-`callbot`, `cparx`, `fbc-platform` and `fx-signal-agent`, and two in
-`agents-task-viewer`, which ships no `normalize-claude-md` file at all (design
-Decision 8) — plus **one `self-hosting` binder**, core's own
+been verified, only assumed uniform. For 1.1.0 and 1.2.0 alike that is **20
+`published-resolution` binders** — three each in `agenticapps-dashboard`,
+`agenticapps-roadmap`, `callbot`, `cparx`, `fbc-platform` and `fx-signal-agent`,
+and two in `agents-task-viewer`, which ships no `normalize-claude-md` file at all
+(design Decision 8) — plus **one `self-hosting` binder**, core's own
 `.claude/hooks/openspec-change-gate.sh`.
+
+Per hook, so that "exactly one self-hosting binder per hook" can be read rather
+than assumed:
+
+| Hook | Published-resolution | Self-hosting |
+|---|---:|---|
+| `openspec-change-gate` | 7 — the whole fleet | 1 — core, ADR-0028 |
+| `database-sentinel` | 7 — the whole fleet | none; core hosts the implementation |
+| `normalize-claude-md` | 6 — all but `agents-task-viewer` | none; core hosts the implementation |
+
+**1.2.0's count was measured, not carried forward from 1.1.0's.** The twenty were
+counted by reading the marker out of each checkout after all seven fleet PRs
+merged; core's was read from its own binder. That distinction matters more than
+usual here, because the run that first scored this fleet was reading stale
+working trees — see the change's propagation evidence.
 
 The two profiles answer an unusable override differently, and 1.1.0 does not
 change that. A published-resolution shim has two candidates, so it reports the

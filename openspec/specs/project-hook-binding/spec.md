@@ -238,9 +238,9 @@ into seven projects produced three distinct versions of
 ### Requirement: The shim contract itself has a propagation path
 
 A shim is duplicated across every project that binds the hook, so a change to
-the **shim contract** — resolution order, exit behaviour, identification — is a
-change to N files, not one. Such a change SHALL name the projects it must reach
-and SHALL be verified per project.
+the **shim contract** — resolution order, exit behaviour, identification,
+reporting — is a change to N files, not one. Such a change SHALL name the
+projects it must reach and SHALL be verified per project.
 
 The one-authoritative-place rule covers implementations, not shims: shims are
 deliberately copies, which is what makes them cheap and what makes a contract
@@ -288,14 +288,43 @@ specified:
   is discharged by that report existing, not by the marker being present.
 
 Bumping the contract version SHALL accompany any change to resolution order,
-exit behaviour or identification — the same three things this requirement's
-first paragraph calls a contract change.
+exit behaviour, identification or **reporting** — the same four things this
+requirement's first paragraph calls a contract change.
+
+**Reporting was added to that list by an instance, not by symmetry.** A change
+altering what every shim writes when its report is suppressed touched none of
+the other three: resolution order, exit codes and identification were all
+byte-unchanged. Under the previous wording no bump was owed, so every deployed
+shim would have differed from the template in what it says with no marker
+difference to surface it — the blindness the marker exists to remove, reached
+through the marker's own rule.
+
+**A shim's behaviour is not confined to what it hands over to; what it says is
+part of the contract**, because the report is the whole of what an unresolvable
+shim delivers. On a machine where resolution fails, the message is the only
+output the operator ever sees from that hook.
 
 #### Scenario: The shim contract changes
 
-- **WHEN** the resolution order or exit behaviour required of shims is revised
+- **WHEN** the resolution order, exit behaviour or reporting required of shims is
+  revised
 - **THEN** every project binding an affected hook is enumerated and updated, and
   each is verified rather than assumed to have been reached
+
+#### Scenario: Only what shims say is changed
+
+- **WHEN** a change alters a shim's report while leaving resolution order, exit
+  codes and identification untouched
+- **THEN** the contract version is bumped and the change propagates like any
+  other contract change, rather than being treated as a documentation edit
+  because no resolution or exit path moved
+
+#### Scenario: The binders are enumerated from a declaration
+
+- **WHEN** a contract change names the projects it must reach
+- **THEN** the set comes from the declared fleet rather than from the projects
+  the change happened to notice, because a binder omitted from an ad-hoc list is
+  indistinguishable from one that passed
 
 #### Scenario: A project carries a shim from before a contract change
 
@@ -1425,6 +1454,46 @@ covers related tools — was raised in review and checked against the host
 documentation, which contradicts it. It is recorded because it is the reading
 that would silently make this requirement unnecessary, and it is wrong.
 
+**This requirement had no check, and a requirement with no check makes nothing
+detectable.** That is the same argument the marker requirement makes of itself
+two requirements below, and it applied here unaddressed: nothing read matchers
+at fleet scope, so a registration could be narrower than the implementation it
+invokes — or absent altogether — while every axis reported the project current.
+Five repositories registered `database-sentinel` on `Bash|Edit|Write` against a
+declared `Bash|Edit|Write|MultiEdit`, and the instrument was blind to it. The
+four properties the marker requirement specifies are therefore specified here
+too:
+
+- **Format** — `<hook> <event> <matcher>` per line, matcher a `|`-separated set
+  of tool names, blank lines and `#` comments ignored.
+- **Authority** — a declaration tracked beside the shim template in the core
+  repository, not any project-local file. An expected set discovered from what a
+  scan happened to find cannot detect a missing member, which is the whole
+  reason it is declared rather than inferred.
+- **Comparison** — a registration is **conformant** when it names the declared
+  event and covers the declared tool set; **narrow** when it omits any declared
+  tool; **wider** when it adds tools beyond it; and **absent** when no entry
+  names the hook at all.
+- **Check** — a conformance tool SHALL evaluate every declared hook in every
+  scanned project against the declaration, and SHALL say when it could not
+  evaluate one rather than passing over it.
+
+**Narrow and absent are findings; wider is reported and not counted.** A project
+may guard more than the fleet requires, and treating that as non-conformant
+would push projects toward removing coverage.
+
+**An absent registration is the strongest form of this defect and SHALL be
+reported as a finding**, not passed over. A hook registered nowhere is one whose
+every tool is inert — protection absent rather than degraded — and it is
+reachable by exactly the edit a contract rollout performs: rewriting a project's
+`settings.json`. Reporting the narrowed case while a hook wired to nothing scores
+clean inverts the severity this requirement already distinguishes, and it is the
+absence-reads-as-clean shape ruled out for shim files two requirements above.
+
+A hook a project has **declared** it does not bind is exempt: for it, no
+registration is the correct state, and reporting it would leave the opt-out
+declaration meaning nothing on this axis.
+
 #### Scenario: A shared implementation gains a tool
 
 - **WHEN** a canonical implementation handles a tool some projects' matchers omit
@@ -1436,6 +1505,37 @@ that would silently make this requirement unnecessary, and it is wrong.
 - **WHEN** a matcher or implementation covers a tool the host no longer provides
 - **THEN** the coverage is harmless but inert, and SHALL NOT be reported as a
   delivered protection
+
+#### Scenario: A declared hook is registered nowhere
+
+- **WHEN** a project's settings name no entry for a hook it is declared to bind,
+  while its shim file is present, current and byte-identical to the authority
+- **THEN** the check reports it as a finding naming the hook, rather than
+  reporting the project clean on the strength of the axes that read the file
+
+#### Scenario: A registration is narrower than the declared coverage
+
+- **WHEN** a project registers a hook on fewer tools than the declaration names
+- **THEN** the check reports the tools that are not covered, by name
+
+#### Scenario: A registration is wider than the declared coverage
+
+- **WHEN** a project registers a hook on tools beyond the declared set
+- **THEN** the check reports it as wider and does not count it as a finding
+
+#### Scenario: A project has declared it does not bind the hook
+
+- **WHEN** a hook is declared as a project's opt-out and that project registers
+  no matcher for it
+- **THEN** the check reports the opt-out and raises no finding, on the same terms
+  the absent-shim axis applies to the same declaration
+
+#### Scenario: The registration cannot be read
+
+- **WHEN** the settings file is absent, does not parse, or the tooling needed to
+  read it is unavailable
+- **THEN** the check says the axis did not run and why, because "not checked" is
+  a different statement from "checked and clean"
 
 ### Requirement: The scaffolder's templates carry the current shape
 
@@ -1610,4 +1710,252 @@ the authority's tracked source and report the result, by artifact name.
   checkout, or `drifted` and `stale` together — the installer SHALL NOT be named.
   An earlier revision of this scenario said the check "names the installer as the
   remedy", contradicting the `stale` invariant above in the same delta
+
+### Requirement: A non-zero exit always carries a message
+
+A shim SHALL NOT exit non-zero having written nothing to stderr. The exit code
+and the message are one signal, not two: this capability requires a non-blocking
+error code **because** it is the only thing that surfaces stderr to the operator,
+so an exit code with no accompanying line invokes the mechanism and supplies
+none of its content.
+
+**This binds the shim's own exits, before `exec`, and no others.** Once a shim
+`exec`s, the process is the implementation and its exit code is the
+implementation's to choose; a shim that tried to constrain it would have to stop
+`exec`ing and start wrapping, which the behaviour-free rule forbids. A stderr
+write that itself fails is likewise outside the rule — the shim SHALL attempt the
+line, not guarantee its delivery through a broken descriptor.
+
+**It binds an event class only where that class's channel is verified.** This
+capability records a verified warning channel for `PreToolUse` and requires the
+exit rule to "be re-established per event class, not assumed to generalise". The
+invariant is argued from `PreToolUse` rendering — a non-zero exit surfacing the
+first stderr line — so it is claimed for `PreToolUse` and for any class whose
+channel is later verified and recorded. For a class whose channel is unverified,
+`normalize-claude-md`'s `PostToolUse` being the live instance, a shim SHALL still
+write its line before exiting non-zero, and no report SHALL claim the operator
+sees it. Writing the line costs nothing and is what makes the claim available the
+day the channel is verified; claiming the operator was warned is what this
+capability forbids.
+
+The host renders such a call as `hook error — No stderr output`. That notice
+costs the operator exactly what a real report costs — it interrupts, it names a
+hook, it implies something is wrong — and returns nothing they can act on. It is
+strictly worse than either alternative: worse than reporting, which at least
+says what broke, and worse than silence, which at least does not interrupt.
+
+This is stated as an invariant rather than as a fix to one code path because it
+binds every future report a shim learns to make, including ones whose rate
+limit, filter or guard has not been written yet. The rule is: **whatever
+suppresses a report SHALL also be asked what the exit code should be**, and the
+answer SHALL NOT be "leave it non-zero and say nothing".
+
+#### Scenario: A report is suppressed but the call still fails to resolve
+
+- **WHEN** a shim on an event class with a verified channel suppresses the full
+  report for a call whose implementation is still unresolvable
+- **THEN** the shim writes at least one line to stderr before exiting non-zero,
+  so the operator sees a notice that names the hook and its state rather than an
+  empty one
+
+#### Scenario: The suppressed line is written for an unverified class
+
+- **WHEN** the same condition arises on an event class whose channel is not
+  verified
+- **THEN** the line is still written and the exit code is still non-zero, and its
+  wording states only what is true of that class — for a `PostToolUse` hook, that
+  the hook did not run, never that a call "was allowed", since the call has
+  already completed and nothing was gated
+
+#### Scenario: A shim is audited for contentless exits
+
+- **WHEN** a shim's pre-`exec` exit paths are enumerated
+- **THEN** every path that exits non-zero is shown to write at least one stderr
+  line first
+
+#### Scenario: An exit path has nothing to say
+
+- **WHEN** a pre-`exec` path would exit non-zero with nothing to report
+- **THEN** it exits 0 **only if** it carries no announcement obligation — a path
+  that fails open and loses protection SHALL be given a message rather than a
+  zero exit, because exit 0 discards stderr entirely and converts the announced
+  fail-open into the silent one this capability rejects
+
+#### Scenario: The class's channel is not verified
+
+- **WHEN** a shim binds an event class for which no warning channel is recorded
+- **THEN** it writes its line and exits by the contract anyway, and every report
+  of it says the channel is unestablished rather than that the operator was
+  warned
+
+#### Scenario: A resolution candidate exists but cannot be executed
+
+- **WHEN** a path a shim resolves is present but is not an executable regular
+  file — a directory, a device, or a non-executable file — on **any** candidate,
+  not only the override
+- **THEN** the shim reports it in its own words and exits by this contract,
+  rather than `exec`ing it and letting the interpreter's own failure stand as the
+  report: `exec` on a directory yields exit 126 and a message naming the path but
+  neither the hook nor the fact that the call was allowed, which is the
+  contentless exit this requirement forbids wearing a different exit code
+
+  The rule was previously stated of the override alone. `-x` is true of any
+  searchable directory, so the bare test admits exactly the case it looks like it
+  excludes, and stating the rule of one candidate left the other holding the
+  defect the first was repaired for.
+
+  A candidate that is present but unusable SHALL be reported as **occupied**
+  rather than as absent. "Not installed" is false of a path something occupies,
+  and it sends the operator to the installer when the remedy is to find out what
+  is sitting there.
+
+### Requirement: A rate limit governs verbosity, not the operator's notice
+
+A repetition policy of **once per interval** SHALL reduce what a suppressed
+report says, not whether it says anything. On a call inside the suppression
+window the shim SHALL emit a single line naming the hook and its unchanged
+state, and SHALL retain the exit code the unsuppressed report would have used.
+
+The reason is that the two halves of the report are not equally suppressible. The
+message can be shortened at no cost to the guarantee; the exit code cannot be
+withheld without converting an *announced* fail-open into a silent one, which is
+the posture this capability rejected when it rejected fail-closed. A policy
+written as though both were suppressible produces neither outcome: it suppresses
+the half that carries meaning and keeps the half that carries only interruption.
+
+**The saving a once-per-interval policy actually delivers is therefore verbosity,
+and it SHALL be described as that.** It does not reduce how often the operator is
+interrupted, because the exit code interrupts on every matched call regardless.
+An interval policy that claims to reduce frequency is claiming a saving the exit
+code takes back.
+
+A shim MAY still choose **per invocation** and repeat the full report. What it
+SHALL NOT do is claim an interval policy and deliver a contentless notice for the
+rest of the interval.
+
+**The suppressed line SHALL carry four things**, so that "a line was written" is
+not discharged by a line that says nothing: the hook's name, that the condition
+is unchanged, that the call was allowed, and a reference to the full notice
+already made. A suppressed line that merely repeats the first line of the full
+report is non-conformant — the operator could not then tell a repeat from a fresh
+failure, which is the one fact the suppressed line exists to add.
+
+**The interval SHALL be described in the units the marker actually keeps.** A
+marker holding `epoch/3600` is a wall-clock **hour bucket**, not a rolling hour:
+two calls four seconds apart can fall in different buckets and both report in
+full. The suppressed line SHALL therefore say *this hour* rather than imply a
+rolling window, and any documentation of the policy SHALL do the same.
+
+**The report SHALL be emitted before the marker is written**, so that a failure
+between the two leaves the next call reporting in full rather than claiming a
+notice nobody received. Ordering it the other way makes the suppressed line's
+reference to an earlier notice a claim the shim cannot support.
+
+**A report that could not be recorded SHALL NOT suppress the next one.** The rule
+binds the *recording* step, not the reading one: if the state directory or the
+marker file cannot be written after a full report, the next matched call reports
+in full again, because suppressing on the strength of a write that failed
+suppresses on a state that was never recorded.
+
+Where a marker was written successfully and *later* becomes unreadable or
+unwritable, the shim suppresses on what it can read and attempts no write, which
+is correct — it is acting on a record that exists. The distinction matters
+because the two cases look identical at the call site and only one of them is a
+lie.
+
+#### Scenario: A second unresolvable call arrives within the interval
+
+- **WHEN** a shim reported in full earlier this hour and matches another call
+  whose implementation is still unresolvable
+- **THEN** it emits one line naming the hook, stating that the condition is
+  unchanged and that the call was allowed, referring to the full notice already
+  made, and exits with the same non-blocking code
+
+#### Scenario: The report is emitted but recording it fails
+
+- **WHEN** a full report is written and the marker write then fails
+- **THEN** the next matched call reports in full again, rather than suppressing
+  on the strength of a record that was never made
+
+#### Scenario: An existing marker is readable but the path is no longer writable
+
+- **WHEN** a marker written earlier this hour is read on a later call and no
+  write is attempted
+- **THEN** the call is suppressed normally, because the shim is acting on a
+  record that exists
+
+#### Scenario: An interval policy is described in a report or document
+
+- **WHEN** the effect of a once-per-interval policy is stated
+- **THEN** it is stated as a reduction in verbosity, not in how often the
+  operator is interrupted, because the exit code is not subject to the interval
+
+### Requirement: An absent shim is a finding, not a silence
+
+A conformance check SHALL report a declared hook for which a project has **no
+shim file** as a finding. Skipping it produces the strongest false clearance the
+instrument can emit: a project that lost its shim, or never received one, scores
+identically to a project whose shim is current, and the total says zero.
+
+The marker and identity axes both read a file, so both are written to skip when
+the file is missing. That is a reasonable local decision and a wrong global one —
+the check's purpose is to report each project's state, and "no shim where one is
+declared" is a state, not the absence of one.
+
+**A deliberate non-binding SHALL be declared to be distinguishable from a
+missing one.** At least one project opts out of a shimmed hook on argued grounds
+and receives no file at all. Without a declaration the instrument cannot tell
+that project from one whose shim was deleted by accident, so it must either
+report both or neither — and reporting neither is what the previous behaviour
+chose. The declaration SHALL name the project, the hook and the reason, and an
+opt-out SHALL be reported as an opt-out rather than passed over in silence.
+
+#### Scenario: A declared hook has no shim in a project
+
+- **WHEN** the check reads a project that binds a shimmed hook and finds no shim
+  file
+- **THEN** it reports the absence by name, rather than skipping the file and
+  contributing nothing to the total
+
+#### Scenario: A project opts out of a shimmed hook
+
+- **WHEN** a project is declared as deliberately not binding a hook
+- **THEN** the check reports it as a declared opt-out with its reason, and the
+  same project's *undeclared* absence of any other shimmed hook is still a
+  finding
+
+### Requirement: The authority's own binder is scored, never assumed
+
+A fleet check that excludes the authority repository SHALL NOT be cited as
+evidence that the authority conforms. `--fleet` resolves the declared binders and
+deliberately omits core, because comparing the template against itself would
+score nothing — a correct exclusion that becomes a false clearance the moment a
+change reports "the fleet is clean" and means "every repo except the one holding
+the authority".
+
+A contract change SHALL therefore score the self-hosting binder explicitly, by
+naming it, and SHALL report its version and conformance beside the fleet's rather
+than inside a total that structurally cannot contain it.
+
+**This is not hypothetical.** At contract 1.1.0 the authority repo's own binder
+failed open by printing a warning to stderr and exiting **0** — the exact
+construction this capability names as warning nobody, since a `PreToolUse` hook
+exiting 0 has its stderr discarded. It sat in the repository that publishes the
+rule, and no run of the instrument could report it, because the instrument
+excludes core by design and the change that would have caught it accepted a
+fleet-wide zero as proof.
+
+#### Scenario: A contract change reports its propagation
+
+- **WHEN** a change states that every binder has been reached
+- **THEN** the self-hosting binder is named with its version and conformance
+  alongside the declared fleet, and a fleet-scoped zero is never presented as
+  covering it
+
+#### Scenario: The authority's binder violates a rule the authority publishes
+
+- **WHEN** the self-hosting binder is scored against the fail-open-and-report rule
+- **THEN** it is held to that rule exactly as a published-resolution shim is, its
+  exemption reaching only the resolution-order clauses, and a violation is a
+  finding rather than a profile difference
 
