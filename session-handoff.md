@@ -36,10 +36,18 @@ The session began as task 6.1 — the Stage-2 review of
 - **Core is in `check-shims.sh`'s target list, not excluded from it.** That is
   what discharges the removed "authority's own binder is scored" requirement —
   the tool's shape rather than prose.
-- **`MATCHERS` is kept and is now read by nothing.** Its header says so
-  explicitly. Rebuilding a registration check needs a JSON parser, and that is
-  how the instrument grew the first time. A drifted registration will be found by
-  the hook not firing — which is how the original defect was found.
+- **`MATCHERS` is deleted, and so is the check its requirement mandated.** Keeping
+  it was the one decision Donald pushed back on, and he was right: it had been
+  kept, not needed. Checking turned up worse — "Registration matches the
+  implementation's tool coverage" still required "a conformance tool SHALL
+  evaluate every declared hook in every scanned project", with no tool left to do
+  it. The first change removed two requirements specifying the deleted
+  instrument and missed this third. Fixed in
+  `2026-08-04-retire-the-matcher-check`: the three matcher sets moved into the
+  requirement as a table, the file deleted, the mandate withdrawn with its cost
+  stated, five scenarios reworded from what a check reports into what is true of
+  the project. Reinstatement is conditioned — a check inside an existing script,
+  never a capability of its own.
 - **`OPT-OUTS` is kept**, read by `check-shims.sh` in three lines. Core's two
   rows were ported from the abandoned branch; ADR-0030 (94 lines arguing them)
   was not. `OPT-OUTS`' header was amended so a self-contained row is sufficient
@@ -48,9 +56,11 @@ The session began as task 6.1 — the Stage-2 review of
 - **What is lost is stated, not argued away:** nothing now detects a project
   setting an override variable in its own files. That scan ran seven times, found
   nothing, and never covered the operator's own shell.
-- **`feat/instrument-counts-what-it-names` is left unmerged, not deleted.** Its
-  eleven commits, its `EVIDENCE.md` and the code review are preserved on the
-  branch. If retirement proves wrong, the repair is still there.
+- **`feat/instrument-counts-what-it-names` is deleted** (was `bd77916`,
+  recoverable from the reflog for ~90 days). It was never pushed, so "preserved"
+  had meant "on one laptop"; and after #77 merges it could not have been merged
+  anyway — it modifies two files `main` no longer has, and resolving that in its
+  favour would resurrect the instrument. Donald called it: we don't need it.
 - **Untouched deliberately:** `tools/provisioning-check.sh` and its four
   requirements (a different question — is *this machine* provisioned), and
   `openspec/specs/conformance-harness-reporting/` (governs the harnesses that
@@ -61,7 +71,8 @@ The session began as task 6.1 — the Stage-2 review of
 - `tools/project-hook-conformance.sh`, `tools/project-hook-conformance.test.sh` — **deleted**
 - `tools/check-shims.sh` — new, 96 lines, with a header arguing against its own growth
 - `openspec/specs/project-hook-binding/spec.md` — 1,961 → 1,898 lines via the archived delta
-- `reference-implementations/project-hooks/{OPT-OUTS,MATCHERS,FLEET,SHIMMED-HOOKS,README.md}` — core's two opt-out rows; comments corrected where they described what runs
+- `reference-implementations/project-hooks/MATCHERS` — **deleted**, its three rows now a table in the requirement
+- `reference-implementations/project-hooks/{OPT-OUTS,FLEET,SHIMMED-HOOKS,README.md}` — core's two opt-out rows; comments corrected where they described what runs
 - `tools/lib/semver.sh`, `tools/provisioning-check.sh` — comment corrections (one caller now, not two)
 
 ## Next session: start here
@@ -87,8 +98,12 @@ no upstream, and two local merge commits sit unpushed on `main` in `callbot` and
   repositories, despite the global rule that `.planning/` is frozen history. It
   swept 29 files into a branch two sessions ago. Worth finding the writer, or
   gitignoring the directory.
-- `MATCHERS` is now unread. If that becomes uncomfortable, the honest options are
-  to delete it or to check it — not to leave it looking verified.
+- **Nothing verifies that a project's `settings.json` registers each hook on the
+  tools its implementation handles.** That has gone wrong once, across five
+  repositories, and was caught by a person noticing a hook had not fired. The
+  obligation now sits on whoever edits a `settings.json`. If it goes wrong twice,
+  that is the argument for a fifteen-line comparison inside `check-shims.sh` —
+  and for nothing larger.
 - The convergence rule is still unwritten — sixteenth session. It may have just
   written itself: *stop when the thing you are fixing is the thing you built to
   find things to fix.*
