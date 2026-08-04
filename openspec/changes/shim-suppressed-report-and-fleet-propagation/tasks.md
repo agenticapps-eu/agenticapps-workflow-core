@@ -19,7 +19,15 @@
       `.claude/hooks/openspec-change-gate.sh`. It is excluded from `--fleet` by
       design, so it must be named explicitly or it is tested by nothing (codex 1).
       Expect RED: it exits 0 today.
-- [ ] 1.6 `tdd=true` — commit all of the above as `test(RED): …` before any
+- [ ] 1.6 Add the inverse anti-pattern test: no shim path exits **0** having
+      written to stderr. Exit 0 discards stderr, so that shape warns nobody — it
+      is the defect found in core's binder, and only a test keeps it from
+      returning (gemini round 2).
+- [ ] 1.7 Assert the suppressed line's **content**, not merely its existence: the
+      four mandatory fields, and that it differs from the full report's first
+      line. A test satisfied by any non-empty string would pass a materially
+      non-conformant message (codex round 2).
+- [ ] 1.8 `tdd=true` — commit all of the above as `test(RED): …` before any
       implementation edit.
 
 ## 2. The fix in core
@@ -46,6 +54,29 @@
       rule while exempting it only from the resolution-order clauses.
 - [ ] 2.7 Bump core's binder marker to 1.2.0.
 - [ ] 2.8 Run 1.1–1.5 GREEN. Commit as `feat(GREEN): …`.
+
+## 2b. The instrument, because it cannot currently see two of this change's claims
+
+- [ ] 2b.1 RED first, in `tools/project-hook-conformance.test.sh`: a project
+      missing a declared hook's shim entirely is reported. Today
+      `project-hook-conformance.sh:195` and `:265` are `[ -f "$shim" ] || continue`
+      on both axes, so an absent shim contributes nothing and the total reads
+      clean (codex round 2). Same `|| continue` shape as the currency defect
+      repaired on 2026-08-04 — second occurrence, so fix the shape here rather
+      than only the instance.
+- [ ] 2b.2 Report the absence on both axes, and add a declaration so a deliberate
+      opt-out is distinguishable from a deletion. `agents-task-viewer` /
+      `normalize-claude-md` is the live opt-out and is the test case.
+- [ ] 2b.3 RED first: the check reads each project's `settings.json` matcher for
+      each shimmed hook and reports a mismatch against the implementation's
+      declared tool coverage. Verified absent today — `:306-309` opens
+      `settings.json` only for override env vectors (gemini + opencode).
+- [ ] 2b.4 Make 2b.3 GREEN, and confirm it catches a `database-sentinel` entry
+      missing `MultiEdit` **and** a gate entry missing `NotebookEdit`. Without
+      the second case the check would license the regression codex found in the
+      rollout instruction.
+- [ ] 2b.5 Re-run `--fleet` and record the new finding count. It will rise before
+      it falls: the instrument now sees absences it previously skipped.
 
 ## 3. Live verification, not just tests
 
@@ -101,8 +132,15 @@ and diff the file to prove only that entry moved.
       saying what still invokes it. A 17k copy that nothing calls and no
       instrument reports is the drift the shim contract exists to end.
 - [ ] 6.6 `agents-task-viewer`: relocate the 26-line opt-out rationale from
-      `normalize-claude-md.sh` into that repo's `CLAUDE.md`, preserving the
-      2026-07-21 date and the warning against re-registering the hook.
+      `normalize-claude-md.sh` into an **ADR in that repo**, preserving the
+      2026-07-21 date and the warning against re-registering the hook, and link
+      it from `CLAUDE.md`. An ADR rather than prose in `CLAUDE.md` because
+      `CLAUDE.md` is rewritten by tooling and trimmed by hand, and this rationale
+      has already survived ~3 manual reverts by being hard to delete accidentally
+      (gemini round 2). Not `settings.json` — it is strict JSON and cannot carry
+      the comment.
+- [ ] 6.6a Add the opt-out to the declaration introduced in 2b.2, so the
+      instrument reports it as declared rather than skipping it.
 - [ ] 6.7 `agents-task-viewer`: delete `normalize-claude-md.sh`. Depends on 6.6
       — the file is the only record of why the opt-out exists, so deleting it
       first destroys the reason and invites the next migration to undo it.
@@ -115,6 +153,12 @@ and diff the file to prove only that entry moved.
       `agenticapps-workflow-core` as a positional argument, and report its version
       beside the fleet's. `--fleet` excludes core by design, so 7.1 alone cannot
       cover it and must not be cited as if it did (codex 1).
+- [ ] 7.2a State what 7.2 does **not** establish. Positionally the tool checks
+      core's marker and then exempts byte identity as out of profile
+      (`:268`) — it never exercises the fail-open path. The behavioural evidence
+      for core is task 1.5's test and task 3's live run, and the change SHALL cite
+      those rather than let a marker check stand in for conformance (codex
+      round 2).
 - [ ] 7.3 Assert the matcher change per repo: `database-sentinel`'s entry reads
       `Bash|Edit|Write|MultiEdit` **and** the gate's still reads
       `Edit|Write|MultiEdit|NotebookEdit`. No instrument reads matchers at fleet
@@ -128,6 +172,21 @@ and diff the file to prove only that entry moved.
 
 ## 8. Close
 
-- [ ] 8.1 Stage-2 independent code review in a cleared session.
-- [ ] 8.2 `openspec archive shim-suppressed-report-and-fleet-propagation -y`,
+The change spans two core PRs, and saying so removes the inconsistency a reviewer
+found: core must merge **first** so the other seven have an authority to be
+compared against, but the propagation evidence only exists **after** they merge.
+One PR cannot be both (codex round 2).
+
+- [ ] 8.1 Core PR 1 — implementation, spec delta, tests, instrument. Merged
+      before any fleet repo's PR is opened.
+- [ ] 8.2 The seven fleet PRs (groups 5 and 6).
+- [ ] 8.3 Core PR 2 — the propagation evidence from group 7, the README
+      corrections from group 4, and the archive. This is the PR the change is
+      archived in, because archiving before the evidence exists would fold a
+      delta whose central claim is still unverified.
+- [ ] 8.4 Stage-2 independent code review in a cleared session, against core PR 1
+      before it merges and against core PR 2 before it merges. Two reviews, not
+      one — PR 2 carries the claim that the fleet was actually reached, which is
+      the claim most worth an independent reader.
+- [ ] 8.5 `openspec archive shim-suppressed-report-and-fleet-propagation -y`,
       then ship. Two separate acts.

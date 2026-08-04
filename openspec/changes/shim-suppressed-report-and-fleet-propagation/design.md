@@ -140,10 +140,18 @@ land through their own repos' gates, not this one's.
 - **No instrument reads hook matchers at fleet scope.** Verified:
   `project-hook-conformance.sh:306-309` opens `settings.json` only to enumerate
   override env vectors, and nothing else under `tools/` reads matchers. So the
-  `MultiEdit` half of this change has no automated check, and "`--fleet` reports
-  0" would have been cited as covering it. → The matcher assertion is a named
-  manual task per repo, and the tooling gap is recorded here rather than left to
-  be rediscovered.
+  `MultiEdit` half of this change had no automated check, and "`--fleet` reports
+  0" would have been cited as covering it. → Round 2 review rejected recording
+  this as a caveat, correctly: a change whose thesis is that a check must not be
+  cited beyond what it can see does not get to ship its own uncheckable half.
+  The instrument is extended instead (group 2b).
+- **`--fleet` skips a hook whose shim file is absent** — `:195` and `:265` are
+  both `[ -f "$shim" ] || continue`, so a repo that lost its shims scores exactly
+  like a repo that is current, and the total reads zero. This is the same
+  `|| continue` shape as the currency-table defect repaired on 2026-08-04, in a
+  different tool: second occurrence, so the fix is the shape and a declaration
+  that separates a deliberate opt-out from a deletion, not one more instance
+  patched. → Group 2b, RED first.
 - **The marker is racy between concurrent hooks.** Two matched calls entering
   `report_rate_limited` together can both read a stale marker. → Not mitigated.
   The worst outcome is one extra full report or one extra suppressed line;

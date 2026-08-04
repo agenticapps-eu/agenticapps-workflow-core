@@ -41,11 +41,20 @@ answer SHALL NOT be "leave it non-zero and say nothing".
 
 #### Scenario: A report is suppressed but the call still fails to resolve
 
-- **WHEN** a shim's repetition policy suppresses the full report for a call whose
-  implementation is still unresolvable
+- **WHEN** a shim on an event class with a verified channel suppresses the full
+  report for a call whose implementation is still unresolvable
 - **THEN** the shim writes at least one line to stderr before exiting non-zero,
   so the operator sees a notice that names the hook and its state rather than an
   empty one
+
+#### Scenario: The suppressed line is written for an unverified class
+
+- **WHEN** the same condition arises on an event class whose channel is not
+  verified
+- **THEN** the line is still written and the exit code is still non-zero, and its
+  wording states only what is true of that class — for a `PostToolUse` hook, that
+  the hook did not run, never that a call "was allowed", since the call has
+  already completed and nothing was gated
 
 #### Scenario: A shim is audited for contentless exits
 
@@ -110,11 +119,17 @@ between the two leaves the next call reporting in full rather than claiming a
 notice nobody received. Ordering it the other way makes the suppressed line's
 reference to an earlier notice a claim the shim cannot support.
 
-**A marker that cannot be written SHALL NOT suppress anything.** If the state
-directory or the marker file cannot be created, every matched call reports in
-full. The failure is loud rather than silent because an unwritable marker means
-the shim has no memory at all, and a policy that silently degrades to suppression
-would suppress on the basis of a state it never recorded.
+**A report that could not be recorded SHALL NOT suppress the next one.** The rule
+binds the *recording* step, not the reading one: if the state directory or the
+marker file cannot be written after a full report, the next matched call reports
+in full again, because suppressing on the strength of a write that failed
+suppresses on a state that was never recorded.
+
+Where a marker was written successfully and *later* becomes unreadable or
+unwritable, the shim suppresses on what it can read and attempts no write, which
+is correct — it is acting on a record that exists. The distinction matters
+because the two cases look identical at the call site and only one of them is a
+lie.
 
 #### Scenario: A second unresolvable call arrives within the interval
 
@@ -124,17 +139,58 @@ would suppress on the basis of a state it never recorded.
   unchanged and that the call was allowed, referring to the full notice already
   made, and exits with the same non-blocking code
 
-#### Scenario: The marker cannot be written
+#### Scenario: The report is emitted but recording it fails
 
-- **WHEN** the state directory or marker file cannot be created
-- **THEN** every matched call reports in full, rather than the policy degrading
-  to suppression on the basis of a state that was never recorded
+- **WHEN** a full report is written and the marker write then fails
+- **THEN** the next matched call reports in full again, rather than suppressing
+  on the strength of a record that was never made
+
+#### Scenario: An existing marker is readable but the path is no longer writable
+
+- **WHEN** a marker written earlier this hour is read on a later call and no
+  write is attempted
+- **THEN** the call is suppressed normally, because the shim is acting on a
+  record that exists
 
 #### Scenario: An interval policy is described in a report or document
 
 - **WHEN** the effect of a once-per-interval policy is stated
 - **THEN** it is stated as a reduction in verbosity, not in how often the
   operator is interrupted, because the exit code is not subject to the interval
+
+### Requirement: An absent shim is a finding, not a silence
+
+A conformance check SHALL report a declared hook for which a project has **no
+shim file** as a finding. Skipping it produces the strongest false clearance the
+instrument can emit: a project that lost its shim, or never received one, scores
+identically to a project whose shim is current, and the total says zero.
+
+The marker and identity axes both read a file, so both are written to skip when
+the file is missing. That is a reasonable local decision and a wrong global one —
+the check's purpose is to report each project's state, and "no shim where one is
+declared" is a state, not the absence of one.
+
+**A deliberate non-binding SHALL be declared to be distinguishable from a
+missing one.** At least one project opts out of a shimmed hook on argued grounds
+and receives no file at all. Without a declaration the instrument cannot tell
+that project from one whose shim was deleted by accident, so it must either
+report both or neither — and reporting neither is what the previous behaviour
+chose. The declaration SHALL name the project, the hook and the reason, and an
+opt-out SHALL be reported as an opt-out rather than passed over in silence.
+
+#### Scenario: A declared hook has no shim in a project
+
+- **WHEN** the check reads a project that binds a shimmed hook and finds no shim
+  file
+- **THEN** it reports the absence by name, rather than skipping the file and
+  contributing nothing to the total
+
+#### Scenario: A project opts out of a shimmed hook
+
+- **WHEN** a project is declared as deliberately not binding a hook
+- **THEN** the check reports it as a declared opt-out with its reason, and the
+  same project's *undeclared* absence of any other shimmed hook is still a
+  finding
 
 ### Requirement: The authority's own binder is scored, never assumed
 

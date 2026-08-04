@@ -103,3 +103,63 @@ on `--fleet`.
   failure. Recorded in `design.md` rather than mitigated.
 - **opencode's `:613` vs `:614`** — the off-by-one is real and cosmetic; citations
   corrected in passing.
+
+# Response to Stage-2 plan review, round 2
+
+Two counted reviewers, both REQUEST-CHANGES; opencode timed out at 180s and is
+recorded as failed rather than silently dropped. Eight findings, all accepted.
+Two of them found instrument defects that the round-1 revision had recorded as
+acceptable caveats — the review was right that recording them was not enough.
+
+## The instrument could report zero on a repo with no shims at all
+
+**codex round 2, verified.** `project-hook-conformance.sh:195` and `:265` are
+both `[ -f "$shim" ] || continue`. A declared hook with no shim file is skipped
+on the marker axis and on the identity axis, so it contributes nothing to the
+total. A project that lost its shims scores identically to one that is current.
+
+This is the **same `|| continue` shape** as the currency-table defect repaired in
+this repo on 2026-08-04, in a different tool. Second occurrence, so the response
+is the shape rather than the instance: absence is reported on both axes, and a
+declaration distinguishes `agents-task-viewer`'s argued opt-out from a deletion.
+Without that declaration the instrument must either report both or neither, and
+the previous behaviour chose neither.
+
+## A caveat is not a check
+
+Round 1 recorded "no instrument reads matchers" in the design and made the
+matcher assertion a manual task. Both round-2 reviewers rejected that, and they
+are right on this change's own terms: its thesis is that a check must not be
+cited beyond what it can see, so shipping an uncheckable half with a note
+attached reproduces the failure at one remove. The instrument is extended
+instead, with the negative case tested — a check that catches a missing
+`MultiEdit` but would pass a gate entry stripped of `NotebookEdit` licenses the
+regression it was added to prevent.
+
+## Accepted without qualification
+
+- **codex — core is not genuinely scored by the tool.** Verified at `:268`:
+  positionally the check reads core's marker and then exempts byte identity as
+  out of profile. It never exercises the fail-open path. Task 7.2 overclaimed;
+  7.2a now states what the tool establishes and cites the behavioural test and
+  the live run for the rest.
+- **codex — `PostToolUse` wording still generalised.** The scoping paragraph was
+  added in round 1 but the scenarios still promised the operator "sees" a notice
+  and that a call "was allowed". Neither is true of a post-tool hook, where the
+  call has already completed. Scenario wording is now class-aware.
+- **codex — tests asserted existence, not content.** A non-empty first line
+  satisfied the invariant, so a suppressed message with none of the four required
+  fields would have passed. The content assertion is now its own task.
+- **codex — the rollout lifecycle contradicted itself.** Core merges first,
+  propagation evidence exists only afterwards, and one PR cannot be both. Split
+  into core PR 1 and core PR 2, with the archive in PR 2 — archiving before the
+  evidence exists would fold a delta whose central claim is unverified.
+- **codex — the unwritable-marker rule was underspecified.** It now binds the
+  recording step only: a report that could not be recorded does not suppress the
+  next one, while a marker written earlier and later unwritable suppresses
+  normally. The two look identical at the call site and only one is a lie.
+- **gemini — no test for the inverse anti-pattern.** Exit 0 *with* stderr is what
+  core's binder did. Added as its own test so it cannot return.
+- **gemini — the opt-out rationale needs a durable home.** Relocated to an ADR in
+  `agents-task-viewer` rather than `CLAUDE.md`, which tooling rewrites and hands
+  trim. Not `settings.json`: it is strict JSON and cannot carry the comment.
