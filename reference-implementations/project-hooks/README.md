@@ -581,11 +581,17 @@ Measured on this machine, 2026-08-02, across all seven repos.
 >   `Bash|Edit|Write`; the reconciled implementation declares
 >   `Bash|Edit|Write|MultiEdit`. A `MultiEdit` to `.env` never invokes the hook
 >   at all, so the protection is absent rather than degraded.
-> - **They carry no version marker.** `grep -c database-sentinel-version` returns
->   0, so `provisioning-check.sh` cannot judge them: they are not in the declared
->   artifact set and the currency axis is structurally blind to them. The copies
->   most likely to be stale are precisely the ones staleness cannot be reported
->   for.
+> - **Nothing declares what they are, so currency cannot judge them.** The
+>   version marker `provisioning-check.sh` reads is `# <artifact>-version: X.Y.Z`
+>   in an implementation's first ten lines (`provisioning-check.sh:381-385`), and
+>   it is read from the *published* copy in the shared bin — not from a project
+>   hook file. `grep -c database-sentinel-version` therefore returns 0 in all
+>   four repos, the shim included, and is not what separates them; the shim
+>   carries `# shim-contract: 1.1.0` and delegates to a shared implementation
+>   that the declared artifact set does cover. An inlined copy is an
+>   implementation no declaration names, compared against no authority, so the
+>   currency axis is structurally blind to it. The copies most likely to be stale
+>   are precisely the ones staleness cannot be reported for.
 > - **The 1.1.0 fixes are absent**, including the jq-absence handling that
 >   otherwise aborts at the first command substitution with exit 127 and nothing
 >   explaining why (Stage-2 finding 11).
