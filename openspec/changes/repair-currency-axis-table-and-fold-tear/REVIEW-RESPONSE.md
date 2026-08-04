@@ -142,3 +142,94 @@ still reported RED, because the *other* signature happened to catch the orphan
 at line 927. A test that passes for the wrong reason is the thing this change is
 about. Fixed, and the reason is a comment in the script so it is not
 reintroduced.
+
+---
+
+# Review response — round 2
+
+Re-run after the round-1 changes. gemini **APPROVE** (was REQUEST-CHANGES);
+codex **REQUEST-CHANGES** again, with sharper points; opencode rejected by the
+runner for emitting no verdict line, so it is uncounted — not a failure of the
+change.
+
+Three of codex's four are correct and are fixed. One is a vocabulary collision
+in the workflow doc rather than a defect.
+
+## 1. The test cannot be green before the fold — ACCEPTED, and the best catch
+
+> codex: "the placement test scans canonical `openspec/specs/`, yet it must
+> become green before `openspec archive` folds the repair there. Reorder the
+> archive/check steps."
+
+Correct, and it invalidated the task order. `openspec archive` is what folds a
+delta into the spec slot — that is how the *previous* change reached `specs/`
+(`db02493` implemented, `09f829e` folded). My §2 said "apply the delta to the
+spec slot" as a hand step before archive and §3 claimed GREEN before §4 archived.
+Both were wrong: hand-editing the slot pre-archive would double-apply at fold
+time, and the test reads the slot, so it cannot pass until the fold happens.
+
+Restructured. §2 lands the guard and states plainly that it is **RED until 4.2**,
+CI red by design in that window; §4 archives, which is what performs the repair;
+§5 verifies GREEN afterwards. The Migration Plan now records the same ordering,
+because it is the kind of fact that reads as a broken build to someone who
+arrives mid-branch.
+
+## 2. Stage-2 vs Stage-3 review labelling — COLLISION, wording fixed, semantics kept
+
+> codex: "Task 4.1 incorrectly requests another 'Stage-2 review' after
+> implementation … Stage 2 is pre-code; this should be the Stage-3 code-review
+> gate."
+
+Codex read the lifecycle numbering, where stage 2 is `validate` and pre-code. The
+workflow also uses "two-stage review", where stage 1 is the plan review and
+stage 2 is the independent **code** review — and its own verification check
+greps the change dir for the literal string "Stage 2" to prove the code review
+happened. Both readings are supported by the document, which is the actual
+problem.
+
+The task no longer says "Stage-2". It now names what it is — an independent code
+review in a cleared session, the Stage-3 execute gate, distinct from the plan
+review in §1 — so neither reading can misfire. The gate it satisfies is
+unchanged.
+
+## 3. "Spec-only" and "no code changes" are no longer true — ACCEPTED
+
+> codex: "The design calls this 'spec-only,' 'no code changes,' … despite adding
+> a shell test and a CI failure condition."
+
+Correct, and self-inflicted: those claims were written before round 1 added the
+test, and I updated the proposal's Impact without going back to the design's
+Non-Goals and Migration Plan. Both now say what is true — behavior is unchanged
+and `provisioning-check.sh` is untouched, but the change adds a test and a CI
+step that can fail the build.
+
+## 4. The success message overclaims — ACCEPTED, and thematically exact
+
+> codex: "The placement test is only heuristic, but its success message claims
+> every paragraph is whole … narrow the claimed guarantee."
+
+The message read *"PASSED — every paragraph is whole and the currency clauses
+agree."* The script cannot know that. It detects tears at paragraph boundaries;
+the design says so explicitly two sections above, and the message contradicted it.
+
+This is the change's own subject matter turned on the change: a check whose
+report claims more than it verified. The fleet has now produced that failure six
+times, and I produced the seventh while fixing the sixth. The message now states
+scope rather than conclusion:
+
+```
+PASSED — no torn paragraph boundary found, and the currency clauses agree.
+         Scope: paragraph-boundary tears only. A grammatically intact
+         paragraph moved to the wrong requirement passes this check.
+```
+
+That is the same rule the override scan follows — *no known vector found* rather
+than *the repository is clean* — which this capability's own spec already
+requires of reports. The test now obeys the spec it guards.
+
+## Standing objection
+
+None outstanding. Codex's remaining note ("the normative qualifier and verbatim
+restoration are otherwise correct and minimal") agrees with gemini and with
+round 1's opencode approval. The round-1 decline on `current`/`unknown`
+precedence stands and was not renewed.

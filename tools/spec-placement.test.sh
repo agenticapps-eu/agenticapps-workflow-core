@@ -139,4 +139,11 @@ if [ "$fails" -ne 0 ]; then
   echo "or a sentence is split across two requirements."
   exit 1
 fi
-echo "PASSED — every paragraph is whole and the currency clauses agree."
+# Say what was checked, never what is true of the specs. This script detects
+# tears at PARAGRAPH BOUNDARIES: a fragment relocated as a whole, grammatically
+# intact paragraph passes it, and only a reader catches that. Claiming "every
+# paragraph is whole" would be a check overstating its own reach — the exact
+# failure this repository keeps finding, and the reason this change exists.
+echo "PASSED — no torn paragraph boundary found, and the currency clauses agree."
+echo "         Scope: paragraph-boundary tears only. A grammatically intact"
+echo "         paragraph moved to the wrong requirement passes this check."

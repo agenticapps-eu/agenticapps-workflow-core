@@ -50,8 +50,11 @@ the wrong heading, which is precisely how Defect A reached `main`.
 
 **Non-Goals:**
 
-- Changing what the currency axis does. No code changes; `provisioning-check.sh`
-  is already correct.
+- Changing what the currency axis does, or any behavior the fleet observes.
+  `provisioning-check.sh` is **not** modified — it already implements the
+  narrowed clause. Note this change is *not* code-free: it adds
+  `tools/spec-placement.test.sh` and a CI step that can fail the build. That is
+  new machinery about the specs, not about provisioning.
 - Reordering, renaming, splitting or merging requirements. The tooling facts from
   the previous session (a `MODIFIED` cannot shed scenarios; a requirement cannot
   appear in both `ADDED` and `REMOVED`; `ADDED` requirements land at end-of-file)
@@ -155,8 +158,17 @@ would have been honest but would have left the fold unguarded.
 
 ## Migration Plan
 
-None. Spec-only change; no deployed artifact, no data, no rollback beyond `git
-revert`.
+No data, no deployed artifact, no runtime behavior change; rollback is `git
+revert`. Two ordering facts do matter:
+
+1. **The canonical spec is repaired by `openspec archive`, not by hand.** The
+   placement test reads `openspec/specs/`, so it is RED from the moment it lands
+   until the fold. CI on this branch is red by design in that window. Raised in
+   review — an earlier task order implied the spec slot was edited before
+   archive and the test could be green beforehand. It cannot.
+2. **A new CI step can fail the build.** `spec-placement.test.sh` runs on every
+   change, over every spec. If it goes red on a spec this change never touched,
+   that is the guard working, not a regression from this change.
 
 ## Open Questions
 
