@@ -57,13 +57,20 @@
 #     fail_policy — see the comment at the apply BLOCK_MISSING check below for
 #     why: it is a document-integrity problem, not an ordinary step failure,
 #     and is treated exactly like a missing check/precondition block already
-#     is (hard, unconditional abort). They DO still call abort_no_rollback
-#     before exiting, though: that function is a REPORTING helper (which
-#     steps applied; nothing was rolled back), not the interactive policy, so
-#     calling it there does not change the routing decision — it just means
-#     the operator gets the same summary on a half-applied tree that every
-#     other abort in this script already gives (fix round 1's review found
-#     this had been dropped on exactly these two paths).
+#     is (hard, unconditional abort). EVERY hard-abort path in the dispatch
+#     loop — check block missing, check exiting outside {0,1}, precondition
+#     block missing, precondition failing, and both apply/verify
+#     BLOCK_MISSING branches — calls abort_no_rollback before exiting.
+#     abort_no_rollback is a REPORTING helper (which steps applied; nothing
+#     was rolled back), not the interactive policy, so calling it at all six
+#     sites does not change any routing decision — it just means the
+#     operator gets the same summary on a half-applied tree everywhere a hard
+#     abort can happen. Fix round 1 wired this into only the apply/verify
+#     BLOCK_MISSING sites and its own comment claimed this was already true
+#     everywhere; fix round 2's review disproved that by construction (a
+#     lint-clean multi-step document whose step 2 precondition fails gives
+#     no applied-steps report at all) and closed the actual asymmetry rather
+#     than rewording the claim down to match it.
 #
 # Usage: run-migration.sh --host NAME [--dry-run] [--on-failure=abort|prompt|skip] <doc> [<workdir>]
 
@@ -507,12 +514,14 @@ for s in $steps; do
   rc=$?
   if [ "$BLOCK_MISSING" -eq 1 ]; then
     echo "step $s: idempotency check block missing — aborting" >&2
+    abort_no_rollback "$s"
     exit 1
   elif [ "$rc" -eq 0 ]; then
     echo "step $s: skipped (already applied)"
     continue
   elif [ "$rc" -ne 1 ]; then
     echo "step $s: idempotency check could not run (exit $rc) — aborting" >&2
+    abort_no_rollback "$s"
     exit 1
   fi
 
@@ -537,6 +546,7 @@ for s in $steps; do
     else
       echo "step $s: pre-condition failed — aborting" >&2
     fi
+    abort_no_rollback "$s"
     exit 1
   fi
 

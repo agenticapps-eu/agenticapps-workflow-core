@@ -358,8 +358,9 @@ EOF
   # of this comment claimed "an absent role is already L1's job; this only
   # fires for a role that IS present but resolves to whitespace" — disproved
   # by construction in fix round 1's review: a `role=verify` fence containing
-  # three real commands, left unclosed at EOF, IS present per `roles` (mr_roles
-  # reports a role from the fence's OPENING line) but `extract.sh block`
+  # one real command (see 0045-unclosed-fence-verify.md's `grep`), left
+  # unclosed at EOF, IS present per `roles` (mr_roles reports a role from the
+  # fence's OPENING line) but `extract.sh block`
   # still exits 1 for it (mr_block only confirms a role on the CLOSING line —
   # see L7's own header comment for the same asymmetry). Without checking the
   # exit status, that extraction FAILURE was silently read as an EMPTY body,

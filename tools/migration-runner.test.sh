@@ -966,7 +966,9 @@ rm -rf "$tmp"; trap - EXIT
 # on `read` under a REAL terminal. `</dev/null` forces the non-interactive
 # default (abort) deliberately: this section is about the exit-code
 # distinction, not the failure policy, and task 6 found by construction
-# (fix round 1 of that task, under a real pty via `script`) that a
+# (fix round 1 of that task, under a real pty via a Python `pty.fork()`
+# harness — not `script(1)`, which this repo's sandbox cannot use to
+# reproduce a genuine hang; see that round's report) that a
 # now-stale version of THIS comment once claimed stdin "is never a
 # terminal... under this test harness" — true when task 5 wrote it, false
 # the moment task 6 gave fail_policy a real prompt branch, and exactly the
@@ -1316,6 +1318,27 @@ assert_contains "$out" "Nothing was rolled back" \
 assert_not_contains "$out" "roll [b]ack" \
   "verify BLOCK_MISSING: fail_policy's own prompt was never reached (the real discriminator)"
 rm -rf "$tmp" "$stubdir"; trap - EXIT
+
+echo
+echo "== run-migration.sh: every hard-abort path reports applied steps (fix round 2) =="
+
+# 0051-failing-precondition-after-apply.md: step 1 genuinely applies, then
+# step 2's pre-condition fails. Fix round 1 wired abort_no_rollback into only
+# the apply/verify BLOCK_MISSING sites and its own comment claimed every
+# hard abort already gave this report — disproved by construction in fix
+# round 2's review, reached through the real CLI with no stub: this exact
+# shape gave `step 1: applied` / `step 2: pre-condition failed — aborting`,
+# rc=1, s1.txt on disk, and NO "applied steps" report at all.
+tmp="$(mktemp -d)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0051-failing-precondition-after-apply.md" "$tmp" </dev/null 2>&1)"
+assert_eq "$?" "1" "hard-abort report: pre-condition failure after an earlier apply exits 1"
+assert_eq "$(cat "$tmp/s1.txt" 2>/dev/null)" "s1" "hard-abort report: step 1's work survives on disk"
+assert_contains "$out" "pre-condition failed" "hard-abort report: names the pre-condition failure"
+assert_contains "$out" "applied steps: 1" \
+  "hard-abort report: NOW names which steps applied, same as the apply/verify BLOCK_MISSING paths"
+assert_contains "$out" "Nothing was rolled back" \
+  "hard-abort report: NOW gives the same summary everywhere a hard abort can happen"
+rm -rf "$tmp"
 
 echo
 echo "TOTAL: $pass passed, $fail failed"
