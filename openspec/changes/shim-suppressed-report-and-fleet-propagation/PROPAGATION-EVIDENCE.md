@@ -241,6 +241,47 @@ Recovered as ADR 0009 in that repo, linked from `CLAUDE.md`'s hand-written
 preamble — outside every GSD block, so the hook the ADR declines to run could not
 rewrite the link even if it were re-registered.
 
+### 7.2 — core, scored explicitly, reports 33
+
+`--fleet` excludes core by design, so it is passed positionally. The number needs
+its composition or it reads as core being the worst repository in the fleet:
+
+| Finding | Count | What it is |
+|---|---:|---|
+| `MARKER … ABSENT` | 2 | `database-sentinel`, `normalize-claude-md` — core does not bind either; it hosts their implementations |
+| `MATCHER … not registered` | 2 | the same two absences, seen from the registration axis |
+| `OVERRIDE-VECTOR` | 29 | core's own tests, ADRs, archived change docs and spec files, which **name** the override variables because core is where the override mechanism is specified and tested |
+
+Its one real binder — `openspec-change-gate`, self-hosting — reads `current
+(1.2.0)`, registered on the full declared matcher set.
+
+Both categories are artefacts of scoring the authority with an instrument built
+for its consumers. Neither is drift. **Neither is fixed here**, and the choice is
+recorded rather than silently accepted: core could declare the two non-bindings
+in `OPT-OUTS` and the vector scan could exempt `openspec/changes/archive/`, but
+both are instrument changes and belong with the checkout-staleness fix above, in
+the instrument's own change.
+
+### 7.2a — what 7.2 does not establish
+
+Positionally the tool reads core's marker and then exempts byte-identity as out
+of profile (`project-hook-conformance.sh:323`), so **it never exercises core's
+fail-open path**. A marker check is a statement about a string in a file.
+
+The behavioural evidence for core is task 1.5's test and task 3's live run
+above — not this score. The change cites those.
+
+### 7.5 — which binder implements which profile
+
+| Hook | Published-resolution binders | Self-hosting |
+|---|---:|---|
+| `openspec-change-gate` | 7 (the whole fleet) | 1 — core, ADR-0028 |
+| `database-sentinel` | 7 (the whole fleet) | none — core does not bind it |
+| `normalize-claude-md` | 6 (all but `agents-task-viewer`, declared opt-out) | none |
+
+The modified requirement's "exactly one self-hosting binder per hook" holds: one
+for the gate, zero for the other two, never two.
+
 ### 6.6a and 6.7 — already satisfied
 
 6.6a: the opt-out is already declared in

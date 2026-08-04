@@ -209,26 +209,52 @@ and diff the file to prove only that entry moved.
 
 - [ ] 7.1 `tools/project-hook-conformance.sh --fleet ~/Sourcecode` reports 0
       findings, down from 30. Paste the output.
-- [ ] 7.2 Score core's binder **explicitly**, by passing
+      **Blocked on the seven PRs merging, and on something the task did not
+      anticipate: the scan reads working trees, so the seven checkouts must also
+      be PULLED after merge or the re-run measures the same stale files the
+      baseline did.** The baseline was 46, not 30 — 21 marker, 21 identity, 4
+      matcher.
+- [x] 7.2 Score core's binder **explicitly**, by passing
       `agenticapps-workflow-core` as a positional argument, and report its version
       beside the fleet's. `--fleet` excludes core by design, so 7.1 alone cannot
       cover it and must not be cited as if it did (codex 1).
-- [ ] 7.2a State what 7.2 does **not** establish. Positionally the tool checks
+      Core reports **33**, composed in `PROPAGATION-EVIDENCE.md`: 4 from the two
+      hooks core does not bind, 29 override vectors from core's own tests, ADRs
+      and archived specs — which name those variables because core is where the
+      mechanism is specified. Its one real binder reads `current (1.2.0)`.
+- [x] 7.2a State what 7.2 does **not** establish. Positionally the tool checks
       core's marker and then exempts byte identity as out of profile
       (`:268`) — it never exercises the fail-open path. The behavioural evidence
       for core is task 1.5's test and task 3's live run, and the change SHALL cite
       those rather than let a marker check stand in for conformance (codex
-      round 2).
-- [ ] 7.3 Assert the matcher change per repo: `database-sentinel`'s entry reads
+      round 2). Stated. The line reference has moved: the exemption is now
+      `project-hook-conformance.sh:323`.
+- [x] 7.3 Assert the matcher change per repo: `database-sentinel`'s entry reads
       `Bash|Edit|Write|MultiEdit` **and** the gate's still reads
       `Edit|Write|MultiEdit|NotebookEdit`. No instrument reads matchers at fleet
       scope — verified: `project-hook-conformance.sh:306-309` reads
       `settings.json` only for override env vectors — so this check is manual and
       its absence from the tooling is recorded, not papered over (opencode 3).
-- [ ] 7.4 In each converted repo, show the hook resolving: one benign matched
+      **The parenthetical is out of date and the check is no longer manual**: the
+      matcher axis added in group 2b reads matchers at fleet scope, which is why
+      it could report four narrow registrations in the baseline. Asserted for all
+      seven repos through that axis — every `database-sentinel` entry covers
+      `Bash|Edit|Write|MultiEdit`, every gate entry still covers
+      `Edit|Write|MultiEdit|NotebookEdit`, and `agents-task-viewer`'s
+      `normalize-claude-md` is reported as a declared opt-out rather than a gap.
+- [x] 7.4 In each converted repo, show the hook resolving: one benign matched
       call, exit 0. The instrument proves propagation, not that anything works.
-- [ ] 7.5 Record which binders implement which profile, as the modified
+      Done in all seven, on each branch's working tree — which is the right place
+      for it, since the question is whether the shim resolves, not whether the PR
+      merged. `DROP TABLE` through `database-sentinel` was run alongside each,
+      returning exit 2: exit 0 alone is also what a hook that does nothing
+      returns.
+- [x] 7.5 Record which binders implement which profile, as the modified
       requirement obliges — seven published-resolution, one self-hosting in core.
+      Recorded in `PROPAGATION-EVIDENCE.md` per hook, because the summary is only
+      true of the gate: 7 published-resolution + 1 self-hosting for
+      `openspec-change-gate`, 7 + 0 for `database-sentinel`, 6 + 0 for
+      `normalize-claude-md`. Never two self-hosting binders for one hook.
 
 ## 8. Close
 
