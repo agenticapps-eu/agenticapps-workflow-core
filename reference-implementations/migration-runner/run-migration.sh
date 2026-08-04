@@ -31,9 +31,9 @@
 # permanently, at the cost of not previewing anything past the first pending
 # step.
 #
-# SCOPE OF THIS FILE (tasks 4-5 of the executable-migration-format plan):
-# the dispatch loop, dry-run, exit-code semantics, and refusing to run a
-# migration that would do nothing.
+# SCOPE OF THIS FILE (tasks 4-6 of the executable-migration-format plan):
+# the dispatch loop, dry-run, exit-code semantics, refusing to run a
+# migration that would do nothing, and the A2 failure policy.
 #   - Lint-before-execute (refusing to run a migration that fails
 #     lint-migration.sh, that yields zero steps, or where any step yields no
 #     apply block) is task 5's job — see "LINT BEFORE EXECUTING ANYTHING"
@@ -41,9 +41,23 @@
 #     immediately after argument parsing.
 #   - The interactive failure policy (retry / skip-with-warning / roll back,
 #     and the non-interactive "abort in place, report what applied, roll back
-#     nothing" behaviour) is task 6's job. fail_policy() below is a STUB: it
-#     reports the failure and returns non-zero (abort) unconditionally, no
-#     matter what --on-failure says. Task 6 fills in the real policy.
+#     nothing" behaviour) is task 6's job, implemented in fail_policy() and
+#     do_rollback() below. It governs apply and verify failures ONLY — a
+#     failing precondition (or check exiting outside {0,1}) hard-aborts
+#     above, unconditionally, before fail_policy is ever consulted. Rollback
+#     runs only on an EXPLICIT choice: end-of-input, an empty answer, and an
+#     unrecognised answer all abort without rolling back (abort_no_rollback).
+#     A step joins $rollbackable the moment its OWN apply succeeds, which is
+#     what makes a verify-failed step rollback-eligible while an apply-failed
+#     step is not. A rollback that itself fails is reported and the remaining
+#     rollbacks are still attempted (do_rollback), and the exit code is
+#     non-zero regardless of how the rollback pass went.
+#
+#     The apply/verify BLOCK_MISSING branches deliberately do NOT go through
+#     fail_policy — see the comment at the apply BLOCK_MISSING check below for
+#     why: it is a document-integrity problem, not an ordinary step failure,
+#     and is treated exactly like a missing check/precondition block already
+#     is (hard, unconditional abort).
 #
 # Usage: run-migration.sh --host NAME [--dry-run] [--on-failure=abort|prompt|skip] <doc> [<workdir>]
 
@@ -114,6 +128,25 @@ fi
 
 applied=""
 
+# rollbackable: steps eligible for an interactive rollback, reverse document
+# order preserved by appending in dispatch order and reversing at rollback
+# time. A step joins this list the moment its OWN apply succeeds — BEFORE
+# verify runs — which is exactly what makes membership correct for both
+# halves of the spec's rule: a step whose apply succeeded and whose verify
+# then failed IS here (apply completed; its rollback describes a state that
+# exists), while a step whose apply itself failed is NEVER added (its state
+# is unknown; rolling it back could destroy work it did not create).
+# `applied` is a narrower list: only steps that are ALSO not blocked by a
+# later verify failure. rollbackable is a SUPERSET of applied, never the
+# reverse.
+rollbackable=""
+
+# PARTIAL: set once any step is skipped after a failure. Read only at the
+# very end of the script, to decide the final exit code — "recorded as
+# partial" is satisfied by the runner's own diagnostic output plus this exit
+# code; the format defines no journal or state file.
+PARTIAL=0
+
 # run_block $1=step $2=role
 #
 # Each block gets its OWN shell (a `bash -c` subshell), cd'd into WORKDIR. No
@@ -145,18 +178,140 @@ run_block() {
   ( cd "$WORKDIR" && bash -c "$body" )
 }
 
-# fail_policy $1=failing step — returns 0 to continue, 1 to abort.
-#
-# STUB for task 4. The real interactive/non-interactive policy (retry, skip
-# with warning, or roll back in reverse document order) is task 6's job. Until
-# then every failure aborts: this reports which steps applied, on stderr, and
-# always returns 1. Nothing is rolled back here, which matches the spec's
-# unattended behaviour exactly — this stub simply never takes the interactive
-# branch yet.
-fail_policy() {
+# abort_no_rollback $1=step — the shared "give up here, touch nothing" exit
+# path: used for ON_FAILURE=abort, for EOF on the prompt, and for an
+# unrecognised or empty prompt answer. A prompt whose default is destruction
+# is not consent, and end-of-input in a pipeline must not be read as
+# permission to undo work — so EVERY one of those cases reports the same
+# thing and rolls back nothing, on purpose, not as three separate near-copies
+# that could drift.
+abort_no_rollback() { # $1=step
   echo "applied steps:${applied:- none}" >&2
   echo "step $1 left in place. Nothing was rolled back — inspect before re-running." >&2
-  return 1
+}
+
+# do_rollback — roll back every step in $rollbackable, in REVERSE document
+# order, continuing past a rollback that itself fails rather than stopping at
+# the first one. Reports which rollbacks succeeded and which failed; a
+# rollback that fails is not silently swallowed, and it does not stop the
+# remainder from being attempted — stopping there would leave a tree that is
+# neither migrated nor restored, with no record of how far it got.
+do_rollback() {
+  echo "rolling back applied steps in reverse document order..." >&2
+  local rc=0 rev="" st
+  for st in $rollbackable; do rev="$st $rev"; done
+  for st in $rev; do
+    if run_block "$st" rollback; then
+      echo "step $st: rollback succeeded" >&2
+    else
+      echo "step $st: rollback FAILED" >&2
+      rc=1
+    fi
+  done
+  if [ "$rc" -eq 0 ]; then
+    echo "rollback complete — all applied steps reverted" >&2
+  else
+    echo "rollback completed WITH FAILURES — see above; some steps may still be applied" >&2
+  fi
+  return "$rc"
+}
+
+# fail_policy $1=failing step $2=role that failed (apply|verify)
+#
+# Returns to the dispatch loop:
+#   0 => the step succeeded on retry (this function already recorded it as
+#        applied and printed so) — the caller should just continue to the
+#        next step, having done nothing further itself.
+#   1 => abort the whole migration (the caller exits 1).
+#   2 => skip: continue to the next step with the migration recorded partial.
+#
+# ON_FAILURE is never empty by the time this runs (resolved to prompt/abort
+# from the TTY check, or set explicitly via --on-failure) — see its
+# resolution above.
+#
+# ROLLBACK REQUIRES AN EXPLICIT CHOICE. End-of-input on the prompt, an empty
+# answer, and an unrecognised answer all fall through to abort_no_rollback:
+# none of them is a "yes". Conflating silence with consent is exactly the
+# defect this requirement exists to close.
+fail_policy() {
+  local step="$1" role="$2" ans
+
+  case "$ON_FAILURE" in
+    abort)
+      abort_no_rollback "$step"
+      return 1
+      ;;
+    skip)
+      echo "step $step: skipping after $role failure — WARNING: migration recorded as partial" >&2
+      PARTIAL=1
+      return 2
+      ;;
+  esac
+
+  # ON_FAILURE == prompt. Reads from the runner's own stdin, not a fresh
+  # terminal — the caller's stdin decides what "silence" means here, which is
+  # why a non-terminal stdin combined with --on-failure=prompt still hits EOF
+  # and still aborts without rolling back rather than blocking forever.
+  while :; do
+    echo "step $step: $role failed. [r]etry / [s]kip (warn, continue, partial) / roll [b]ack applied steps? " >&2
+    if ! IFS= read -r ans; then
+      # End-of-input. Silence is not consent.
+      abort_no_rollback "$step"
+      return 1
+    fi
+    case "$ans" in
+      r|retry)
+        if run_block "$step" "$role"; then
+          if [ "$role" = "apply" ]; then
+            # This retry is the step's apply succeeding for the first time —
+            # only now does it join rollbackable, exactly like the main
+            # dispatch loop's own apply site does.
+            rollbackable="$rollbackable $step"
+            if bash "$EXTRACT" roles "$DOC" "$step" | grep -qx verify; then
+              if run_block "$step" verify; then
+                applied="$applied $step"
+                echo "step $step: applied"
+                return 0
+              else
+                echo "step $step: verify failed" >&2
+                role="verify"
+                continue
+              fi
+            else
+              applied="$applied $step"
+              echo "step $step: applied"
+              return 0
+            fi
+          else
+            # role == verify, retried and passed.
+            applied="$applied $step"
+            echo "step $step: applied"
+            return 0
+          fi
+        else
+          echo "step $step: $role failed again" >&2
+          continue
+        fi
+        ;;
+      s|skip)
+        echo "step $step: skipping after $role failure — WARNING: migration recorded as partial" >&2
+        PARTIAL=1
+        return 2
+        ;;
+      b|rollback)
+        do_rollback
+        # Whether every individual rollback succeeded or some failed, the
+        # migration itself did not complete — always a non-zero exit here,
+        # never dependent on rollback's own outcome.
+        return 1
+        ;;
+      *)
+        echo "step $step: unrecognised answer '$ans' — not rolling back" >&2
+        abort_no_rollback "$step"
+        return 1
+        ;;
+    esac
+  done
 }
 
 # EXIT-CODE SCHEME (fix round 1, per spec's "Refusal is distinguishable from
@@ -410,30 +565,50 @@ for s in $steps; do
     # non-empty via extract.sh directly, before this loop runs at all). This
     # is applied defensively, matching the round's own check-site finding,
     # rather than argued as unnecessary.
+    # BLOCK_MISSING here is a document that changed shape out from under the
+    # dispatch loop (extract.sh re-reads $DOC fresh on every call — see
+    # 0046-apply-dropped-by-step1.md), not an ordinary failure of the step's
+    # own logic. It is deliberately NOT routed through fail_policy: the
+    # interactive policy's retry/skip/rollback options all presuppose the
+    # block itself exists to retry, skip past, or reason about — and, more
+    # importantly, a document missing a block it should have may have other
+    # blocks (including THIS step's or an earlier step's rollback) in the
+    # same compromised state, which is exactly the situation where blindly
+    # trusting a prompted "roll back" is least safe. This matches how a
+    # missing check/precondition block is already treated above: a hard,
+    # unconditional abort, independent of --on-failure and of whether stdin
+    # is a terminal.
     if [ "$BLOCK_MISSING" -eq 1 ]; then
       echo "step $s: apply block missing — aborting" >&2
       exit 1
     fi
     echo "step $s: apply failed" >&2
-    fail_policy "$s" || exit 1
+    fail_policy "$s" apply
+    fp_rc=$?
+    [ "$fp_rc" -eq 1 ] && exit 1
     continue
   fi
+
+  # Apply succeeded: this step joins rollbackable NOW, before verify runs.
+  # This is the ordering that makes rollback membership correct — see
+  # rollbackable's own header comment above.
+  rollbackable="$rollbackable $s"
 
   if bash "$EXTRACT" roles "$DOC" "$s" | grep -qx verify; then
     if ! run_block "$s" verify; then
       # NOT recorded as applied — apply ran, but the result is not what the
       # migration said it should be, so the step did not succeed.
       #
-      # BLOCK_MISSING checked here too, same reasoning as apply above: verify
-      # is optional and its presence is already confirmed via `roles` right
-      # before this call, but the check is added defensively rather than
-      # relying on that guarantee never being violated.
+      # BLOCK_MISSING checked here too, same reasoning and same deliberate
+      # non-routing through fail_policy as the apply site above.
       if [ "$BLOCK_MISSING" -eq 1 ]; then
         echo "step $s: verify block missing — aborting" >&2
         exit 1
       fi
       echo "step $s: verify failed" >&2
-      fail_policy "$s" || exit 1
+      fail_policy "$s" verify
+      fp_rc=$?
+      [ "$fp_rc" -eq 1 ] && exit 1
       continue
     fi
   fi
@@ -441,5 +616,10 @@ for s in $steps; do
   applied="$applied $s"
   echo "step $s: applied"
 done
+
+if [ "$PARTIAL" -eq 1 ]; then
+  echo "migration partial: one or more steps were skipped after a failure" >&2
+  exit 1
+fi
 
 exit 0

@@ -834,20 +834,28 @@ rm -rf "$tmp"; trap - EXIT
 
 # 0038-zero-apply-step.md: check/precondition/rollback are real and tagged;
 # the apply fence is syntactically valid (```bash role=apply```, satisfying
-# L1) but has nothing between its delimiters, so lint-migration.sh itself
-# exits 0 clean on this fixture too. Confirmed against the OLD runner:
+# L1) but has nothing between its delimiters. AT THE TIME this fixture and
+# test were written, lint-migration.sh exited 0 clean on it, and only the
+# runner's OWN pre-flight scan (checking the captured apply body for
+# emptiness, not just extract.sh's exit code) caught it, reporting "step 1
+# has no apply block". L8 (task 6) now generalises that same emptiness check
+# to every role and moves it into the linter, so this fixture is refused at
+# the LINT GATE now, before the runner's own pre-flight scan ever runs — this
+# is strictly earlier and more informative (it names the rule), not a
+# regression: the runner's own apply-emptiness check stays in place as
+# defense in depth for a lint-bypassed path (e.g. the stub-collaborator
+# technique used elsewhere in this suite), it merely never fires for THIS
+# fixture's shape any more. Confirmed against the OLD runner (pre-L8):
 #   step 1: applied
 #   rc=0
 #   fixture.txt: (absent — nothing was ever written)
-# — the runner claimed the step applied while doing nothing at all. Checking
-# for an EMPTY captured body (not just extract.sh's exit code) is what closes
-# this: an absent apply block and a tagged-but-empty one are the same
-# silent-no-op outcome from the operator's point of view.
+# — the runner claimed the step applied while doing nothing at all.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0038-zero-apply-step.md" "$tmp" 2>&1)"
 assert_eq "$?" "65" "the runner refuses a step whose apply block is empty"
 assert_not_contains "$out" "step 1: applied" "the runner does not report success"
-assert_contains "$out" "step 1 has no apply block" "the runner names the empty apply block"
+assert_contains "$out" "L8: step 1: role 'apply' is empty or whitespace-only" \
+  "the runner's lint gate (L8) names the empty apply block"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
   "nothing was written by the empty apply block"
 rm -rf "$tmp"; trap - EXIT
@@ -958,6 +966,258 @@ assert_eq "$(ls "$tmp"/probe.txt 2>/dev/null; echo none)" "none" "dry-run wrote 
 assert_eq "$(ls "$escape_target"/ran 2>/dev/null; echo none)" "none" \
   "dry-run wrote nothing through the symlink either — apply never ran"
 rm -rf "$tmp" "$escape_target"; trap - EXIT
+
+echo
+echo "== lint-migration.sh: L8 empty/whitespace-only body, any role =="
+
+# 0049: role=check is PRESENT (an exact-grammar fence tagged check opens and
+# closes), so L1 sees nothing wrong — this is the fixture that lints clean
+# without L8. Run for real, `bash -c ''` exits 0, which the three-valued
+# check contract reads as "already applied": the runner would report
+# "step 1: skipped (already applied)" and apply nothing on a tree where
+# nothing was ever applied. That is confirmed directly below, against the
+# REAL CLI, not merely asserted.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0049-bad-l8-empty-check.md" 2>&1)"
+assert_eq "$?" "1" "L8: a tagged-but-empty check fence exits 1"
+assert_contains "$out" "L8" "L8: names the rule"
+assert_contains "$out" "'check'" "L8: names the empty role"
+assert_not_contains "$out" "L1" "L8: does NOT also fire L1 — the role IS present, just empty"
+
+# The runner's existing lint-before-execute gate closes this without any
+# runner change: once L8 exists, this fixture is refused before dispatch,
+# rather than silently reporting "skipped (already applied)" as it would
+# have before L8 existed.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0049-bad-l8-empty-check.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "the runner refuses an empty-check migration at the lint gate"
+assert_contains "$out" "L8" "the refusal is attributed to L8"
+assert_not_contains "$out" "skipped (already applied)" \
+  "the runner never gets far enough to report the silent-no-op skip"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "nothing ran"
+rm -rf "$tmp"; trap - EXIT
+
+# 0050: whitespace-only (one blank line), not merely zero bytes — proves L8
+# tests emptiness AFTER stripping whitespace, not a literal byte-count.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0050-bad-l8-empty-precondition.md" 2>&1)"
+assert_eq "$?" "1" "L8: a whitespace-only pre-condition fence exits 1"
+assert_contains "$out" "L8" "L8: names the rule (precondition)"
+assert_contains "$out" "'precondition'" "L8: names the empty role (precondition)"
+
+echo
+echo "== run-migration.sh: A2 failure policy — non-interactive apply failure =="
+
+# 0036-failing-apply.md: step 1 applies, step 2's apply exits 7. This is the
+# load-bearing case: absence of anyone to ask is not consent, and the
+# half-applied tree is the evidence of what happened, which an automatic
+# rollback would destroy.
+tmp="$(mktemp -d)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --on-failure=abort "$FIX/0036-failing-apply.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2: explicit --on-failure=abort exits 1"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "step1" \
+  "A2: step 1's work SURVIVES — nothing was rolled back"
+assert_contains "$out" "Nothing was rolled back" "A2: says so explicitly"
+assert_contains "$out" "applied steps: 1" "A2: names which steps applied"
+rm -rf "$tmp"
+
+# Non-TTY defaults to abort without being told (no --on-failure at all).
+tmp="$(mktemp -d)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0036-failing-apply.md" "$tmp" </dev/null 2>&1)"
+assert_eq "$?" "1" "A2: non-TTY exits 1 with no --on-failure"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "step1" "A2: non-TTY rolls back nothing"
+assert_contains "$out" "Nothing was rolled back" "A2: non-TTY says so explicitly too"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: A2 failure policy — verify failure is not recorded as applied =="
+
+# 0037-failing-verify.md: step 2's apply succeeds (s2.txt is written) but its
+# verify fails. The step must NOT be reported as applied, even though the
+# apply itself ran to completion.
+tmp="$(mktemp -d)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0037-failing-verify.md" "$tmp" </dev/null 2>&1)"
+assert_eq "$?" "1" "A2: a verify failure exits 1"
+assert_eq "$(cat "$tmp/s1.txt" 2>/dev/null)" "s1" "A2: step 1 fully applied and verified"
+assert_eq "$(cat "$tmp/s2.txt" 2>/dev/null)" "s2" "A2: step 2's apply DID run — verify is what failed"
+assert_contains "$out" "step 2: verify failed" "A2: names the verify failure"
+assert_not_contains "$out" "step 2: applied" \
+  "A2: a failing verify does not mark its step applied"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: A2 failure policy — skip continues rather than aborting =="
+
+# 0047-skip-continues.md: an earlier draft of this policy had skip fall
+# through to an unconditional exit, meaning skip never skipped. Step 2's
+# apply always fails; under --on-failure=skip the runner must still reach
+# and apply step 3.
+tmp="$(mktemp -d)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow --on-failure=skip "$FIX/0047-skip-continues.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2: skip policy still exits non-zero overall (a step DID fail)"
+assert_eq "$(cat "$tmp/s1.txt" 2>/dev/null)" "s1" "A2: step 1 applied"
+assert_contains "$out" "step 3: applied" "A2: skip CONTINUES to step 3 rather than stopping at step 2"
+assert_eq "$(cat "$tmp/s3.txt" 2>/dev/null)" "s3" "A2: step 3 actually ran"
+assert_contains "$out" "partial" "A2: the migration is reported as partial"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: A2 interactive prompt — silence is never consent to roll back =="
+
+# All four cases below feed stdin from a pipe or here-string, never a real
+# pty. This proves the PROMPT-HANDLING logic itself — reading an answer,
+# branching on it, and what happens at end-of-input — behaves correctly. It
+# does NOT prove that `[ -t 0 ]` genuinely detects a real terminal; that
+# detection is unchanged from task 4 and isn't exercised by a pty anywhere in
+# this suite. --on-failure=prompt is passed explicitly so these cases reach
+# the prompt branch despite stdin never being a terminal (matching "an
+# explicit override selects the policy").
+
+# End-of-input: the pipe/redirect supplies nothing at all.
+tmp="$(mktemp -d)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --on-failure=prompt "$FIX/0036-failing-apply.md" "$tmp" </dev/null 2>&1)"
+assert_eq "$?" "1" "A2 prompt: EOF on the prompt aborts"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "step1" "A2 prompt: EOF rolls back nothing"
+assert_contains "$out" "Nothing was rolled back" "A2 prompt: EOF says so explicitly"
+rm -rf "$tmp"
+
+# An empty answer (just pressing enter) is not a "yes" either.
+tmp="$(mktemp -d)"
+out="$(printf '\n' | bash "$MR/run-migration.sh" --host codex-workflow --on-failure=prompt "$FIX/0036-failing-apply.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2 prompt: an empty answer aborts"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "step1" "A2 prompt: empty answer rolls back nothing"
+assert_contains "$out" "Nothing was rolled back" "A2 prompt: empty answer says so explicitly"
+rm -rf "$tmp"
+
+# An unrecognised answer is not a "yes" either.
+tmp="$(mktemp -d)"
+out="$(printf 'qqq\n' | bash "$MR/run-migration.sh" --host codex-workflow --on-failure=prompt "$FIX/0036-failing-apply.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2 prompt: an unrecognised answer aborts"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "step1" "A2 prompt: unrecognised answer rolls back nothing"
+assert_contains "$out" "Nothing was rolled back" "A2 prompt: unrecognised answer says so explicitly"
+rm -rf "$tmp"
+
+# An explicit --on-failure=abort overrides even when a "b" (rollback) answer
+# is sitting right there on stdin — proving the override short-circuits
+# before the prompt is ever reached, not merely that it happens to also
+# answer "no".
+tmp="$(mktemp -d)"
+out="$(printf 'b\n' | bash "$MR/run-migration.sh" --host codex-workflow --on-failure=abort "$FIX/0036-failing-apply.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2: --on-failure=abort overrides even with a rollback answer available on stdin"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "step1" "A2: override never reads the available 'b' at all"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: A2 interactive prompt — retry loops back to the same prompt =="
+
+# 0036's step 2 apply always exits 7, so a retry always fails again. Feeding
+# "r" then "b" proves retry re-attempts the failing block and, on a second
+# failure, re-prompts rather than falling through to anything else.
+tmp="$(mktemp -d)"
+out="$(printf 'r\nb\n' | bash "$MR/run-migration.sh" --host codex-workflow --on-failure=prompt "$FIX/0036-failing-apply.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2 prompt: retry-then-rollback exits non-zero"
+assert_contains "$out" "failed again" "A2 prompt: retry re-ran the failing apply and it failed again"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "A2 prompt: the SECOND answer (rollback) still took effect — step 1 was rolled back"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: A2 interactive rollback — a verify-failed step IS rolled back =="
+
+# 0037-failing-verify.md: step 2's apply succeeded and its verify failed.
+# Choosing rollback must roll back BOTH steps, in reverse order (2 before 1)
+# — step 2 is rollback-eligible precisely because its apply completed.
+tmp="$(mktemp -d)"
+out="$(printf 'b\n' | bash "$MR/run-migration.sh" --host codex-workflow --on-failure=prompt "$FIX/0037-failing-verify.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2 prompt: rollback after a verify failure exits non-zero"
+log="$(cat "$tmp/rollback.log" 2>/dev/null)"
+assert_contains "$log" "rollback:2" "A2 prompt: the verify-failed step's rollback DID run"
+assert_contains "$log" "rollback:1" "A2 prompt: the earlier fully-applied step's rollback also ran"
+assert_eq "$(printf '%s\n' "$log" | grep -n 'rollback:' | head -1 | cut -d: -f1)" \
+  "$(printf '%s\n' "$log" | grep -n 'rollback:2' | head -1 | cut -d: -f1)" \
+  "A2 prompt: step 2's rollback entry comes BEFORE step 1's — reverse document order"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: A2 interactive rollback — reverse order, membership, continues past a failed rollback =="
+
+# 0048-rollback-order-and-membership.md: steps 1 and 2 apply; step 3's apply
+# fails. Rollback must: (a) roll back 2 then 1 (reverse order), (b) NEVER
+# roll back 3 (its apply failed part-way — state unknown), and (c) continue
+# to attempt step 1's rollback even though step 2's rollback itself fails.
+tmp="$(mktemp -d)"
+out="$(printf 'b\n' | bash "$MR/run-migration.sh" --host codex-workflow --on-failure=prompt "$FIX/0048-rollback-order-and-membership.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "A2 prompt: a rollback that itself partially fails still exits non-zero"
+log="$(cat "$tmp/rollback.log" 2>/dev/null)"
+assert_contains "$log" "rollback:2:attempted" "A2 prompt: step 2's rollback WAS attempted"
+assert_contains "$log" "rollback:1:ok" "A2 prompt: step 1's rollback WAS attempted despite step 2's failing"
+assert_not_contains "$log" "rollback:3" \
+  "A2 prompt: step 3's rollback NEVER ran — its apply failed part-way, excluded from rollback"
+line2="$(printf '%s\n' "$log" | grep -n 'rollback:2:attempted' | head -1 | cut -d: -f1)"
+line1="$(printf '%s\n' "$log" | grep -n 'rollback:1:ok' | head -1 | cut -d: -f1)"
+assert_eq "$(( line2 < line1 ? 1 : 0 ))" "1" \
+  "A2 prompt: step 2's rollback entry appears BEFORE step 1's — reverse document order"
+assert_contains "$out" "rollback FAILED" "A2 prompt: step 2's own rollback failure is reported"
+assert_contains "$out" "rollback succeeded" "A2 prompt: step 1's rollback success is reported too"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: apply BLOCK_MISSING is reachable through the real CLI, no stub needed =="
+
+# 0046-apply-dropped-by-step1.md: step 1's own apply rewrites the document
+# (a RELATIVE "0046-doc.md", copied into the workdir here — the numeric
+# prefix matters, since the linter derives scope from the filename) to
+# strip step 2's apply fence entirely. extract.sh re-reads $DOC from disk on
+# every call, so by the time the dispatch loop reaches step 2, its apply
+# fence is gone — BLOCK_MISSING, genuinely reached with no stub-collaborator
+# bypass at all. This also exercises the deliberate design choice that
+# apply/verify BLOCK_MISSING does NOT go through fail_policy: there is no
+# "Nothing was rolled back" phrasing here, because fail_policy was never
+# called.
+tmp="$(mktemp -d)"
+cp "$FIX/0046-apply-dropped-by-step1.md" "$tmp/0046-doc.md"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$tmp/0046-doc.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "apply BLOCK_MISSING: exits 1"
+assert_eq "$(cat "$tmp/s1.txt" 2>/dev/null)" "s1" "apply BLOCK_MISSING: step 1 (which did the mutating) applied fine"
+assert_contains "$out" "apply block missing" "apply BLOCK_MISSING: named as missing, not merely failed"
+assert_not_contains "$out" "step 2: applied" "apply BLOCK_MISSING: step 2 never reported as applied"
+assert_eq "$(ls "$tmp"/s2.txt 2>/dev/null; echo none)" "none" "apply BLOCK_MISSING: step 2's apply never ran"
+assert_not_contains "$out" "Nothing was rolled back" \
+  "apply BLOCK_MISSING: bypasses fail_policy entirely (design choice — see run-migration.sh's header)"
+rm -rf "$tmp"
+
+echo
+echo "== run-migration.sh: verify BLOCK_MISSING — normal refusal at L7, then reached via stub =="
+
+# 0045-unclosed-fence-verify.md: an unclosed role=verify fence at EOF. L7
+# catches this at lint time (unlike 0041's pre-L7 era), so a normal
+# invocation refuses before the dispatch loop ever runs. The dispatch loop's
+# own verify BLOCK_MISSING branch is reached only via the same
+# stub-collaborator technique used for 0042/0044 (a stubbed lint gate that
+# always exits 0) — see those fixtures' own comments for why that technique
+# carries zero bypass surface in the shipped script.
+tmp="$(mktemp -d)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0045-unclosed-fence-verify.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "verify BLOCK_MISSING: normally refused at the lint gate (L7), never reaching dispatch"
+assert_contains "$out" "L7" "verify BLOCK_MISSING: the refusal is attributed to L7"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "verify BLOCK_MISSING: nothing ran"
+
+stubdir="$(mktemp -d)"
+ln -s "$MR/run-migration.sh" "$stubdir/run-migration.sh"
+ln -s "$MR/extract.sh" "$stubdir/extract.sh"
+cat > "$stubdir/lint-migration.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$stubdir/lint-migration.sh"
+
+out="$(cd "$tmp" && bash "$stubdir/run-migration.sh" --host codex-workflow "$FIX/0045-unclosed-fence-verify.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "verify BLOCK_MISSING: past a stubbed-clean lint gate, the dispatch loop aborts"
+assert_contains "$out" "verify block missing" "verify BLOCK_MISSING: diagnostic names the block as missing"
+assert_not_contains "$out" "verify failed" "verify BLOCK_MISSING: a missing block is not misreported as a failed one"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "applied" \
+  "verify BLOCK_MISSING: apply DID run (only verify is missing) — its artefact is on disk"
+assert_not_contains "$out" "Nothing was rolled back" \
+  "verify BLOCK_MISSING: also bypasses fail_policy, same design choice as the apply case"
+rm -rf "$tmp" "$stubdir"; trap - EXIT
 
 echo
 echo "TOTAL: $pass passed, $fail failed"

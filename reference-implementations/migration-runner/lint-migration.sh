@@ -13,6 +13,10 @@
 #     though the extractor deliberately tolerates it structurally — see
 #     mr_steps's "bound by the next heading, not N+1" comment)
 # L7  every fence a migration opens must be closed before end of file
+# L8  a tagged fence's body must not be empty or whitespace-only, for ANY
+#     role (check, precondition, apply, verify, rollback) — see the header
+#     comment just above the L8 scan for why this is a linter rule and not a
+#     runner one
 #
 # Every rule above is implemented in this script.
 #
@@ -324,6 +328,40 @@ for s in $steps; do
   done <<EOF
 $bad
 EOF
+
+  # L8 — a tagged fence must not be empty or whitespace-only, for ANY role.
+  #
+  # WHY THIS IS A LINTER RULE, NOT A RUNNER ONE. Run for real, `bash -c ''`
+  # (and `bash -c '<blank line>'`) exits 0 — which the three-valued check
+  # contract reads as "already applied" — so a tagged-but-empty `check` fence
+  # makes the runner report `step N: skipped (already applied)` and apply
+  # nothing, on a tree where nothing was ever applied. Reproduced against the
+  # REAL CLI (see 0049-bad-l8-empty-check.md), not merely asserted: this is
+  # the exact silent-no-op class the whole format exists to close, one layer
+  # beneath an un-annotated fence — this one IS tagged, and still does
+  # nothing. The pre-flight scan in run-migration.sh already tests emptiness
+  # for `apply` specifically (a step whose apply fence is present but empty),
+  # but `check` and `precondition` have no equivalent there — an empty
+  # `precondition` passes just as vacuously, for the same reason. Fixing this
+  # in the linter, once, for every role uniformly, is what the runner's own
+  # lint-before-execute gate already turns into a hard refusal for all five
+  # roles, rather than bolting a sixth ad hoc emptiness check onto the
+  # runner's dispatch loop.
+  #
+  # Reuses extract.sh's own `block` subcommand — the exact same extraction
+  # `run_block` itself calls — rather than a second, drifting reimplementation
+  # of "capture this fence's body." An ABSENT role is already L1's job; this
+  # only fires for a role that IS present but resolves to nothing but
+  # whitespace. `tr -d '[:space:]'` collapses blank lines and spaces alike, so
+  # a fence containing only a blank line does not pass as "non-empty" merely
+  # because it has bytes in it.
+  for r in $roles; do
+    body="$(bash "$SCRIPT_DIR/extract.sh" block "$DOC" "$s" "$r" 2>/dev/null)"
+    stripped="$(printf '%s' "$body" | tr -d '[:space:]')"
+    if [ -z "$stripped" ]; then
+      report "L8: step $s: role '$r' is empty or whitespace-only"
+    fi
+  done
 done
 
 # L5 — role= only on bash fences, and only in the exact grammar. Scans every
