@@ -1,111 +1,109 @@
-# Session Handoff — 2026-08-04 (second session of the day)
+# Session Handoff — 2026-08-04 (fifth session of the day)
 
 ## Accomplished
 
-- **PR #72 reviewed independently and merged.** This session was the cleared
-  session for it. One defect found and fixed before merge: the propagation note
-  cited `grep -c database-sentinel-version` returning 0 as what distinguished the
-  three inlined copies from the shim — but the shim returns 0 for that grep too.
-  The marker (`# <artifact>-version:`) lives in the *published* implementation,
-  not in project hook files. Conclusion was right, evidence didn't hold.
-- **A new change is open, planned, twice-reviewed and half-built:**
-  `shim-suppressed-report-and-fleet-propagation`. **Core PR 1 is #73, open and
-  green.**
-- **The rate-limit defect is fixed.** A suppressed call emits one line and keeps
-  `exit 1`. The rate limit governs verbosity — the only thing it can govern,
-  since the exit code interrupts regardless.
-- **Core's own binder was violating the rule this repo publishes, and is fixed.**
-  `.claude/hooks/openspec-change-gate.sh` failed open with `printf … >&2; exit 0`
-  from 1.1.0 until today. `spec.md:611-615` names that construction as warning
-  nobody. `--fleet` excludes core by design, so no run of the instrument could
-  ever have reported it.
-- **The instrument gained two axes.** Absence is reported instead of skipped
-  (`[ -f "$shim" ] || continue` on both axes), and registrations are checked
-  against a declared `MATCHERS` set. `--fleet` findings went **30 → 46**.
-- **Contract is at 1.2.0** across template, gate shim and core's binder, enforced
-  by an existing parity assertion.
+- **Core PR 2 is open: [#74](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/74).**
+  It carries group 7's propagation evidence, the archive, the spec fold-in, and
+  the one group-4 correction that was still outstanding.
+- **The change is archived** as
+  `openspec/changes/archive/2026-08-04-shim-suppressed-report-and-fleet-propagation`.
+  The delta folded into `project-hook-binding`: **4 requirements added, 2
+  modified** (354 insertions). `openspec validate --all` green at 5/5 after.
+- **Re-verified before shipping, not recalled:** shim 64/64, conformance 60/60,
+  wrapper 12/12, validate 5/5 — run both before and after the archive.
+- Tasks 4.4, 8.3 and 8.5a ticked. 8.4's second half and 8.5b (ship) remain.
+
+### The one correction group 4 had left open — about itself
+
+The README's contract-revision table recorded **1.2.0's own row as
+`in progress`**. That was true when core PR 1 wrote it and became false the
+moment the seventh fleet PR merged. Last session's handoff read this as "group 4
+not folded in yet"; in fact 4.1–4.3 all shipped in PR 1, and what was actually
+left was the row those three left open about themselves.
+
+Now **21**, and 1.2.0 states its profile split per hook rather than inheriting
+1.1.0's paragraph.
+
+**The 21 was counted, not carried forward.** The marker was read out of each
+checkout after the merges — three each in six repos, two in `agents-task-viewer`
+(declared opt-out) = 20 published-resolution — plus core's own binder read from
+core. Given that this change spent a whole session discovering that the fleet
+number was measuring a laptop, inheriting 1.1.0's count would have been the
+identical mistake in the identical place.
+
+Recorded as task 4.4, since no existing task covered it.
 
 ## Decisions
 
-- **Bundle the propagation with the fix, and cross the family boundary** — both
-  your calls, made explicitly. The change reaches all seven declared binders,
-  four of which are in `factiv`. Recorded in the proposal as authorized for this
-  change only, not standing permission.
-- **Convert all three shimmed hooks in the five inlining repos**, not just
-  `database-sentinel` — your call. Feasible because the README had already argued
-  every reconciliation (differences 1–6); this applies them, it decides nothing new.
-- **A suppressed call says one line rather than exiting 0.** Exiting 0 would
-  deliver the interval policy's intent and make the rest of the hour an
-  *unannounced* fail-open — the posture this capability rejects.
-- **Two core PRs, not one.** Core must merge first so the seven have an authority
-  to compare against; the propagation evidence only exists after they merge. One
-  PR cannot be both. The archive belongs to PR 2.
-- **Instrument gaps became work, not caveats.** Round 1 recorded them in
-  `design.md`; both round-2 reviewers rejected that on the change's own terms.
+- **Archive went into PR 2 rather than after it**, per 8.3: archiving before the
+  evidence existed would fold a delta whose central claim was still unverified.
+  The evidence now exists, so it folds.
+- **`openspec archive -y` warned about 3 incomplete tasks and continued.** Named
+  in 8.5a rather than left silent. Two of the three (8.3, 8.5) describe the act
+  of archiving and cannot be ticked before it; the third is 8.4's review of the
+  PR that carries the archive. A `--yes` that walks past a warning should leave
+  a record of what it walked past.
+- **8.5 split into 8.5a (archived) and 8.5b (ship)** — the task always said "two
+  separate acts" and was one checkbox.
 
-## The theme, now at eleven — and the suite was in on it
+## The theme, now at eighteen
 
-9. **The acceptance criterion could not see the authority.** "`--fleet` reports 0"
-   structurally excludes core. Following that exclusion found core's binder
-   shipping the defect the spec names.
-10. **`[ -f "$shim" ] || continue`, second occurrence.** Same shape as the
-    currency-table defect repaired in #71 two days ago, in a different tool. A
-    repo with no shims at all scored exactly like a current one.
-11. **Two tests asserted the defect as the contract.** `"unresolvable report is
-    rate limited (1/3)"` required that two of three calls say *nothing*, and
-    `"genuinely absent gate fails open (0)"` required the exit code that discards
-    the message. Both had to invert. A test that asserts the defect answers the
-    question before anyone thinks to ask it.
+17. **A document ages into fiction about itself.** The contract table's
+    `in progress` was not a claim about the world that drifted — it was 1.2.0's
+    own row, describing 1.2.0, going stale the moment 1.2.0 finished. The
+    previous handoff then misread which part of group 4 was outstanding, so the
+    stale row survived a second reading that was specifically looking for it.
+18. **A green check for not having run.** CodeRabbit reported `pass — Review
+    rate limited` on #74. Not a wrong verdict; no verdict, reported in the
+    column where verdicts go. The same shape as the suppressed report that
+    kept its exit code, arriving unprompted from a third-party tool on the PR
+    that fixes it.
 
 ## Files modified
 
-- `reference-implementations/project-hooks/shim-template.sh` — suppressed line,
-  report-then-mark, 1.2.0
-- `reference-implementations/project-hooks/openspec-change-gate.shim.sh` — same
-- `.claude/hooks/openspec-change-gate.sh` — `exit 0` → report + `exit 1`, 1.2.0
-- `tools/project-hook-conformance.sh` — absence axis, registration axis, matcher axis
-- `reference-implementations/project-hooks/MATCHERS`, `OPT-OUTS` — **new** declarations
-- `tools/project-hook-shim.test.sh`, `project-hook-conformance.test.sh`,
-  `test-claude-hook-wrapper.sh` — new assertions, two inverted
-- `reference-implementations/project-hooks/README.md` — fix recorded; the
-  three-repos-one-family count corrected to five across two
-- `openspec/changes/shim-suppressed-report-and-fleet-propagation/` — proposal,
-  design, delta, tasks, `REVIEWS.md` (2 rounds), `REVIEW-RESPONSE.md`
+On `chore/fleet-propagation-evidence` (8 commits, pushed, PR #74 open):
+
+- `reference-implementations/project-hooks/README.md` — 1.2.0 row `in progress`
+  → 21; per-hook profile table; a note that the count was measured
+- `openspec/specs/project-hook-binding/spec.md` — the fold-in (+354/-6)
+- `openspec/changes/…` → `openspec/changes/archive/2026-08-04-…` — all nine
+  artifacts moved
+- `…/archive/…/tasks.md` — 4.4 added, 8.3 + 8.5a ticked, 8.5b added
 
 ## Next session: start here
 
-**PR #73 needs the independent code review in a cleared session** — `/clear`,
-then review the branch. It is the one gate this branch does not carry evidence
-for, and task 8.4 asks for it explicitly *before* merge. Everything else on PR 1
-is verified: 56/56 shim suite, 54/54 conformance suite, 12/12 wrapper suite,
-validate green, gate `--ci` exit 0, RED observed before every GREEN.
+**Do 8.4's second half: the Stage-2 independent review of PR #74, in a cleared
+session** (§07 independence — a cleared session, never a subagent). This session
+wrote the PR, so it cannot review it. That review is the last thing between the
+change and shipping. Then 8.5b: merge #74 and ship.
 
-After it merges, the remaining tasks are groups 3, 5, 6, 7 and 8 in
-`tasks.md`: live end-to-end verification (needs a 1.2.0 shim deployed, so it
-follows 5.1), then seven repos each by its own branch and PR — 6 shims
-re-versioned in `agenticapps-dashboard` and `cparx`, 14 inlined copies converted
-in `agenticapps-roadmap`, `agents-task-viewer`, `callbot`, `fbc-platform` and
-`fx-signal-agent`, and one file deleted in `agents-task-viewer` **after** its
-opt-out rationale is relocated to an ADR there. Then core PR 2 carries the
-evidence and the archive.
+Both checks on #74 are green: `gate` pass (29s), CodeRabbit pass.
+
+**Read that second one before trusting it.** CodeRabbit's status is
+`pass — Review rate limited`: it did not review the PR, and reports a green
+check for not having done so. On the PR whose whole subject is a report that
+says nothing while its exit code says fine. It is the third instance today, and
+the first from a tool nobody here wrote — which makes 8.4's human-independent
+review the only review this PR will actually get.
 
 ## Open questions
 
-- **Converting will change live behaviour in five repos**, and it is intended:
-  their inlined `database-sentinel` blocks every `migrations/*` edit behind a
-  sentinel file they do not have, with a remedy naming `/gsd-discuss-phase`
-  (removed 2026-07-28). Each PR body must say so.
-- **`agents-task-viewer` carries `bin/openspec-change-gate.sh` (17k).** The
-  contract's two-candidate order drops that fallback deliberately. Task 6.5a
-  disposes of it explicitly rather than orphaning it.
-- **The matcher axis needs `python3`** and says so when absent. "Not checked" is
-  a different sentence from "checked and clean" — but a CI runner without python3
-  would silently narrow coverage to what the other axes see.
-- **`agenticapps-dashboard-add-agent-board` is not in `FLEET`** and its hooks do
-  fire when that worktree is used. Left unconverted, reasoning in `design.md`.
-- **`provisioning-check.sh` is still not published to the shared bin.** Unchanged
-  from previous sessions.
+- **The instrument change is still unwritten**, and remains the most valuable
+  thing this work produced: `--fleet` must report each project's checkout state
+  beside its findings. It misread the fleet twice in opposite directions.
+  Two more instrument fixes belong with it, both deliberately declined here:
+  core declaring its two non-bindings in `OPT-OUTS`, and the override-vector
+  scan exempting `openspec/changes/archive/` — which takes core from 33 to 19,
+  not to 4. 29 of the 33 are override-vector; only 14 of those 29 are in the
+  archive.
+- **Documenting the contract inside a fleet repo costs a permanent finding.**
+  `agents-task-viewer`'s `bin/README.md` omits the override variable's name for
+  exactly this reason. Verified both ways: one finding with, zero without.
+- **7.1's "0" is reachable only because no fleet repo has docs prose naming an
+  override variable.** Add one file that does and 0 stops being reachable.
+- **Two local merge commits sit unpushed on `main`**: `callbot` (`ea23f9c`) and
+  `fbc-platform`'s feature branch. Neither is mine to push.
 - **27 branches carry genuinely unmerged content**, still unjudged for worth.
-- The convergence rule is still unwritten — tenth session.
+- The convergence rule is still unwritten — thirteenth session.
 - **Two neuroflash PRs remain open** (api-docs #14, terraform #185) — different
   family, untouched.

@@ -80,14 +80,26 @@
 
 ## 3. Live verification, not just tests
 
-- [ ] 3.1 Rename `~/.agenticapps/bin/database-sentinel.sh` away, clear the
+- [x] 3.1 Rename `~/.agenticapps/bin/database-sentinel.sh` away, clear the
       rate-limit marker, and make three consecutive matched calls in a repo
       carrying a 1.2.0 shim. Record all three exit codes and stderr.
-- [ ] 3.2 Confirm call 2 and 3 render a notice with content rather than
+      **Done with one stated deviation**: the implementation was NOT renamed —
+      a second session was live in `agenticapps-dashboard` and would have been
+      put on the fail-open path for the duration. `HOME` was pointed at a tree
+      of the same shape with an empty `.agenticapps/bin/` instead, which reaches
+      the identical branch (`SHARED="$HOME/.agenticapps/bin/$HOOK.sh"`) and
+      clears the marker by construction. Recorded in `PROPAGATION-EVIDENCE.md`
+      with what it does not cover.
+- [x] 3.2 Confirm call 2 and 3 render a notice with content rather than
       `No stderr output`. This is the defect's own reproduction, re-run — the
       only evidence that the fix reaches the surface the defect appeared on.
-- [ ] 3.3 Restore the implementation and re-verify: benign call exit 0,
+      Both render one line saying the failure is a repeat; the 1.1.0 render
+      under the same conditions produces zero stderr on calls 2 and 3 at the
+      same exit code, which is the defect itself.
+- [x] 3.3 Restore the implementation and re-verify: benign call exit 0,
       `DROP TABLE` exit 2. Restoring is part of the task, not cleanup after it.
+      Nothing was renamed, so the real environment was re-checked rather than
+      restored: shared bin present, benign call exit 0, `DROP TABLE` exit 2.
 
 ## 4. Spec and documentation
 
@@ -98,15 +110,47 @@
       `FLEET`.
 - [x] 4.3 Update the README's rate-limit finding, which currently records the
       defect as open, to record it as fixed and name the version that fixes it.
+- [x] 4.4 **Close the contract table's open row.** 4.1–4.3 shipped in core PR 1,
+      while 1.2.0 was genuinely still in flight, so the revision table recorded
+      its own row as `in progress` — true when written, fiction the moment the
+      seventh fleet PR merged. Now 21, and the profile split 1.2.0 is required to
+      state is stated per hook rather than inherited from 1.1.0's paragraph.
+      The twenty were **counted out of the checkouts** after the merges, not
+      carried forward: three each in six repos, two in `agents-task-viewer`,
+      plus core's own binder read from core. Assuming the count is the specific
+      mistake this change spent a session finding.
 
 ## 5. Propagate — the two repos already carrying shims
 
-- [ ] 5.1 `agenticapps-dashboard`: re-issue three shims at 1.2.0, own branch and
+- [x] 5.1 `agenticapps-dashboard`: re-issue three shims at 1.2.0, own branch and
       PR. Verify with `project-hook-conformance.sh` against that repo alone.
-- [ ] 5.2 `cparx`: the same. Note in the PR that this is cross-family work
-      authorized for this change specifically.
+      PR #99. Six findings against that repo → zero.
+- [x] 5.2 `cparx`: the same. Note in the PR that this is cross-family work
+      authorized for this change specifically. PR #124, and the PR body says so
+      in its first line.
+
+Both repos' shims were compared against a clean 1.1.0 render before being
+replaced and were byte-identical to it, so neither PR carried away local
+behaviour — the check that makes a blind re-render safe. Neither `settings.json`
+was touched: all six registrations already covered their declared matcher sets.
 
 ## 6. Propagate — the five repos carrying inlined copies
+
+> **This heading is wrong, and finding out how was the most useful thing in the
+> group.** None of the five carried inlined copies. All seven repos were already
+> at 1.1.0 shims with correct matcher coverage on `origin/main`; the inlined
+> copies existed only in the **stale local checkouts on this machine**, six of
+> which were behind their remotes by up to eleven commits.
+> `project-hook-conformance.sh --fleet` reads working trees and says nothing
+> about how old they are, so it described this laptop and called it the fleet.
+> The full account is in `PROPAGATION-EVIDENCE.md`; the instrument fix is
+> deliberately NOT taken here and wants its own change.
+>
+> Consequence for the instruction below: **no repo needed a matcher edit**, and
+> no PR could truthfully say `migrations/*` stops being blocked or the
+> `Migration 0009` stub stops being injected — both had already stopped when the
+> repos were shimmed at 1.1.0. Each of the five needed the same 1.1.0 → 1.2.0
+> re-version as group 5.
 
 Each repo: convert three hooks to 1.2.0 shims, own branch and PR, and state in
 the PR body that `migrations/*` edits stop being blocked and the
@@ -118,20 +162,35 @@ Each repo's `settings.json` carries several matchers; the gate's is
 across the file would strip the gate's `NotebookEdit` coverage. Change one entry,
 and diff the file to prove only that entry moved.
 
-- [ ] 6.1 `agenticapps-roadmap`
-- [ ] 6.2 `callbot`
-- [ ] 6.3 `fbc-platform`
-- [ ] 6.4 `fx-signal-agent`
-- [ ] 6.5 `agents-task-viewer` — `database-sentinel` and `openspec-change-gate`
+- [x] 6.1 `agenticapps-roadmap` — PR #13. Opened against a stale checkout with
+      claims that were false of the repo, then corrected in place: merged with
+      current `main`, conflicts resolved to it, body rewritten to name the
+      mistake. Net diff is now the same re-version as the other six.
+- [x] 6.2 `callbot` — PR #100.
+- [x] 6.3 `fbc-platform` — PR #105, prepared in a temporary worktree cut from
+      `origin/main`: that checkout sits on an in-progress design-system branch
+      with uncommitted work that must not be disturbed.
+- [x] 6.4 `fx-signal-agent` — PR #120.
+- [x] 6.5 `agents-task-viewer` — `database-sentinel` and `openspec-change-gate`
       only. Before converting the gate, verify the shared install resolves on
       this machine: that repo's current shim falls back to a repo-local
       `bin/openspec-change-gate.sh` (17k, verified present) and the contract's
       two-candidate order deliberately drops it (codex 2).
-- [ ] 6.5a `agents-task-viewer`: dispose of the now-orphaned
+      PR #18. The premise is stale in the same way: upstream that shim is already
+      the 1.1.0 two-candidate shim, so it has not fallen back to the repo-local
+      copy since 2026-08-02.
+- [x] 6.5a `agents-task-viewer`: dispose of the now-orphaned
       `bin/openspec-change-gate.sh` explicitly — removed, or kept with a note
       saying what still invokes it. A 17k copy that nothing calls and no
       instrument reports is the drift the shim contract exists to end.
-- [ ] 6.6 `agents-task-viewer`: relocate the 26-line opt-out rationale from
+      **Not orphaned — the second branch taken.** No instrument reports it, but
+      CI invokes it: `openspec-gate.yml` runs `change-gate-conformance.sh`
+      against it, `bin/openspec-gate-ci.sh` fails without it, and
+      `core-vendor.manifest` pins its sha256 (ADR-0023). CI has no
+      `~/.agenticapps` to resolve from. Kept, with `bin/README.md` saying so —
+      beside the file, not inside it, because editing a pinned file breaks
+      the pin.
+- [x] 6.6 `agents-task-viewer`: relocate the 26-line opt-out rationale from
       `normalize-claude-md.sh` into an **ADR in that repo**, preserving the
       2026-07-21 date and the warning against re-registering the hook, and link
       it from `CLAUDE.md`. An ADR rather than prose in `CLAUDE.md` because
@@ -139,36 +198,76 @@ and diff the file to prove only that entry moved.
       has already survived ~3 manual reverts by being hard to delete accidentally
       (gemini round 2). Not `settings.json` — it is strict JSON and cannot carry
       the comment.
-- [ ] 6.6a Add the opt-out to the declaration introduced in 2b.2, so the
-      instrument reports it as declared rather than skipping it.
-- [ ] 6.7 `agents-task-viewer`: delete `normalize-claude-md.sh`. Depends on 6.6
+      **Recovered rather than relocated**: upstream deleted the file in
+      `ac13485` before this ran, so the rationale existed only in
+      `git show ac13485^`. Now ADR 0009, linked from `CLAUDE.md`'s hand-written
+      preamble — outside every GSD block, so the hook it declines to run could
+      not rewrite the link even if re-registered.
+- [x] 6.6a Add the opt-out to the declaration introduced in 2b.2, so the
+      instrument reports it as declared rather than skipping it. Already present
+      in `OPT-OUTS`; verified reported as an opt-out on both the marker and the
+      matcher axis.
+- [x] 6.7 `agents-task-viewer`: delete `normalize-claude-md.sh`. Depends on 6.6
       — the file is the only record of why the opt-out exists, so deleting it
       first destroys the reason and invites the next migration to undo it.
+      **Already deleted upstream in `ac13485`, ahead of 6.6** — the dependency
+      this task states was violated before the task ran, which is why 6.6 became
+      a recovery from git history rather than a move.
 
 ## 7. Verify the propagation as a whole
 
-- [ ] 7.1 `tools/project-hook-conformance.sh --fleet ~/Sourcecode` reports 0
+- [x] 7.1 `tools/project-hook-conformance.sh --fleet ~/Sourcecode` reports 0
       findings, down from 30. Paste the output.
-- [ ] 7.2 Score core's binder **explicitly**, by passing
+      **0, down from 46** — the stated 30 was never the baseline. Output in
+      `PROPAGATION-EVIDENCE.md`, along with the intermediate reading of 7, which
+      is the more informative one: after the merges but before the last checkout
+      was brought current, every remaining finding belonged to the single tree
+      that had not moved. The pull is part of the task, not cleanup after it —
+      the scan reads working trees, so skipping it would have re-measured the
+      same stale files the baseline did.
+- [x] 7.2 Score core's binder **explicitly**, by passing
       `agenticapps-workflow-core` as a positional argument, and report its version
       beside the fleet's. `--fleet` excludes core by design, so 7.1 alone cannot
       cover it and must not be cited as if it did (codex 1).
-- [ ] 7.2a State what 7.2 does **not** establish. Positionally the tool checks
+      Core reports **33**, composed in `PROPAGATION-EVIDENCE.md`: 4 from the two
+      hooks core does not bind, 29 override vectors from core's own tests, ADRs
+      and archived specs — which name those variables because core is where the
+      mechanism is specified. Its one real binder reads `current (1.2.0)`.
+- [x] 7.2a State what 7.2 does **not** establish. Positionally the tool checks
       core's marker and then exempts byte identity as out of profile
       (`:268`) — it never exercises the fail-open path. The behavioural evidence
       for core is task 1.5's test and task 3's live run, and the change SHALL cite
       those rather than let a marker check stand in for conformance (codex
-      round 2).
-- [ ] 7.3 Assert the matcher change per repo: `database-sentinel`'s entry reads
+      round 2). Stated. The line reference has moved: the exemption is now
+      `project-hook-conformance.sh:323`.
+- [x] 7.3 Assert the matcher change per repo: `database-sentinel`'s entry reads
       `Bash|Edit|Write|MultiEdit` **and** the gate's still reads
       `Edit|Write|MultiEdit|NotebookEdit`. No instrument reads matchers at fleet
       scope — verified: `project-hook-conformance.sh:306-309` reads
       `settings.json` only for override env vectors — so this check is manual and
       its absence from the tooling is recorded, not papered over (opencode 3).
-- [ ] 7.4 In each converted repo, show the hook resolving: one benign matched
+      **The parenthetical is out of date and the check is no longer manual**: the
+      matcher axis added in group 2b reads matchers at fleet scope, which is why
+      it could report four narrow registrations in the baseline. Asserted for all
+      seven repos through that axis — every `database-sentinel` entry covers
+      `Bash|Edit|Write|MultiEdit`, every gate entry still covers
+      `Edit|Write|MultiEdit|NotebookEdit`, and `agents-task-viewer`'s
+      `normalize-claude-md` is reported as a declared opt-out rather than a gap.
+- [x] 7.4 In each converted repo, show the hook resolving: one benign matched
       call, exit 0. The instrument proves propagation, not that anything works.
-- [ ] 7.5 Record which binders implement which profile, as the modified
+      Done in all seven, on each branch's working tree — which is the right place
+      for it, since the question is whether the shim resolves, not whether the PR
+      merged. `DROP TABLE` through `database-sentinel` was run alongside each,
+      returning exit 2: exit 0 alone is also what a hook that does nothing
+      returns. **Re-run across all seven merged checkouts afterwards**, because a
+      hook that resolves on a branch says nothing about the tree the operator
+      actually works in. Benign 0, `DROP TABLE` 2, `migrations/*` 0 everywhere.
+- [x] 7.5 Record which binders implement which profile, as the modified
       requirement obliges — seven published-resolution, one self-hosting in core.
+      Recorded in `PROPAGATION-EVIDENCE.md` per hook, because the summary is only
+      true of the gate: 7 published-resolution + 1 self-hosting for
+      `openspec-change-gate`, 7 + 0 for `database-sentinel`, 6 + 0 for
+      `normalize-claude-md`. Never two self-hosting binders for one hook.
 
 ## 8. Close
 
@@ -177,14 +276,23 @@ found: core must merge **first** so the other seven have an authority to be
 compared against, but the propagation evidence only exists **after** they merge.
 One PR cannot be both (codex round 2).
 
-- [ ] 8.1 Core PR 1 — implementation, spec delta, tests, instrument. Merged
-      before any fleet repo's PR is opened.
-- [ ] 8.2 The seven fleet PRs (groups 5 and 6).
-- [ ] 8.3 Core PR 2 — the propagation evidence from group 7, the README
+- [x] 8.1 Core PR 1 — implementation, spec delta, tests, instrument. Merged
+      before any fleet repo's PR is opened. Merged as `8e7fcd4` (PR #73), and
+      the first fleet PR was opened after it.
+- [x] 8.2 The seven fleet PRs (groups 5 and 6). All seven merged (squash):
+      dashboard #99, cparx #124, roadmap #13, callbot #100, fbc-platform #105,
+      fx-signal-agent #120, agents-task-viewer #18. `fx-signal-agent` merged with
+      two red checks — `pnpm-audit` and `gitleaks`, both failing on `main` since
+      2026-07-29, neither reachable from a three-file hook diff. Named here
+      rather than left for a reader to rediscover.
+- [x] 8.3 Core PR 2 — the propagation evidence from group 7, the README
       corrections from group 4, and the archive. This is the PR the change is
       archived in, because archiving before the evidence exists would fold a
       delta whose central claim is still unverified.
-- [ ] 8.4 Stage-2 independent code review in a cleared session, against core PR 1
+      **PR [#74](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/74).**
+      Group 4's items had in fact shipped in PR 1; what PR 2 carries from that
+      group is 4.4, the row those three left open about themselves.
+- [x] 8.4 Stage-2 independent code review in a cleared session, against core PR 1
       before it merges and against core PR 2 before it merges. Two reviews, not
       one — PR 2 carries the claim that the fleet was actually reached, which is
       the claim most worth an independent reader.
@@ -192,6 +300,21 @@ One PR cannot be both (codex round 2).
         reproduced before it was recorded; `CODE-REVIEW.md` holds the review and
         the reproductions. All four fixed in group 9. The half of 8.4 that
         remains is PR 2's review, so 8.4 stays open.
+  - [x] 8.4b **Core PR 2 reviewed** in a cleared session — `CODE-REVIEW-PR2.md`.
+        PR 2 carries no executable change, so the review is a re-run of the
+        evidence rather than a read of the diff: fleet 0, core 33 composed
+        2/2/29, the 21 binders counted per hook, 7.4's exit codes across all
+        seven repos, the 1.2.0-vs-1.1.0 suppressed-report tables to the exit
+        code and the error string, all four suites, and the fold-in checked
+        requirement-by-requirement for verbatim landing. Everything
+        reproducible reproduced. **Approved**, with two findings, both prose
+        arithmetic in artifacts this PR ships and both fixed on the branch:
+        the archive exemption was credited with 29 of core's 33 findings when
+        it is worth 14, and the composition of the 29 described all of them as
+        documents when 5 are the mechanism itself — the published shim
+        template, the installer, and the instrument, which reports its own
+        override vector. CodeRabbit's check on #74 is
+        `pass — Review rate limited`, so this was the only review #74 got.
 
 ## 9. The Stage-2 findings against PR 1
 
@@ -231,3 +354,12 @@ pre-existing and is finding 6's second half.
       validate --all` green.
 - [ ] 8.5 `openspec archive shim-suppressed-report-and-fleet-propagation -y`,
       then ship. Two separate acts.
+  - [x] 8.5a **Archived.** Run against the merged fleet, not before it: 4
+        requirements added and 2 modified into `project-hook-binding`, as
+        `2026-08-04-shim-suppressed-report-and-fleet-propagation`. The CLI
+        warned about 3 incomplete tasks and continued under `-y` — 8.3 and 8.5
+        describe the act of archiving itself and cannot be ticked before it, and
+        8.4's second half is the review of the PR that carries it. Named here
+        because a `--yes` that walks past a warning should leave a record of
+        what it walked past.
+  - [ ] 8.5b Ship — the second act, after 8.4's review closes and #74 merges.
