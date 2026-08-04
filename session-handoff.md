@@ -1,126 +1,94 @@
-# Session Handoff — 2026-08-04 (sixth session of the day)
+# Session Handoff — 2026-08-04 (eighth session of the day)
 
 ## Accomplished
 
-- **8.4 closed: core PR 2 (#74) independently reviewed** in this cleared session
-  (§07 — a cleared session, never a subagent). `CODE-REVIEW-PR2.md` holds it.
-  **Approved.**
-- **8.5b closed: #74 squash-merged as `e69e471`.** The change is shipped. All
-  eight PRs are merged — core #73, the seven fleet PRs, core #74.
-- Two findings from the review, both fixed on the branch before it merged.
+**The conformance instrument is retired.** PR #77 opened, all suites green.
 
-### The review re-ran the evidence rather than reading the diff
+The session began as task 6.1 — the Stage-2 review of
+`instrument-counts-what-it-names` — and ended by deleting the thing under review.
 
-PR 2 carries no executable change; its content is a claim. So every table in
-`PROPAGATION-EVIDENCE.md` that could be re-run, was:
-
-| Claim | Re-run |
-|---|---|
-| fleet reports 0 | `OK — no known vector found` |
-| 21 binders, 7/7/6 per hook | 21 `MARKER` lines, 20 current, opt-out reads `no shim file` |
-| core reports 33, composed 2/2/29 | exact |
-| 7.4 across all seven repos | benign `Edit` 0, `DROP TABLE` 2, `migrations/*` 0 |
-| 1.2.0 three matched calls | exit 1/1/1, stderr 4/1/1 |
-| 1.1.0, same three | exit 1/1/1, stderr 4/**0/0** — the defect reproducing |
-| occupied shared path | 1.2.0 exit 1 with the sentence; 1.1.0 exit **126** |
-| suites | 64/64, 60/60, 12/12, validate 5/5 |
-| the fold-in | all 6 requirements landed verbatim; spec 17 → 21 |
-
-It reproduced to the exit code and the bash error string. The 3.1 isolation
-claim held too — the real marker's mtime never moved.
-
-### The two findings — both a number answering a narrower question than its sentence
-
-1. **The archive exemption was credited with 29 of core's 33 findings.** Only 14
-   of the 29 are under `openspec/changes/archive/`. The exemption takes core
-   33 → **19**, not → 4. The true sentence (*29 of 33 are override-vector*) sat
-   three lines above, which is how the two fused.
-2. **The 29's composition called all of them documents.** Five are the
-   mechanism: the published shim template the fleet vendors,
-   `install-core-git-hooks.sh`, the gate reference README twice, and
-   `project-hook-conformance.sh` — **the instrument reports its own override
-   vector**, and the row did not say so.
-
-Finding 2 widens an open question. *"Documenting the contract inside a fleet
-repo costs a permanent finding"* is the narrow version; **implementing** it
-costs one too, and no exemption scoped at documentation reaches that.
+1. **The review ran and found a real regression (F1).** The change's new
+   classifier reads shell assignment syntax, while the corpus deliberately
+   includes `Makefile`, `*.mk`, `justfile` and `Taskfile.yml`. Four files each
+   setting the override, all reported `OK — no known vector found`. Confirmed by
+   execution, not by reading. Also F3: one unparseable settings file reported as
+   "5 settings file(s)", because the counter incremented per (hook, variable,
+   file). Full review at
+   `openspec/changes/instrument-counts-what-it-names/CODE-REVIEW.md` on that
+   branch.
+2. **Donald asked what problem any of this was solving.** The answer, from the
+   history rather than from memory: the migration he asked for — hooks published
+   once, bound through shims — shipped 2026-08-02 (PR #61). Everything in the six
+   days since has been repairs to the instrument built alongside it, each found
+   by reading the previous repair's output. 1,962 lines of instrument against the
+   320 it measured; six of eight archived changes were self-repairs.
+3. **He chose to shrink it.** `tools/project-hook-conformance.sh` and its
+   1,000-line suite deleted; `tools/check-shims.sh` (96 lines) replaces them.
+   Two requirements removed from `project-hook-binding`, one modified to stop
+   mandating the scan. Change archived as
+   `2026-08-04-retire-the-conformance-instrument`.
 
 ## Decisions
 
-- **The merge was asked for, not assumed.** The review had just changed the
-  branch, so the user had not read what was about to land. Confirmed, then
-  squash-merged.
-- **8.5b ticked in a follow-up PR rather than left open.** An archived change
-  whose last task still reads "ship" is the same fiction-about-itself that 4.4
-  existed to close.
-- **Both findings fixed by the reviewer**, because each is a number correction
-  verifiable against command output recorded in the same file — not a judgement
-  that needs a second opinion.
-
-## The theme, now at nineteen
-
-19. **The instrument is inside its own blast radius.** `project-hook-conformance.sh`
-    is one of the 29 override vectors it reports against core. That is the scan
-    working — it names the variable because it implements the mechanism — but
-    the composition row filed it under "tests, ADRs, change docs and spec
-    files", where a reader would never look for it. Same shape as 17 and 18: not
-    a wrong number, a number answering a question nobody asked.
+- **The instrument was never requested.** It came from a task inside PR #61's own
+  plan ("a version marker with no check makes nothing detectable"). Recorded in
+  the proposal because the same reasoning will regenerate it otherwise.
+- **Core is in `check-shims.sh`'s target list, not excluded from it.** That is
+  what discharges the removed "authority's own binder is scored" requirement —
+  the tool's shape rather than prose.
+- **`MATCHERS` is kept and is now read by nothing.** Its header says so
+  explicitly. Rebuilding a registration check needs a JSON parser, and that is
+  how the instrument grew the first time. A drifted registration will be found by
+  the hook not firing — which is how the original defect was found.
+- **`OPT-OUTS` is kept**, read by `check-shims.sh` in three lines. Core's two
+  rows were ported from the abandoned branch; ADR-0030 (94 lines arguing them)
+  was not. `OPT-OUTS`' header was amended so a self-contained row is sufficient
+  and an ADR is not compulsory — requiring one for a one-sentence fact is what
+  produced the 94 lines.
+- **What is lost is stated, not argued away:** nothing now detects a project
+  setting an override variable in its own files. That scan ran seven times, found
+  nothing, and never covered the operator's own shell.
+- **`feat/instrument-counts-what-it-names` is left unmerged, not deleted.** Its
+  eleven commits, its `EVIDENCE.md` and the code review are preserved on the
+  branch. If retirement proves wrong, the repair is still there.
+- **Untouched deliberately:** `tools/provisioning-check.sh` and its four
+  requirements (a different question — is *this machine* provisioned), and
+  `openspec/specs/conformance-harness-reporting/` (governs the harnesses that
+  measure *host* implementations).
 
 ## Files modified
 
-Merged in #74 (branch deleted):
-
-- `…/archive/…/CODE-REVIEW-PR2.md` — new, the PR 2 review
-- `…/archive/…/PROPAGATION-EVIDENCE.md` — 7.2's composition row corrected; the
-  exemption's actual yield stated
-- `…/archive/…/tasks.md` — 8.4 + 8.4b closed
-- `session-handoff.md` — the 29/14 correction
-
-On `chore/close-shipped-task` (this PR):
-
-- `…/archive/…/tasks.md` — 8.5b closed
-- `session-handoff.md` — this file
+- `tools/project-hook-conformance.sh`, `tools/project-hook-conformance.test.sh` — **deleted**
+- `tools/check-shims.sh` — new, 96 lines, with a header arguing against its own growth
+- `openspec/specs/project-hook-binding/spec.md` — 1,961 → 1,898 lines via the archived delta
+- `reference-implementations/project-hooks/{OPT-OUTS,MATCHERS,FLEET,SHIMMED-HOOKS,README.md}` — core's two opt-out rows; comments corrected where they described what runs
+- `tools/lib/semver.sh`, `tools/provisioning-check.sh` — comment corrections (one caller now, not two)
 
 ## Next session: start here
 
-**The change is done.** Nothing remains in
-`2026-08-04-shim-suppressed-report-and-fleet-propagation`; every task is ticked
-and every PR merged — verified by `grep '\[ \]' tasks.md` returning nothing, not
-by having ticked them. The first grep found one: **parent task 8.5, still open
-after both its halves closed.** Splitting 8.5 into a and b moved the work down a
-level and left the box above it unattended, and this handoff claimed "every task
-is ticked" while it was false. Corrected in #76.
+**Merge PR #77, then stop.** The migration is done, the check is 96 lines, and
+the loop is closed by deletion rather than by intention.
 
-The next piece of work is the one this change kept deferring and the review
-flagged again: **the instrument change**. Propose it as a new OpenSpec change.
-Its scope is now three items, all recorded with evidence:
+If `check-shims.sh` ever reports something, **fix the shim it names — not the
+script.** That sentence is task 4.4 of the archived change and it is the whole
+point of this session. Do not open a change against `check-shims.sh`. Do not add
+an axis to it. Do not rebuild the matcher check, the override scan, or the
+checkout provenance report; if one of them seems necessary, the argument to beat
+is in
+`openspec/changes/archive/2026-08-04-retire-the-conformance-instrument/proposal.md`.
 
-1. **`--fleet` must report each project's checkout state** beside its findings
-   (ahead/behind, or at minimum HEAD date and fetch staleness). It misread the
-   fleet twice in opposite directions — 46 findings that were one laptop, then
-   7 that were one branch.
-2. **Core declares its two non-bindings in `OPT-OUTS`** — `database-sentinel`
-   and `normalize-claude-md`, which core hosts but does not bind. Clears 4 of
-   core's 33.
-3. **The override-vector scan exempts `openspec/changes/archive/`** — worth 14,
-   taking core 33 → 19. It does **not** clear the 5 implementation files, and
-   should not.
-
-Start with `/opsx:propose`. Until it lands, do not quote a `--fleet` number
-anywhere without saying which checkouts produced it.
+The real backlog, if work is wanted: `agenticapps-dashboard` is on a branch with
+no upstream, and two local merge commits sit unpushed on `main` in `callbot` and
+`fbc-platform`. Those are actual repository states, not instrument output.
 
 ## Open questions
 
-- **Documenting *or implementing* the contract costs a permanent finding.**
-  `agents-task-viewer`'s `bin/README.md` omits the override variable's name for
-  exactly this reason; core's own shim template cannot. Whether the scan should
-  distinguish "names the variable" from "sets the variable" is unanswered, and
-  is probably the real fix behind item 3.
-- **7.1's "0" is reachable only because no fleet repo has docs prose naming an
-  override variable.** Add one file that does and 0 stops being reachable.
-- **Two local merge commits sit unpushed on `main`**: `callbot` (`ea23f9c`) and
-  `fbc-platform`'s feature branch. Neither is mine to push.
-- **27 branches carry genuinely unmerged content**, still unjudged for worth.
-- The convergence rule is still unwritten — fourteenth session.
-- **Two neuroflash PRs remain open** (api-docs #14, terraform #185) — different
-  family, untouched.
+- **Something is still writing `.planning/skill-observations/*`** into these
+  repositories, despite the global rule that `.planning/` is frozen history. It
+  swept 29 files into a branch two sessions ago. Worth finding the writer, or
+  gitignoring the directory.
+- `MATCHERS` is now unread. If that becomes uncomfortable, the honest options are
+  to delete it or to check it — not to leave it looking verified.
+- The convergence rule is still unwritten — sixteenth session. It may have just
+  written itself: *stop when the thing you are fixing is the thing you built to
+  find things to fix.*
