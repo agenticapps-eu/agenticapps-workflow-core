@@ -8,6 +8,25 @@
 
 **Tech Stack:** bash 3.2+ (macOS default), awk, git. No Node, no network, no external dependencies.
 
+> **Revised after Stage 2 review.** Three independent reviewers returned
+> REQUEST-CHANGES on the first draft. Two structural findings are fixed in the
+> code below: the runner now lints before executing anything (it previously
+> would run an all-illustration migration and report success), and the linter
+> now derives the migration ID from the **filename** rather than frontmatter (a
+> missing `id:` line previously evaded it entirely, defeating the whole reason
+> the ID was chosen). See `openspec/changes/executable-migration-format/design.md`,
+> "What the Stage 2 review changed".
+>
+> **`openspec/changes/executable-migration-format/tasks.md` is now the
+> authoritative task list** — it has nine groups, including a new one for the
+> lint-first refusal. The task numbering below predates that split and no
+> longer matches one-to-one. The `TOTAL: N passed` figures below are likewise
+> from the pre-review draft and are now floors, not targets: the revision adds
+> assertions for verify failure, three-valued `check`, filename-ID evasion,
+> opt-in below threshold, non-consecutive numbering, info-string grammar, skip
+> continuing, and the all-illustration refusal. Record actual counts in the
+> ledger as you go rather than trusting these.
+
 ## Global Constraints
 
 - **Bash, not JavaScript.** Migration steps are bash; a JS runner shells out for every block and buys only a process boundary. Migrations must stay runnable on a machine with no Node.
@@ -277,35 +296,47 @@ mr_steps() {
 }
 
 mr_roles() {
-  local doc="$1" step="$2" next=$(( $2 + 1 ))
-  awk -v stepp="### Step ${step}" -v nextp="### Step ${next}" '
+  local doc="$1" step="$2"
+  awk -v stepp="### Step ${step}" '
     function delim_ok(line, plen,   d) {
       d = substr(line, plen + 1, 1)
       return (d == "" || d == ":" || d == " ")
     }
-    index($0, stepp) == 1 && delim_ok($0, length(stepp)) { in_step = 1; next }
-    index($0, nextp) == 1 && delim_ok($0, length(nextp)) { in_step = 0 }
+    # ANY step heading ends the previous step. Bounding on "the next step
+    # heading" rather than on "the heading numbered N+1" means a gap in the
+    # numbering cannot merge two steps and hide the second one'"'"'s roles from
+    # both the linter and the runner.
+    index($0, "### Step ") == 1 {
+      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
+      next
+    }
     !in_step { next }
     inb && index($0, "```") == 1 { inb = 0; next }
     inb { next }
     index($0, "```") == 1 {
       inb = 1
       info = substr($0, 4); sub(/[ \t]+$/, "", info)
-      if (info ~ /^bash[ \t]+role=/) { sub(/^bash[ \t]+role=/, "", info); print info }
+      # EXACT GRAMMAR: literal bash, whitespace, role=, a lowercase role name,
+      # then end of string. An info-string carrying extra keys is NOT a tagged
+      # fence — it falls through to the linter as a violation rather than being
+      # silently honoured with its extra keys ignored.
+      if (info ~ /^bash[ \t]+role=[a-z]+$/) { sub(/^bash[ \t]+role=/, "", info); print info }
       next
     }
   ' "$doc"
 }
 
 mr_block() {
-  local doc="$1" step="$2" role="$3" next=$(( $2 + 1 )) out
-  out="$(awk -v stepp="### Step ${step}" -v nextp="### Step ${next}" -v want="$role" '
+  local doc="$1" step="$2" role="$3" out
+  out="$(awk -v stepp="### Step ${step}" -v want="$role" '
     function delim_ok(line, plen,   d) {
       d = substr(line, plen + 1, 1)
       return (d == "" || d == ":" || d == " ")
     }
-    index($0, stepp) == 1 && delim_ok($0, length(stepp)) { in_step = 1; next }
-    index($0, nextp) == 1 && delim_ok($0, length(nextp)) { in_step = 0 }
+    index($0, "### Step ") == 1 {
+      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
+      next
+    }
     !in_step { next }
     inother && index($0, "```") == 1 { inother = 0; next }
     inother { next }
@@ -313,7 +344,7 @@ mr_block() {
     inb { print; next }
     index($0, "```") == 1 {
       info = substr($0, 4); sub(/[ \t]+$/, "", info); r = ""
-      if (info ~ /^bash[ \t]+role=/) { r = info; sub(/^bash[ \t]+role=/, "", r) }
+      if (info ~ /^bash[ \t]+role=[a-z]+$/) { r = info; sub(/^bash[ \t]+role=/, "", r) }
       if (r == want) inb = 1; else inother = 1
       next
     }
@@ -592,27 +623,61 @@ THRESHOLD=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --threshold) THRESHOLD="${2:?--threshold needs a value}"; shift 2 ;;
+    --host)
+      # Resolve from the declared file rather than making every caller
+      # remember a number. THRESHOLDS is core's declaration, one row per host.
+      _h="${2:?--host needs a value}"; shift 2
+      THRESHOLD="$(sed 's/#.*//' "$SCRIPT_DIR/THRESHOLDS" | awk -v h="$_h" '$1 == h { print $2; exit }')"
+      [ -n "$THRESHOLD" ] || { echo "lint: no threshold declared for host '$_h'" >&2; exit 65; }
+      ;;
     *) DOC="$1"; shift ;;
   esac
 done
-: "${DOC:?usage: lint-migration.sh [--threshold N] <doc>}"
+: "${DOC:?usage: lint-migration.sh [--threshold N | --host NAME] <doc>}"
 
-fm_id="$(awk -F': *' '/^id:/ { print $2; exit }' "$DOC" | tr -d '[:space:]')"
+# THE ID COMES FROM THE FILENAME, NEVER FROM FRONTMATTER.
+#
+# The ID threshold was chosen over a frontmatter declaration precisely because
+# a filename cannot be forgotten. A linter that then reads frontmatter throws
+# that away: delete one `id:` line and the file is skipped entirely. That was a
+# real defect in this plan's first draft, found by the Stage 2 review, and the
+# fixture bad-no-frontmatter-id.md is the regression guard. Do not "simplify"
+# this back to reading frontmatter.
+base="$(basename "$DOC")"
+file_id="$(printf '%s' "$base" | sed -n 's/^\([0-9][0-9]*\)-.*/\1/p')"
+if [ -z "$file_id" ]; then
+  echo "lint: $DOC: filename does not begin with a numeric migration ID" >&2
+  exit 1
+fi
+
 fm_fmt="$(awk -F': *' '/^migration_format:/ { print $2; exit }' "$DOC" | tr -d '[:space:]')"
 
-# Below the threshold this document predates the executable format. It is
-# frozen history — skip it entirely rather than reporting violations nobody
-# will ever fix. See the design note: retrofit scope is deliberately zero.
-if [ -n "$THRESHOLD" ] && [ -n "$fm_id" ] && [ "$((10#$fm_id))" -lt "$((10#$THRESHOLD))" ]; then
+# In scope if the filename says so. A declaration may ADD a migration to scope
+# but never remove one — opting in is always allowed, opting out is not
+# expressible.
+in_scope=0
+above=0
+if [ -n "$THRESHOLD" ] && [ "$((10#$file_id))" -ge "$((10#$THRESHOLD))" ]; then
+  above=1; in_scope=1
+fi
+[ "$fm_fmt" = "executable" ] && in_scope=1
+
+# Below the threshold and not opted in, this document predates the executable
+# format. It is frozen history — skip it rather than reporting violations
+# nobody will ever fix. Retrofit scope is deliberately zero.
+if [ "$in_scope" -eq 0 ]; then
+  if [ -n "$fm_fmt" ]; then
+    echo "L0: $DOC: unknown migration_format value '$fm_fmt'" >&2
+    exit 1
+  fi
   exit 0
 fi
-```
 
-Then, immediately after the threshold gate, the frontmatter cross-check:
-
-```bash
-if [ -n "$THRESHOLD" ] && [ "$fm_fmt" != "executable" ]; then
-  report "threshold: $DOC: id $fm_id is at or above threshold $THRESHOLD but frontmatter does not declare migration_format: executable"
+if [ -n "$fm_fmt" ] && [ "$fm_fmt" != "executable" ]; then
+  report "L0: $DOC: unknown migration_format value '$fm_fmt'"
+fi
+if [ "$above" -eq 1 ] && [ "$fm_fmt" != "executable" ]; then
+  report "threshold: $DOC: id $file_id is at or above threshold $THRESHOLD but frontmatter does not declare migration_format: executable"
 fi
 ```
 
@@ -786,6 +851,7 @@ if [ -z "$ON_FAILURE" ]; then
 fi
 
 applied=""
+partial=0
 
 run_block() { # $1=step $2=role ; returns the block's exit code, stderr passthrough
   local body
@@ -795,12 +861,81 @@ run_block() { # $1=step $2=role ; returns the block's exit code, stderr passthro
 
 has_role() { bash "$EXTRACT" roles "$DOC" "$1" | grep -qx "$2"; }
 
-for s in $(bash "$EXTRACT" steps "$DOC"); do
-  if run_block "$s" check >/dev/null 2>&1; then
+# LINT BEFORE EXECUTING ANYTHING.
+#
+# Rejecting a bad migration at lint time is not enough on its own, because
+# nothing obliges the operator to have linted. A runner that executes whatever
+# it is given can be handed an all-illustration document and report success
+# having changed nothing — the exact failure this format exists to prevent, and
+# worst when the silently-skipped step was the security-relevant one. The Stage
+# 2 review found this hole; all-illustration.md is the regression guard.
+if ! bash "$SCRIPT_DIR/lint-migration.sh" ${LINT_HOST:+--host "$LINT_HOST"} "$DOC"; then
+  echo "refusing to run: $DOC does not satisfy the executable format" >&2
+  exit 1
+fi
+
+steps="$(bash "$EXTRACT" steps "$DOC")"
+if [ -z "$steps" ]; then
+  echo "refusing to run: $DOC declares no steps" >&2
+  exit 1
+fi
+for s in $steps; do
+  if [ -z "$(bash "$EXTRACT" block "$DOC" "$s" apply 2>/dev/null)" ]; then
+    echo "refusing to run: $DOC step $s has no apply block" >&2
+    exit 1
+  fi
+done
+
+fail_policy() { # $1 = failing step ; returns 0 to continue, 1 to abort
+  case "$ON_FAILURE" in
+    abort)
+      echo "applied steps:${applied:- none}" >&2
+      echo "step $1 left in place. Nothing was rolled back — inspect before re-running." >&2
+      return 1
+      ;;
+    skip)
+      echo "step $1: skipped with warning (migration is partial)" >&2
+      partial=1
+      return 0
+      ;;
+    prompt)
+      echo "step $1 failed. [r]etry / [s]kip / [b]ack out steps${applied:- none}?" >&2
+      read -r choice
+      case "$choice" in
+        r) RETRY=1; return 0 ;;
+        s) partial=1; return 0 ;;
+        # Reverse document order: a later step may depend on an earlier one, so
+        # undoing forwards can leave the tree in a state no rollback expected.
+        # The FAILED step is deliberately absent from $applied — a step that
+        # died part-way through apply is in an unknown state, and running its
+        # rollback could destroy work the rollback did not create.
+        *) for d in $(echo "$applied" | tr ' ' '\n' | tail -r 2>/dev/null || echo "$applied" | tr ' ' '\n' | tac); do
+             [ -n "$d" ] && run_block "$d" rollback || true
+           done
+           return 1 ;;
+      esac
+      ;;
+  esac
+}
+
+for s in $steps; do
+  # THREE-VALUED CHECK: 0 = applied, 1 = not applied, anything else = the check
+  # itself could not run. Conflating the last two silently re-applies a step
+  # whose state is unknown.
+  run_block "$s" check >/dev/null 2>&1
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo "step $s: skipped (already applied)"
     continue
+  elif [ "$rc" -ne 1 ]; then
+    echo "step $s: idempotency check could not run (exit $rc) — aborting" >&2
+    exit 1
   fi
 
+  # A failed pre-condition ALWAYS hard-aborts, terminal or not. It means the
+  # migration's assumptions about the tree do not hold; retrying cannot change
+  # that, and skipping would apply a step whose assumptions are violated. The
+  # interactive policy governs apply and verify only.
   if ! run_block "$s" precondition; then
     echo "step $s: pre-condition failed — aborting" >&2
     exit 1
@@ -812,45 +947,31 @@ for s in $(bash "$EXTRACT" steps "$DOC"); do
     continue
   fi
 
-  if ! run_block "$s" apply; then
-    echo "step $s: apply failed" >&2
-    fail_policy "$s"; exit 1
-  fi
-
-  if has_role "$s" verify && ! run_block "$s" verify; then
-    echo "step $s: verify failed" >&2
-    fail_policy "$s"; exit 1
-  fi
+  RETRY=1
+  while [ "$RETRY" -eq 1 ]; do
+    RETRY=0
+    if ! run_block "$s" apply; then
+      echo "step $s: apply failed" >&2
+      fail_policy "$s" || exit 1
+      [ "$RETRY" -eq 1 ] && continue
+      continue 2
+    fi
+    if has_role "$s" verify && ! run_block "$s" verify; then
+      # The step is NOT recorded as applied: apply ran, but its result is not
+      # what the migration said it should be.
+      echo "step $s: verify failed" >&2
+      fail_policy "$s" || exit 1
+      [ "$RETRY" -eq 1 ] && continue
+      continue 2
+    fi
+  done
 
   applied="$applied $s"
   echo "step $s: applied"
 done
+
+[ "$partial" -eq 1 ] && echo "migration is partial" >&2
 exit 0
-```
-
-Add `fail_policy()` above the loop:
-
-```bash
-fail_policy() { # $1 = failing step
-  case "$ON_FAILURE" in
-    abort)
-      echo "applied steps:${applied:- none}" >&2
-      echo "step $1 left in place. Nothing was rolled back — inspect before re-running." >&2
-      ;;
-    skip)
-      echo "step $1: skipped with warning (migration is partial)" >&2
-      ;;
-    prompt)
-      echo "step $1 failed. [r]etry / [s]kip / [b]ack out steps${applied:- none}?" >&2
-      read -r choice
-      case "$choice" in
-        r) return 0 ;;
-        s) return 0 ;;
-        b) for done_step in $applied; do run_block "$done_step" rollback || true; done ;;
-      esac
-      ;;
-  esac
-}
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**

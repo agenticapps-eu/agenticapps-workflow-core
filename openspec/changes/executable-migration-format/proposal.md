@@ -18,13 +18,25 @@ replay, and the new format can be greenfield rather than a 445-fence retrofit.
   `verify` (optional), `rollback`.
 - **Un-annotated ```` ```bash ```` fences become explicitly non-executable.**
   This is what lets a migration keep explanatory snippets beside real commands.
-- **An ID threshold scopes the format.** Migrations at or above a host's declared
-  threshold MUST be executable and MUST declare `migration_format: executable`.
-  Below it, migrations are frozen history and are skipped entirely. Retrofit
-  scope is zero by decision.
+- **An ID threshold scopes the format.** The ID comes from the migration's
+  **filename**, so it cannot be evaded by omitting a frontmatter field.
+  Migrations at or above their host's threshold MUST be executable and MUST
+  declare `migration_format: executable`; the declaration is cross-checked
+  against the filename and may add a migration to the linter's scope but never
+  remove one. Below the threshold, migrations are frozen history and are skipped
+  entirely. Retrofit scope is zero by decision.
+- **Thresholds are declared in core**, at
+  `reference-implementations/migration-runner/THRESHOLDS`, one row per host —
+  the same way core already declares `FLEET`, `ARTIFACTS` and `SHIMMED-HOOKS`.
+  A host may declare its own later and take precedence.
 - **A format linter ships and blocks**, enforcing five rules: required roles
   present (L1), role matches its heading (L2), no duplicate roles (L3),
   unrecognised role values rejected (L4), `role=` only on `bash` fences (L5).
+- **The runner lints before it executes**, and refuses a migration yielding zero
+  steps or a step with no `apply` block. Catching a bad migration at lint time
+  is not enough on its own, because nothing obliges the operator to have linted;
+  a runner that executes whatever it is given can be handed an all-illustration
+  document and report success having changed nothing.
 - **BREAKING (to §08's own text, not to any host): the atomicity contract is
   amended.** §08 currently requires an interactive three-option prompt on
   mid-migration failure, which a non-interactive runner cannot satisfy. Amended:
@@ -65,7 +77,9 @@ existed to absorb legacy prose, and there is no legacy prose in scope).
   the highest-risk part of the change.
 - `reference-implementations/migration-runner/` — new directory, three scripts,
   eight fixtures, a README.
-- `tools/migration-runner.test.sh` — new, 51 assertions.
+- `tools/migration-runner.test.sh` — new.
+- `reference-implementations/migration-runner/THRESHOLDS` — new; the declared
+  per-host boundary the linter reads.
 - `.github/workflows/openspec-gate.yml` — one new step.
 - **No host repo is touched.** The four hosts declare their thresholds
   (claude `0035`, codex `0016`, opencode `0012`, pi `0011`) when the installer

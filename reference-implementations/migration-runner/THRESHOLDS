@@ -1,0 +1,40 @@
+# Executable-format thresholds, one per host.
+#
+# WHY THIS EXISTS.
+#
+# The format linter has to know which migrations it is allowed to judge. Every
+# migration written before this format existed is frozen history — no project in
+# the fleet has one pending, and fresh setup installs a snapshot rather than
+# replaying (ADR-0036) — so judging them would report violations nobody will
+# ever fix.
+#
+# The boundary is the migration's ID, read from its FILENAME. A filename cannot
+# be forgotten the way a frontmatter field can, which is the whole reason the ID
+# was chosen over a per-file declaration. A migration MAY additionally declare
+# `migration_format: executable` in frontmatter; that can only ADD it to the
+# linter's scope, never remove it. The asymmetry is deliberate — opting in is
+# always allowed, opting out is not expressible.
+#
+# WHY IT LIVES IN CORE AND NOT IN THE HOSTS.
+#
+# Because the linter and its CI step ship here, and a spec that mandates a
+# declaration no host has yet written would be false on the day it shipped. Core
+# already declares fleet-wide facts this way — see FLEET, ARTIFACTS and
+# SHIMMED-HOOKS under reference-implementations/project-hooks/. When the
+# installer lands, a host MAY declare its own threshold and take precedence;
+# until then this file is the answer.
+#
+# Each threshold is the next unused ID in that host's migrations/ directory at
+# the time this format was adopted. Everything from that number onward MUST
+# satisfy the executable form.
+#
+# RAISING A THRESHOLD IS A RECORDED DECISION, not a convenience. It excuses a
+# migration from the format, which is the one thing that lets a silent no-op
+# back in. Lowering one is free.
+#
+# Format: <host-repo-name> <threshold-id>. Blank lines and # comments ignored.
+
+claude-workflow            0035
+codex-workflow             0016
+opencode-workflow          0012
+pi-agentic-apps-workflow   0011

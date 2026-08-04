@@ -84,7 +84,53 @@ consume this is bash.
 
 **Dry-run prints source, not a diff.** Producing a diff requires applying the
 step. The spec text is corrected to promise what is deliverable rather than
-retain a claim nothing satisfies.
+retain a claim nothing satisfies. Dry-run still executes `check` and
+`precondition`, so the non-mutation obligation below is what makes its "writes
+nothing" claim honest.
+
+**`check` and `precondition` must not mutate.** Stated as an author obligation
+rather than a runner guarantee. A runner executing arbitrary shell cannot
+enforce it; pretending otherwise is how a false promise gets into a spec.
+
+**A pre-condition failure always hard-aborts**, terminal or not. The interactive
+policy governs `apply` and `verify` only. A failed pre-condition means the
+migration's assumptions about the tree do not hold — retrying cannot change
+that, and skipping would apply a step whose assumptions are known to be
+violated.
+
+**`check` exit codes are three-valued.** 0 applied, 1 not applied, anything else
+means the check itself could not run and aborts. Conflating "not applied" with
+"could not tell" silently re-applies a step whose state is unknown.
+
+## What the Stage 2 review changed
+
+Three independent reviewers (gemini, codex, opencode) all returned
+REQUEST-CHANGES against the first draft of this delta. Two findings were
+structural and both are recorded here because the reasoning that produced them
+will otherwise recur.
+
+**The runner never linted, so the central failure mode survived.** The design's
+sharpest claim is that a migration which would silently do nothing must fail
+loudly. That was closed at lint time only — nothing obliged the runner to lint,
+or to refuse a document yielding zero `apply` blocks. An all-illustration
+migration would therefore run to completion and report success. Closed by a new
+requirement: the runner lints first, aborts on any violation, and aborts on zero
+steps or a step with no `apply` block.
+
+**The threshold read frontmatter, not the filename.** B3 was chosen over B1
+precisely because a filename cannot be forgotten, and then the implementation
+read `id:` from frontmatter — so deleting one line evaded the linter entirely.
+Closed: the ID comes from the filename, the frontmatter declaration is
+cross-checked, and the two can only disagree in the safe direction (a
+declaration may add a migration to scope, never remove one).
+
+Also closed from the same review: `verify` failure semantics were undefined; L1
+and L3 had no requirements at all despite being two of the five advertised
+rules; `precondition` "SHALL abort" contradicted the TTY prompt rule; the
+override was `SHOULD` in a requirement and `SHALL` in its own scenario; step
+extent used an `N+1` boundary that a numbering gap could defeat; the
+info-string grammar was unspecified; and dry-run promised not to write while
+executing arbitrary shell.
 
 ## Risks / Trade-offs
 
@@ -131,7 +177,13 @@ harmless.
   (untracked, no skills) and `.opencode/` (tracked config, no skills), both
   reading 0.5.0. They are the only thing in the fleet that makes historic
   migrations look live. Removing them is a `factiv`-family decision and is out
-  of scope here.
-- **Whether the four host thresholds belong in each host's instruction file or
-  in a manifest** is deferred to the installer change, which is what will first
-  need to read them.
+  of scope here. Two reviewers noted that the zero-retrofit premise rests on
+  this, so it is stated as a constraint rather than an assumption: **if a
+  project is ever found at a version with pending pre-threshold migrations, the
+  answer is to re-snapshot it, not to make historic migrations executable.**
+- **Threshold location — resolved.** Declared in
+  `reference-implementations/migration-runner/THRESHOLDS`, in core, one row per
+  host. Two reviewers independently flagged that the first draft mandated a
+  declaration in each host's instruction file while touching no host and
+  shipping the linter here, which would have made the requirement false on the
+  day it shipped. A host may declare its own later and take precedence.
