@@ -912,9 +912,23 @@ applied=""
 rollbackable=""
 partial=0
 
-run_block() { # $1=step $2=role ; returns the block's exit code, stderr passthrough
+# BLOCK_MISSING is an OUT-OF-BAND signal, not a sentinel return code.
+# SUPERSEDED as of fix round 3/4 of the executable-migration-format change:
+# an earlier version of this snippet (and the shipped code, briefly)
+# returned a sentinel of 127 for "block missing" — but `bash -c "$body"`
+# ALSO returns 127 for a REAL reason, command-not-found, when the block's
+# own body shells out to a tool that isn't installed (jq, gh, rg, openspec
+# are the common ones). Overloading 127 as a sentinel meant a present,
+# functioning pre-condition whose command wasn't installed was misreported
+# as a MISSING block. Do not reintroduce `|| return 127` here; it teaches
+# the bug back.
+run_block() { # $1=step $2=role ; sets $BLOCK_MISSING; returns the block's REAL exit code otherwise
   local body
-  body="$(bash "$EXTRACT" block "$DOC" "$1" "$2" 2>/dev/null)" || return 127
+  BLOCK_MISSING=0
+  if ! body="$(bash "$EXTRACT" block "$DOC" "$1" "$2" 2>/dev/null)"; then
+    BLOCK_MISSING=1
+    return 1
+  fi
   ( cd "$WORKDIR" && bash -c "$body" )
 }
 
@@ -1017,9 +1031,18 @@ for s in $steps; do
   # THREE-VALUED CHECK: 0 = applied, 1 = not applied, anything else = the check
   # itself could not run. Conflating the last two silently re-applies a step
   # whose state is unknown.
+  #
+  # BLOCK_MISSING MUST BE CHECKED BEFORE rc. A missing check block makes
+  # run_block return 1 — the SAME value this contract uses for "not yet
+  # applied, proceed." A real regression (fix round 4) came from checking rc
+  # alone here: a migration whose check was simply never written silently
+  # fell into "proceed, apply it," voiding the idempotency contract entirely.
   run_block "$s" check >/dev/null 2>&1
   rc=$?
-  if [ "$rc" -eq 0 ]; then
+  if [ "$BLOCK_MISSING" -eq 1 ]; then
+    echo "step $s: idempotency check block missing — aborting" >&2
+    exit 1
+  elif [ "$rc" -eq 0 ]; then
     echo "step $s: skipped (already applied)"
     continue
   elif [ "$rc" -ne 1 ]; then
@@ -1031,8 +1054,16 @@ for s in $steps; do
   # migration's assumptions about the tree do not hold; retrying cannot change
   # that, and skipping would apply a step whose assumptions are violated. The
   # interactive policy governs apply and verify only.
+  #
+  # BLOCK_MISSING, not "rc -eq 127": the block's own body can legitimately
+  # exit 127 (command not found) and that is a REAL pre-condition failure,
+  # not a missing block. Only BLOCK_MISSING means extract.sh found nothing.
   if ! run_block "$s" precondition; then
-    echo "step $s: pre-condition failed — aborting" >&2
+    if [ "$BLOCK_MISSING" -eq 1 ]; then
+      echo "step $s: pre-condition block missing — aborting" >&2
+    else
+      echo "step $s: pre-condition failed — aborting" >&2
+    fi
     exit 1
   fi
 
@@ -1046,6 +1077,15 @@ for s in $steps; do
   while [ "$RETRY" -eq 1 ]; do
     RETRY=0
     if ! run_block "$s" apply; then
+      # BLOCK_MISSING checked defensively here too, same reasoning as check
+      # and precondition above — applied even though the pre-flight scope
+      # (elsewhere in this plan) already verifies every step's apply body is
+      # non-empty before this loop runs, so this should not be reachable in
+      # practice; it is not relied upon to be.
+      if [ "$BLOCK_MISSING" -eq 1 ]; then
+        echo "step $s: apply block missing — aborting" >&2
+        exit 1
+      fi
       echo "step $s: apply failed" >&2
       fail_policy "$s" || exit 1
       [ "$RETRY" -eq 1 ] && continue
@@ -1057,6 +1097,14 @@ for s in $steps; do
       # to the rollback set, though: apply completed, so this step's rollback
       # describes a state that actually exists on disk. A step whose apply
       # itself died part-way never reaches here and stays out of both lists.
+      #
+      # BLOCK_MISSING checked defensively here too: verify is optional and
+      # its presence is confirmed via has_role right before this call, but
+      # this does not rely on that guarantee never being violated.
+      if [ "$BLOCK_MISSING" -eq 1 ]; then
+        echo "step $s: verify block missing — aborting" >&2
+        exit 1
+      fi
       echo "step $s: verify failed" >&2
       rollbackable="$rollbackable $s"
       fail_policy "$s" || exit 1

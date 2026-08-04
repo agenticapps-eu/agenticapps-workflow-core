@@ -333,9 +333,21 @@ for s in $steps; do
   # other than 0 or 1 — UNCHANGED in dry-run. A dry run never relaxes this;
   # it simply stops evaluating anything once it hits the first step that
   # returns 1, rather than tolerating a check that returns something else.
+  #
+  # BLOCK_MISSING MUST BE CHECKED FIRST, BEFORE rc. A missing check block
+  # makes run_block return 1 (see run_block's header comment) — the SAME
+  # value that means "not yet applied, proceed" in this three-valued
+  # contract. Fix round 3's BLOCK_MISSING refactor introduced exactly this
+  # regression here: checking rc alone folded "the block is absent" into
+  # "proceed, apply it", silently voiding the idempotency contract for a
+  # migration whose check simply never got written. This is fixed at the
+  # precondition site below already; this is the same fix for check.
   run_block "$s" check >/dev/null 2>&1
   rc=$?
-  if [ "$rc" -eq 0 ]; then
+  if [ "$BLOCK_MISSING" -eq 1 ]; then
+    echo "step $s: idempotency check block missing — aborting" >&2
+    exit 1
+  elif [ "$rc" -eq 0 ]; then
     echo "step $s: skipped (already applied)"
     continue
   elif [ "$rc" -ne 1 ]; then
@@ -390,6 +402,18 @@ for s in $steps; do
   fi
 
   if ! run_block "$s" apply; then
+    # BLOCK_MISSING checked here too, for the same reason as check and
+    # precondition above: `run_block` returning 1 must never be read as an
+    # affirmative outcome, only ever as "something is wrong", regardless of
+    # whether this specific branch is reachable in today's dispatch order
+    # (the pre-flight scan above already verifies every step's apply body is
+    # non-empty via extract.sh directly, before this loop runs at all). This
+    # is applied defensively, matching the round's own check-site finding,
+    # rather than argued as unnecessary.
+    if [ "$BLOCK_MISSING" -eq 1 ]; then
+      echo "step $s: apply block missing — aborting" >&2
+      exit 1
+    fi
     echo "step $s: apply failed" >&2
     fail_policy "$s" || exit 1
     continue
@@ -399,6 +423,15 @@ for s in $steps; do
     if ! run_block "$s" verify; then
       # NOT recorded as applied — apply ran, but the result is not what the
       # migration said it should be, so the step did not succeed.
+      #
+      # BLOCK_MISSING checked here too, same reasoning as apply above: verify
+      # is optional and its presence is already confirmed via `roles` right
+      # before this call, but the check is added defensively rather than
+      # relying on that guarantee never being violated.
+      if [ "$BLOCK_MISSING" -eq 1 ]; then
+        echo "step $s: verify block missing — aborting" >&2
+        exit 1
+      fi
       echo "step $s: verify failed" >&2
       fail_policy "$s" || exit 1
       continue

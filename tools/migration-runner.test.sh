@@ -330,17 +330,45 @@ echo "== lint-migration.sh: L7 unclosed fence =="
 # transcript; it is now MACHINE-CHECKED by pulling the actual pre-L7
 # lint-migration.sh out of git history and running it for real, so the
 # "evidence" is an executed assertion rather than a claim.
+# FIX ROUND 4: the `git show` below had its own exit status unchecked, and
+# `>` creates the destination file regardless of whether the command inside
+# it succeeded — an unreachable commit (a squash/rebase merge onto main, a
+# shallow clone) would silently produce a 0-byte file, and `bash` on an
+# empty file exits 0 with empty output: EXACTLY what both downstream
+# assertions expect, making this pass VACUOUSLY forever instead of being the
+# evidence it claims to be. Demonstrated directly: `git show deadbee:...`
+# (nonexistent commit) leaves a 0-byte file and both downstream assertions
+# would still PASS. Guarded now: `git show`'s own exit status, the extracted
+# file's non-emptiness, and that it does NOT already contain "L7" (which
+# would mean some OTHER revision got extracted, not the intended pre-L7
+# one) are all asserted BEFORE anything the extracted script says is
+# trusted — and if any of those guards fail, the two "MACHINE-CHECKED"
+# assertions below are recorded as FAIL rather than silently skipped, so a
+# broken extraction shrinks the pass count instead of vanishing from it.
 oldlintdir="$(mktemp -d)"
-git -C "$ROOT" show e22db7f:reference-implementations/migration-runner/lint-migration.sh > "$oldlintdir/lint-migration.sh"
-chmod +x "$oldlintdir/lint-migration.sh"
-# extract.sh and THRESHOLDS are unchanged since e22db7f; symlink the real
-# ones in rather than pulling stale copies of files this test isn't about.
-ln -s "$MR/extract.sh" "$oldlintdir/extract.sh"
-ln -s "$MR/THRESHOLDS" "$oldlintdir/THRESHOLDS"
-out="$(bash "$oldlintdir/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
-assert_eq "$?" "0" \
-  "MACHINE-CHECKED: 0041 lints CLEAN under the actual pre-L7 (e22db7f) linter"
-assert_eq "$out" "" "the pre-L7 linter reports zero violations for this fixture, not merely exit 0"
+git -C "$ROOT" show e22db7f:reference-implementations/migration-runner/lint-migration.sh > "$oldlintdir/lint-migration.sh" 2>/dev/null
+show_rc=$?
+assert_eq "$show_rc" "0" "git show e22db7f:...lint-migration.sh succeeds (the commit must stay reachable)"
+assert_eq "$(test -s "$oldlintdir/lint-migration.sh" && echo nonempty || echo empty)" "nonempty" \
+  "the extracted pre-L7 lint-migration.sh is non-empty, not a git-show failure masked by an empty file"
+assert_not_contains "$(cat "$oldlintdir/lint-migration.sh" 2>/dev/null)" "L7" \
+  "the extracted script is genuinely the pre-L7 revision (contains no L7 rule)"
+
+if [ "$show_rc" -eq 0 ] && [ -s "$oldlintdir/lint-migration.sh" ]; then
+  chmod +x "$oldlintdir/lint-migration.sh"
+  # extract.sh and THRESHOLDS are unchanged since e22db7f; symlink the real
+  # ones in rather than pulling stale copies of files this test isn't about.
+  ln -s "$MR/extract.sh" "$oldlintdir/extract.sh"
+  ln -s "$MR/THRESHOLDS" "$oldlintdir/THRESHOLDS"
+  out="$(bash "$oldlintdir/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
+  assert_eq "$?" "0" \
+    "MACHINE-CHECKED: 0041 lints CLEAN under the actual pre-L7 (e22db7f) linter"
+  assert_eq "$out" "" "the pre-L7 linter reports zero violations for this fixture, not merely exit 0"
+else
+  fail=$((fail + 2))
+  echo "  FAIL  MACHINE-CHECKED: 0041 lints CLEAN under the actual pre-L7 (e22db7f) linter (skipped: extraction failed above)"
+  echo "  FAIL  the pre-L7 linter reports zero violations for this fixture, not merely exit 0 (skipped: extraction failed above)"
+fi
 rm -rf "$oldlintdir"
 
 out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
@@ -633,6 +661,52 @@ assert_contains "$out" "pre-condition block missing" \
   "diagnostic names the block as missing, not as having failed"
 assert_not_contains "$out" "pre-condition failed" \
   "a missing block is not misreported as a failed one"
+rm -rf "$tmp" "$stubdir"; trap - EXIT
+
+echo
+echo "== run-migration.sh: a missing check block is not silently treated as 'not yet applied' =="
+
+# FIX ROUND 4, Important 1 — a REAL REGRESSION introduced by fix round 3's
+# BLOCK_MISSING refactor, not a pre-existing gap. run_block used to return a
+# sentinel of 127 for "block missing"; changing that to a real 1 collided
+# with the THREE-VALUED check contract's OWN meaning for 1 ("not yet
+# applied, proceed"). Fix round 3 updated the pre-condition call site to
+# consult $BLOCK_MISSING but missed the check call site, so a migration
+# whose check was simply never written fell through into "proceed, apply
+# it" — silently voiding the idempotency contract. Confirmed against the
+# committed run-migration.sh at acae685 (past a stubbed-clean lint gate,
+# same technique as the pre-condition test above):
+#   step 1: applied
+#   rc=0
+#   fixture.txt: APPLIED BLIND
+# — applied blind, with no idempotency check at all, reporting success.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+
+# Normal operation still refuses it at lint (L1), same contrast as above.
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0044-missing-check-block.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "normally, this fixture is refused at the lint gate (L1), never reaching the dispatch loop"
+assert_contains "$out" "L1" "the refusal is attributed to the linter, not the dispatch loop"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "nothing ran"
+
+# Past a stubbed-clean lint gate, the dispatch loop's own check-handling
+# must abort rather than silently proceeding to apply.
+stubdir="$(mktemp -d)"
+ln -s "$MR/run-migration.sh" "$stubdir/run-migration.sh"
+ln -s "$MR/extract.sh" "$stubdir/extract.sh"
+cat > "$stubdir/lint-migration.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$stubdir/lint-migration.sh"
+
+out="$(cd "$tmp" && bash "$stubdir/run-migration.sh" --host codex-workflow "$FIX/0044-missing-check-block.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "past a stubbed-clean lint gate, a step with no check block aborts, not applies"
+assert_contains "$out" "idempotency check block missing" \
+  "diagnostic names the check block as missing"
+assert_not_contains "$out" "step 1: applied" \
+  "the step is NOT silently applied just because its check block is absent"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "apply never ran — the missing check aborts before it, exactly like a missing pre-condition does"
 rm -rf "$tmp" "$stubdir"; trap - EXIT
 
 echo
