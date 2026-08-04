@@ -1,0 +1,51 @@
+# The tool coverage each shimmed hook's registration must declare.
+#
+# WHY THIS EXISTS.
+#
+# Nothing read matchers at fleet scope. project-hook-conformance.sh opened
+# settings.json only to enumerate override env vectors, so a registration could
+# be narrower than the implementation it invokes and every axis still reported
+# the project current: the marker matched, the shim was byte-identical, and the
+# hook simply never fired for the tools nobody had registered.
+#
+# That is not hypothetical. Five repositories registered database-sentinel on
+# `Bash|Edit|Write` while the reconciled implementation declared
+# `Bash|Edit|Write|MultiEdit`, so a MultiEdit to .env did not invoke the hook at
+# all — protection absent rather than degraded, and invisible to every check.
+#
+# WHY A DECLARATION RATHER THAN A READ OF THE IMPLEMENTATION.
+#
+# The implementation's coverage is what its payload tests accept, which cannot
+# be read out of the file without executing it or parsing its conditionals. The
+# expected set is therefore declared, exactly as ARTIFACTS, SHIMMED-HOOKS and
+# FLEET are — an expected set discovered from what you happened to find cannot
+# detect a missing member.
+#
+# WHAT A MISMATCH MEANS, IN BOTH DIRECTIONS.
+#
+# A registration NARROWER than this declaration is a coverage gap: the hook does
+# not fire where it is meant to. A registration WIDER is not automatically a
+# defect — a project may guard more than the fleet requires — so it is reported
+# as wider and not as a failure. Both are reported; neither is silently passed.
+#
+# AND A HOOK REGISTERED NOWHERE IS THE THIRD DIRECTION, which the first revision
+# of this axis missed. A hook no settings entry names has no registration to be
+# narrow — the comparison loop simply had nothing to iterate, printed nothing,
+# and a shim that was current, byte-identical and wired to nothing scored clean
+# on every axis. That is the worse case by this file's own reasoning: protection
+# ABSENT rather than degraded, reported as neither.
+#
+# It is reachable by exactly the edit a contract rollout performs. The 1.2.0
+# propagation rewrites settings.json in five repositories, and dropping an entry
+# is the plausible mistake there — so the axis added to verify that rollout was
+# blind to the way the rollout most plausibly fails.
+#
+# A hook a project has DECLARED it does not bind (see OPT-OUTS) is exempt: no
+# registration is the correct state for it, and reporting it would leave the
+# declaration meaning nothing here.
+#
+# Format: <hook> <event> <matcher>. One per line, blank lines and # ignored.
+
+database-sentinel     PreToolUse   Bash|Edit|Write|MultiEdit
+openspec-change-gate  PreToolUse   Edit|Write|MultiEdit|NotebookEdit
+normalize-claude-md   PostToolUse  Edit|Write|MultiEdit

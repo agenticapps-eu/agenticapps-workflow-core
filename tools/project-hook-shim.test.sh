@@ -236,21 +236,36 @@ done
 
 rm -f "$BIN/database-sentinel.sh"
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+# WHAT IS RATE LIMITED IS THE FULL REPORT, NOT THE NOTICE (contract 1.2.0).
+# This assertion used to require that only 1 of 3 calls wrote anything at all,
+# which is the defect stated as a requirement: the other two exited 1 in silence
+# and rendered as "hook error — No stderr output". All three now speak; exactly
+# one speaks in full.
 h0=$(( $(date +%s) / 3600 ))
-n=0
+full=0; spoke=0
 for i in 1 2 3; do
   run_shim "$SHIM" "$PAYLOAD" || true
-  [ -s "$TMP/err" ] && n=$((n + 1))
+  [ -s "$TMP/err" ] && spoke=$((spoke + 1))
+  # The full report names the remedy; the suppressed line does not.
+  grep -qi 'install-shared-artifact\|unprovisioned' "$TMP/err" && full=$((full + 1))
 done
 h1=$(( $(date +%s) / 3600 ))
 if [ "$h0" -ne "$h1" ]; then
   # The policy is once per hour; a run straddling the boundary legitimately
   # reports twice. Say so rather than failing or silently accepting 2.
   echo "  SKIP  unresolvable-implementation report is rate limited — run crossed an hour boundary"
-elif [ "$n" -eq 1 ]; then
-  ok "unresolvable-implementation report is rate limited (1/3)"
 else
-  bad "unresolvable-implementation report is rate limited (1/3)" "reported $n/3"
+  if [ "$full" -eq 1 ]; then
+    ok "the FULL unresolvable-implementation report is rate limited (1/3)"
+  else
+    bad "the FULL unresolvable-implementation report is rate limited (1/3)" "full reports: $full/3"
+  fi
+  if [ "$spoke" -eq 3 ]; then
+    ok "every call still says something (3/3) — the limit is on verbosity, not on the notice"
+  else
+    bad "every call still says something (3/3)" "spoke $spoke/3" \
+        "a silent call exits 1 anyway and renders as 'No stderr output'"
+  fi
 fi
 
 echo
@@ -403,20 +418,235 @@ fi
 # finding-12 mistake repeated: a rule with an unstated exemption for the
 # repository that defines it is advisory.
 #
-# Its profile is self-hosting, so the expected answer is NOT the shim's exit 1.
-# This file resolves ONE path — $OPENSPEC_GATE or its working-tree default — and
-# its stated behaviour when that path is not usable is to warn, name it, and fail
-# open. A directory there must reach that branch instead of being `exec`ed.
+# Its profile is self-hosting, so the resolution-order clauses do not reach it.
+# The fail-open-and-report rule does (capability, "the version marker, the
+# behaviour-free rule and the fail-open-and-report rule do"). A directory there
+# must reach the report branch instead of being `exec`ed.
+#
+# THIS ASSERTION USED TO REQUIRE exit 0, and that is how the defect survived: the
+# suite encoded the construction the capability names as warning nobody — stderr
+# on a PreToolUse hook exiting 0 is discarded from the transcript. A test that
+# asserts the defect is worse than no test, because it answers the question
+# before anyone thinks to ask it.
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"
 CORE_BINDER="$ROOT/.claude/hooks/openspec-change-gate.sh"
 run_shim "$CORE_BINDER" "$PAYLOAD" OPENSPEC_GATE="$TMP/gate-plain-subdir"; rc=$?
-if [ "$rc" -eq 0 ] && grep -qi 'not found\|WARNING' "$TMP/err"; then
-  ok "core's self-hosting binder: a directory at the gate path warns and fails open"
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ] && [ "$rc" -ne 126 ] && grep -qi 'not found\|gated' "$TMP/err"; then
+  ok "core's self-hosting binder: a directory at the gate path reports and fails open non-zero"
 else
-  bad "core's self-hosting binder: a directory at the gate path warns and fails open" \
-      "got exit $rc — 126 means it exec'd the directory" \
+  bad "core's self-hosting binder: a directory at the gate path reports and fails open non-zero" \
+      "got exit $rc — 0 means the report is discarded from the transcript, 126 means it exec'd the directory" \
       "stderr: $(head -1 "$TMP/err")"
 fi
+
+echo
+echo "=== the suppressed report still says something ==="
+
+# THE DEFECT. report_rate_limited() returns silently inside the hour and control
+# falls through to an unconditional exit 1, so the host renders
+# "hook error — No stderr output": an alarm that fires as often as the message
+# would and says nothing.
+SUP_SHIM=$(make_shim database-sentinel)
+rm -f "$BIN/database-sentinel.sh"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc1=$?
+first=$(head -1 "$TMP/err")
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc2=$?
+second=$(head -1 "$TMP/err")
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc3=$?
+third=$(head -1 "$TMP/err")
+
+if [ "$rc2" -eq 1 ] && [ -n "$second" ]; then
+  ok "a suppressed repeat exits 1 AND writes a line"
+else
+  bad "a suppressed repeat exits 1 AND writes a line" \
+      "exit $rc2, stderr '$second'" \
+      "empty stderr with a non-zero exit renders as 'hook error — No stderr output'"
+fi
+
+if [ -n "$third" ]; then
+  ok "the third call inside the hour also says something"
+else
+  bad "the third call inside the hour also says something" "stderr was empty"
+fi
+
+# Four mandatory fields, because a test satisfied by any non-empty string would
+# pass a materially non-conformant message (Stage-2 round 2, codex).
+missing=""
+grep -qi 'database-sentinel'          <<<"$second" || missing="$missing hook-name"
+grep -qiE 'still|unchanged'           <<<"$second" || missing="$missing unchanged-state"
+grep -qiE 'allowed|did not run'       <<<"$second" || missing="$missing call-allowed"
+grep -qiE 'earlier|already|this hour' <<<"$second" || missing="$missing earlier-notice"
+if [ -z "$missing" ]; then
+  ok "the suppressed line names the hook, the unchanged state, the allowance and the earlier notice"
+else
+  bad "the suppressed line names the hook, the unchanged state, the allowance and the earlier notice" \
+      "missing:$missing" "line: '$second'"
+fi
+
+if [ -n "$second" ] && [ "$second" != "$first" ]; then
+  ok "the suppressed line differs from the full report's first line"
+else
+  bad "the suppressed line differs from the full report's first line" \
+      "a repeat that reads identically leaves the operator unable to tell it from a fresh failure"
+fi
+
+echo
+echo "=== no pre-exec path exits non-zero in silence ==="
+
+# The general rule, not the one instance. Each case is a path the shim itself
+# takes before exec; what an implementation does after exec is its own.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+run_shim "$SUP_SHIM" "$PAYLOAD" DATABASE_SENTINEL_OVERRIDE="$TMP/nonexistent-override.sh"; rc=$?
+if [ "$rc" -eq 0 ] || [ -s "$TMP/err" ]; then
+  ok "unusable override: non-zero exit carries a message"
+else
+  bad "unusable override: non-zero exit carries a message" "exit $rc with empty stderr"
+fi
+
+for probe in "unresolvable shared install" "suppressed repeat"; do
+  case "$probe" in
+    "unresolvable shared install") rm -rf "$TMP/state"; mkdir -p "$TMP/state" ;;
+  esac
+  run_shim "$SUP_SHIM" "$PAYLOAD"; rc=$?
+  if [ "$rc" -eq 0 ] || [ -s "$TMP/err" ]; then
+    ok "$probe: non-zero exit carries a message"
+  else
+    bad "$probe: non-zero exit carries a message" "exit $rc with empty stderr"
+  fi
+done
+
+# The inverse anti-pattern, which is what core's binder did: exit 0 having
+# written to stderr. Exit 0 discards stderr, so that shape warns nobody.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc=$?
+if [ "$rc" -ne 0 ] || [ ! -s "$TMP/err" ]; then
+  ok "no shim path writes to stderr and then exits 0"
+else
+  bad "no shim path writes to stderr and then exits 0" \
+      "exit 0 with stderr '$(head -1 "$TMP/err")' — discarded from the transcript, so it warns nobody"
+fi
+
+echo
+echo "=== a report that could not be recorded does not suppress the next one ==="
+
+# If the marker write fails, the shim has no memory of having reported.
+# Suppressing the next call would suppress on the strength of a state that was
+# never recorded.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+chmod 500 "$TMP/state"
+run_shim "$SUP_SHIM" "$PAYLOAD"; mfirst=$(head -1 "$TMP/err")
+run_shim "$SUP_SHIM" "$PAYLOAD"; msecond=$(head -1 "$TMP/err")
+chmod 700 "$TMP/state"
+
+if [ -n "$mfirst" ] && [ "$msecond" = "$mfirst" ]; then
+  ok "an unwritable marker leaves every call reporting in full"
+else
+  bad "an unwritable marker leaves every call reporting in full" \
+      "first '$mfirst'" "second '$msecond'" \
+      "suppression here would rest on a record that was never made"
+fi
+
+echo
+echo "=== the SIBLING's suppressed report, driven rather than assumed ==="
+
+# EVERY 1.2.0 ASSERTION ABOVE IS MADE OF THE TEMPLATE. The gate shim carries its
+# own copy of report_rate_limited, its own wording and its own marker, and until
+# now nothing drove any of it: $BIN/openspec-change-gate.sh is created near the
+# top of the gate-shim section and never removed, so $GATE_SHIM always resolved
+# candidate 2 and never reached the unresolvable path where the rate limiter
+# lives. Reverting that file's suppressed branch to the 1.1.0 silent `return 0`
+# — the exact defect this change exists to remove, in the file the change calls
+# the worst case in the fleet — left the whole suite green.
+#
+# That is finding 6's shape a third time, and the comment introducing the
+# gate-shim section already names it: "an assertion made of one of two
+# hand-synchronised files is an assertion about one of them."
+rm -f "$BIN/openspec-change-gate.sh"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+
+run_shim "$GATE_SHIM" "$PAYLOAD"; grc1=$?; gfirst=$(head -1 "$TMP/err")
+run_shim "$GATE_SHIM" "$PAYLOAD"; grc2=$?; gsecond=$(head -1 "$TMP/err")
+
+if [ "$grc1" -eq 1 ] && [ -n "$gfirst" ]; then
+  ok "gate shim: an unresolvable gate reports in full and exits 1"
+else
+  bad "gate shim: an unresolvable gate reports in full and exits 1" \
+      "exit $grc1, stderr '$gfirst'"
+fi
+
+if [ "$grc2" -eq 1 ] && [ -n "$gsecond" ]; then
+  ok "gate shim: a suppressed repeat exits 1 AND writes a line"
+else
+  bad "gate shim: a suppressed repeat exits 1 AND writes a line" \
+      "exit $grc2, stderr '$gsecond'" \
+      "empty stderr with a non-zero exit renders as 'hook error — No stderr output'"
+fi
+
+# The same four mandatory fields the template's line carries. The wording
+# differs between the two files by design — this one names the §18 gate — so the
+# fields are asserted, not the sentence.
+gmissing=""
+grep -qi 'openspec-change-gate'       <<<"$gsecond" || gmissing="$gmissing hook-name"
+grep -qiE 'still|unchanged'           <<<"$gsecond" || gmissing="$gmissing unchanged-state"
+grep -qiE 'allowed|did not run'       <<<"$gsecond" || gmissing="$gmissing call-allowed"
+grep -qiE 'earlier|already|this hour' <<<"$gsecond" || gmissing="$gmissing earlier-notice"
+if [ -z "$gmissing" ]; then
+  ok "gate shim: the suppressed line carries all four mandatory fields"
+else
+  bad "gate shim: the suppressed line carries all four mandatory fields" \
+      "missing:$gmissing" "line: '$gsecond'"
+fi
+
+if [ -n "$gsecond" ] && [ "$gsecond" != "$gfirst" ]; then
+  ok "gate shim: the suppressed line differs from the full report's first line"
+else
+  bad "gate shim: the suppressed line differs from the full report's first line" \
+      "first '$gfirst'" "second '$gsecond'"
+fi
+
+echo
+echo "=== candidate 2 must be an executable REGULAR file, not merely -x ==="
+
+# STAGE-2 FINDING 6, SECOND HALF. `-x` alone is true of any searchable
+# directory. That was repaired on the OVERRIDE path at contract 1.1.0, with a
+# comment in the template explaining precisely why — and candidate 2 kept the
+# bare `-x` eleven lines below that comment. A directory at the shared-install
+# path was therefore `exec`ed: bash exited **126** with its own "is a directory"
+# message, so the exit code was not the 1 this contract defines and the first
+# line the operator saw named neither the hook nor the fact that the call had
+# been allowed.
+#
+# It is the invariant two blocks above, on the one path that block does not
+# enumerate.
+for pair in "database-sentinel:$SUP_SHIM" "openspec-change-gate:$GATE_SHIM"; do
+  hook="${pair%%:*}"; shim="${pair#*:}"
+  rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+  rm -f "$BIN/$hook.sh"
+  mkdir -p "$BIN/$hook.sh"
+  run_shim "$shim" "$PAYLOAD"; rc=$?
+  first=$(head -1 "$TMP/err")
+  rmdir "$BIN/$hook.sh"
+
+  if [ "$rc" -eq 1 ]; then
+    ok "$hook: a directory at the shared-install path exits 1, not 126"
+  else
+    bad "$hook: a directory at the shared-install path exits 1, not 126" \
+        "got exit $rc — 126 means bash was asked to exec a directory"
+  fi
+  # NAMING THE HOOK IS NOT ENOUGH TO DISTINGUISH THE TWO OUTCOMES: bash's own
+  # "is a directory" quotes the full path, which contains the hook name. The
+  # assertion is therefore that the line says the call was ALLOWED — the thing
+  # only the shim's own report says, and the thing the operator needs.
+  if grep -qF "$hook" <<<"$first" && grep -qiE 'allowed|did NOT run' <<<"$first"; then
+    ok "$hook: the report is the shim's own, naming the hook and the allowance"
+  else
+    bad "$hook: the report is the shim's own, naming the hook and the allowance" \
+        "first line: '$first'" \
+        "bash's 'is a directory' names the path but neither the hook's identity nor the allowance"
+  fi
+done
 
 # The three files carry the same contract and must be bumped together. A sibling
 # left behind is the drift the marker exists to surface, and it would surface it

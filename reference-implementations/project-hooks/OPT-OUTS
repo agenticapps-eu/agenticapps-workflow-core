@@ -1,0 +1,25 @@
+# Declared non-bindings: a repository that deliberately does not bind a shimmed
+# hook, with the reason.
+#
+# WHY THIS EXISTS.
+#
+# Once an absent shim is reported rather than skipped, a deliberate opt-out and
+# an accidental deletion look identical to the instrument. Without this file it
+# must report both or neither, and reporting neither is what the previous
+# behaviour chose — the failure that let five repositories carry unmarked inlined
+# copies unreported.
+#
+# An opt-out is reported AS an opt-out, with its reason, and does not count as a
+# finding. It is never silence: a hook nobody binds on purpose is still a fact
+# about the fleet, and the next migration that re-adds the registration should
+# meet the reason before it meets the file.
+#
+# THE REASON BELONGS WITH THE PROJECT, NOT ONLY HERE. This line is an index. The
+# argument lives in the project's own ADR, because a rationale kept only in
+# another repository's declaration is one `git clone` away from being lost — and
+# the one live instance below had already been manually reverted about three
+# times when it was carried as a comment inside the file it justified.
+#
+# Format: <repo> <hook> <reason>. One per line, blank lines and # ignored.
+
+agents-task-viewer normalize-claude-md collapsing CLAUDE.md's inlined stack block drops pinned-version constraints this project's correctness depends on; opted out 2026-07-21, see that repo's ADR

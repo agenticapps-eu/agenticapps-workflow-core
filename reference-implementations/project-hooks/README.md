@@ -27,7 +27,8 @@ over to it.
 
 1. `$<HOOK>_OVERRIDE` — an explicit path naming an **executable regular file**,
    when set to a non-empty value.
-2. `~/.agenticapps/bin/<hook>.sh` — the shared install.
+2. `~/.agenticapps/bin/<hook>.sh` — the shared install, likewise an **executable
+   regular file**.
 
 There is **no third `<repo>/bin/` candidate.** A repo-local copy is the drift
 this directory exists to remove; keeping it as a fallback keeps the drift and
@@ -42,6 +43,21 @@ message, the invalid-override report never fired, and the exit code was not the
 conformance and diagnostics defect rather than a safety one — but the report is
 the whole mechanism by which an operator learns a hook is switched off, and it
 was the one thing that did not happen.
+
+**It applied to candidate 2 as well, and 1.1.0 fixed only candidate 1
+(shim-contract 1.2.0).** The bare `-x` survived on the shared-install branch
+eleven lines below the comment explaining why it was wrong on the override
+branch, so a directory at `~/.agenticapps/bin/<hook>.sh` reproduced finding 6
+exactly: exit 126, bash's message, no sentence naming the hook or the allowance.
+A rule stated of one of two candidates is a rule about one of them. Found in the
+Stage-2 review of the 1.2.0 change, which is also where the same shape was found
+in the test suite — every 1.2.0 assertion had been made of the template, and the
+sibling shim was reached by none of them.
+
+A candidate that **exists but is not usable** is now reported as *occupied*
+rather than as *not installed*, and is not rate limited. "Not installed" is false
+of a path something occupies, and it points the operator at the installer when
+the question is what is sitting there.
 
 **An override set to the empty string falls through, deliberately.** `FOO=` is
 the conventional way to neutralise a variable — it is how an operator says "no
@@ -59,6 +75,7 @@ chose.
 |---|---|---|
 | 1.0.0 | initial — two-candidate order, fail-open-and-report, the marker | 21 |
 | 1.1.0 | an override must name an executable **regular file**; empty means unset | 21 |
+| 1.2.0 | a suppressed report still emits one line; **candidate 2** must also name an executable regular file, and an occupied path is reported as occupied | in progress |
 
 A contract change must name **which profile each binder implements**, because a
 change that reaches every file and applies one profile's clauses to both has not
@@ -149,11 +166,22 @@ Worth keeping as a method note: **absence of evidence on the only surface you
 can observe is not evidence of absence on the surfaces you cannot.** The
 original text got this right in its caveat and wrong in its conclusion.
 
-#### A defect this settled probe exposed
+#### A defect this settled probe exposed — FIXED at shim-contract 1.2.0
 
-The report is rate-limited to once per hour per hook per machine. **The exit
-code is not.** So the first unresolved call that hour reports properly, and
-every subsequent one exits 1 with empty stderr, which the host renders as:
+**Fixed.** A suppressed call now emits one line — naming the hook, the unchanged
+state, that the call was allowed, and that the full notice was already made this
+hour — and keeps its non-blocking exit code. The rate limit governs verbosity,
+which is the only thing it can govern: the exit code interrupts regardless. The
+rule generalises beyond this instance and is now normative — a shim never exits
+non-zero having written nothing, so whatever suppresses a report must also be
+asked what the exit code should be.
+
+What follows is the defect as found, kept because the reasoning is what argued
+the fix.
+
+The report was rate-limited to once per hour per hook per machine. **The exit
+code was not.** So the first unresolved call that hour reported properly, and
+every subsequent one exited 1 with empty stderr, which the host renders as:
 
 ```
 PreToolUse:Bash hook error
@@ -169,10 +197,12 @@ reporting every time is the alarm fatigue this directory rejects elsewhere — b
 a *contentless* alarm fires exactly as often as the message would have and tells
 the operator nothing at all, which is worse than the repetition it was adopted
 to prevent. **If it is worth exiting non-zero, it is worth saying why; if it is
-not worth saying, it should exit 0.** Rate-limiting the exit code alongside the
-message, or reporting a one-line "still unresolved, see earlier notice", would
-both resolve it. Not fixed here — recorded so the fix is argued rather than
-assumed.
+not worth saying, it should exit 0.**
+
+Of the two remedies named here, the second was taken. Exiting 0 when suppressed
+would have delivered the interval policy's intent and made every remaining call
+that hour an *unannounced* fail-open — silent protection loss, which is the
+posture this directory rejected when it rejected fail-closed.
 
 #### The original headless run, retained for provenance
 
@@ -569,6 +599,19 @@ documented opt-out.
 
 Measured on this machine, 2026-08-02, across all seven repos.
 
+> **Corrected the same day, by the instrument.** The note below counted three
+> repos in one family, because one family is what was looked at.
+> `project-hook-conformance.sh --fleet ~/Sourcecode` reads the declared set and
+> reports **five** repos carrying unmarked inlined copies of **all three**
+> shimmed hooks — `agenticapps-roadmap`, `agents-task-viewer`, `callbot`,
+> `fbc-platform`, `fx-signal-agent` — across two families. Only
+> `agenticapps-dashboard` and `cparx` bind through contract shims.
+>
+> The count came from the repos the author happened to open rather than from
+> `FLEET`, which is the failure `FLEET` was written to prevent: a binder missing
+> from an ad-hoc list is indistinguishable from one that passed. The paragraph is
+> kept rather than rewritten, because the correction is the point.
+>
 > **Re-measured 2026-08-04: the reconciliation has not propagated.** Of the four
 > repos in the `agenticapps` family that bind `database-sentinel`, only
 > `agenticapps-dashboard` binds it through a shim. The other three —

@@ -1,133 +1,111 @@
-# Session Handoff — 2026-08-04
+# Session Handoff — 2026-08-04 (second session of the day)
 
 ## Accomplished
 
-- **The axes-table Currency contradiction is fixed** — the change the last
-  handoff named as next. The table's `stale` clause now scopes to a declared,
-  **present** artifact, matching the qualifier its own `current` clause already
-  carried. Not a judgement call in the end: the requirement prose, the scenario,
-  and `provisioning-check.sh:422` (`[ -f "$art" ] || continue`) all already
-  agreed against the table. Three sources including running code.
-- **A second, worse defect was found and fixed in the same change.** The archive
-  fold at `09f829e` had **torn a paragraph in half across two requirements** —
-  first half ending mid-clause at `:861`, second half filed ~66 lines away
-  inside a different requirement at `:927`. Intact in the pre-fold delta at
-  `db02493`, so the fold caused it, not the split in #70. Restored byte-for-byte.
-- **PR #71 is open and green.** Both defects, plus a CI guard.
-- **`tools/spec-placement.test.sh` is committed and wired into CI.** It landed
-  RED (`f96b5a6`) and went GREEN after the fold (`6cb2e7e`) — a real RED/GREEN
-  pair. It sweeps every spec, not just this one.
-- **All five specs are now swept for tears. The other four are clean.** So
-  `project-hook-binding` carried the only one, and there is no backlog to file.
+- **PR #72 reviewed independently and merged.** This session was the cleared
+  session for it. One defect found and fixed before merge: the propagation note
+  cited `grep -c database-sentinel-version` returning 0 as what distinguished the
+  three inlined copies from the shim — but the shim returns 0 for that grep too.
+  The marker (`# <artifact>-version:`) lives in the *published* implementation,
+  not in project hook files. Conclusion was right, evidence didn't hold.
+- **A new change is open, planned, twice-reviewed and half-built:**
+  `shim-suppressed-report-and-fleet-propagation`. **Core PR 1 is #73, open and
+  green.**
+- **The rate-limit defect is fixed.** A suppressed call emits one line and keeps
+  `exit 1`. The rate limit governs verbosity — the only thing it can govern,
+  since the exit code interrupts regardless.
+- **Core's own binder was violating the rule this repo publishes, and is fixed.**
+  `.claude/hooks/openspec-change-gate.sh` failed open with `printf … >&2; exit 0`
+  from 1.1.0 until today. `spec.md:611-615` names that construction as warning
+  nobody. `--fleet` excludes core by design, so no run of the instrument could
+  ever have reported it.
+- **The instrument gained two axes.** Absence is reported instead of skipped
+  (`[ -f "$shim" ] || continue` on both axes), and registrations are checked
+  against a declared `MATCHERS` set. `--fleet` findings went **30 → 46**.
+- **Contract is at 1.2.0** across template, gate shim and core's binder, enforced
+  by an existing parity assertion.
 
 ## Decisions
 
-- **Bundled the normative fix and the placement repair into one change** — you
-  chose this. Not a reversal of last session's refusal: that forbade *concealing*
-  a normative change inside a refactor advertised as semantics-free. Here both
-  are advertised, labelled separately in the delta, and they touch the same
-  requirement, so splitting would have meant editing one requirement twice
-  across two lifecycles.
-- **Fixed the table, not the requirement or the code.** The alternative would
-  have required editing `provisioning-check.sh` to *add* a finding that says
-  nothing new, contradicting the requirement's own stated rationale.
-- **Declined two reviewer objections with reasoning.** codex's `current`/`unknown`
-  precedence claim is wrong — the spec specifies it twice (`:986-987`, `:998`)
-  and the implementation matches. And a Stage-2/Stage-3 relabelling that comes
-  from a real vocabulary collision in the workflow doc, not from a defect.
-- **Left the EOF trailing newline alone.** It is `openspec archive`'s own output;
-  two other specs end the same way. Hand-editing would fight the tool.
+- **Bundle the propagation with the fix, and cross the family boundary** — both
+  your calls, made explicitly. The change reaches all seven declared binders,
+  four of which are in `factiv`. Recorded in the proposal as authorized for this
+  change only, not standing permission.
+- **Convert all three shimmed hooks in the five inlining repos**, not just
+  `database-sentinel` — your call. Feasible because the README had already argued
+  every reconciliation (differences 1–6); this applies them, it decides nothing new.
+- **A suppressed call says one line rather than exiting 0.** Exiting 0 would
+  deliver the interval policy's intent and make the rest of the hour an
+  *unannounced* fail-open — the posture this capability rejects.
+- **Two core PRs, not one.** Core must merge first so the seven have an authority
+  to compare against; the propagation evidence only exists after they merge. One
+  PR cannot be both. The archive belongs to PR 2.
+- **Instrument gaps became work, not caveats.** Round 1 recorded them in
+  `design.md`; both round-2 reviewers rejected that on the change's own terms.
 
-## The theme, now at seven instances — and one of them was mine
+## The theme, now at eleven — and the suite was in on it
 
-Every failure in this lineage is a **check that lied**. Two more this session:
-
-6. **`openspec validate --all` was green on both defects the whole time**, and so
-   was the line-multiset diff. It proved every line survived — which was *true*
-   and useless. Every line did survive, in the wrong requirement.
-7. **I wrote the guard with a bug that blinded it to its own motivating case.**
-   The first version excluded lines opening with a backtick from the
-   "paragraph ends mid-sentence" signature; the torn line opens on
-   `` `CLAUDE.md` ``. It still reported RED — because the *other* signature
-   caught the orphan. A test passing for the wrong reason, inside the change
-   about tests that pass for the wrong reason.
-
-codex then caught an eighth in review: the guard's success message claimed
-"every paragraph is whole", which it cannot know. It now states scope, not
-conclusion — the same rule the spec already imposes on the override scan
-(*no known vector found*, never *the repository is clean*).
+9. **The acceptance criterion could not see the authority.** "`--fleet` reports 0"
+   structurally excludes core. Following that exclusion found core's binder
+   shipping the defect the spec names.
+10. **`[ -f "$shim" ] || continue`, second occurrence.** Same shape as the
+    currency-table defect repaired in #71 two days ago, in a different tool. A
+    repo with no shims at all scored exactly like a current one.
+11. **Two tests asserted the defect as the contract.** `"unresolvable report is
+    rate limited (1/3)"` required that two of three calls say *nothing*, and
+    `"genuinely absent gate fails open (0)"` required the exit code that discards
+    the message. Both had to invert. A test that asserts the defect answers the
+    question before anyone thinks to ask it.
 
 ## Files modified
 
-- `openspec/specs/project-hook-binding/spec.md` — both repairs (2 MODIFIED reqs)
-- `tools/spec-placement.test.sh` — **new**, the CI guard
-- `.github/workflows/openspec-gate.yml` — new step, runs the guard on every change
-- `openspec/changes/archive/2026-08-04-repair-currency-axis-table-and-fold-tear/`
-  — incl. `REVIEW-RESPONSE.md` (two rounds) and `REVIEWS.md`
-- `tools/provisioning-check.sh` — **deliberately unchanged**, verified byte-identical
+- `reference-implementations/project-hooks/shim-template.sh` — suppressed line,
+  report-then-mark, 1.2.0
+- `reference-implementations/project-hooks/openspec-change-gate.shim.sh` — same
+- `.claude/hooks/openspec-change-gate.sh` — `exit 0` → report + `exit 1`, 1.2.0
+- `tools/project-hook-conformance.sh` — absence axis, registration axis, matcher axis
+- `reference-implementations/project-hooks/MATCHERS`, `OPT-OUTS` — **new** declarations
+- `tools/project-hook-shim.test.sh`, `project-hook-conformance.test.sh`,
+  `test-claude-hook-wrapper.sh` — new assertions, two inverted
+- `reference-implementations/project-hooks/README.md` — fix recorded; the
+  three-repos-one-family count corrected to five across two
+- `openspec/changes/shim-suppressed-report-and-fleet-propagation/` — proposal,
+  design, delta, tasks, `REVIEWS.md` (2 rounds), `REVIEW-RESPONSE.md`
 
 ## Next session: start here
 
-**PR #71 needs the independent code review in a cleared session** — `/clear`,
+**PR #73 needs the independent code review in a cleared session** — `/clear`,
 then review the branch. It is the one gate this branch does not carry evidence
-for, and it is checked off in `tasks.md` as *scheduled against the PR*, not
-performed. Everything else is verified: validate green, guard green in CI across
-all five specs, gate `--ci` exit 0, 8/8 placement assertions, 16/16 tasks.
+for, and task 8.4 asks for it explicitly *before* merge. Everything else on PR 1
+is verified: 56/56 shim suite, 54/54 conformance suite, 12/12 wrapper suite,
+validate green, gate `--ci` exit 0, RED observed before every GREEN.
 
-After it merges, the open questions below are unchanged from last session and
-none were touched by this work.
-
-## The reporting channel is SETTLED — PR #72
-
-The nine-session question is closed, **in the opposite direction to the standing
-claim**. Renaming the shared implementation away and making a Bash call in
-`agenticapps-dashboard` put this in the interactive transcript:
-
-```
-PreToolUse:Bash hook error
-Failed with non-blocking status code: database-sentinel hook: not installed at …
-```
-
-The shims do warn. The earlier negative was an artifact of headless mode having
-no transcript — the only surface the notice renders on. The run recorded that
-honestly as "genuinely unknown"; the summary line hardened it to UNESTABLISHED
-and that propagated for nine sessions. **Absence of evidence on the only surface
-you can observe is not evidence of absence on the surfaces you cannot.**
-
-Narrower claim that survives: exit 1 emits no `hook_response` event, so
-programmatic consumers still cannot see it. Human-visible, machine-invisible.
-
-Probe fully reverted; implementation restored and re-verified live (benign call
-exit 0, `DROP TABLE` exit 2).
-
-### Two findings it exposed, recorded not fixed
-
-1. **The report is rate-limited; the exit code is not.** After the first
-   unresolved call in an hour, every later one exits 1 with empty stderr and
-   renders as `hook error — No stderr output`. Reproduced 3×. This defeats the
-   rate limit's own purpose: a contentless alarm fires as often as the message
-   would and says nothing. **The next fix here.**
-2. **The 2026-08-02 reconciliation never propagated.** Only
-   `agenticapps-dashboard` binds a shim. `agenticapps-roadmap`,
-   `agents-task-viewer` and the `…-add-agent-board` checkout inline a 68-line
-   copy — byte-identical to each other, pre-1.1.0, matcher `Bash|Edit|Write` so
-   **MultiEdit is not covered at all**, and **no version marker**, which puts
-   them outside the declared set where `provisioning-check.sh` cannot judge them.
-   The copies most likely to be stale are the ones staleness cannot be reported
-   for. Converting them is a change, not an edit.
+After it merges, the remaining tasks are groups 3, 5, 6, 7 and 8 in
+`tasks.md`: live end-to-end verification (needs a 1.2.0 shim deployed, so it
+follows 5.1), then seven repos each by its own branch and PR — 6 shims
+re-versioned in `agenticapps-dashboard` and `cparx`, 14 inlined copies converted
+in `agenticapps-roadmap`, `agents-task-viewer`, `callbot`, `fbc-platform` and
+`fx-signal-agent`, and one file deleted in `agents-task-viewer` **after** its
+opt-out rationale is relocated to an ADR there. Then core PR 2 carries the
+evidence and the archive.
 
 ## Open questions
 
-- **The guard only detects tears at paragraph boundaries.** A fragment relocated
-  as a whole, grammatically intact paragraph passes it. Narrowed, not closed —
-  the independent reviewer is still the only thing that reads for sense.
-- **`provisioning-check.sh` is still not published to the shared bin.** Currency
-  works and defaults on, but only where core is checked out. Nothing prompts
-  anyone on a machine without a core checkout to discover their install is stale.
-  Sharpened by finding 2 above: the inlined copies are invisible to it regardless.
-- **The `cmp`-error branch is reasoned, not tested.** Negative evidence.
-- **27 branches carry genuinely unmerged content**, classified for reachability
-  and never for worth. Nobody has judged whether any of it is wanted.
-- The convergence rule is still unwritten — ninth session.
-- **Two neuroflash PRs from last session are still open** (api-docs #14,
-  terraform #185) — outside this family's context boundary, untouched here.
+- **Converting will change live behaviour in five repos**, and it is intended:
+  their inlined `database-sentinel` blocks every `migrations/*` edit behind a
+  sentinel file they do not have, with a remedy naming `/gsd-discuss-phase`
+  (removed 2026-07-28). Each PR body must say so.
+- **`agents-task-viewer` carries `bin/openspec-change-gate.sh` (17k).** The
+  contract's two-candidate order drops that fallback deliberately. Task 6.5a
+  disposes of it explicitly rather than orphaning it.
+- **The matcher axis needs `python3`** and says so when absent. "Not checked" is
+  a different sentence from "checked and clean" — but a CI runner without python3
+  would silently narrow coverage to what the other axes see.
+- **`agenticapps-dashboard-add-agent-board` is not in `FLEET`** and its hooks do
+  fire when that worktree is used. Left unconverted, reasoning in `design.md`.
+- **`provisioning-check.sh` is still not published to the shared bin.** Unchanged
+  from previous sessions.
+- **27 branches carry genuinely unmerged content**, still unjudged for worth.
+- The convergence rule is still unwritten — tenth session.
+- **Two neuroflash PRs remain open** (api-docs #14, terraform #185) — different
+  family, untouched.

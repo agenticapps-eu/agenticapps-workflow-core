@@ -97,13 +97,25 @@ else
   check "a stale CLAUDE_PROJECT_DIR does not ungate" 0 "$r"
 fi
 
-# Fails OPEN: the root resolved, the gate genuinely is not installed there.
-# Exercised by copying the wrapper into a project-shaped tree with no gate.
+# Fails OPEN AND REPORTS: the root resolved, the gate genuinely is not installed
+# there. Exercised by copying the wrapper into a project-shaped tree with no gate.
+#
+# EXIT 1, NOT 0, since shim-contract 1.2.0. Fail-open means the edit proceeds —
+# which exit 1 does, because 1 is non-blocking; only 2 blocks. It does not mean
+# exit 0, and this assertion required 0 for as long as the wrapper printed a
+# warning the operator could never read: a PreToolUse hook exiting 0 has its
+# stderr discarded from the transcript. Asserting 0 here is what kept that
+# defect in place.
 mkdir -p "$WORK/emptyproj/.claude/hooks"
 cp "$WRAPPER" "$WORK/emptyproj/.claude/hooks/"
-check "genuinely absent gate fails open (0)" 0 \
-  "$( cd "$OUTSIDE" && printf '{}' | env -u OPENSPEC_GATE -u CLAUDE_PROJECT_DIR \
-        bash "$WORK/emptyproj/.claude/hooks/openspec-change-gate.sh" >/dev/null 2>&1; echo $?; )"
+absent_rc="$( cd "$OUTSIDE" && printf '{}' | env -u OPENSPEC_GATE -u CLAUDE_PROJECT_DIR \
+        bash "$WORK/emptyproj/.claude/hooks/openspec-change-gate.sh" >/dev/null 2>"$WORK/absent-err.txt"; echo $?; )"
+check "genuinely absent gate fails open, non-blocking (1)" 1 "$absent_rc"
+if [ -s "$WORK/absent-err.txt" ]; then
+  check "genuinely absent gate reports before exiting" 0 0
+else
+  check "genuinely absent gate reports before exiting" 0 1
+fi
 
 # An explicit override names the gate outright, so root resolution is moot.
 mkgate 2
