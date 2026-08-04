@@ -319,7 +319,7 @@ echo
 echo "== run-migration.sh: happy path =="
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0016-conformant.md" "$tmp" 2>&1)"
 rc=$?
 assert_eq "$rc" "0" "conformant migration applies cleanly"
 assert_eq "$(cat "$tmp/fixture.txt")" "$(printf 'applied\nsecond')" "both steps applied in order"
@@ -334,7 +334,7 @@ assert_eq "$(ls "$tmp"/tripwire.txt 2>/dev/null; echo done)" "done" \
 # snapshot over every file in the workdir catches that a single-file content
 # comparison cannot.
 before="$(tree_snapshot "$tmp")"
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0016-conformant.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "second run exits 0"
 assert_contains "$out" "skipped" "second run reports skipped"
 after="$(tree_snapshot "$tmp")"
@@ -352,7 +352,7 @@ echo "== run-migration.sh: dry-run =="
 # apply source is printed but explicitly labelled unevaluated, and its check
 # (which depends on step 1 having actually run) never executes.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --dry-run "$FIX/0016-conformant.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "dry-run exits 0"
 assert_contains "$out" 'echo "applied" > fixture.txt' "dry-run prints step 1's apply source"
 assert_contains "$out" 'echo "second" >> fixture.txt' "dry-run prints step 2's apply source too"
@@ -371,7 +371,7 @@ echo "== run-migration.sh: three-valued check, unchanged in dry-run =="
 # migration whose real run would hard-abort is worse than no preview at all,
 # so both modes must agree here.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
 assert_eq "$?" "1" "check exiting 2 aborts a real run"
 assert_contains "$out" "could not run" "abort message names the check-could-not-run condition"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
@@ -379,7 +379,7 @@ assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
 rm -rf "$tmp"; trap - EXIT
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --dry-run "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
 assert_eq "$?" "1" "the same fixture's dry run aborts too, exactly as the real run does"
 assert_contains "$out" "could not run" "dry-run abort message also names the check-could-not-run condition"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "dry-run still wrote nothing"
@@ -392,7 +392,7 @@ echo "== run-migration.sh: pre-condition failure is verbatim and hard-aborts =="
 # terminal — and its stderr is reproduced VERBATIM, never paraphrased. 0023's
 # pre-condition writes an exact two-line remediation message and exits 3.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
 assert_eq "$?" "1" "failing pre-condition aborts the migration"
 assert_contains "$out" 'cparx: unmanaged prose at line 42. Either (a) move it above the marker,' \
   "pre-condition stderr line 1 reproduced verbatim"
@@ -412,7 +412,7 @@ echo "== run-migration.sh: pre-condition failure aborts a dry run too =="
 # unlike 0023's case here, where the failure is on the very first step, so
 # there is nothing before it to have already been reported pending.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --dry-run "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
 assert_eq "$?" "1" "dry-run aborts on a failing pre-condition"
 assert_contains "$out" 'cparx: unmanaged prose at line 42. Either (a) move it above the marker,' \
   "dry-run reproduces pre-condition stderr line 1 verbatim"
@@ -430,7 +430,7 @@ echo "== run-migration.sh: pre-condition failure aborts at a terminal too =="
 # pre-condition is not governed by the failure policy at all: it always
 # hard-aborts.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" --on-failure=prompt "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow --on-failure=prompt "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
 assert_eq "$?" "1" "failing pre-condition aborts even with --on-failure=prompt"
 rm -rf "$tmp"; trap - EXIT
 
@@ -444,7 +444,7 @@ echo "== run-migration.sh: each block runs in its own shell =="
 # into the workdir fresh, "cwd.txt" would record /tmp (or fail to land in the
 # workdir at all).
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0029-block-isolation.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0029-block-isolation.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "isolation fixture applies cleanly"
 assert_eq "$(cat "$tmp/iso.txt")" "clean" \
   "apply sees no env var or function left by check/precondition blocks"
@@ -463,7 +463,7 @@ echo "== run-migration.sh: dry-run never writes outside the workdir =="
 # appear, in a scratch copy or anywhere else.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 escape_target="$(mktemp -d)"; trap 'rm -rf "$tmp" "$escape_target"' EXIT
-out="$(ESCAPE_TARGET="$escape_target" bash "$MR/run-migration.sh" --dry-run "$FIX/0034-escape-probe.md" "$tmp" 2>&1)"
+out="$(ESCAPE_TARGET="$escape_target" bash "$MR/run-migration.sh" --host codex-workflow --dry-run "$FIX/0034-escape-probe.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "escape-probe dry-run exits 0"
 assert_contains "$out" 'date > "$ESCAPE_TARGET/ran"' "dry-run prints the apply source"
 assert_eq "$(ls "$tmp"/probe.txt 2>/dev/null; echo none)" "none" "dry-run wrote nothing in the workdir"
@@ -478,7 +478,7 @@ echo "== run-migration.sh: document existence/readability =="
 # zero-anything success: extract.sh's own awk error would otherwise go to
 # stderr while `steps` comes back empty, the loop runs zero times, and the
 # script exits 0 having done nothing at all.
-out="$(bash "$MR/run-migration.sh" "$FIX/0099-does-not-exist.md" 2>&1)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0099-does-not-exist.md" 2>&1)"
 assert_eq "$?" "66" "a nonexistent document is an error, not a silent no-op success"
 assert_contains "$out" "no such file" "error names the problem"
 
@@ -486,7 +486,7 @@ echo
 echo "== run-migration.sh: --on-failure validates its value =="
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(bash "$MR/run-migration.sh" --on-failure=bogus "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --on-failure=bogus "$FIX/0016-conformant.md" "$tmp" 2>&1)"
 assert_eq "$?" "64" "an unrecognised --on-failure value is a usage error"
 assert_contains "$out" "bogus" "error names the offending value"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
@@ -499,20 +499,26 @@ echo "== run-migration.sh: a missing pre-condition block is named, not misreport
 # A step with no precondition block at all makes run_block return 127
 # (extract.sh found nothing to run). That must not be reported as though the
 # block ran and failed — the diagnostic should say the block is missing.
+#
+# This fixture is deliberately BELOW every host's threshold and declares no
+# migration_format at all, so lint-migration.sh skips it entirely (exit 0,
+# out of scope) rather than catching the missing precondition itself via L1
+# — group 5's lint-before-execute step must not preempt this scenario, or it
+# would only ever exercise lint's diagnostic and never the runner's own
+# run_block-returned-127 handling this test exists to cover.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-cat > "$tmp/0099-missing-precondition.md" <<'EOF'
+cat > "$tmp/0002-missing-precondition.md" <<'EOF'
 ---
-id: 0099
+id: 0002
 slug: missing-precondition
 title: A step with no pre-condition block at all
 from_version: 1.8.0
 to_version: 1.9.0
-migration_format: executable
 applies_to:
   - fixture.txt
 ---
 
-# Migration 0099 — missing pre-condition block
+# Migration 0002 — missing pre-condition block
 
 ## Steps
 
@@ -533,11 +539,153 @@ echo "applied" > fixture.txt
 rm -f fixture.txt
 ```
 EOF
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$tmp/0099-missing-precondition.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$tmp/0002-missing-precondition.md" "$tmp" 2>&1)"
 assert_eq "$?" "1" "a step with no pre-condition block aborts"
 assert_contains "$out" "pre-condition block missing" \
   "diagnostic names the block as missing, not as having failed"
 rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: --host is required, no default =="
+
+# THE HOST IS REQUIRED, NOT OPTIONAL. An optional threshold looks harmless
+# and reopens the silent-no-op hole one layer down: with no threshold,
+# nothing is in scope for the linter, every lint passes trivially, and this
+# runner — which now lints before executing — would execute anything at all.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+assert_eq "$?" "64" "a missing --host is a usage error"
+assert_contains "$out" "--host is required" "error names the missing flag"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "nothing ran when --host was omitted"
+rm -rf "$tmp"; trap - EXIT
+
+# An unknown host name is not a default either — it propagates
+# lint-migration.sh's own exit code (65) and its own diagnostic, exactly like
+# the runner already mirrors lint's exit 66 for a missing document.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --host nonexistent-host "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "an unknown --host value propagates lint's own exit code"
+assert_contains "$out" "nonexistent-host" "error names the unresolved host"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "nothing ran for an unresolvable host"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: refuses a migration that would do nothing =="
+
+# LINT BEFORE EXECUTING ANYTHING.
+#
+# Rejecting a bad migration at lint time is not enough on its own, because
+# nothing obliges the operator to have linted. Confirmed against the OLD
+# (task 4) runner before this fix: 0017-bad-l1-missing-rollback.md fails L1
+# (its step has no rollback block at all) yet the old runner ran check,
+# pre-condition, and apply to completion and exited 0 —
+#   step 1: applied
+#   rc=0
+#   fixture.txt: applied
+# — a lint violation, fully executed, reported as success. The runner must
+# now lint first and refuse before any block runs at all.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0017-bad-l1-missing-rollback.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "the runner refuses a migration that fails the linter"
+assert_contains "$out" "L1" "the runner's output includes the linter's own violation"
+assert_contains "$out" "rollback" "the violation names the missing role"
+assert_contains "$out" "does not satisfy the executable format" \
+  "the runner explains why it refused"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "no block of the failing-lint migration ever ran"
+rm -rf "$tmp"; trap - EXIT
+
+# 0035-all-illustration.md: every fence in its one step is un-annotated.
+# Confirmed against the OLD runner: it does NOT report success on this exact
+# fixture — run_block's own missing-block convention (extract.sh exits 1 =>
+# 127) makes the untagged `check` role look like "the check itself could not
+# run," so the OLD runner already hard-aborted here for an unrelated reason:
+#   step 1: idempotency check could not run (exit 127) — aborting
+#   rc=1
+# That is an accident of the three-valued check contract, not evidence the
+# format is enforced: it fires only because `check` specifically happened to
+# be untagged, and gives no indication the document is even in scope, let
+# alone which rule it breaks. Lint-first replaces that with an accurate,
+# actionable diagnostic naming all four missing roles, and — unlike the
+# accident above — also catches a document where only SOME roles are
+# illustration (see 0038 below, where `check` is real and tagged but `apply`
+# is empty, and the accident above cannot fire at all).
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0035-all-illustration.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "the runner refuses an all-illustration migration"
+assert_not_contains "$out" "step 1: applied" "the runner does not report success"
+assert_contains "$out" "L1: step 1: missing required role 'check'" \
+  "the linter names the missing check role"
+assert_contains "$out" "L1: step 1: missing required role 'precondition'" \
+  "the linter names the missing precondition role"
+assert_contains "$out" "L1: step 1: missing required role 'apply'" \
+  "the linter names the missing apply role"
+assert_contains "$out" "L1: step 1: missing required role 'rollback'" \
+  "the linter names the missing rollback role"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "the apply illustration was never executed"
+assert_eq "$(ls "$tmp"/tripwire.txt 2>/dev/null; echo none)" "none" \
+  "the un-annotated tripwire fence was never executed"
+rm -rf "$tmp"; trap - EXIT
+
+# 0039-zero-steps.md: an in-scope migration with no ### Step heading at all.
+# Confirmed against the OLD runner: it exits 0 with NO output whatsoever —
+#   [output was empty]
+#   rc=0
+# — the purest form of the defect this group exists to close: a document
+# that runs to completion having dispatched nothing, and reports success.
+# Lint alone cannot catch this (every per-step rule iterates zero times over
+# an empty step list, so lint-migration.sh itself exits 0 clean on this
+# fixture) — only the runner's own zero-steps refusal closes this one.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0039-zero-steps.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "the runner refuses a zero-step migration"
+assert_contains "$out" "declares no steps" "the runner names the zero-steps problem"
+rm -rf "$tmp"; trap - EXIT
+
+# 0038-zero-apply-step.md: check/precondition/rollback are real and tagged;
+# the apply fence is syntactically valid (```bash role=apply```, satisfying
+# L1) but has nothing between its delimiters, so lint-migration.sh itself
+# exits 0 clean on this fixture too. Confirmed against the OLD runner:
+#   step 1: applied
+#   rc=0
+#   fixture.txt: (absent — nothing was ever written)
+# — the runner claimed the step applied while doing nothing at all. Checking
+# for an EMPTY captured body (not just extract.sh's exit code) is what closes
+# this: an absent apply block and a tagged-but-empty one are the same
+# silent-no-op outcome from the operator's point of view.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0038-zero-apply-step.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "the runner refuses a step whose apply block is empty"
+assert_not_contains "$out" "step 1: applied" "the runner does not report success"
+assert_contains "$out" "step 1 has no apply block" "the runner names the empty apply block"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "nothing was written by the empty apply block"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: dry-run never writes outside the workdir via a symlink =="
+
+# 0034-escape-probe.md above guards only the ABSOLUTE-path variant of the
+# dry-run escape. This is the same root cause from the other side: a workdir
+# containing a symlink to a location outside it, and an apply block that
+# only ever names a purely RELATIVE path (no leading /, no env var). Since
+# dry-run never executes apply at all — not for real, not against a scratch
+# copy — this must never appear regardless of what the relative path
+# resolves to.
+tmp="$(mktemp -d)"
+escape_target="$(mktemp -d)"
+trap 'rm -rf "$tmp" "$escape_target"' EXIT
+ln -s "$escape_target" "$tmp/escape-link"
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --dry-run "$FIX/0040-symlink-escape-probe.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "symlink escape-probe dry-run exits 0"
+assert_contains "$out" 'date > escape-link/ran' "dry-run prints the apply source"
+assert_eq "$(ls "$tmp"/probe.txt 2>/dev/null; echo none)" "none" "dry-run wrote nothing in the workdir"
+assert_eq "$(ls "$escape_target"/ran 2>/dev/null; echo none)" "none" \
+  "dry-run wrote nothing through the symlink either — apply never ran"
+rm -rf "$tmp" "$escape_target"; trap - EXIT
 
 echo
 echo "TOTAL: $pass passed, $fail failed"

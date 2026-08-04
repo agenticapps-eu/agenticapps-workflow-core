@@ -31,18 +31,21 @@
 # permanently, at the cost of not previewing anything past the first pending
 # step.
 #
-# SCOPE OF THIS FILE (task 4 of the executable-migration-format plan):
-# the dispatch loop, dry-run, and exit-code semantics only.
+# SCOPE OF THIS FILE (tasks 4-5 of the executable-migration-format plan):
+# the dispatch loop, dry-run, exit-code semantics, and refusing to run a
+# migration that would do nothing.
 #   - Lint-before-execute (refusing to run a migration that fails
-#     lint-migration.sh, or that yields zero steps / a step with no apply
-#     block) is task 5's job. This runner does not call lint-migration.sh.
+#     lint-migration.sh, that yields zero steps, or where any step yields no
+#     apply block) is task 5's job — see "LINT BEFORE EXECUTING ANYTHING"
+#     below. --host is REQUIRED for exactly this reason: see the check
+#     immediately after argument parsing.
 #   - The interactive failure policy (retry / skip-with-warning / roll back,
 #     and the non-interactive "abort in place, report what applied, roll back
 #     nothing" behaviour) is task 6's job. fail_policy() below is a STUB: it
 #     reports the failure and returns non-zero (abort) unconditionally, no
 #     matter what --on-failure says. Task 6 fills in the real policy.
 #
-# Usage: run-migration.sh [--dry-run] [--on-failure=abort|prompt|skip] <doc> [<workdir>]
+# Usage: run-migration.sh --host NAME [--dry-run] [--on-failure=abort|prompt|skip] <doc> [<workdir>]
 
 set -uo pipefail
 
@@ -51,6 +54,7 @@ EXTRACT="$SCRIPT_DIR/extract.sh"
 
 DRY_RUN=0
 ON_FAILURE=""
+HOST=""
 DOC=""
 WORKDIR=""
 
@@ -58,10 +62,27 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --on-failure=*) ON_FAILURE="${1#*=}"; shift ;;
+    --host) HOST="${2:?--host needs a value}"; shift 2 ;;
     *) if [ -z "$DOC" ]; then DOC="$1"; else WORKDIR="$1"; fi; shift ;;
   esac
 done
-: "${DOC:?usage: run-migration.sh [--dry-run] [--on-failure=P] <doc> [<workdir>]}"
+: "${DOC:?usage: run-migration.sh --host NAME [--dry-run] [--on-failure=P] <doc> [<workdir>]}"
+
+# --host IS REQUIRED. THERE IS DELIBERATELY NO DEFAULT AND NO "NO THRESHOLD"
+# PATH.
+#
+# An optional threshold looks harmless and reopens the silent-no-op hole one
+# layer down: with no threshold, nothing is in scope for the linter, so the
+# lint passes trivially, so this runner — which now lints before executing —
+# executes anything at all. That is the exact defect this group exists to
+# close, wearing the lint step as a disguise. A missing --host is therefore a
+# usage error, checked alongside the other required arguments, before this
+# script ever looks at the filesystem.
+if [ -z "$HOST" ]; then
+  echo "run-migration: --host is required (no default; see THRESHOLDS) — omitting it would leave every migration out of scope, every lint trivially clean, and this runner willing to execute anything" >&2
+  exit 64
+fi
+
 WORKDIR="${WORKDIR:-.}"
 
 # A nonexistent or unreadable document must be a hard error, not a silent
@@ -115,7 +136,57 @@ fail_policy() {
   return 1
 }
 
+# LINT BEFORE EXECUTING ANYTHING.
+#
+# Rejecting a bad migration at lint time is not enough on its own, because
+# nothing obliges the operator to have linted. A runner that executes
+# whatever it is given can be handed an all-illustration document — every
+# fence un-annotated — and report success having changed nothing. That is
+# the exact silent-no-op failure this whole format exists to prevent, and it
+# is worst when the step it silently skipped was the security-relevant one.
+# lint-migration.sh's own exit code is propagated unchanged (1 = violation,
+# 65 = bad/unknown host, 66 = missing file) rather than collapsed to a single
+# generic failure, exactly like this script already mirrors lint's exit 66
+# for a missing document above.
+bash "$SCRIPT_DIR/lint-migration.sh" --host "$HOST" "$DOC"
+lint_rc=$?
+if [ "$lint_rc" -ne 0 ]; then
+  echo "refusing to run: $DOC does not satisfy the executable format" >&2
+  exit "$lint_rc"
+fi
+
 steps="$(bash "$EXTRACT" steps "$DOC")"
+
+# ABORT ON ZERO STEPS.
+#
+# An in-scope migration that declares no `### Step ` heading at all lints
+# clean — every per-step rule iterates zero times over an empty step list —
+# and would otherwise run to completion having dispatched nothing. The
+# linter cannot catch this; only the runner can, because only the runner
+# knows what "ran to completion" is about to mean.
+if [ -z "$steps" ]; then
+  echo "refusing to run: $DOC declares no steps" >&2
+  exit 1
+fi
+
+# ABORT IF ANY STEP YIELDS NO APPLY BLOCK.
+#
+# L1 only checks that a role=apply fence is PRESENT, not what is inside it.
+# A fence that opens and closes with nothing between its delimiters passes
+# L1 and every other structural rule, but running it would apply literally
+# nothing (`bash -c ''` exits 0, untouched). Checking for an EMPTY captured
+# body — not just extract.sh's exit code — is what catches both an ABSENT
+# apply block (extract.sh exits 1, body empty) and a TAGGED-BUT-EMPTY one
+# (extract.sh exits 0, body still empty): both are the same silent-no-op
+# outcome from the operator's point of view, so both refuse to run.
+for s in $steps; do
+  apply_body="$(bash "$EXTRACT" block "$DOC" "$s" apply)"
+  apply_rc=$?
+  if [ "$apply_rc" -ne 0 ] || [ -z "$apply_body" ]; then
+    echo "refusing to run: $DOC step $s has no apply block" >&2
+    exit 1
+  fi
+done
 
 # pending_seen / pending_step: DRY-RUN ONLY bookkeeping. Once a pending step
 # is found, every later step's blocks — check and precondition included — go
@@ -129,7 +200,18 @@ pending_step=""
 for s in $steps; do
   if [ "$DRY_RUN" -eq 1 ] && [ "$pending_seen" -eq 1 ]; then
     echo "step $s: would apply (not evaluated — follows pending step $pending_step):"
-    bash "$EXTRACT" block "$DOC" "$s" apply | sed 's/^/    /'
+    # Capture first and check the exit status explicitly — piping straight
+    # into sed silently swallows extract.sh's own exit code, since sed still
+    # exits 0 having formatted zero lines of input. The pre-flight scan above
+    # already guarantees every step has a non-empty apply block before this
+    # loop ever runs, so this is defense in depth, not the primary guard.
+    apply_src="$(bash "$EXTRACT" block "$DOC" "$s" apply)"
+    apply_rc=$?
+    if [ "$apply_rc" -ne 0 ] || [ -z "$apply_src" ]; then
+      echo "step $s: has no apply block — aborting" >&2
+      exit 1
+    fi
+    printf '%s\n' "$apply_src" | sed 's/^/    /'
     continue
   fi
 
@@ -170,7 +252,16 @@ for s in $steps; do
 
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "step $s: would apply:"
-    bash "$EXTRACT" block "$DOC" "$s" apply | sed 's/^/    /'
+    # Same fix as the other dry-run print site above: capture and check the
+    # exit status explicitly rather than piping straight into sed, which
+    # would otherwise mask extract.sh having found nothing.
+    apply_src="$(bash "$EXTRACT" block "$DOC" "$s" apply)"
+    apply_rc=$?
+    if [ "$apply_rc" -ne 0 ] || [ -z "$apply_src" ]; then
+      echo "step $s: has no apply block — aborting" >&2
+      exit 1
+    fi
+    printf '%s\n' "$apply_src" | sed 's/^/    /'
     # This step is now the first pending one. Nothing past this point is
     # ever executed or evaluated — not against WORKDIR, and not against any
     # copy of it — so every later step's blocks are skipped outright above.
