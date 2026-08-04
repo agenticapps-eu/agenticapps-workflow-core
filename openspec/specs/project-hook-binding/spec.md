@@ -844,7 +844,7 @@ three vary independently:
 |---|---|---|
 | **Completeness** | `none` / `partial` / `complete` | how many shimmed implementations are present and executable: none of them, some of them, all of them |
 | **Integrity** | `attested` / `drifted` | `attested` when every present implementation matches a manifest row; `drifted` when any present implementation's bytes disagree with its row, any row names an absent file, or any present implementation has no row |
-| **Currency** | `current` / `stale` / `unknown` | judged over the **declared** artifact set only. `current` when every declared, present implementation is byte-identical to the authority's file **as it exists on disk at the time of the check**; `stale` when any differs, or the authority holds no file for a declared artifact; `unknown` when the authority cannot be read or is not an authority checkout |
+| **Currency** | `current` / `stale` / `unknown` | judged over the **declared** artifact set only. `current` when every declared, present implementation is byte-identical to the authority's file **as it exists on disk at the time of the check**; `stale` when any differs, or the authority holds no file for a declared, present artifact; `unknown` when the authority cannot be read or is not an authority checkout |
 
 **Currency is a third axis and not a value on either of the others**, for the
 reason completeness and integrity were split from each other. Both of those are
@@ -859,6 +859,9 @@ reported `complete` + `attested` — "This machine is provisioned. The shims wil
 resolve." — while running `normalize-claude-md` 1.0.0 against core's 1.0.1 and
 `database-sentinel` 1.0.0 against core's 1.1.0. Measured on the published copies:
 `CLAUDE.md` went 0644 in and **0600** out, and `DELETE FROM public.users` was
+**not** blocked. Both are defects the fleet believed were fixed. The check printed
+`attested v1.0.0` throughout; the number was on screen and nothing compared it to
+anything.
 
 `stale` and `drifted` are deliberately **not** merged. They have different causes
 and different remedies: `drifted` means a published file was edited or replaced
@@ -923,10 +926,6 @@ The comparison reported findings into a separate block, the summary was computed
 without it, and so the tool printed "This machine is provisioned. The shims will
 resolve." while that block read `DIFFERS` on every project hook. Reproduced. An
 axis is what obliges the summary to agree with the comparison.
-
-**not** blocked. Both are defects the fleet believed were fixed. The check printed
-`attested v1.0.0` throughout; the number was on screen and nothing compared it to
-anything.
 
 **The declared set, and nothing else.** The shared bin also holds artifacts
 published by a different installer — the change gate, the reviewer CLI, the plan
@@ -1088,7 +1087,6 @@ performs the opposite of half the instruction it was given.
 - **THEN** it is reported `stale` in that direction — the machine holds a build
   the authority cannot account for — rather than passed as newer-and-fine, for
   the same reason a shim marker ahead of the template is `unrecognised`
-
 
 ### Requirement: Provisioning is checked per machine, not only per repository
 
@@ -1612,3 +1610,4 @@ the authority's tracked source and report the result, by artifact name.
   checkout, or `drifted` and `stale` together — the installer SHALL NOT be named.
   An earlier revision of this scenario said the check "names the installer as the
   remedy", contradicting the `stale` invariant above in the same delta
+
