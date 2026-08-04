@@ -108,9 +108,75 @@ events" — that qualifier is why the empirical check below is not redundant.
    but by verification, not by inheritance.** The general rule is what makes it
    correct, not the `PreToolUse` convention.
 
-### The empirical leg (task 2.3a) — RUN, and the result is negative
+### The empirical leg (task 2.3a) — SETTLED 2026-08-04: the channel is established
 
-Not carried this time. A headless `claude -p` session was driven against a
+**Result first, because this section previously said the opposite.** On
+2026-08-04 the interactive check below was carried out. The notice **renders in
+the interactive TUI transcript**, carrying the shim's first stderr line intact:
+
+```
+PreToolUse:Bash hook error
+Failed with non-blocking status code: database-sentinel hook: not installed at
+/Users/donald/.agenticapps/bin/database-sentinel.sh — this hook did NOT run, and
+the tool call was allowed
+```
+
+Method: `~/.agenticapps/bin/database-sentinel.sh` was renamed away, the
+rate-limit marker at `${XDG_STATE_HOME:-$HOME/.local/state}/agenticapps/` was
+deleted so a stale hour could not suppress the report, and a Bash call was made
+in `agenticapps-dashboard` — the one fleet repo in its family that binds the
+hook through a real shim rather than an inlined copy. The implementation was
+restored immediately afterwards and re-verified: benign call exit 0, `DROP
+TABLE` exit 2.
+
+**So exit 1 IS observable, and the shims do warn.** The prohibition that stood
+here — that no report may describe either hook as "warning" anyone — is
+withdrawn. What survives from the headless run is narrower and still true: exit
+1 produces no `hook_response` event in `--output-format stream-json`, so
+**programmatic** consumers cannot see it. The channel is human-visible and
+machine-invisible, which is a different statement from "unestablished".
+
+#### Why the earlier probe concluded the opposite
+
+The headless run was sound and its negative was an artifact of the surface it
+could reach, not of the hook. Headless mode has no transcript, so the one place
+the notice actually renders did not exist in that environment. The probe
+correctly recorded this as "genuinely unknown" rather than refuted — but the
+summary line then hardened it into UNESTABLISHED, and that wording is what
+propagated for nine sessions.
+
+Worth keeping as a method note: **absence of evidence on the only surface you
+can observe is not evidence of absence on the surfaces you cannot.** The
+original text got this right in its caveat and wrong in its conclusion.
+
+#### A defect this settled probe exposed
+
+The report is rate-limited to once per hour per hook per machine. **The exit
+code is not.** So the first unresolved call that hour reports properly, and
+every subsequent one exits 1 with empty stderr, which the host renders as:
+
+```
+PreToolUse:Bash hook error
+Failed with non-blocking status code: No stderr output
+```
+
+Reproduced directly: three consecutive invocations against an unresolvable
+shared install gave `exit=1` with the message, then `exit=1` silent, then
+`exit=1` silent.
+
+This defeats the rate limit's own stated purpose. The limit exists because
+reporting every time is the alarm fatigue this directory rejects elsewhere — but
+a *contentless* alarm fires exactly as often as the message would have and tells
+the operator nothing at all, which is worse than the repetition it was adopted
+to prevent. **If it is worth exiting non-zero, it is worth saying why; if it is
+not worth saying, it should exit 0.** Rate-limiting the exit code alongside the
+message, or reporting a one-line "still unresolved, see earlier notice", would
+both resolve it. Not fixed here — recorded so the fix is argued rather than
+assumed.
+
+#### The original headless run, retained for provenance
+
+A headless `claude -p` session was driven against a
 scratch project registering **real, unresolvable shims** on both `PreToolUse`
 and `PostToolUse`, with the rate-limit marker directory isolated so it could not
 lie. 2026-08-02, Claude Code 2.1.220.
@@ -136,23 +202,28 @@ sitting: its **exit 2** block *did* reach the agent, which quoted the message
 back. Exit 2 is observable. Exit 1 was not observable anywhere this probe could
 look.
 
-**What remains genuinely unknown:** whether the notice renders in the
-*interactive* TUI transcript. Headless mode has no such surface, so this probe
-cannot settle it — but the evidence now runs **against** relying on the channel
-rather than merely being absent.
+**What was then unknown — and is now answered:** whether the notice renders in
+the *interactive* TUI transcript. Headless mode has no such surface, so this
+probe could not settle it. The check named below was carried out on 2026-08-04
+and **the notice does render**; see the result at the top of this section.
 
-**So the wording of task 2.10a stands, and now applies to both shims, not just
-`normalize-claude-md`: they fail open with the reporting channel
-UNESTABLISHED.** No report of this change may describe either hook as "warning"
-anyone.
+~~So the wording of task 2.10a stands … the reporting channel UNESTABLISHED.~~
+**Withdrawn 2026-08-04.** The channel is established for a human at an
+interactive session. The accurate statement is narrower: the shims fail open and
+report, the report reaches the operator's transcript, and it does **not** reach
+programmatic consumers of `--output-format stream-json`.
 
-> **The one check that would settle it**, for a human at an interactive
-> session: on a machine where `~/.agenticapps/bin/database-sentinel.sh` is
-> absent, open one of the seven repos and edit any file. If a
-> `database-sentinel hook error` notice appears in the transcript, the channel
-> is established and this section can be rewritten. If nothing appears, the
-> fail-open trade is silent, and that is a design problem this change should
-> reopen — not a documentation nit.
+> **The check that settled it**, for a human at an interactive session: on a
+> machine where `~/.agenticapps/bin/database-sentinel.sh` is absent, open one of
+> the fleet repos **that binds the hook through a shim** and run any Bash call.
+> Clear the rate-limit marker first, or a report already made this hour will be
+> suppressed and the result will read as a false negative.
+>
+> Carried out 2026-08-04 in `agenticapps-dashboard`. The notice appeared. Note
+> the repo choice is load-bearing: three of the four repos in that family carry
+> an inlined copy of the implementation rather than a shim, so renaming the
+> shared file has no effect on them and the probe would have shown nothing for
+> reasons unrelated to the channel.
 
 ### Unresolvable → fail open, and report
 
@@ -497,6 +568,32 @@ than unioned, and a deliberate project-specific difference is preserved as a
 documented opt-out.
 
 Measured on this machine, 2026-08-02, across all seven repos.
+
+> **Re-measured 2026-08-04: the reconciliation has not propagated.** Of the four
+> repos in the `agenticapps` family that bind `database-sentinel`, only
+> `agenticapps-dashboard` binds it through a shim. The other three —
+> `agenticapps-roadmap`, `agents-task-viewer` and the
+> `agenticapps-dashboard-add-agent-board` checkout — still carry a standalone
+> 68-line copy, **byte-identical to each other** and predating the 1.1.0
+> reconciliation. Consequences, all verified rather than inferred:
+>
+> - **`MultiEdit` is not covered in those three.** Their matcher is
+>   `Bash|Edit|Write`; the reconciled implementation declares
+>   `Bash|Edit|Write|MultiEdit`. A `MultiEdit` to `.env` never invokes the hook
+>   at all, so the protection is absent rather than degraded.
+> - **They carry no version marker.** `grep -c database-sentinel-version` returns
+>   0, so `provisioning-check.sh` cannot judge them: they are not in the declared
+>   artifact set and the currency axis is structurally blind to them. The copies
+>   most likely to be stale are precisely the ones staleness cannot be reported
+>   for.
+> - **The 1.1.0 fixes are absent**, including the jq-absence handling that
+>   otherwise aborts at the first command substitution with exit 127 and nothing
+>   explaining why (Stage-2 finding 11).
+>
+> This is the failure mode the shim contract exists to remove, observed intact
+> two days after the reconciliation that was supposed to end it. Publishing to
+> the shared bin does not reach a project that never bound a shim. Recorded here
+> rather than fixed: converting the three is a change, not an edit.
 
 ### `database-sentinel` — three distinct variants
 
