@@ -285,10 +285,13 @@ One PR cannot be both (codex round 2).
       two red checks — `pnpm-audit` and `gitleaks`, both failing on `main` since
       2026-07-29, neither reachable from a three-file hook diff. Named here
       rather than left for a reader to rediscover.
-- [ ] 8.3 Core PR 2 — the propagation evidence from group 7, the README
+- [x] 8.3 Core PR 2 — the propagation evidence from group 7, the README
       corrections from group 4, and the archive. This is the PR the change is
       archived in, because archiving before the evidence exists would fold a
       delta whose central claim is still unverified.
+      **PR [#74](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/74).**
+      Group 4's items had in fact shipped in PR 1; what PR 2 carries from that
+      group is 4.4, the row those three left open about themselves.
 - [ ] 8.4 Stage-2 independent code review in a cleared session, against core PR 1
       before it merges and against core PR 2 before it merges. Two reviews, not
       one — PR 2 carries the claim that the fleet was actually reached, which is
@@ -336,3 +339,12 @@ pre-existing and is finding 6's second half.
       validate --all` green.
 - [ ] 8.5 `openspec archive shim-suppressed-report-and-fleet-propagation -y`,
       then ship. Two separate acts.
+  - [x] 8.5a **Archived.** Run against the merged fleet, not before it: 4
+        requirements added and 2 modified into `project-hook-binding`, as
+        `2026-08-04-shim-suppressed-report-and-fleet-propagation`. The CLI
+        warned about 3 incomplete tasks and continued under `-y` — 8.3 and 8.5
+        describe the act of archiving itself and cannot be ticked before it, and
+        8.4's second half is the review of the PR that carries it. Named here
+        because a `--yes` that walks past a warning should leave a record of
+        what it walked past.
+  - [ ] 8.5b Ship — the second act, after 8.4's review closes and #74 merges.
