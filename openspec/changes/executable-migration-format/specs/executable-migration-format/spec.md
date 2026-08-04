@@ -66,6 +66,11 @@ introduced by a `### Step <N>` heading at the start of a line. A step's extent
 SHALL end at the next `### Step ` heading of any number, or at the end of the
 document.
 
+A `### Step ` heading SHALL be recognised only **outside** a fenced code block.
+Step bodies contain shell, and shell contains heredocs; a migration whose
+`apply` block writes a document containing the text `### Step 2` must not have
+its own step silently truncated at that line.
+
 Bounding a step by "the next step heading" rather than by "the heading numbered
 N+1" means a gap in the numbering cannot silently merge two steps into one and
 hide the second step's roles from both the linter and the runner.
@@ -78,6 +83,11 @@ hide the second step's roles from both the linter and the runner.
 #### Scenario: Step 1 is not confused with step 10
 - **WHEN** a migration contains both `### Step 1` and `### Step 10`
 - **THEN** a request for step 1's blocks SHALL return only step 1's blocks
+
+#### Scenario: A step heading inside a fence does not end the step
+- **WHEN** a step's `apply` block contains a heredoc whose body includes the line `### Step 2`
+- **THEN** the extractor SHALL return that block in full
+- **AND** SHALL NOT treat the heredoc line as the start of a new step
 
 ### Requirement: Un-annotated fences are never executed
 
@@ -151,8 +161,36 @@ not be the difference between a judged migration and an unjudged one. The
 declaration is retained as a human-readable assertion and cross-checked against
 the filename, which is why the two can only disagree in the safe direction.
 
-Thresholds SHALL be declared per host in a file the linter reads. Until a host
-declares its own, core's declaration is authoritative.
+A migration's ID SHALL be the leading digits of its filename, which SHALL match
+`<digits>-<slug>.md`. A file whose name carries no parseable leading ID SHALL be
+reported as a violation rather than skipped — an unreadable ID must never be the
+quiet route out of the linter's scope.
+
+Thresholds SHALL be declared per host in a file the linter reads, as rows of
+`<host-repo-name> <threshold-id>`, with `#` introducing a comment and blank
+lines ignored. The host SHALL be named explicitly by the caller; the linter
+SHALL NOT infer it. A linter invoked against an in-scope migration without a
+resolvable threshold SHALL fail rather than proceed, and a host name with no row
+SHALL be an error, not a default.
+
+There is deliberately no "no threshold given" path that silently judges nothing.
+A caller who omits the host would otherwise find every migration out of scope,
+every lint trivially clean, and — because the runner lints before executing —
+every migration runnable. That reopens the silent-no-op hole one layer down.
+
+#### Scenario: A missing host is an error, not an empty scope
+- **WHEN** the linter is invoked with no host and no threshold
+- **THEN** it SHALL exit non-zero reporting that no threshold could be resolved
+- **AND** SHALL NOT report the migration as clean
+
+#### Scenario: An unparseable filename is a violation
+- **WHEN** the linter is invoked against a file whose name carries no leading numeric ID
+- **THEN** it SHALL report a violation and exit non-zero
+
+#### Scenario: A frontmatter ID contradicting the filename is a violation
+- **WHEN** a file named `0016-example.md` declares `id: 0005` in frontmatter
+- **THEN** the linter SHALL report the disagreement and exit non-zero
+- **AND** SHALL have used the filename's ID to decide scope
 
 #### Scenario: A migration below the threshold is not judged
 - **WHEN** the linter runs against a migration whose filename ID is below the declared threshold
@@ -231,9 +269,15 @@ messages offering specific alternatives; a runner that substitutes its own
 wording destroys the only useful output.
 
 Because this output is reproduced into whatever log the runner writes to,
-migration authors SHALL NOT emit secrets or personal data from a block's
-diagnostics. A runner cannot screen this, and CI logs are frequently more widely
-readable than the repository.
+migration authors SHALL NOT emit secrets or personal data from **any** block's
+output — `check`, `precondition`, `apply`, `verify` or `rollback` — nor from an
+`apply` block's source, which dry-run prints. A runner cannot screen this, and
+CI logs are frequently more widely readable than the repository.
+
+Each block SHALL be executed in its own shell. A step therefore SHALL NOT rely
+on environment variables, shell functions, or a working directory established by
+an earlier block or an earlier step: such a dependency would be invisible in the
+document and would break the moment a step is skipped as already applied.
 
 #### Scenario: A multi-line remediation message survives intact
 - **WHEN** a `precondition` block writes a two-option remediation message to stderr and exits 3
@@ -255,9 +299,23 @@ evidence of what went wrong, which an automatic rollback destroys. Runners SHALL
 offer an explicit means of selecting the failure policy directly, so that
 automation is never dependent on whether a terminal happens to be attached.
 
-The failed step is not among "the steps already applied" and its rollback SHALL
-NOT be run: a step that failed part-way through `apply` is in an unknown state,
-and running its rollback could destroy work the rollback did not create.
+Rollback SHALL be performed only on an explicit choice. End-of-input, an empty
+answer, or an unrecognised answer SHALL abort without rolling back. A prompt
+whose default is destruction is not consent, and a runner reaching EOF in a
+pipeline must not read silence as permission to undo work.
+
+A step whose `apply` failed part-way SHALL NOT have its rollback run: its state
+is unknown, and the rollback could destroy work it did not create. A step whose
+`apply` succeeded and whose `verify` then failed SHALL be included in a
+rollback: `apply` completed, so its rollback describes a state that actually
+exists. The two failures are not interchangeable.
+
+If a `rollback` block itself fails during an interactive rollback, the runner
+SHALL report which rollbacks succeeded and which failed, SHALL continue
+attempting the remainder, and SHALL exit non-zero. Stopping at the first failed
+rollback would leave a tree that is neither migrated nor restored, with no
+record of how far it got.
+
 "Recorded as partial" and "which steps applied" are satisfied by the runner's
 own diagnostic output; this format defines no journal or state file.
 
@@ -272,15 +330,28 @@ own diagnostic output; this format defines no journal or state file.
 - **THEN** the runner SHALL continue to step 3
 - **AND** SHALL report the migration as partial
 
+#### Scenario: Silence is not consent to roll back
+- **WHEN** the runner prompts after a failure and standard input reaches end-of-file
+- **THEN** the runner SHALL abort without running any rollback
+- **AND** SHALL exit non-zero
+
+#### Scenario: A verify failure is rolled back, a partial apply is not
+- **WHEN** an interactive rollback follows a step whose `apply` succeeded and whose `verify` failed
+- **THEN** that step's rollback SHALL be run
+- **AND WHEN** the rollback instead follows a step whose `apply` itself failed
+- **THEN** that step's rollback SHALL NOT be run
+
 #### Scenario: An explicit override selects the policy
 - **WHEN** the runner is invoked with an explicit failure-policy selection
 - **THEN** it SHALL use that policy rather than the one derived from whether a terminal is attached
 
 ### Requirement: Rollback blocks are exercised independently of the runner
 
-Because the non-interactive path never reaches a `rollback` block, a host's
-migration harness SHALL exercise each `rollback` block directly against its own
-step's post-apply state.
+Because the non-interactive path never reaches a `rollback` block, the migration
+harness that ships with this format SHALL exercise each `rollback` block
+directly against its own step's post-apply state. Hosts SHOULD adopt the same
+practice when they adopt the format; the obligation is stated as a SHOULD for
+them because no host is touched by this change and no host harness exists yet.
 
 Every step is required to declare a rollback, but only an interactive operator
 choosing to roll back ever causes one to run. Without a direct test, the one

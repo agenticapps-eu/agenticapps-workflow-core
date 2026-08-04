@@ -36,7 +36,14 @@
 - **Un-annotated ```` ```bash ```` fences are illustration and MUST NOT be executed.**
 - **ID thresholds** (a migration at or above its host's threshold MUST be executable): claude-workflow `0035`, codex-workflow `0016`, opencode-workflow `0012`, pi-agentic-apps-workflow `0011`.
 - **A2 failure policy:** TTY → prompt retry/skip/rollback. Non-TTY → abort in place, print which steps applied, **roll back nothing**. `--on-failure=abort|prompt|skip` overrides.
+- **Rollback happens only on an explicit `b`.** EOF, an empty answer, or anything unrecognised aborts and touches nothing. A prompt whose default is destruction is not consent.
+- **A pre-condition failure always hard-aborts**, terminal or not. The failure policy governs `apply` and `verify` only.
+- **`check` is three-valued:** 0 applied, 1 not applied, anything else means the check could not run and aborts.
+- **`--host` is required** wherever a threshold is needed. There is no default: with no threshold nothing is in scope, every lint passes trivially, and the runner would execute anything.
+- **Step headings are recognised only outside fences.** A heredoc containing `### Step 2` must not truncate its own step.
 - **Pre-condition stderr is reproduced verbatim**, never paraphrased.
+- **No block emits secrets or personal data** — all output, and the `apply` source that dry-run prints, can reach CI logs.
+- **Each block runs in its own shell.** No step may depend on env vars, functions, or a working directory set by an earlier block.
 - **No writes outside a temp dir in any test.** No network in any test.
 - `set -uo pipefail` at the top of every script (core's convention — note `-e` is deliberately absent; these scripts inspect exit codes).
 
@@ -59,6 +66,14 @@ passes for the wrong reason becomes possible.
 | `bad-threshold-no-frontmatter.md` | 0022 | `bad-threshold` | Keep step 1 only; delete the `migration_format: executable` line from frontmatter |
 | `failing-apply.md` | 0023 | `failing-apply` | Keep both steps; change step 2's check to `test -f never.txt` and its apply to `exit 7` |
 | `failing-precondition.md` | 0024 | `failing-precondition` | Keep step 1 only; replace its pre-condition with the three-line block shown in Task 5 |
+| `bad-infostring-extra-key.md` | 0025 | `bad-infostring` | Keep step 1 only; open the apply fence as ```` ```bash role=apply retry=2 ```` |
+| `bad-no-frontmatter-id.md` | 0026 | `bad-no-id` | Keep step 1 only; delete the `id:` line entirely **and** omit its rollback. In scope by filename, so the missing rollback must still be caught |
+| `bad-id-mismatch.md` | 0027 | `bad-id-mismatch` | Keep step 1 only; set frontmatter `id: 0005` while the filename says 0027 |
+| `bad-optin-below-threshold.md` | 0009 | `bad-optin` | Below any threshold, but declares `migration_format: executable` and omits its rollback — opting in must pull it into scope |
+| `bad-nonconsecutive-steps.md` | 0028 | `bad-nonconsec` | Two complete steps, numbered `### Step 1` and `### Step 3` |
+| `all-illustration.md` | 0029 | `all-illustration` | One step, `migration_format: executable`, whose only fences carry **no** `role=` at all |
+| `failing-verify.md` | 0030 | `failing-verify` | Keep both steps; change step 2's verify to `exit 1` so apply succeeds and verify does not |
+| `heredoc-step-heading.md` | 0031 | `heredoc-step` | Keep step 1 only; its apply block writes a heredoc whose body contains the line `### Step 2` |
 
 ---
 
@@ -302,25 +317,32 @@ mr_roles() {
       d = substr(line, plen + 1, 1)
       return (d == "" || d == ":" || d == " ")
     }
-    # ANY step heading ends the previous step. Bounding on "the next step
-    # heading" rather than on "the heading numbered N+1" means a gap in the
-    # numbering cannot merge two steps and hide the second one'"'"'s roles from
-    # both the linter and the runner.
-    index($0, "### Step ") == 1 {
-      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
-      next
-    }
-    !in_step { next }
-    inb && index($0, "```") == 1 { inb = 0; next }
-    inb { next }
-    index($0, "```") == 1 {
-      inb = 1
+    # FENCE STATE IS TRACKED FIRST, BEFORE ANY STEP LOGIC.
+    #
+    # Step bodies are shell, and shell contains heredocs. A migration whose
+    # apply block writes a document containing the line "### Step 2" would
+    # otherwise truncate its own step there and hide every role below it — the
+    # linter and the runner would both agree the step was fine. Recognising a
+    # step heading only OUTSIDE a fence is what closes that.
+    !infence && index($0, "```") == 1 {
+      infence = 1
       info = substr($0, 4); sub(/[ \t]+$/, "", info)
       # EXACT GRAMMAR: literal bash, whitespace, role=, a lowercase role name,
       # then end of string. An info-string carrying extra keys is NOT a tagged
       # fence — it falls through to the linter as a violation rather than being
       # silently honoured with its extra keys ignored.
-      if (info ~ /^bash[ \t]+role=[a-z]+$/) { sub(/^bash[ \t]+role=/, "", info); print info }
+      if (in_step && info ~ /^bash[ \t]+role=[a-z]+$/) {
+        sub(/^bash[ \t]+role=/, "", info); print info
+      }
+      next
+    }
+    infence && index($0, "```") == 1 { infence = 0; next }
+    infence { next }
+    # ANY step heading ends the previous step. Bounding on "the next step
+    # heading" rather than on "the heading numbered N+1" means a gap in the
+    # numbering cannot merge two steps and hide the second one'"'"'s roles.
+    index($0, "### Step ") == 1 {
+      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
       next
     }
   ' "$doc"
@@ -333,19 +355,24 @@ mr_block() {
       d = substr(line, plen + 1, 1)
       return (d == "" || d == ":" || d == " ")
     }
-    index($0, "### Step ") == 1 {
-      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
-      next
-    }
-    !in_step { next }
-    inother && index($0, "```") == 1 { inother = 0; next }
-    inother { next }
-    inb && index($0, "```") == 1 { found = 1; exit }
-    inb { print; next }
-    index($0, "```") == 1 {
+    # Fence state first — see the note in mr_roles. A "### Step" line inside a
+    # heredoc is shell, not a heading.
+    !infence && index($0, "```") == 1 {
+      infence = 1
       info = substr($0, 4); sub(/[ \t]+$/, "", info); r = ""
       if (info ~ /^bash[ \t]+role=[a-z]+$/) { r = info; sub(/^bash[ \t]+role=/, "", r) }
-      if (r == want) inb = 1; else inother = 1
+      if (in_step && r == want) capturing = 1
+      next
+    }
+    infence && index($0, "```") == 1 {
+      infence = 0
+      if (capturing) { found = 1; exit }
+      next
+    }
+    capturing { print; next }
+    infence { next }
+    index($0, "### Step ") == 1 {
+      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
       next
     }
     END { if (!found) exit 1 }
@@ -851,6 +878,7 @@ if [ -z "$ON_FAILURE" ]; then
 fi
 
 applied=""
+rollbackable=""
 partial=0
 
 run_block() { # $1=step $2=role ; returns the block's exit code, stderr passthrough
@@ -869,7 +897,14 @@ has_role() { bash "$EXTRACT" roles "$DOC" "$1" | grep -qx "$2"; }
 # having changed nothing — the exact failure this format exists to prevent, and
 # worst when the silently-skipped step was the security-relevant one. The Stage
 # 2 review found this hole; all-illustration.md is the regression guard.
-if ! bash "$SCRIPT_DIR/lint-migration.sh" ${LINT_HOST:+--host "$LINT_HOST"} "$DOC"; then
+# THE HOST IS REQUIRED, NOT OPTIONAL.
+#
+# An optional threshold looks harmless and reopens the hole one layer down: with
+# no threshold nothing is in scope, so the lint passes trivially, so the runner
+# executes anything at all. That is the silent-no-op defect again, wearing the
+# lint step as a disguise. There is deliberately no default.
+: "${LINT_HOST:?run-migration.sh: --host is required (no default; see THRESHOLDS)}"
+if ! bash "$SCRIPT_DIR/lint-migration.sh" --host "$LINT_HOST" "$DOC"; then
   echo "refusing to run: $DOC does not satisfy the executable format" >&2
   exit 1
 fi
@@ -900,19 +935,48 @@ fail_policy() { # $1 = failing step ; returns 0 to continue, 1 to abort
       ;;
     prompt)
       echo "step $1 failed. [r]etry / [s]kip / [b]ack out steps${applied:- none}?" >&2
-      read -r choice
+      # ROLLBACK REQUIRES AN EXPLICIT CHOICE.
+      #
+      # `read` returns non-zero at EOF and leaves $choice empty. A catch-all
+      # that rolls back therefore destroys work whenever this runs in a
+      # pipeline with nothing on stdin — silence read as permission, which is
+      # the exact principle the non-interactive policy exists to defend.
+      # Only `b` authorises a rollback; everything else aborts, touching
+      # nothing.
+      if ! read -r choice; then
+        echo "no answer (end of input) — aborting without rollback" >&2
+        return 1
+      fi
       case "$choice" in
         r) RETRY=1; return 0 ;;
         s) partial=1; return 0 ;;
-        # Reverse document order: a later step may depend on an earlier one, so
-        # undoing forwards can leave the tree in a state no rollback expected.
-        # The FAILED step is deliberately absent from $applied — a step that
-        # died part-way through apply is in an unknown state, and running its
-        # rollback could destroy work the rollback did not create.
-        *) for d in $(echo "$applied" | tr ' ' '\n' | tail -r 2>/dev/null || echo "$applied" | tr ' ' '\n' | tac); do
-             [ -n "$d" ] && run_block "$d" rollback || true
-           done
-           return 1 ;;
+        b)
+          # Reverse document order: a later step may depend on an earlier one,
+          # so undoing forwards can leave the tree in a state no rollback
+          # expected. A step whose apply died part-way is absent from $applied
+          # and is NOT rolled back — its state is unknown, and its rollback
+          # could destroy work it did not create. A step whose apply succeeded
+          # and whose verify then failed IS in $applied and is rolled back.
+          rb_failed=""
+          for d in $(printf '%s\n' $rollbackable | { tac 2>/dev/null || tail -r; }); do
+            [ -n "$d" ] || continue
+            if run_block "$d" rollback; then
+              echo "step $d: rolled back" >&2
+            else
+              echo "step $d: ROLLBACK FAILED" >&2
+              rb_failed="$rb_failed $d"
+            fi
+          done
+          # Continue through the rest rather than stopping at the first
+          # failure: a tree that is neither migrated nor restored needs a
+          # record of how far it got.
+          [ -n "$rb_failed" ] && echo "rollback incomplete for steps:$rb_failed" >&2
+          return 1
+          ;;
+        *)
+          echo "unrecognised answer '$choice' — aborting without rollback" >&2
+          return 1
+          ;;
       esac
       ;;
   esac
@@ -957,9 +1021,13 @@ for s in $steps; do
       continue 2
     fi
     if has_role "$s" verify && ! run_block "$s" verify; then
-      # The step is NOT recorded as applied: apply ran, but its result is not
-      # what the migration said it should be.
+      # NOT recorded as applied — apply ran, but its result is not what the
+      # migration said it should be, so the step did not succeed. It IS added
+      # to the rollback set, though: apply completed, so this step's rollback
+      # describes a state that actually exists on disk. A step whose apply
+      # itself died part-way never reaches here and stays out of both lists.
       echo "step $s: verify failed" >&2
+      rollbackable="$rollbackable $s"
       fail_policy "$s" || exit 1
       [ "$RETRY" -eq 1 ] && continue
       continue 2
@@ -967,6 +1035,7 @@ for s in $steps; do
   done
 
   applied="$applied $s"
+  rollbackable="$rollbackable $s"
   echo "step $s: applied"
 done
 

@@ -85,6 +85,12 @@ existed to absorb legacy prose, and there is no legacy prose in scope).
   (claude `0035`, codex `0016`, opencode `0012`, pi `0011`) when the installer
   lands, which is a separate change.
 - **No existing migration is modified.** All 73 across the four hosts stay as
-  they are.
-- No new dependencies. Bash, awk and git only — deliberately, so migrations stay
-  runnable on a machine with no Node.
+  they are. Note that the threshold exempts them from the *executable form*
+  only — §08's four-section quartet remains a universal MUST and is not being
+  amended, so `codex-workflow`'s `0014` and `0015` stay non-conformant against
+  it exactly as they are today. This change neither fixes nor excuses that; it
+  declines to make it worse.
+- Dependencies: bash, awk, git, and the POSIX text utilities already assumed
+  everywhere else in this repo — `sed`, `grep`, `tr`, `basename`, `mktemp`.
+  Reversing a list uses `tac` where present and `tail -r` on BSD. Deliberately
+  no Node, so migrations stay runnable on a machine without it.

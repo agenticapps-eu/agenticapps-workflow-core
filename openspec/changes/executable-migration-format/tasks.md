@@ -83,6 +83,7 @@ Stage 2 review changed".
 ## 9. CI and documentation
 
 - [ ] 9.1 Write `reference-implementations/migration-runner/README.md` — the role table, why L4 exists, why the runner lints first, the A2 policy and its rollback consequence, the THRESHOLDS file, and the note that the installer will publish these under `# migration-runner-version:` arbitration
-- [ ] 9.2 Add the `Test the migration runner` step to `.github/workflows/openspec-gate.yml`
-- [ ] 9.3 Run the full local suite — test file, linter against the conformant fixture, `openspec validate --all`, and the change gate `--ci`
-- [ ] 9.4 Commit
+- [ ] 9.2 Add the `Test the migration runner` step to `.github/workflows/openspec-gate.yml`. It runs the **test suite**, which drives the linter against fixtures and asserts their expected verdicts. It MUST NOT lint `test-fixtures/` broadly — most of those files fail the linter by design, so a broad scan would make the gate self-fail
+- [ ] 9.3 Note in the README that dry-run is **not** a safe preview of an untrusted migration: it still executes `check` and `precondition`, and the non-mutation rule binds honest authors, not hostile ones
+- [ ] 9.4 Run the full local suite — test file, linter against the conformant fixture, `openspec validate --all`, and the change gate `--ci`
+- [ ] 9.5 Commit

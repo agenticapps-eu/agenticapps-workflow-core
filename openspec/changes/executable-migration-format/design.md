@@ -171,6 +171,38 @@ except task 7, which edits `spec/08-migration-format.md`. Reverting task 7 alone
 restores the previous contract and leaves the scripts in place, unused and
 harmless.
 
+## Known gaps, accepted deliberately
+
+Stage 2 ran twice. Round 2 confirmed both structural fixes landed and returned a
+further set, of which the ones that bite are fixed: fence-aware step headings, a
+required `--host` (an optional threshold reopened the silent-no-op hole one
+layer down), rollback only on an explicit answer (EOF was being read as
+consent), the verify-failure versus partial-apply rollback distinction, rollback
+failure during rollback, the widened no-secrets obligation, the filename-ID
+grammar, and the corrected claim about `0014`/`0015`.
+
+Review stopped there by decision, not because the list was empty. Three
+reviewers will always find something in a spec, and this repository has just
+finished retiring an instrument that spent six days generating its own work. The
+first migration written under this format will teach us more than a third round
+will. What is left, recorded rather than silently dropped:
+
+- **§08:112 says a partial migration is recorded "in the version-bump record".**
+  This change says partial state is reported through diagnostic output and
+  defines no journal. That is a second amendment to §08 and it is not called out
+  in the BREAKING note. Reconcile when §08 is next opened.
+- **§08's own section table writes the headings without colons**
+  (`**Idempotency check**`), while this format requires
+  `**Idempotency check:**`. Existing migrations use the colon form, so the
+  linter follows the migrations rather than the table, but the table should be
+  corrected.
+- **A `role=` fence under no recognised heading at all** is currently caught by
+  L2 only incidentally, via the "most recent heading" scan. Worth an explicit
+  rule.
+- **Dry-run is not a safe preview of an untrusted migration.** It still executes
+  `check` and `precondition`. The README must say so plainly; the non-mutation
+  obligation binds authors, not attackers.
+
 ## Open Questions
 
 - **`cparx`'s two vestigial version stamps are unresolved.** `.codex/`
