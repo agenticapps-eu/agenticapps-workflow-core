@@ -153,7 +153,11 @@ not. A migration below the threshold that declares `migration_format:
 executable` SHALL be judged as though it were in scope; a declaration can add a
 migration to the linter's scope but SHALL NOT remove one from it. A
 `migration_format` value other than `executable` SHALL be reported as a
-violation.
+violation, **including below the threshold** — "skipped entirely" means a
+migration that declares nothing, not one that declares something unrecognised.
+A historic migration carries no `migration_format` line at all, so this cannot
+retroactively fail one; a below-threshold file that does declare a value has
+been touched deliberately, and a typo there is worth reporting.
 
 Reading the ID from the filename rather than from frontmatter is what makes the
 scope unevadable: a frontmatter field can be omitted, and an omitted field must

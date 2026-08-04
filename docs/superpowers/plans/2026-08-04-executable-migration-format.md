@@ -41,6 +41,7 @@
 - **`check` is three-valued:** 0 applied, 1 not applied, anything else means the check could not run and aborts.
 - **`--host` is required** wherever a threshold is needed. There is no default: with no threshold nothing is in scope, every lint passes trivially, and the runner would execute anything.
 - **Step headings are recognised only outside fences.** A heredoc containing `### Step 2` must not truncate its own step.
+- **ANY awk pass over a migration document orders its rules: fence state first, step boundary second, content third.** This exact inversion has now been shipped three times in this plan — `mr_roles`/`mr_block` (caught in spec review), `mr_steps` (caught in Task 1 review), and the L2/L4 scan (caught in Task 3 review). It fails silently every time: an apply block whose heredoc contains `### Step 2` turns `in_step` off, and every check below that point is skipped, so a malformed migration lints clean and the runner executes it reporting success. Bound the step at **any** `### Step ` heading, never at `N+1`. No exceptions.
 - **Pre-condition stderr is reproduced verbatim**, never paraphrased.
 - **No block emits secrets or personal data** — all output, and the `apply` source that dry-run prints, can reach CI logs.
 - **Each block runs in its own shell.** No step may depend on env vars, functions, or a working directory set by an earlier block.
@@ -72,8 +73,8 @@ passes for the wrong reason becomes possible.
 | `bad-optin-below-threshold.md` | 0009 | `bad-optin` | Below any threshold, but declares `migration_format: executable` and omits its rollback — opting in must pull it into scope |
 | `bad-nonconsecutive-steps.md` | 0028 | `bad-nonconsec` | Two complete steps, numbered `### Step 1` and `### Step 3` |
 | `all-illustration.md` | 0029 | `all-illustration` | One step, `migration_format: executable`, whose only fences carry **no** `role=` at all |
-| `failing-verify.md` | 0030 | `failing-verify` | Keep both steps; change step 2's verify to `exit 1` so apply succeeds and verify does not |
-| `heredoc-step-heading.md` | 0031 | `heredoc-step` | Keep step 1 only; its apply block writes a heredoc whose body contains the line `### Step 2` |
+| `failing-verify.md` | 0034 | `failing-verify` | Keep both steps; change step 2's verify to `exit 1` so apply succeeds and verify does not |
+| `heredoc-step-heading.md` | 0031 | `heredoc-step` | (already committed in Task 1) Keep step 1 only; its apply block writes a heredoc whose body contains the line `### Step 2` |
 
 ---
 
@@ -298,7 +299,18 @@ Create `reference-implementations/migration-runner/extract.sh`:
 set -uo pipefail
 
 mr_steps() {
+  # FENCE STATE FIRST, exactly as in mr_roles and mr_block.
+  #
+  # This function was the one that got missed when the other two were made
+  # fence-aware, and it is the worst place to miss it: mr_steps enumerates the
+  # steps every other caller iterates. Without the guard, an apply block whose
+  # heredoc contains the line "### Step 2" invents a phantom step 2 — and if a
+  # real step 2 also exists, emits it twice. Caught in Task 1 review by
+  # reproduction, not by reading.
   awk '
+    !infence && index($0, "```") == 1 { infence = 1; next }
+    infence && index($0, "```") == 1 { infence = 0; next }
+    infence { next }
     index($0, "### Step ") == 1 {
       rest = substr($0, 10); n = ""
       for (i = 1; i <= length(rest); i++) {
@@ -712,7 +724,22 @@ Then add L2 and L4 inside the per-step loop, after the L3 block:
 
 ```bash
   # L2 + L4 — one pass, tracking the most recent **Label:** heading.
-  bad="$(awk -v stepp="### Step ${s}" -v nextp="### Step $((s + 1))" '
+  #
+  # FENCE STATE FIRST, AND BOUND ON ANY STEP HEADING.
+  #
+  # This is the THIRD place in this plan where that ordering was got wrong —
+  # mr_roles and mr_block were fixed after spec review, mr_steps after Task 1
+  # review, and this after Task 3 review. The failure is identical each time and
+  # it is always silent: if the step rules run before the fence rules, an apply
+  # block whose heredoc contains the line "### Step 2" turns in_step off, and
+  # every L2 and L4 check below that point is skipped. A `role=aply` fence then
+  # lints clean, the runner lints before executing, and the migration runs
+  # reporting success having done nothing. Demonstrated by reproduction in Task
+  # 3's review, not inferred.
+  #
+  # If you are writing a new awk pass over a migration document: fence state
+  # first, step boundary second, content third. No exceptions.
+  bad="$(awk -v stepp="### Step ${s}" '
     function delim_ok(line, plen,   d) {
       d = substr(line, plen + 1, 1)
       return (d == "" || d == ":" || d == " ")
@@ -724,21 +751,25 @@ Then add L2 and L4 inside the per-step loop, after the L3 block:
       want["verify"]       = "**Verify:**"
       want["rollback"]     = "**Rollback:**"
     }
-    index($0, stepp) == 1 && delim_ok($0, length(stepp)) { in_step = 1; next }
-    index($0, nextp) == 1 && delim_ok($0, length(nextp)) { in_step = 0 }
-    !in_step { next }
-    inb && index($0, "```") == 1 { inb = 0; next }
-    inb { next }
-    index($0, "**") == 1 { label = $0; sub(/[ \t]+$/, "", label); next }
-    index($0, "```") == 1 {
-      inb = 1
+    !infence && index($0, "```") == 1 {
+      infence = 1
       info = substr($0, 4); sub(/[ \t]+$/, "", info)
+      if (!in_step) next
       if (info !~ /^bash[ \t]+role=/) next
       r = info; sub(/^bash[ \t]+role=/, "", r)
       if (!(r in want)) { printf "L4|%s\n", r; next }
       if (label != want[r]) printf "L2|%s|%s|%s\n", r, want[r], label
       next
     }
+    infence && index($0, "```") == 1 { infence = 0; next }
+    infence { next }
+    index($0, "### Step ") == 1 {
+      in_step = (index($0, stepp) == 1 && delim_ok($0, length(stepp)))
+      label = ""
+      next
+    }
+    !in_step { next }
+    index($0, "**") == 1 { label = $0; sub(/[ \t]+$/, "", label); next }
   ' "$DOC")"
 
   while IFS='|' read -r rule a b c; do
