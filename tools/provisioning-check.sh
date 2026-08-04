@@ -88,8 +88,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# One semver implementation, shared with project-hook-conformance.sh. Refusing
-# rather than degrading is deliberate and matches that tool: without an ordering
+# One semver implementation, extracted when a second tool needed it. Refusing
+# rather than degrading is deliberate: without an ordering
 # the direction of a staleness cannot be reported, and a currency report with no
 # direction hands the operator the wrong remedy half the time.
 if [ ! -f "$SCRIPT_DIR/lib/semver.sh" ]; then

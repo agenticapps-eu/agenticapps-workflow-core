@@ -616,8 +616,8 @@ Measured on this machine, 2026-08-02, across all seven repos.
 
 > **Corrected the same day, by the instrument.** The note below counted three
 > repos in one family, because one family is what was looked at.
-> `project-hook-conformance.sh --fleet ~/Sourcecode` reads the declared set and
-> reports **five** repos carrying unmarked inlined copies of **all three**
+> `project-hook-conformance.sh --fleet ~/Sourcecode` (retired 2026-08-04) read
+> the declared set and reported **five** repos carrying unmarked inlined copies of **all three**
 > shimmed hooks — `agenticapps-roadmap`, `agents-task-viewer`, `callbot`,
 > `fbc-platform`, `fx-signal-agent` — across two families. Only
 > `agenticapps-dashboard` and `cparx` bind through contract shims.

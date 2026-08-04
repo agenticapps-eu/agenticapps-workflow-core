@@ -14,12 +14,20 @@
 # about the fleet, and the next migration that re-adds the registration should
 # meet the reason before it meets the file.
 #
-# THE REASON BELONGS WITH THE PROJECT, NOT ONLY HERE. This line is an index. The
-# argument lives in the project's own ADR, because a rationale kept only in
-# another repository's declaration is one `git clone` away from being lost — and
-# the one live instance below had already been manually reverted about three
-# times when it was carried as a comment inside the file it justified.
+# THE REASON MUST SURVIVE THIS FILE. A rationale kept only in another
+# repository's declaration is one `git clone` away from being lost — the live
+# instance below had already been manually reverted about three times when it was
+# carried as a comment inside the file it justified. So a row is either
+# self-contained, or it points at the project's own ADR. It is not required to be
+# both: requiring an ADR for a one-sentence fact produces ninety lines of prose
+# arguing what the row already says, which is its own kind of loss.
+#
+# A REASON IS PER HOOK. "This repository is the authority, not a consumer"
+# explains why a repository is not a consumer and says nothing about the hook
+# being excused. A reason should be specific enough to argue with.
 #
 # Format: <repo> <hook> <reason>. One per line, blank lines and # ignored.
 
 agents-task-viewer normalize-claude-md collapsing CLAUDE.md's inlined stack block drops pinned-version constraints this project's correctness depends on; opted out 2026-07-21, see that repo's ADR
+agenticapps-workflow-core database-sentinel core holds no database credentials, no .env and no deployment secrets — the hook guards a class of file this repository does not contain, so binding it would score an empty set green
+agenticapps-workflow-core normalize-claude-md core's CLAUDE.md is a scaffolder artifact whose inlined blocks ARE the published template's content; collapsing them is the transformation this repository exists to define, not to undergo
