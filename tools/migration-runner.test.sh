@@ -860,6 +860,37 @@ assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
   "nothing was written by the empty apply block"
 rm -rf "$tmp"; trap - EXIT
 
+# COVERAGE REGRESSION, fix round 1 of task 6's review. L8 catching this
+# fixture at the lint gate means the runner's OWN pre-flight "no apply
+# block" check (the "step 1 has no apply block" message, distinct from L8's
+# "role 'apply' is empty or whitespace-only") is no longer reachable through
+# the real CLI for THIS fixture's shape — and the assertion that used to
+# cover it was simply re-pointed at L8's message above, leaving that
+# pre-flight branch with zero coverage. Same stub-collaborator technique as
+# 0042/0044/0045: a stubbed-clean lint gate reaches the runner's own
+# pre-flight scan directly, past L8 entirely.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+stubdir="$(mktemp -d)"
+ln -s "$MR/run-migration.sh" "$stubdir/run-migration.sh"
+ln -s "$MR/extract.sh" "$stubdir/extract.sh"
+cat > "$stubdir/lint-migration.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$stubdir/lint-migration.sh"
+
+out="$(cd "$tmp" && bash "$stubdir/run-migration.sh" --host codex-workflow "$FIX/0038-zero-apply-step.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" \
+  "past a stubbed-clean lint gate, the runner's OWN pre-flight scan still refuses an empty apply block"
+assert_not_contains "$out" "step 1: applied" "the runner does not report success"
+assert_contains "$out" "step 1 has no apply block" \
+  "the runner's own pre-flight message is still reachable (past a bypassed lint gate)"
+assert_not_contains "$out" "L8" \
+  "this is the runner's pre-flight scan speaking, not the (stubbed-out) linter"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "nothing was written by the empty apply block"
+rm -rf "$tmp" "$stubdir"; trap - EXIT
+
 echo
 echo "== run-migration.sh: a runner executes only migrations the linter judged =="
 
@@ -929,13 +960,22 @@ rm -rf "$tmp"; trap - EXIT
 # from the refusal code." The case above never applies anything either way,
 # so it cannot show the dangerous side of the distinction: a tree that MAY
 # have changed. 0036-failing-apply.md's step 1 genuinely applies (writes
-# fixture.txt) before step 2's apply exits 7 non-interactively (default
-# --on-failure when stdin is not a terminal, which it never is under this
-# test harness). The observable difference from every refusal case above is
+# fixture.txt) before step 2's apply fails. This invocation gives no
+# --on-failure, so the policy is TTY-derived — which, since group 6, means
+# an apply failure with no redirect here would resolve to `prompt` and block
+# on `read` under a REAL terminal. `</dev/null` forces the non-interactive
+# default (abort) deliberately: this section is about the exit-code
+# distinction, not the failure policy, and task 6 found by construction
+# (fix round 1 of that task, under a real pty via `script`) that a
+# now-stale version of THIS comment once claimed stdin "is never a
+# terminal... under this test harness" — true when task 5 wrote it, false
+# the moment task 6 gave fail_policy a real prompt branch, and exactly the
+# kind of claim the standing instruction warns against making without an
+# executed case. The observable difference from every refusal case above is
 # that step 1's artefact SURVIVES on disk — that is "ran partway, tree may
 # have changed" made concrete, not merely a different number.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0036-failing-apply.md" "$tmp" 2>&1)"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0036-failing-apply.md" "$tmp" </dev/null 2>&1)"
 assert_eq "$?" "1" "a step's apply failing after an earlier step applied is exit 1, not 65"
 assert_contains "$out" "step 1: applied" "step 1 is reported as applied"
 assert_contains "$out" "step 2: apply failed" "step 2's apply failure is reported"
@@ -1003,6 +1043,47 @@ assert_eq "$?" "1" "L8: a whitespace-only pre-condition fence exits 1"
 assert_contains "$out" "L8" "L8: names the rule (precondition)"
 assert_contains "$out" "'precondition'" "L8: names the empty role (precondition)"
 
+# IMPORTANT 3, fix round 1 of task 6's review. L8 must check extract.sh
+# block's own exit status before trusting a captured (or empty) body — an
+# extraction FAILURE is not the same thing as an empty body. Probe:
+# 0045-unclosed-fence-verify.md's verify fence has real content (one real
+# grep command) and is simply never closed before EOF — `roles` reports it
+# present (from the fence's OPENING line) but `extract.sh block` exits 1 for
+# it (mr_block only confirms a role on the CLOSING line). Confirmed by
+# extracting the actual pre-fix lint-migration.sh from the commit this task
+# shipped (4592eaa) and running it directly against this exact fixture:
+#   L8: step 1: role 'verify' is empty or whitespace-only
+#   L7: step 1: fence opened at line 53 (info string: bash role=verify) is
+#   never closed before end of file
+# — L8 fired first, and is simply FALSE (the body is real, non-empty
+# content; extraction never got to return it). L7 alone is correct.
+tmp8="$(mktemp -d)"
+git show 4592eaa:reference-implementations/migration-runner/lint-migration.sh > "$tmp8/lint-migration.sh" 2>/dev/null
+show_rc8=$?
+assert_eq "$show_rc8" "0" "git show 4592eaa:...lint-migration.sh succeeds (the commit must stay reachable)"
+assert_eq "$(test -s "$tmp8/lint-migration.sh" && echo nonempty || echo empty)" "nonempty" \
+  "the extracted pre-fix lint-migration.sh is non-empty, not a git-show failure masked by an empty file"
+assert_not_contains "$(cat "$tmp8/lint-migration.sh" 2>/dev/null)" "extract_rc" \
+  "the extracted script is genuinely the pre-fix revision (contains no exit-status check)"
+if [ "$show_rc8" -eq 0 ] && [ -s "$tmp8/lint-migration.sh" ]; then
+  chmod +x "$tmp8/lint-migration.sh"
+  ln -s "$MR/extract.sh" "$tmp8/extract.sh"
+  ln -s "$MR/THRESHOLDS" "$tmp8/THRESHOLDS"
+  out="$(bash "$tmp8/lint-migration.sh" --host codex-workflow "$FIX/0045-unclosed-fence-verify.md" 2>&1)"
+  assert_contains "$out" "L8: step 1: role 'verify' is empty or whitespace-only" \
+    "MACHINE-CHECKED: the pre-fix (4592eaa) L8 really does misreport this as empty"
+else
+  fail=$((fail + 1))
+  echo "  FAIL  MACHINE-CHECKED: the pre-fix (4592eaa) L8 really does misreport this as empty (skipped: extraction failed above)"
+fi
+rm -rf "$tmp8"
+
+out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0045-unclosed-fence-verify.md" 2>&1)"
+assert_eq "$?" "1" "L8 fix: 0045 still lints dirty (L7 fires)"
+assert_contains "$out" "L7" "L8 fix: L7 still correctly diagnoses the unclosed fence"
+assert_not_contains "$out" "role 'verify' is empty" \
+  "L8 fix: no longer misreports an extraction FAILURE as an empty body"
+
 echo
 echo "== run-migration.sh: A2 failure policy — non-interactive apply failure =="
 
@@ -1056,7 +1137,8 @@ assert_eq "$?" "1" "A2: skip policy still exits non-zero overall (a step DID fai
 assert_eq "$(cat "$tmp/s1.txt" 2>/dev/null)" "s1" "A2: step 1 applied"
 assert_contains "$out" "step 3: applied" "A2: skip CONTINUES to step 3 rather than stopping at step 2"
 assert_eq "$(cat "$tmp/s3.txt" 2>/dev/null)" "s3" "A2: step 3 actually ran"
-assert_contains "$out" "partial" "A2: the migration is reported as partial"
+assert_contains "$out" "migration partial:" \
+  "A2: the migration-level summary line reports it as partial (not just the per-step warning)"
 rm -rf "$tmp"
 
 echo
@@ -1131,8 +1213,14 @@ assert_eq "$?" "1" "A2 prompt: rollback after a verify failure exits non-zero"
 log="$(cat "$tmp/rollback.log" 2>/dev/null)"
 assert_contains "$log" "rollback:2" "A2 prompt: the verify-failed step's rollback DID run"
 assert_contains "$log" "rollback:1" "A2 prompt: the earlier fully-applied step's rollback also ran"
-assert_eq "$(printf '%s\n' "$log" | grep -n 'rollback:' | head -1 | cut -d: -f1)" \
-  "$(printf '%s\n' "$log" | grep -n 'rollback:2' | head -1 | cut -d: -f1)" \
+# Same shape as 0048's order check below, not the earlier grep|cut-vs-grep|cut
+# comparison this replaced: two empty extractions there would have compared
+# "" to "" and passed vacuously if rollback.log were ever missing. The
+# arithmetic comparison fails (0, not the expected 1) in that same missing-log
+# case instead, because bash arithmetic treats an unset/empty operand as 0.
+line2="$(printf '%s\n' "$log" | grep -n 'rollback:2' | head -1 | cut -d: -f1)"
+line1="$(printf '%s\n' "$log" | grep -n 'rollback:1' | head -1 | cut -d: -f1)"
+assert_eq "$(( line2 < line1 ? 1 : 0 ))" "1" \
   "A2 prompt: step 2's rollback entry comes BEFORE step 1's — reverse document order"
 rm -rf "$tmp"
 
@@ -1169,9 +1257,15 @@ echo "== run-migration.sh: apply BLOCK_MISSING is reachable through the real CLI
 # every call, so by the time the dispatch loop reaches step 2, its apply
 # fence is gone — BLOCK_MISSING, genuinely reached with no stub-collaborator
 # bypass at all. This also exercises the deliberate design choice that
-# apply/verify BLOCK_MISSING does NOT go through fail_policy: there is no
-# "Nothing was rolled back" phrasing here, because fail_policy was never
-# called.
+# apply/verify BLOCK_MISSING does NOT go through fail_policy's INTERACTIVE
+# branch: fix round 1 of this task's review found "Nothing was rolled back"
+# is the wrong discriminator for that claim, because abort_no_rollback (a
+# reporting helper, called directly from the BLOCK_MISSING sites too, so the
+# operator still gets an applied-steps summary on this half-applied tree)
+# prints that exact phrase from BOTH call sites now. The needle that
+# actually discriminates "fail_policy's prompt loop was never entered" is
+# the PROMPT TEXT ITSELF ("roll [b]ack"), which only ever appears from
+# inside fail_policy's own interactive branch.
 tmp="$(mktemp -d)"
 cp "$FIX/0046-apply-dropped-by-step1.md" "$tmp/0046-doc.md"
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$tmp/0046-doc.md" "$tmp" 2>&1)"
@@ -1180,8 +1274,10 @@ assert_eq "$(cat "$tmp/s1.txt" 2>/dev/null)" "s1" "apply BLOCK_MISSING: step 1 (
 assert_contains "$out" "apply block missing" "apply BLOCK_MISSING: named as missing, not merely failed"
 assert_not_contains "$out" "step 2: applied" "apply BLOCK_MISSING: step 2 never reported as applied"
 assert_eq "$(ls "$tmp"/s2.txt 2>/dev/null; echo none)" "none" "apply BLOCK_MISSING: step 2's apply never ran"
-assert_not_contains "$out" "Nothing was rolled back" \
-  "apply BLOCK_MISSING: bypasses fail_policy entirely (design choice — see run-migration.sh's header)"
+assert_contains "$out" "Nothing was rolled back" \
+  "apply BLOCK_MISSING: still gets the applied-steps report (abort_no_rollback is called directly)"
+assert_not_contains "$out" "roll [b]ack" \
+  "apply BLOCK_MISSING: fail_policy's own prompt was never reached (the real discriminator)"
 rm -rf "$tmp"
 
 echo
@@ -1215,8 +1311,10 @@ assert_contains "$out" "verify block missing" "verify BLOCK_MISSING: diagnostic 
 assert_not_contains "$out" "verify failed" "verify BLOCK_MISSING: a missing block is not misreported as a failed one"
 assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "applied" \
   "verify BLOCK_MISSING: apply DID run (only verify is missing) — its artefact is on disk"
-assert_not_contains "$out" "Nothing was rolled back" \
-  "verify BLOCK_MISSING: also bypasses fail_policy, same design choice as the apply case"
+assert_contains "$out" "Nothing was rolled back" \
+  "verify BLOCK_MISSING: still gets the applied-steps report (abort_no_rollback is called directly)"
+assert_not_contains "$out" "roll [b]ack" \
+  "verify BLOCK_MISSING: fail_policy's own prompt was never reached (the real discriminator)"
 rm -rf "$tmp" "$stubdir"; trap - EXIT
 
 echo

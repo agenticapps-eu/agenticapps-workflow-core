@@ -350,13 +350,34 @@ EOF
   #
   # Reuses extract.sh's own `block` subcommand — the exact same extraction
   # `run_block` itself calls — rather than a second, drifting reimplementation
-  # of "capture this fence's body." An ABSENT role is already L1's job; this
-  # only fires for a role that IS present but resolves to nothing but
-  # whitespace. `tr -d '[:space:]'` collapses blank lines and spaces alike, so
-  # a fence containing only a blank line does not pass as "non-empty" merely
-  # because it has bytes in it.
-  for r in $roles; do
+  # of "capture this fence's body." `tr -d '[:space:]'` collapses blank lines
+  # and spaces alike, so a fence containing only a blank line does not pass
+  # as "non-empty" merely because it has bytes in it.
+  #
+  # EXIT STATUS CHECKED FIRST, BEFORE TRUSTING EMPTINESS. An earlier version
+  # of this comment claimed "an absent role is already L1's job; this only
+  # fires for a role that IS present but resolves to whitespace" — disproved
+  # by construction in fix round 1's review: a `role=verify` fence containing
+  # three real commands, left unclosed at EOF, IS present per `roles` (mr_roles
+  # reports a role from the fence's OPENING line) but `extract.sh block`
+  # still exits 1 for it (mr_block only confirms a role on the CLOSING line —
+  # see L7's own header comment for the same asymmetry). Without checking the
+  # exit status, that extraction FAILURE was silently read as an EMPTY body,
+  # and L8 reported "role 'verify' is empty or whitespace-only" — false; the
+  # body is real, non-empty content that extraction simply never got to
+  # return. That is the exact BLOCK_MISSING-vs-127 conflation this codebase
+  # already had to fix once in run-migration.sh's run_block; fixed the same
+  # way here: an extraction failure is skipped, not reported, and is left to
+  # whichever rule actually diagnoses it (L7, for an unclosed fence).
+  #
+  # De-duplicated via `sort -u`: a role appearing twice in $roles (already
+  # its own L3 violation) would otherwise resolve to the same fence twice via
+  # mr_block and print the identical L8 line once per occurrence — cosmetic,
+  # but pointless noise on a document already flagged elsewhere.
+  for r in $(printf '%s\n' "$roles" | sort -u); do
     body="$(bash "$SCRIPT_DIR/extract.sh" block "$DOC" "$s" "$r" 2>/dev/null)"
+    extract_rc=$?
+    [ "$extract_rc" -eq 0 ] || continue
     stripped="$(printf '%s' "$body" | tr -d '[:space:]')"
     if [ -z "$stripped" ]; then
       report "L8: step $s: role '$r' is empty or whitespace-only"

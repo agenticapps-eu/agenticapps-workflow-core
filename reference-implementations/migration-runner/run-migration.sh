@@ -57,7 +57,13 @@
 #     fail_policy — see the comment at the apply BLOCK_MISSING check below for
 #     why: it is a document-integrity problem, not an ordinary step failure,
 #     and is treated exactly like a missing check/precondition block already
-#     is (hard, unconditional abort).
+#     is (hard, unconditional abort). They DO still call abort_no_rollback
+#     before exiting, though: that function is a REPORTING helper (which
+#     steps applied; nothing was rolled back), not the interactive policy, so
+#     calling it there does not change the routing decision — it just means
+#     the operator gets the same summary on a half-applied tree that every
+#     other abort in this script already gives (fix round 1's review found
+#     this had been dropped on exactly these two paths).
 #
 # Usage: run-migration.sh --host NAME [--dry-run] [--on-failure=abort|prompt|skip] <doc> [<workdir>]
 
@@ -578,8 +584,17 @@ for s in $steps; do
     # missing check/precondition block is already treated above: a hard,
     # unconditional abort, independent of --on-failure and of whether stdin
     # is a terminal.
+    #
+    # abort_no_rollback is a REPORTING helper, not the policy — calling it
+    # here does not route this through fail_policy (the decision above is
+    # unchanged); it only means the operator gets the same "which steps
+    # applied / nothing was rolled back" summary here that every other
+    # abort in this script already gives, on a tree that may genuinely be
+    # half-applied (see 0046-apply-dropped-by-step1.md: step 1 really did
+    # apply before step 2's apply block went missing).
     if [ "$BLOCK_MISSING" -eq 1 ]; then
       echo "step $s: apply block missing — aborting" >&2
+      abort_no_rollback "$s"
       exit 1
     fi
     echo "step $s: apply failed" >&2
@@ -600,9 +615,12 @@ for s in $steps; do
       # migration said it should be, so the step did not succeed.
       #
       # BLOCK_MISSING checked here too, same reasoning and same deliberate
-      # non-routing through fail_policy as the apply site above.
+      # non-routing through fail_policy as the apply site above — and the
+      # same reporting fix: abort_no_rollback gives the operator the
+      # applied-steps summary without making this go through the policy.
       if [ "$BLOCK_MISSING" -eq 1 ]; then
         echo "step $s: verify block missing — aborting" >&2
+        abort_no_rollback "$s"
         exit 1
       fi
       echo "step $s: verify failed" >&2
