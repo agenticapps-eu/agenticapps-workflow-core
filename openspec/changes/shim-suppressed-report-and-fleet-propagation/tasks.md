@@ -80,14 +80,26 @@
 
 ## 3. Live verification, not just tests
 
-- [ ] 3.1 Rename `~/.agenticapps/bin/database-sentinel.sh` away, clear the
+- [x] 3.1 Rename `~/.agenticapps/bin/database-sentinel.sh` away, clear the
       rate-limit marker, and make three consecutive matched calls in a repo
       carrying a 1.2.0 shim. Record all three exit codes and stderr.
-- [ ] 3.2 Confirm call 2 and 3 render a notice with content rather than
+      **Done with one stated deviation**: the implementation was NOT renamed —
+      a second session was live in `agenticapps-dashboard` and would have been
+      put on the fail-open path for the duration. `HOME` was pointed at a tree
+      of the same shape with an empty `.agenticapps/bin/` instead, which reaches
+      the identical branch (`SHARED="$HOME/.agenticapps/bin/$HOOK.sh"`) and
+      clears the marker by construction. Recorded in `PROPAGATION-EVIDENCE.md`
+      with what it does not cover.
+- [x] 3.2 Confirm call 2 and 3 render a notice with content rather than
       `No stderr output`. This is the defect's own reproduction, re-run — the
       only evidence that the fix reaches the surface the defect appeared on.
-- [ ] 3.3 Restore the implementation and re-verify: benign call exit 0,
+      Both render one line saying the failure is a repeat; the 1.1.0 render
+      under the same conditions produces zero stderr on calls 2 and 3 at the
+      same exit code, which is the defect itself.
+- [x] 3.3 Restore the implementation and re-verify: benign call exit 0,
       `DROP TABLE` exit 2. Restoring is part of the task, not cleanup after it.
+      Nothing was renamed, so the real environment was re-checked rather than
+      restored: shared bin present, benign call exit 0, `DROP TABLE` exit 2.
 
 ## 4. Spec and documentation
 
@@ -101,10 +113,17 @@
 
 ## 5. Propagate — the two repos already carrying shims
 
-- [ ] 5.1 `agenticapps-dashboard`: re-issue three shims at 1.2.0, own branch and
+- [x] 5.1 `agenticapps-dashboard`: re-issue three shims at 1.2.0, own branch and
       PR. Verify with `project-hook-conformance.sh` against that repo alone.
-- [ ] 5.2 `cparx`: the same. Note in the PR that this is cross-family work
-      authorized for this change specifically.
+      PR #99. Six findings against that repo → zero.
+- [x] 5.2 `cparx`: the same. Note in the PR that this is cross-family work
+      authorized for this change specifically. PR #124, and the PR body says so
+      in its first line.
+
+Both repos' shims were compared against a clean 1.1.0 render before being
+replaced and were byte-identical to it, so neither PR carried away local
+behaviour — the check that makes a blind re-render safe. Neither `settings.json`
+was touched: all six registrations already covered their declared matcher sets.
 
 ## 6. Propagate — the five repos carrying inlined copies
 
@@ -177,9 +196,11 @@ found: core must merge **first** so the other seven have an authority to be
 compared against, but the propagation evidence only exists **after** they merge.
 One PR cannot be both (codex round 2).
 
-- [ ] 8.1 Core PR 1 — implementation, spec delta, tests, instrument. Merged
-      before any fleet repo's PR is opened.
-- [ ] 8.2 The seven fleet PRs (groups 5 and 6).
+- [x] 8.1 Core PR 1 — implementation, spec delta, tests, instrument. Merged
+      before any fleet repo's PR is opened. Merged as `8e7fcd4` (PR #73), and
+      the first fleet PR was opened after it.
+- [ ] 8.2 The seven fleet PRs (groups 5 and 6). Two open: dashboard #99,
+      cparx #124.
 - [ ] 8.3 Core PR 2 — the propagation evidence from group 7, the README
       corrections from group 4, and the archive. This is the PR the change is
       archived in, because archiving before the evidence exists would fold a
