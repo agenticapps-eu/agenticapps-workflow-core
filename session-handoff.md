@@ -93,7 +93,9 @@ review the only review this PR will actually get.
   beside its findings. It misread the fleet twice in opposite directions.
   Two more instrument fixes belong with it, both deliberately declined here:
   core declaring its two non-bindings in `OPT-OUTS`, and the override-vector
-  scan exempting `openspec/changes/archive/` (29 of core's 33 findings).
+  scan exempting `openspec/changes/archive/` — which takes core from 33 to 19,
+  not to 4. 29 of the 33 are override-vector; only 14 of those 29 are in the
+  archive.
 - **Documenting the contract inside a fleet repo costs a permanent finding.**
   `agents-task-viewer`'s `bin/README.md` omits the override variable's name for
   exactly this reason. Verified both ways: one finding with, zero without.

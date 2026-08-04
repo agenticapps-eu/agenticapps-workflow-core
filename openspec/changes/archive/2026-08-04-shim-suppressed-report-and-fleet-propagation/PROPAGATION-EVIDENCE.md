@@ -301,7 +301,7 @@ its composition or it reads as core being the worst repository in the fleet:
 |---|---:|---|
 | `MARKER … ABSENT` | 2 | `database-sentinel`, `normalize-claude-md` — core does not bind either; it hosts their implementations |
 | `MATCHER … not registered` | 2 | the same two absences, seen from the registration axis |
-| `OVERRIDE-VECTOR` | 29 | core's own tests, ADRs, archived change docs and spec files, which **name** the override variables because core is where the override mechanism is specified and tested |
+| `OVERRIDE-VECTOR` | 29 | 24 documents — archived change docs (14), tests (5), spec files (3), ADRs (2) — plus **5 that are the mechanism, not prose about it**: the published shim template the fleet vendors, the installer, the instrument itself, and the gate reference README twice |
 
 Its one real binder — `openspec-change-gate`, self-hosting — reads `current
 (1.2.0)`, registered on the full declared matcher set.
@@ -312,6 +312,12 @@ recorded rather than silently accepted: core could declare the two non-bindings
 in `OPT-OUTS` and the vector scan could exempt `openspec/changes/archive/`, but
 both are instrument changes and belong with the checkout-staleness fix above, in
 the instrument's own change.
+
+The archive exemption is worth **14**, not 29 — it would take core from 33 to
+19. The 15 it does not reach include the published shim template, the installer
+and the instrument itself, which name the variable because they implement the
+mechanism. An exemption scoped at documentation cannot clear those, and should
+not: the instrument reporting its own override vector is the scan working.
 
 ### 7.2a — what 7.2 does not establish
 

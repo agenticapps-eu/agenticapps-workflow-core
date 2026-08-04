@@ -292,7 +292,7 @@ One PR cannot be both (codex round 2).
       **PR [#74](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/74).**
       Group 4's items had in fact shipped in PR 1; what PR 2 carries from that
       group is 4.4, the row those three left open about themselves.
-- [ ] 8.4 Stage-2 independent code review in a cleared session, against core PR 1
+- [x] 8.4 Stage-2 independent code review in a cleared session, against core PR 1
       before it merges and against core PR 2 before it merges. Two reviews, not
       one — PR 2 carries the claim that the fleet was actually reached, which is
       the claim most worth an independent reader.
@@ -300,6 +300,21 @@ One PR cannot be both (codex round 2).
         reproduced before it was recorded; `CODE-REVIEW.md` holds the review and
         the reproductions. All four fixed in group 9. The half of 8.4 that
         remains is PR 2's review, so 8.4 stays open.
+  - [x] 8.4b **Core PR 2 reviewed** in a cleared session — `CODE-REVIEW-PR2.md`.
+        PR 2 carries no executable change, so the review is a re-run of the
+        evidence rather than a read of the diff: fleet 0, core 33 composed
+        2/2/29, the 21 binders counted per hook, 7.4's exit codes across all
+        seven repos, the 1.2.0-vs-1.1.0 suppressed-report tables to the exit
+        code and the error string, all four suites, and the fold-in checked
+        requirement-by-requirement for verbatim landing. Everything
+        reproducible reproduced. **Approved**, with two findings, both prose
+        arithmetic in artifacts this PR ships and both fixed on the branch:
+        the archive exemption was credited with 29 of core's 33 findings when
+        it is worth 14, and the composition of the 29 described all of them as
+        documents when 5 are the mechanism itself — the published shim
+        template, the installer, and the instrument, which reports its own
+        override vector. CodeRabbit's check on #74 is
+        `pass — Review rate limited`, so this was the only review #74 got.
 
 ## 9. The Stage-2 findings against PR 1
 
