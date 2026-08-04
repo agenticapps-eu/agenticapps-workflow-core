@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # openspec-change-gate — shim. Resolves the shared gate and hands over.
 #
-# shim-contract: 1.1.0
+# shim-contract: 1.2.0
 #
 # The spec §18 change gate. This file is a SHIM, not an implementation: the
 # enforcement surface is ONE host-agnostic script shared by every agent (claude,
@@ -55,21 +55,37 @@ SHARED="$HOME/.agenticapps/bin/openspec-change-gate.sh"
 
 report() { printf '%s\n' "$@" >&2; }
 
-# Rate limited to once per hour, per hook, per machine. The condition is
-# persistent on an unprovisioned machine, so reporting every time would put a
-# hook-error notice on essentially every edit — the alarm fatigue this change
+# The FULL report is limited to once per hour, per hook, per machine. The
+# condition is persistent on an unprovisioned machine, so repeating the whole
+# notice would put it on essentially every edit — the alarm fatigue this change
 # rejects elsewhere. Once per session would be better and is unreachable: the
 # session id lives only in the stdin payload, which must reach the gate intact.
+#
+# THE LIMIT SAVES VERBOSITY, NOT INTERRUPTION (contract 1.2.0). The exit code is
+# not suppressible, so a suppressed call still interrupts; the previous revision
+# suppressed the message and kept the exit, rendering `hook error — No stderr
+# output` on every edit after the first. For THIS shim that is the worst case in
+# the fleet: the notice it swallowed is the one saying §18 enforcement is not
+# running and CI is the only floor left.
+#
+# So a suppressed call still says one line, and says what the full report cannot
+# — that this is a repeat.
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/agenticapps"
 MARKER="$STATE_DIR/$HOOK.unresolved-report"
 
+# Report first, then mark: a failure between the two would otherwise leave the
+# marker claiming a notice nobody received. A marker write that fails suppresses
+# nothing, because the shim then holds no record of having reported.
 report_rate_limited() {
   local now last
   now=$(( $(date +%s) / 3600 ))
   last=$(cat "$MARKER" 2>/dev/null) || last=""
-  [ "$last" = "$now" ] && return 0
-  mkdir -p "$STATE_DIR" 2>/dev/null && printf '%s\n' "$now" > "$MARKER" 2>/dev/null
+  if [ "$last" = "$now" ]; then
+    report "$HOOK hook: still not installed at $SHARED — the §18 gate did NOT run and the edit was allowed; full notice already made this hour"
+    return 0
+  fi
   report "$@"
+  mkdir -p "$STATE_DIR" 2>/dev/null && printf '%s\n' "$now" > "$MARKER" 2>/dev/null
 }
 
 # NO `export OPENSPEC_GATE_SELF` — and this is a deliberate removal, not an
@@ -121,5 +137,5 @@ report_rate_limited \
   "  On this machine the git pre-commit wrapper resolves the same absent install" \
   "  and also fails open, so CI is the only remaining floor. Run" \
   "  install-shared-artifact.sh from agenticapps-workflow-core." \
-  "  Reported at most once per hour; see shim-contract 1.1.0."
+  "  Full notice at most once per hour; see shim-contract 1.2.0."
 exit 1

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Hook — OpenSpec Change Gate (PreToolUse), core's own copy.
 #
-# shim-contract: 1.1.0
+# shim-contract: 1.2.0
 # Profile: self-hosting.
 #
 # The marker binds BOTH profiles — it, the behaviour-free rule and
@@ -28,7 +28,7 @@
 # earliest place gate drift can be detected. See ADR-0028 and docs/WORKFLOW.md.
 #
 # Fires on PreToolUse matcher: Edit|Write|MultiEdit|NotebookEdit
-# Exit 2 = BLOCK; Exit 0 = ALLOW.
+# Exit 2 = BLOCK; Exit 0 = ALLOW; Exit 1 = gate unresolvable — allow and report.
 #
 # LIMITS, because three interposition points are not complete coverage:
 #   - The matcher does not see Bash. `sed -i`, `tee` and redirects bypass this
@@ -98,9 +98,20 @@ GATE="${OPENSPEC_GATE:-$ROOT/reference-implementations/openspec-change-gate/open
 # this with the invalid-override report and exit 1; this profile has one
 # candidate rather than two, so the usable-path branch is where it belongs.
 # Exempting core's own binder would be finding 12 repeated.
+# EXIT NON-ZERO, NOT 0 — corrected at shim-contract 1.2.0, and the correction is
+# the capability's own rule applied to the file that publishes it. A PreToolUse
+# hook exiting 0 has its stdout written to the debug log and its stderr DISCARDED
+# from the transcript, so the warning below reached nobody. This binder printed
+# it and exited 0 from 1.1.0 until now: the exact construction
+# project-hook-binding names as warning nobody, shipping in the repository that
+# defines the rule, and structurally unreportable because --fleet excludes core.
+#
+# Found by a Stage-2 reviewer asking why core was absent from this change's
+# acceptance criterion. The exemption core holds is narrow — resolution order
+# and byte-identity, per ADR-0028 — and fail-open-and-report was never in it.
 if [ ! -f "$GATE" ] || [ ! -x "$GATE" ]; then
-  printf 'openspec-gate: WARNING — gate not found at %s; this edit is not gated.\n' "$GATE" >&2
-  exit 0
+  printf 'openspec-change-gate hook: gate not found at %s — the §18 change gate did NOT run, and this edit was allowed. CI is the only remaining floor.\n' "$GATE" >&2
+  exit 1
 fi
 
 # NO OPENSPEC_GATE_SELF EXPORT. An earlier revision set it here and claimed it

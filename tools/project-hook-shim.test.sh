@@ -236,21 +236,36 @@ done
 
 rm -f "$BIN/database-sentinel.sh"
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+# WHAT IS RATE LIMITED IS THE FULL REPORT, NOT THE NOTICE (contract 1.2.0).
+# This assertion used to require that only 1 of 3 calls wrote anything at all,
+# which is the defect stated as a requirement: the other two exited 1 in silence
+# and rendered as "hook error — No stderr output". All three now speak; exactly
+# one speaks in full.
 h0=$(( $(date +%s) / 3600 ))
-n=0
+full=0; spoke=0
 for i in 1 2 3; do
   run_shim "$SHIM" "$PAYLOAD" || true
-  [ -s "$TMP/err" ] && n=$((n + 1))
+  [ -s "$TMP/err" ] && spoke=$((spoke + 1))
+  # The full report names the remedy; the suppressed line does not.
+  grep -qi 'install-shared-artifact\|unprovisioned' "$TMP/err" && full=$((full + 1))
 done
 h1=$(( $(date +%s) / 3600 ))
 if [ "$h0" -ne "$h1" ]; then
   # The policy is once per hour; a run straddling the boundary legitimately
   # reports twice. Say so rather than failing or silently accepting 2.
   echo "  SKIP  unresolvable-implementation report is rate limited — run crossed an hour boundary"
-elif [ "$n" -eq 1 ]; then
-  ok "unresolvable-implementation report is rate limited (1/3)"
 else
-  bad "unresolvable-implementation report is rate limited (1/3)" "reported $n/3"
+  if [ "$full" -eq 1 ]; then
+    ok "the FULL unresolvable-implementation report is rate limited (1/3)"
+  else
+    bad "the FULL unresolvable-implementation report is rate limited (1/3)" "full reports: $full/3"
+  fi
+  if [ "$spoke" -eq 3 ]; then
+    ok "every call still says something (3/3) — the limit is on verbosity, not on the notice"
+  else
+    bad "every call still says something (3/3)" "spoke $spoke/3" \
+        "a silent call exits 1 anyway and renders as 'No stderr output'"
+  fi
 fi
 
 echo
