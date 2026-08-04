@@ -13,10 +13,11 @@
 #
 # WHY IT IS DECLARED AT ALL.
 #
-# project-hook-conformance.sh carried this set as a hardcoded array while the
+# The retired conformance tool carried this set as a hardcoded array while the
 # installer and the provisioning check read a declaration, so one fleet had two
 # expected sets maintained in two places — the drift ARTIFACTS was created to
-# prevent, reintroduced in the third tool (Stage-2 finding 7).
+# prevent, reintroduced in a third tool (Stage-2 finding 7). `check-shims.sh`
+# reads this file for the same reason.
 #
 # One hook name per line, without the .sh. Blank lines and # comments ignored.
 

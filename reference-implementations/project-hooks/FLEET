@@ -19,9 +19,9 @@
 #
 # Bare repository names, because a path is a fact about one machine. The fleet
 # is checked out under different roots on different machines and in CI, so
-# `project-hook-conformance.sh --fleet <root>` resolves each name beneath the
-# root it is given and reports the ones it cannot find. A name that resolves
-# nowhere is a finding; it is never silence.
+# `tools/check-shims.sh <root>` resolves each name beneath the root it is given
+# and reports the ones it cannot find. A name that resolves nowhere is reported;
+# it is never silence.
 #
 # WHAT IS NOT HERE.
 #

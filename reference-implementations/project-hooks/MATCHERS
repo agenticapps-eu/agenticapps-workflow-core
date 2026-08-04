@@ -1,8 +1,18 @@
 # The tool coverage each shimmed hook's registration must declare.
 #
+# NOTHING VERIFIES THIS FILE, AS OF 2026-08-04. The axis that read it was part of
+# the conformance instrument retired that day, and it was not rebuilt: the check
+# needed to parse settings.json, and rebuilding it is how the instrument grew to
+# six times the size of the contract it measured the first time. This file is a
+# declaration a person reads when wiring a project, and the requirement it serves
+# ("Registration matches the implementation's tool coverage") is stated and not
+# machine-checked. That is a deliberate trade, not an oversight — if a
+# registration drifts, it will be found by the hook not firing, which is how the
+# defect below was found in the first place.
+#
 # WHY THIS EXISTS.
 #
-# Nothing read matchers at fleet scope. project-hook-conformance.sh opened
+# Nothing read matchers at fleet scope. The conformance tool opened
 # settings.json only to enumerate override env vectors, so a registration could
 # be narrower than the implementation it invokes and every axis still reported
 # the project current: the marker matched, the shim was byte-identical, and the

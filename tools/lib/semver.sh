@@ -1,9 +1,14 @@
 # semver.sh — component-wise numeric version comparison. SOURCED, never run.
 #
-# ONE implementation, two callers, deliberately.
+# ONE implementation, extracted when there were two callers.
 #
-#   project-hook-conformance.sh  compares `# shim-contract:` against the template
 #   provisioning-check.sh        compares `# <hook>-version:` against the authority
+#
+# The second caller, project-hook-conformance.sh, was retired on 2026-08-04 with
+# the rest of the conformance instrument. This file is kept as its own unit
+# rather than folded back into its one remaining caller: the argument below is
+# about what a divergent copy costs, and it applies again the moment a second
+# caller appears.
 #
 # The second caller is why this file exists. Writing a second copy would have
 # been shorter, and the failure a divergent copy produces is silent: a lexical
