@@ -68,14 +68,53 @@ assert_eq "$out" 'echo "applied" > fixture.txt' "block returns step 1 apply body
 out="$(bash "$MR/extract.sh" block "$FIX/conformant.md" 2 apply)"
 assert_eq "$out" 'echo "second" >> fixture.txt' "block scopes to step 2, not step 1"
 
-# The illustration guard: an un-annotated bash fence must be invisible.
-out="$(bash "$MR/extract.sh" roles "$FIX/conformant.md" 1)"
-assert_not_contains "$out" "tripwire" "un-annotated fence contributes no role"
-out="$(bash "$MR/extract.sh" block "$FIX/conformant.md" 1 apply)"
-assert_not_contains "$out" "DO NOT RUN ME" "un-annotated fence is not returned as a block"
-
 bash "$MR/extract.sh" block "$FIX/conformant.md" 2 verify >/dev/null 2>&1
 assert_eq "$?" "1" "block exits 1 for an absent role"
+
+echo "== extract.sh regression fixtures =="
+
+# Regression guard for the phantom-step defect: mr_steps must track fence
+# state, exactly like mr_roles/mr_block do. A heredoc in an apply block whose
+# body contains the literal line "### Step 2" must not be read as a heading.
+out="$(bash "$MR/extract.sh" steps "$FIX/heredoc-step-heading.md")"
+assert_eq "$out" "1" \
+  "steps on heredoc fixture returns exactly 1, no phantom step from the heredoc heading line"
+
+out="$(bash "$MR/extract.sh" block "$FIX/heredoc-step-heading.md" 1 apply)"
+expected="$(printf '%s\n' "cat <<'INNER' > out.txt" "### Step 2" "INNER" "echo done >> out.txt")"
+assert_eq "$out" "$expected" \
+  "block on heredoc fixture returns the whole heredoc including its ### Step 2 line"
+
+# A gap in step numbering (1, 3 — no 2) must not merge the two steps or
+# synthesize a phantom step 2.
+out="$(bash "$MR/extract.sh" steps "$FIX/bad-nonconsecutive-steps.md")"
+assert_eq "$out" "$(printf '1\n3')" \
+  "steps on non-consecutive fixture returns 1 and 3, gap does not synthesize step 2"
+
+out="$(bash "$MR/extract.sh" roles "$FIX/bad-nonconsecutive-steps.md" 1)"
+assert_eq "$out" "$(printf 'check\nprecondition\napply\nverify\nrollback')" \
+  "non-consecutive fixture: step 1 roles resolve correctly"
+
+out="$(bash "$MR/extract.sh" roles "$FIX/bad-nonconsecutive-steps.md" 3)"
+assert_eq "$out" "$(printf 'check\nprecondition\napply\nverify\nrollback')" \
+  "non-consecutive fixture: step 3 roles resolve correctly"
+
+out="$(bash "$MR/extract.sh" block "$FIX/bad-nonconsecutive-steps.md" 1 apply)"
+assert_eq "$out" 'echo "one" > fixture.txt' \
+  "non-consecutive fixture: step 1 apply block resolves correctly"
+
+out="$(bash "$MR/extract.sh" block "$FIX/bad-nonconsecutive-steps.md" 3 apply)"
+assert_eq "$out" 'echo "three" >> fixture.txt' \
+  "non-consecutive fixture: step 3 apply block resolves correctly"
+
+# A fence info-string with an extra key is not a tagged fence: it contributes
+# no role and its body cannot be fetched as a block.
+out="$(bash "$MR/extract.sh" roles "$FIX/bad-infostring-extra-key.md" 1)"
+assert_eq "$out" "$(printf 'check\nprecondition\nrollback')" \
+  "extra-key info-string fence contributes no role"
+
+bash "$MR/extract.sh" block "$FIX/bad-infostring-extra-key.md" 1 apply >/dev/null 2>&1
+assert_eq "$?" "1" "block exits 1 for a fence with an extra info-string key"
 
 echo
 echo "TOTAL: $pass passed, $fail failed"

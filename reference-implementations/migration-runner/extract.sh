@@ -29,6 +29,9 @@ set -uo pipefail
 
 mr_steps() {
   awk '
+    !infence && index($0, "```") == 1 { infence = 1; next }
+    infence && index($0, "```") == 1 { infence = 0; next }
+    infence { next }
     index($0, "### Step ") == 1 {
       rest = substr($0, 10); n = ""
       for (i = 1; i <= length(rest); i++) {
