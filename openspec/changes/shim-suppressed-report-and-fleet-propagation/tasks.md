@@ -1,81 +1,81 @@
 ## 1. The defect, RED first
 
-- [ ] 1.1 Add a test to `tools/project-hook-shim.test.sh`: a second unresolvable
+- [x] 1.1 Add a test to `tools/project-hook-shim.test.sh`: a second unresolvable
       call within the same hour exits 1 **and** writes a non-empty first stderr
       line. Run it and record it RED against today's shim — the RED is the
       evidence that the test sees the defect, not that it compiles.
-- [ ] 1.2 Add the invariant test: for every shim file under
+- [x] 1.2 Add the invariant test: for every shim file under
       `reference-implementations/project-hooks/`, no **pre-`exec`** path exits
       non-zero with empty stderr. Enumerate the paths rather than testing the one
       that motivated this — an unresolvable override, an unresolvable shared
       install, and a suppressed repeat of each. Post-`exec` exits belong to the
       implementation and are out of scope (codex 3).
-- [ ] 1.3 Add the marker-failure test: with the state directory unwritable, every
+- [x] 1.3 Add the marker-failure test: with the state directory unwritable, every
       call reports in full and none is suppressed (opencode 4).
-- [ ] 1.4 Add the ordering test: the report is written before the marker, so a
+- [x] 1.4 Add the ordering test: the report is written before the marker, so a
       run that dies after reporting leaves a marker consistent with a notice that
       was actually emitted (codex 4).
-- [ ] 1.5 Extend the invariant test to core's own binder,
+- [x] 1.5 Extend the invariant test to core's own binder,
       `.claude/hooks/openspec-change-gate.sh`. It is excluded from `--fleet` by
       design, so it must be named explicitly or it is tested by nothing (codex 1).
       Expect RED: it exits 0 today.
-- [ ] 1.6 Add the inverse anti-pattern test: no shim path exits **0** having
+- [x] 1.6 Add the inverse anti-pattern test: no shim path exits **0** having
       written to stderr. Exit 0 discards stderr, so that shape warns nobody — it
       is the defect found in core's binder, and only a test keeps it from
       returning (gemini round 2).
-- [ ] 1.7 Assert the suppressed line's **content**, not merely its existence: the
+- [x] 1.7 Assert the suppressed line's **content**, not merely its existence: the
       four mandatory fields, and that it differs from the full report's first
       line. A test satisfied by any non-empty string would pass a materially
       non-conformant message (codex round 2).
-- [ ] 1.8 `tdd=true` — commit all of the above as `test(RED): …` before any
+- [x] 1.8 `tdd=true` — commit all of the above as `test(RED): …` before any
       implementation edit.
 
 ## 2. The fix in core
 
-- [ ] 2.1 `shim-template.sh`: `report_rate_limited` emits a single line on the
+- [x] 2.1 `shim-template.sh`: `report_rate_limited` emits a single line on the
       suppressed path instead of returning silently. The line names the hook,
       states the condition is unchanged, states the call was allowed, and refers
       to the full notice already made this hour.
-- [ ] 2.2 `openspec-change-gate.shim.sh`: the same change to its own copy, with
+- [x] 2.2 `openspec-change-gate.shim.sh`: the same change to its own copy, with
       wording matching what that shim's unsuppressed report says (the gate's
       cost sentence differs from the template's).
-- [ ] 2.3 Bump `# shim-contract:` to `1.2.0` in both files, and update the two
+- [x] 2.3 Bump `# shim-contract:` to `1.2.0` in both files, and update the two
       in-body references to `shim-contract 1.1.0` in the report text.
-- [ ] 2.4 Update the comment block above `report_rate_limited` in both files: it
+- [x] 2.4 Update the comment block above `report_rate_limited` in both files: it
       currently justifies the interval policy as reducing how often the operator
       is told, which the exit code takes back. State verbosity.
-- [ ] 2.5 Reorder `report_rate_limited` to report **then** write the marker, and
+- [x] 2.5 Reorder `report_rate_limited` to report **then** write the marker, and
       make a failed marker write leave the next call reporting in full.
-- [ ] 2.6 Core's self-hosting binder, `.claude/hooks/openspec-change-gate.sh`:
+- [x] 2.6 Core's self-hosting binder, `.claude/hooks/openspec-change-gate.sh`:
       replace `printf … >&2; exit 0` with a report and a non-blocking error code.
       This is a live violation of the fail-open-and-report rule in the repository
       that publishes it — `spec.md:611-615` calls exit 0 with a stderr warning
       "warns nobody", and `spec.md:251-253` puts core's copy in scope for that
       rule while exempting it only from the resolution-order clauses.
-- [ ] 2.7 Bump core's binder marker to 1.2.0.
-- [ ] 2.8 Run 1.1–1.5 GREEN. Commit as `feat(GREEN): …`.
+- [x] 2.7 Bump core's binder marker to 1.2.0.
+- [x] 2.8 Run 1.1–1.5 GREEN. Commit as `feat(GREEN): …`.
 
 ## 2b. The instrument, because it cannot currently see two of this change's claims
 
-- [ ] 2b.1 RED first, in `tools/project-hook-conformance.test.sh`: a project
+- [x] 2b.1 RED first, in `tools/project-hook-conformance.test.sh`: a project
       missing a declared hook's shim entirely is reported. Today
       `project-hook-conformance.sh:195` and `:265` are `[ -f "$shim" ] || continue`
       on both axes, so an absent shim contributes nothing and the total reads
       clean (codex round 2). Same `|| continue` shape as the currency defect
       repaired on 2026-08-04 — second occurrence, so fix the shape here rather
       than only the instance.
-- [ ] 2b.2 Report the absence on both axes, and add a declaration so a deliberate
+- [x] 2b.2 Report the absence on both axes, and add a declaration so a deliberate
       opt-out is distinguishable from a deletion. `agents-task-viewer` /
       `normalize-claude-md` is the live opt-out and is the test case.
-- [ ] 2b.3 RED first: the check reads each project's `settings.json` matcher for
+- [x] 2b.3 RED first: the check reads each project's `settings.json` matcher for
       each shimmed hook and reports a mismatch against the implementation's
       declared tool coverage. Verified absent today — `:306-309` opens
       `settings.json` only for override env vectors (gemini + opencode).
-- [ ] 2b.4 Make 2b.3 GREEN, and confirm it catches a `database-sentinel` entry
+- [x] 2b.4 Make 2b.3 GREEN, and confirm it catches a `database-sentinel` entry
       missing `MultiEdit` **and** a gate entry missing `NotebookEdit`. Without
       the second case the check would license the regression codex found in the
       rollout instruction.
-- [ ] 2b.5 Re-run `--fleet` and record the new finding count. It will rise before
+- [x] 2b.5 Re-run `--fleet` and record the new finding count. It will rise before
       it falls: the instrument now sees absences it previously skipped.
 
 ## 3. Live verification, not just tests
@@ -91,12 +91,12 @@
 
 ## 4. Spec and documentation
 
-- [ ] 4.1 `openspec validate --all` green on the delta.
-- [ ] 4.2 Update the README's propagation note: it says three repos in one
+- [x] 4.1 `openspec validate --all` green on the delta.
+- [x] 4.2 Update the README's propagation note: it says three repos in one
       family; the instrument says five across two. Correct the claim and say why
       it was wrong — the count came from the family that was looked at, not from
       `FLEET`.
-- [ ] 4.3 Update the README's rate-limit finding, which currently records the
+- [x] 4.3 Update the README's rate-limit finding, which currently records the
       defect as open, to record it as fixed and name the version that fixes it.
 
 ## 5. Propagate — the two repos already carrying shims
