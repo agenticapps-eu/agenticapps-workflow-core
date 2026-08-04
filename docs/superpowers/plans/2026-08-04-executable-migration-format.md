@@ -65,15 +65,15 @@ passes for the wrong reason becomes possible.
 | `bad-l2-wrong-heading.md` | 0020 | `bad-l2` | Keep step 1 only; swap the two tags — put `role=apply` under `**Rollback:**` and `role=rollback` under `**Apply:**` |
 | `bad-l4-typo-role.md` | 0021 | `bad-l4` | Keep step 1 only; open the apply fence as ```` ```bash role=aply ```` |
 | `bad-threshold-no-frontmatter.md` | 0022 | `bad-threshold` | Keep step 1 only; delete the `migration_format: executable` line from frontmatter |
-| `failing-apply.md` | 0023 | `failing-apply` | Keep both steps; change step 2's check to `test -f never.txt` and its apply to `exit 7` |
-| `failing-precondition.md` | 0024 | `failing-precondition` | Keep step 1 only; replace its pre-condition with the three-line block shown in Task 5 |
+| `failing-apply.md` | 0036 | `failing-apply` | Keep both steps; change step 2's check to `test -f never.txt` and its apply to `exit 7` |
+| `failing-precondition.md` | 0023 | `failing-precondition` | (already committed in Task 4) Keep step 1 only; replace its pre-condition with the three-line block shown in Task 5 |
 | `bad-infostring-extra-key.md` | 0025 | `bad-infostring` | Keep step 1 only; open the apply fence as ```` ```bash role=apply retry=2 ```` |
 | `bad-no-frontmatter-id.md` | 0026 | `bad-no-id` | Keep step 1 only; delete the `id:` line entirely **and** omit its rollback. In scope by filename, so the missing rollback must still be caught |
 | `bad-id-mismatch.md` | 0027 | `bad-id-mismatch` | Keep step 1 only; set frontmatter `id: 0005` while the filename says 0027 |
 | `bad-optin-below-threshold.md` | 0009 | `bad-optin` | Below any threshold, but declares `migration_format: executable` and omits its rollback — opting in must pull it into scope |
 | `bad-nonconsecutive-steps.md` | 0028 | `bad-nonconsec` | Two complete steps, numbered `### Step 1` and `### Step 3` |
-| `all-illustration.md` | 0029 | `all-illustration` | One step, `migration_format: executable`, whose only fences carry **no** `role=` at all |
-| `failing-verify.md` | 0034 | `failing-verify` | Keep both steps; change step 2's verify to `exit 1` so apply succeeds and verify does not |
+| `all-illustration.md` | 0035 | `all-illustration` | One step, `migration_format: executable`, whose only fences carry **no** `role=` at all |
+| `failing-verify.md` | 0037 | `failing-verify` | Keep both steps; change step 2's verify to `exit 1` so apply succeeds and verify does not |
 | `heredoc-step-heading.md` | 0031 | `heredoc-step` | (already committed in Task 1) Keep step 1 only; its apply block writes a heredoc whose body contains the line `### Step 2` |
 
 ---
