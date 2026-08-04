@@ -316,6 +316,25 @@ assert_eq "$?" "1" "L6: non-consecutive step numbering exits 1"
 assert_contains "$out" "L6" "L6: names the rule"
 
 echo
+echo "== lint-migration.sh: L7 unclosed fence =="
+
+# FIX ROUND 2. extract.sh's mr_roles (what L1 is built on) prints a role
+# from a fence's OPENING line; mr_block (what the runner calls) only
+# confirms it on the CLOSING line. A fence that opens and is never closed
+# before EOF is therefore PRESENT to L1 but ABSENT to the runner — found by
+# construction in review, using 0041-unclosed-fence-precondition.md: its
+# pre-condition fence is deliberately last in the file and never closed.
+# Before L7 existed, this fixture linted CLEAN (confirmed against the
+# committed pre-fix-round-2 lint-migration.sh, restored via `git stash` and
+# run in place — see the fix report for the transcript) — that clean exit is
+# the evidence L7 was needed, not merely a nice-to-have.
+out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
+assert_eq "$?" "1" "L7: an unclosed fence at EOF exits 1"
+assert_contains "$out" "L7" "L7: names the rule"
+assert_contains "$out" "never closed" "L7: names the problem"
+assert_contains "$out" "role=precondition" "L7: names the offending fence's info string"
+
+echo
 echo "== run-migration.sh: happy path =="
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
@@ -494,29 +513,54 @@ assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
 rm -rf "$tmp"; trap - EXIT
 
 echo
-echo "== run-migration.sh: (retired) a missing pre-condition block =="
+echo "== run-migration.sh: a missing pre-condition block is named, not misreported =="
 
-# RETIRED in fix round 1, not merely renumbered. The prior version of this
-# test kept its ad-hoc fixture BELOW every host's threshold, with no
-# migration_format declared, specifically so lint-migration.sh would skip it
-# (exit 0, out of scope) and never see the missing precondition — leaving
-# run_block's own 127-detection in the dispatch loop as the only thing that
-# caught it.
+# FIX ROUND 1 retired this test on the theory that L1 and run_block share
+# the same extraction primitive, so no document could be both in-scope-and-
+# lint-clean and still missing a required role at runtime. FIX ROUND 2's
+# review disproved that BY CONSTRUCTION: extract.sh's mr_roles (what L1 is
+# built on) prints a role from a fence's OPENING line, while mr_block (what
+# run_block calls) only confirms it on the CLOSING line. An unclosed fence
+# at EOF is therefore present to one and absent to the other — see
+# 0041-unclosed-fence-precondition.md and lint-migration.sh's new L7, which
+# closes exactly that gap.
 #
-# Fix round 1 closes exactly that gap (see "the runner executes only
-# migrations the linter judged" below): a below-threshold, non-opted-in
-# document is now refused BEFORE the dispatch loop ever runs, which means
-# the fixture that used to reach run_block's 127 path can no longer reach it
-# at all without also being refused first. And the fixture cannot be made
-# in-scope instead, because lint's L1 and run_block share the exact same
-# extraction primitive (extract.sh) — any role L1 sees as present, run_block
-# necessarily also finds, and any role missing enough to trip run_block's
-# 127 path is, by the same construction, missing enough to trip L1 first.
-# There is no longer a document shape that is both in-scope-and-lint-clean
-# AND missing a required role at runtime. The dispatch loop's own
-# rc-eq-127 handling (see run_block's header comment and the "pre-condition
-# block missing" branch below it) is kept as defense in depth — it is
-# still correct code, just no longer reachable from this CLI, by design.
+# L7 closes the SPECIFIC mismatch the reviewer found, and — as far as this
+# investigation can tell — every other route to the same mismatch (L2's
+# heading check, L3's duplicate check, L4's unknown-role check, L5's
+# grammar check all still route through the same mr_roles/mr_block pair, so
+# a role either both see or both miss). That means, once L7 exists, this
+# specific fixture's shape (a step with NO precondition heading or fence at
+# all) again cannot reach run_block's 127 path while staying in-scope and
+# lint-clean: an in-scope document with a genuinely absent precondition
+# fails L1 before the dispatch loop ever runs, exactly as intended.
+#
+# Rather than assert that unreachability as a second RED/GREEN-style
+# negative claim (round 1's mistake was doing exactly that once, based on
+# an argument rather than a construction), this test exercises run_block's
+# 127-handling directly by deliberately stepping around the lint gate —
+# _RUN_MIGRATION_TEST_ONLY_SKIP_LINT, documented in run-migration.sh as
+# existing for exactly this purpose and nothing else. The fixture itself
+# (0042-missing-precondition-block.md) is an ordinary in-scope document that
+# a real invocation refuses at lint (asserted below too, for contrast); only
+# this test's invocation bypasses that gate to reach the branch beneath it.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+
+# First, confirm normal operation still refuses it — this is what happens
+# to this exact fixture on every real invocation.
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0042-missing-precondition-block.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "normally, this fixture is refused at the lint gate (L1), never reaching the dispatch loop"
+assert_contains "$out" "L1" "the refusal is attributed to the linter, not the dispatch loop"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "nothing ran"
+
+# Now exercise the dispatch loop's own handling directly.
+out="$(cd "$tmp" && _RUN_MIGRATION_TEST_ONLY_SKIP_LINT=1 bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0042-missing-precondition-block.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "with the lint gate bypassed, a step with no pre-condition block aborts"
+assert_contains "$out" "pre-condition block missing" \
+  "diagnostic names the block as missing, not as having failed"
+assert_not_contains "$out" "pre-condition failed" \
+  "a missing block is not misreported as a failed one"
+rm -rf "$tmp"; trap - EXIT
 
 echo
 echo "== run-migration.sh: --host is required, no default =="
@@ -713,7 +757,9 @@ echo "== run-migration.sh: refusal is distinguishable from failure by exit code 
 # 0024-failing-check.md's step 1 check exits 2 (can't tell if it's already
 # applied), which is a MID-DISPATCH failure, not a pre-execution refusal:
 # the document itself is lint-clean and well-scoped, so it reaches the
-# dispatch loop before failing.
+# dispatch loop before failing. This case alone does not touch the tree
+# either way, though, so it does not yet distinguish "tree untouched" from
+# "tree may have changed" — see the load-bearing case just below.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0017-bad-l1-missing-rollback.md" "$tmp" 2>&1)"
 refusal_rc="$?"
@@ -721,6 +767,27 @@ out2="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/002
 failure_rc="$?"
 assert_eq "$refusal_rc" "65" "a pre-execution refusal (lint violation) is exit 65"
 assert_eq "$failure_rc" "1" "a mid-dispatch failure (check could not run) is exit 1, not 65"
+rm -rf "$tmp"; trap - EXIT
+
+# FIX ROUND 2. spec.md's own scenario: "WHEN a step's apply fails AFTER
+# EARLIER STEPS APPLIED ... THEN the runner SHALL exit with a code distinct
+# from the refusal code." The case above never applies anything either way,
+# so it cannot show the dangerous side of the distinction: a tree that MAY
+# have changed. 0036-failing-apply.md's step 1 genuinely applies (writes
+# fixture.txt) before step 2's apply exits 7 non-interactively (default
+# --on-failure when stdin is not a terminal, which it never is under this
+# test harness). The observable difference from every refusal case above is
+# that step 1's artefact SURVIVES on disk — that is "ran partway, tree may
+# have changed" made concrete, not merely a different number.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0036-failing-apply.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "a step's apply failing after an earlier step applied is exit 1, not 65"
+assert_contains "$out" "step 1: applied" "step 1 is reported as applied"
+assert_contains "$out" "step 2: apply failed" "step 2's apply failure is reported"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "step1" \
+  "step 1's artefact survives on disk — the tree DID change, unlike every refusal case above"
+assert_eq "$(ls "$tmp"/step2.txt 2>/dev/null; echo none)" "none" \
+  "step 2's own artefact was never written (its apply is what failed)"
 rm -rf "$tmp"; trap - EXIT
 
 echo

@@ -12,8 +12,23 @@
 # L6  steps are numbered consecutively from 1 (a gap is a violation, even
 #     though the extractor deliberately tolerates it structurally — see
 #     mr_steps's "bound by the next heading, not N+1" comment)
+# L7  every fence a migration opens must be closed before end of file
 #
 # Every rule above is implemented in this script.
+#
+# WHY L7 EXISTS. extract.sh's mr_roles prints a role from the fence's
+# OPENING line; mr_block only sets found=1 on the fence's CLOSING line (see
+# extract.sh's header and its END block). An unclosed fence at EOF is
+# therefore PRESENT to mr_roles — and so to L1, which is built on mr_roles —
+# but ABSENT to mr_block, which is what run_block actually calls. Without
+# L7, such a document lints clean and fails at runtime with "block missing"
+# for a role the linter just confirmed was there: the exact
+# looks-correct-does-nothing class this whole format exists to prevent, and
+# a linter gap rather than a runner one, since it is the linter's own role
+# listing that has the blind spot. Found by construction in fix round 2's
+# review: an in-scope, otherwise-conformant document whose `**Pre-condition:**`
+# fence is the last thing in the file and is never closed lints clean and
+# aborts with "pre-condition block missing" at run time.
 #
 # L1's job is presence only: "verify appears at most once" and "no role
 # appears more than once" are both L3's problem, so a required role that
@@ -340,5 +355,44 @@ done < <(awk '
     next
   }
 ' "$DOC")
+
+# L7 — every fence a migration opens must be closed. Same fence-state
+# tracking as every other scan in this file, plus the same step-tracking
+# used by L5, but reporting only from END: there can be at most one
+# genuinely unclosed fence per document. Once inside an unclosed fence,
+# EVERY line after it — including any later "```" — is consumed by this
+# same state machine as that fence's own content (the `infence &&
+# index($0, "```") == 1` rule closes it), so the state machine can never
+# close one fence and then leave a second one open; only the LAST fence
+# opened in the document can possibly still be open at EOF.
+unclosed="$(awk '
+  !infence && index($0, "```") == 1 {
+    infence = 1
+    openinfo = substr($0, 4); sub(/[ \t]+$/, "", openinfo)
+    openline = NR
+    openstep = (curstep == "" ? "0" : curstep)
+    next
+  }
+  infence && index($0, "```") == 1 { infence = 0; next }
+  infence { next }
+  index($0, "### Step ") == 1 {
+    rest = substr($0, 10); n = ""
+    for (i = 1; i <= length(rest); i++) {
+      c = substr(rest, i, 1)
+      if (c >= "0" && c <= "9") n = n c; else break
+    }
+    if (n != "") curstep = n + 0
+    next
+  }
+  END {
+    if (infence) printf "%s|%s|%s\n", openstep, openline, openinfo
+  }
+' "$DOC")"
+if [ -n "$unclosed" ]; then
+  IFS='|' read -r ol_step ol_line ol_info <<EOF
+$unclosed
+EOF
+  report "L7: step $ol_step: fence opened at line $ol_line (info string: $ol_info) is never closed before end of file"
+fi
 
 [ "$violations" -eq 0 ]

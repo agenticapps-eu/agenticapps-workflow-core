@@ -159,6 +159,28 @@ fail_policy() {
 # changed" (1) without parsing stderr.
 REFUSAL=65
 
+# _RUN_MIGRATION_TEST_ONLY_SKIP_LINT — NOT a documented feature, NOT for
+# real use, checked nowhere else in this file.
+#
+# The two gates immediately below are the entire point of this group: skip
+# them and this script is exactly the "executes whatever it is given"
+# runner the format exists to prevent. The ONLY reason this exists at all is
+# that fix round 2 closed L7 (every fence must close), which means every
+# required role that lint sees as present now genuinely IS present at
+# runtime too — so the dispatch loop's own "block missing" diagnostics
+# (run_block returning 127) are no longer reachable through this CLI from
+# ANY in-scope, lint-clean document. That is the correct, intended outcome:
+# lint should catch a malformed document before the runner ever tries to run
+# it. It also means the dispatch loop's own 127-handling has no way to be
+# exercised as a regression test without deliberately stepping around the
+# gate that makes it unreachable. This variable exists solely so
+# tools/migration-runner.test.sh can do that, on a document that is
+# otherwise perfectly ordinary and in-scope. It is unset (0) in every real
+# invocation and is not, and must not become, part of this script's usage.
+SKIP_LINT_FOR_TESTS="${_RUN_MIGRATION_TEST_ONLY_SKIP_LINT:-0}"
+
+if [ "$SKIP_LINT_FOR_TESTS" != "1" ]; then
+
 # A RUNNER EXECUTES ONLY MIGRATIONS THE LINTER JUDGED.
 #
 # The linter's silence on a below-threshold, non-opted-in document means NOT
@@ -224,6 +246,8 @@ case "$lint_rc" in
     exit "$REFUSAL"
     ;;
 esac
+
+fi # SKIP_LINT_FOR_TESTS — see the comment above the scope gate
 
 steps="$(bash "$EXTRACT" steps "$DOC")"
 
