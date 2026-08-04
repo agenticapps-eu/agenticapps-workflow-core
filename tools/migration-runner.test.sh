@@ -312,5 +312,109 @@ assert_eq "$?" "1" "L6: non-consecutive step numbering exits 1"
 assert_contains "$out" "L6" "L6: names the rule"
 
 echo
+echo "== run-migration.sh: happy path =="
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+rc=$?
+assert_eq "$rc" "0" "conformant migration applies cleanly"
+assert_eq "$(cat "$tmp/fixture.txt")" "$(printf 'applied\nsecond')" "both steps applied in order"
+assert_contains "$out" "step 1" "reports step 1"
+assert_contains "$out" "step 2" "reports step 2"
+assert_eq "$(ls "$tmp"/tripwire.txt 2>/dev/null; echo done)" "done" \
+  "illustration fence was never executed"
+
+# Idempotency: the second run must apply nothing.
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "second run exits 0"
+assert_contains "$out" "skipped" "second run reports skipped"
+assert_eq "$(cat "$tmp/fixture.txt")" "$(printf 'applied\nsecond')" "second run changed nothing"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: dry-run =="
+
+# §08 requires dry-run to run check + precondition and print the apply SOURCE,
+# writing nothing. A dry run cannot show a real diff without applying the step.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "dry-run exits 0"
+assert_contains "$out" 'echo "applied" > fixture.txt' "dry-run prints the apply source"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "dry-run wrote nothing"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: dry-run does not abort on an ambiguous check =="
+
+# The three-valued check contract's abort branch is a REAL-run-only
+# safeguard against silently re-applying a step of unknown state — a dry run
+# never applies anything either way, so 0024's check exiting 2 must be
+# treated as "not (yet) applied" (pending) rather than aborting the dry run.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "dry-run does not abort when a step's check exits neither 0 nor 1"
+assert_contains "$out" "would apply" "dry-run reports the ambiguous-check step as pending"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "dry-run still wrote nothing"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: three-valued check =="
+
+# check exiting 2 (neither 0 nor 1) means the check itself could not run.
+# Conflating that with "not applied" would silently re-apply a step whose
+# state is unknown — the runner must abort instead, and must never run apply.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "check exiting 2 aborts the migration"
+assert_contains "$out" "could not run" "abort message names the check-could-not-run condition"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "apply never ran when its step's check could not run"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: pre-condition failure is verbatim and hard-aborts =="
+
+# A failing pre-condition always aborts — regardless of whether stdin is a
+# terminal — and its stderr is reproduced VERBATIM, never paraphrased. 0023's
+# pre-condition writes an exact two-line remediation message and exits 3.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "failing pre-condition aborts the migration"
+assert_contains "$out" 'cparx: unmanaged prose at line 42. Either (a) move it above the marker,' \
+  "pre-condition stderr line 1 reproduced verbatim"
+assert_contains "$out" 'or (b) re-run with --adopt to take ownership.' \
+  "pre-condition stderr line 2 reproduced verbatim"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "apply never ran when its step's pre-condition failed"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: pre-condition failure aborts at a terminal too =="
+
+# The same fixture, but stdin redirected from /dev/null so [ -t 0 ] is false —
+# and separately exercised with an explicit --on-failure=prompt so the
+# terminal-vs-not distinction is not what is deciding the outcome. A failing
+# pre-condition is not governed by the failure policy at all: it always
+# hard-aborts.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --on-failure=prompt "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "failing pre-condition aborts even with --on-failure=prompt"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: each block runs in its own shell =="
+
+# 0029's check and pre-condition each set a variable and define a function
+# that its apply block must NOT see. If apply observed either, it would write
+# "leaked" instead of "clean" — proof that env vars, shell functions and cwd
+# from an earlier block are not inherited.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0029-block-isolation.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "isolation fixture applies cleanly"
+assert_eq "$(cat "$tmp/iso.txt")" "clean" \
+  "apply sees no env var or function left by check/precondition blocks"
+rm -rf "$tmp"; trap - EXIT
+
+echo
 echo "TOTAL: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
