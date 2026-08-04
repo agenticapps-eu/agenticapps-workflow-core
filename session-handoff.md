@@ -77,6 +77,45 @@ all five specs, gate `--ci` exit 0, 8/8 placement assertions, 16/16 tasks.
 After it merges, the open questions below are unchanged from last session and
 none were touched by this work.
 
+## The reporting channel is SETTLED — PR #72
+
+The nine-session question is closed, **in the opposite direction to the standing
+claim**. Renaming the shared implementation away and making a Bash call in
+`agenticapps-dashboard` put this in the interactive transcript:
+
+```
+PreToolUse:Bash hook error
+Failed with non-blocking status code: database-sentinel hook: not installed at …
+```
+
+The shims do warn. The earlier negative was an artifact of headless mode having
+no transcript — the only surface the notice renders on. The run recorded that
+honestly as "genuinely unknown"; the summary line hardened it to UNESTABLISHED
+and that propagated for nine sessions. **Absence of evidence on the only surface
+you can observe is not evidence of absence on the surfaces you cannot.**
+
+Narrower claim that survives: exit 1 emits no `hook_response` event, so
+programmatic consumers still cannot see it. Human-visible, machine-invisible.
+
+Probe fully reverted; implementation restored and re-verified live (benign call
+exit 0, `DROP TABLE` exit 2).
+
+### Two findings it exposed, recorded not fixed
+
+1. **The report is rate-limited; the exit code is not.** After the first
+   unresolved call in an hour, every later one exits 1 with empty stderr and
+   renders as `hook error — No stderr output`. Reproduced 3×. This defeats the
+   rate limit's own purpose: a contentless alarm fires as often as the message
+   would and says nothing. **The next fix here.**
+2. **The 2026-08-02 reconciliation never propagated.** Only
+   `agenticapps-dashboard` binds a shim. `agenticapps-roadmap`,
+   `agents-task-viewer` and the `…-add-agent-board` checkout inline a 68-line
+   copy — byte-identical to each other, pre-1.1.0, matcher `Bash|Edit|Write` so
+   **MultiEdit is not covered at all**, and **no version marker**, which puts
+   them outside the declared set where `provisioning-check.sh` cannot judge them.
+   The copies most likely to be stale are the ones staleness cannot be reported
+   for. Converting them is a change, not an edit.
+
 ## Open questions
 
 - **The guard only detects tears at paragraph boundaries.** A fragment relocated
@@ -85,8 +124,8 @@ none were touched by this work.
 - **`provisioning-check.sh` is still not published to the shared bin.** Currency
   works and defaults on, but only where core is checked out. Nothing prompts
   anyone on a machine without a core checkout to discover their install is stale.
+  Sharpened by finding 2 above: the inlined copies are invisible to it regardless.
 - **The `cmp`-error branch is reasoned, not tested.** Negative evidence.
-- **The `PostToolUse` fail-open channel remains unverified** — ninth session.
 - **27 branches carry genuinely unmerged content**, classified for reachability
   and never for worth. Nobody has judged whether any of it is wanted.
 - The convergence rule is still unwritten — ninth session.
