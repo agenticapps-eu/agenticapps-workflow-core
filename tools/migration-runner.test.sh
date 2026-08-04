@@ -117,5 +117,39 @@ bash "$MR/extract.sh" block "$FIX/bad-infostring-extra-key.md" 1 apply >/dev/nul
 assert_eq "$?" "1" "block exits 1 for a fence with an extra info-string key"
 
 echo
+echo "== lint-migration.sh: structural rules =="
+
+out="$(bash "$MR/lint-migration.sh" "$FIX/conformant.md" 2>&1)"
+assert_eq "$?" "0" "L1/L3/L5: conformant fixture passes"
+
+out="$(bash "$MR/lint-migration.sh" "$FIX/bad-l1-missing-rollback.md" 2>&1)"
+assert_eq "$?" "1" "L1: missing rollback exits 1"
+assert_contains "$out" "L1" "L1: names the rule"
+assert_contains "$out" "rollback" "L1: names the missing role"
+
+out="$(bash "$MR/lint-migration.sh" "$FIX/bad-l3-duplicate-apply.md" 2>&1)"
+assert_eq "$?" "1" "L3: duplicate apply exits 1"
+assert_contains "$out" "L3" "L3: names the rule"
+
+out="$(bash "$MR/lint-migration.sh" "$FIX/bad-l5-role-on-yaml.md" 2>&1)"
+assert_eq "$?" "1" "L5: role= on a yaml fence exits 1"
+assert_contains "$out" "L5" "L5: names the rule"
+
+# bad-infostring-extra-key.md already exists from Task 1 (extract.sh coverage).
+# Reuse it here rather than adding a duplicate fixture: its apply fence
+# ("```bash role=apply retry=2") is a bash fence that carries role=, so it is
+# in scope for L5's exact grammar (^bash[ \t]+role=[a-z]+$) — the extra
+# `retry=2` key fails that grammar even though the fence type is bash. This
+# also drives an L1 violation (apply never gets recognized, so it looks
+# missing), which is asserted precisely so this isn't a vacuous L5-only check.
+out="$(bash "$MR/lint-migration.sh" "$FIX/bad-infostring-extra-key.md" 2>&1)"
+assert_eq "$?" "1" "L5: bash fence with extra info-string key exits 1"
+assert_contains "$out" "L1: step 1: missing required role 'apply'" \
+  "L5 fixture reuse: extra-key fence also trips L1 (apply looks absent)"
+assert_contains "$out" "L5" "L5: names the rule for the extra-key grammar violation"
+assert_contains "$out" "retry=2" \
+  "L5: extra-key violation message names the offending info string, not just the word L5"
+
+echo
 echo "TOTAL: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
