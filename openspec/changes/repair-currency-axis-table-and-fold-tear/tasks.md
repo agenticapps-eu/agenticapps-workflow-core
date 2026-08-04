@@ -1,11 +1,11 @@
 ## 1. Review before any edit
 
-- [ ] 1.1 Confirm `openspec validate --all` is green with the delta in place
-- [ ] 1.2 Run `~/.agenticapps/bin/run-plan-review.sh
+- [x] 1.1 Confirm `openspec validate --all` is green with the delta in place
+- [x] 1.2 Run `~/.agenticapps/bin/run-plan-review.sh
       repair-currency-axis-table-and-fold-tear --implementing-host claude` and land
       `REVIEWS.md` with two or more independent other-vendor reviewers. The runner
       is **not** on the repo PATH and exits without `--implementing-host`.
-- [ ] 1.3 Read the reviewers on one question specifically: is narrowing the table
+- [x] 1.3 Read the reviewers on one question specifically: is narrowing the table
       the right side of the contradiction to fix, or does the majority-plus-code
       argument hide a reason the table was right?
 
@@ -16,15 +16,15 @@ The canonical spec is repaired by the archive fold in §4, not by hand here.
 from this point until 4.2 folds the delta**. That is the RED half of the pair,
 not a broken build — CI on this branch is red by design until the fold.
 
-- [ ] 2.1 Commit `tools/spec-placement.test.sh` and confirm it is RED against the
+- [x] 2.1 Commit `tools/spec-placement.test.sh` and confirm it is RED against the
       unrepaired spec, failing on all three symptoms: the stranded opener at 927,
       the severed tail at 861, and the unscoped `stale` clause
-- [ ] 2.2 Confirm each symptom fails for its own reason — in particular that the
+- [x] 2.2 Confirm each symptom fails for its own reason — in particular that the
       severed-tail signature fires on 861 on its own, rather than the run going
       RED only because the stranded-opener signature caught 927
-- [ ] 2.3 Wire it into `.github/workflows/openspec-gate.yml` beside the other
+- [x] 2.3 Wire it into `.github/workflows/openspec-gate.yml` beside the other
       conformance tests, so the next fold is guarded rather than this one only
-- [ ] 2.4 Confirm the four other specs already pass, so the glob adds a guard
+- [x] 2.4 Confirm the four other specs already pass, so the glob adds a guard
       rather than a backlog
 
 ## 3. Independent code review
@@ -33,7 +33,7 @@ not a broken build — CI on this branch is red by design until the fold.
       Stage-3 execute gate, the second of the two reviews. Distinct from §1,
       which reviewed the plan before code existed. `openspec validate` is a
       spec check and does not discharge it.
-- [ ] 3.2 Confirm `tools/provisioning-check.sh` is unchanged — the code is this
+- [x] 3.2 Confirm `tools/provisioning-check.sh` is unchanged — the code is this
       change's evidence, not its target
 
 ## 4. Archive, which is what repairs the spec
