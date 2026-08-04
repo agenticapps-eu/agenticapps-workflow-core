@@ -352,8 +352,10 @@ pre-existing and is finding 6's second half.
       exemption.
 - [x] 9.6 GREEN: 64/64 shim, 60/60 conformance, 12/12 wrapper, `openspec
       validate --all` green.
-- [ ] 8.5 `openspec archive shim-suppressed-report-and-fleet-propagation -y`,
-      then ship. Two separate acts.
+- [x] 8.5 `openspec archive shim-suppressed-report-and-fleet-propagation -y`,
+      then ship. Two separate acts — 8.5a and 8.5b, both done. The parent
+      outlived both its halves by one commit, because the split into a and b
+      moved the work down a level and left the box above it unattended.
   - [x] 8.5a **Archived.** Run against the merged fleet, not before it: 4
         requirements added and 2 modified into `project-hook-binding`, as
         `2026-08-04-shim-suppressed-report-and-fleet-propagation`. The CLI

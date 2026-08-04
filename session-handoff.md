@@ -85,7 +85,11 @@ On `chore/close-shipped-task` (this PR):
 
 **The change is done.** Nothing remains in
 `2026-08-04-shim-suppressed-report-and-fleet-propagation`; every task is ticked
-and every PR merged.
+and every PR merged — verified by `grep '\[ \]' tasks.md` returning nothing, not
+by having ticked them. The first grep found one: **parent task 8.5, still open
+after both its halves closed.** Splitting 8.5 into a and b moved the work down a
+level and left the box above it unattended, and this handoff claimed "every task
+is ticked" while it was false. Corrected in #76.
 
 The next piece of work is the one this change kept deferring and the review
 flagged again: **the instrument change**. Propose it as a new OpenSpec change.
