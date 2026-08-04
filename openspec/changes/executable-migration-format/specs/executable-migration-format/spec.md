@@ -386,11 +386,26 @@ should not make.
 
 ### Requirement: Dry-run reports the source it would execute
 
-A runner's dry-run mode SHALL evaluate each step's `check` and `precondition`
-blocks, SHALL print the source of the `apply` block each pending step would run,
-and SHALL NOT itself write to the working tree. A `precondition` failing during
-a dry run SHALL abort the dry run and exit non-zero, exactly as it would during
-a real run.
+A runner's dry-run mode SHALL evaluate `check` and `precondition` up to and
+including the first pending step, SHALL print the source of the `apply` block
+each pending step would run, and SHALL NOT execute any `apply`, `verify` or
+`rollback` block. A `precondition` failing during a dry run SHALL abort the dry
+run and exit non-zero, exactly as it would during a real run, and the
+three-valued `check` contract SHALL apply unchanged.
+
+The blocks of steps *after* the first pending step SHALL NOT be evaluated, and
+their apply sources SHALL be reported as unevaluated. Those blocks describe a
+tree that only an earlier `apply` would have created, so running them asks a
+question about a state that does not exist. A runner MUST NOT manufacture that
+state — not in the working tree, and not in a copy of it.
+
+A scratch copy is not a sandbox. Executing `apply` against a mirrored directory
+still runs arbitrary shell with the caller's environment, credentials and
+network: it can write to `$HOME` or any absolute path, push to a real remote
+using the `.git` the copy inherited, or install globally. A copy made with
+ordinary recursive tools also preserves symlinks, so even a purely relative
+write can land outside it. "The working tree was not modified" is then a
+property of the migration that happened to be tested, not of the runner.
 
 Dry-run does not report a diff. Producing one would require applying the step,
 which is the thing dry-run exists not to do.
@@ -401,3 +416,12 @@ which is the thing dry-run exists not to do.
 - **THEN** the runner SHALL print each pending step's `apply` source
 - **AND** the working tree SHALL be unchanged
 - **AND** the runner SHALL exit zero
+
+#### Scenario: Dry-run does not evaluate steps behind a pending one
+- **WHEN** step 1 is pending and step 2's `check` describes a file that only step 1's `apply` would create
+- **THEN** the runner SHALL NOT execute step 2's `check`
+- **AND** SHALL report step 2's apply source as unevaluated
+
+#### Scenario: A dry run predicts the run it precedes
+- **WHEN** a migration's first step has a `check` that exits 2
+- **THEN** the dry run SHALL abort and exit non-zero, exactly as the real run does

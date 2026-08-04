@@ -54,6 +54,10 @@ assert_not_contains() { # $1=haystack $2=needle $3=description
   fi
 }
 
+tree_snapshot() { # $1=dir -> relative-path + checksum for every file, sorted
+  ( cd "$1" && find . -type f -print0 | xargs -0 shasum | sort )
+}
+
 echo "== extract.sh =="
 
 out="$(bash "$MR/extract.sh" steps "$FIX/0016-conformant.md")"
@@ -324,51 +328,61 @@ assert_contains "$out" "step 2" "reports step 2"
 assert_eq "$(ls "$tmp"/tripwire.txt 2>/dev/null; echo done)" "done" \
   "illustration fence was never executed"
 
-# Idempotency: the second run must apply nothing.
+# Idempotency: the second run must apply nothing and must leave the WHOLE
+# tree byte-identical — not just fixture.txt's content, which a stray extra
+# file created by the second run would pass unnoticed. A find+checksum
+# snapshot over every file in the workdir catches that a single-file content
+# comparison cannot.
+before="$(tree_snapshot "$tmp")"
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0016-conformant.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "second run exits 0"
 assert_contains "$out" "skipped" "second run reports skipped"
-assert_eq "$(cat "$tmp/fixture.txt")" "$(printf 'applied\nsecond')" "second run changed nothing"
+after="$(tree_snapshot "$tmp")"
+assert_eq "$after" "$before" "second run leaves the whole workdir byte-identical (checksum snapshot)"
 rm -rf "$tmp"; trap - EXIT
 
 echo
 echo "== run-migration.sh: dry-run =="
 
-# §08 requires dry-run to run check + precondition and print the apply SOURCE,
-# writing nothing. A dry run cannot show a real diff without applying the step.
+# §08 requires dry-run to run check + precondition and print the apply
+# SOURCE, writing nothing. A dry run cannot show a real diff without applying
+# the step. It evaluates check/precondition up to and including the FIRST
+# pending step only: 0016's step 1 is pending, so its source is printed and
+# its check/precondition really ran; step 2 is never evaluated at all — its
+# apply source is printed but explicitly labelled unevaluated, and its check
+# (which depends on step 1 having actually run) never executes.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0016-conformant.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "dry-run exits 0"
-assert_contains "$out" 'echo "applied" > fixture.txt' "dry-run prints the apply source"
+assert_contains "$out" 'echo "applied" > fixture.txt' "dry-run prints step 1's apply source"
+assert_contains "$out" 'echo "second" >> fixture.txt' "dry-run prints step 2's apply source too"
+assert_contains "$out" "not evaluated" \
+  "dry-run labels step 2 as unevaluated rather than silently running its check"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "dry-run wrote nothing"
 rm -rf "$tmp"; trap - EXIT
 
 echo
-echo "== run-migration.sh: dry-run does not abort on an ambiguous check =="
-
-# The three-valued check contract's abort branch is a REAL-run-only
-# safeguard against silently re-applying a step of unknown state — a dry run
-# never applies anything either way, so 0024's check exiting 2 must be
-# treated as "not (yet) applied" (pending) rather than aborting the dry run.
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
-assert_eq "$?" "0" "dry-run does not abort when a step's check exits neither 0 nor 1"
-assert_contains "$out" "would apply" "dry-run reports the ambiguous-check step as pending"
-assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "dry-run still wrote nothing"
-rm -rf "$tmp"; trap - EXIT
-
-echo
-echo "== run-migration.sh: three-valued check =="
+echo "== run-migration.sh: three-valued check, unchanged in dry-run =="
 
 # check exiting 2 (neither 0 nor 1) means the check itself could not run.
 # Conflating that with "not applied" would silently re-apply a step whose
 # state is unknown — the runner must abort instead, and must never run apply.
+# This is NOT relaxed in dry-run: a dry run that reports success over a
+# migration whose real run would hard-abort is worse than no preview at all,
+# so both modes must agree here.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
-assert_eq "$?" "1" "check exiting 2 aborts the migration"
+assert_eq "$?" "1" "check exiting 2 aborts a real run"
 assert_contains "$out" "could not run" "abort message names the check-could-not-run condition"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
   "apply never ran when its step's check could not run"
+rm -rf "$tmp"; trap - EXIT
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "the same fixture's dry run aborts too, exactly as the real run does"
+assert_contains "$out" "could not run" "dry-run abort message also names the check-could-not-run condition"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "dry-run still wrote nothing"
 rm -rf "$tmp"; trap - EXIT
 
 echo
@@ -389,6 +403,25 @@ assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
 rm -rf "$tmp"; trap - EXIT
 
 echo
+echo "== run-migration.sh: pre-condition failure aborts a dry run too =="
+
+# Spec: "A precondition failing during a dry run SHALL abort the dry run and
+# exit non-zero, exactly as it would during a real run." 0016's step 1 is the
+# first pending step, so its precondition IS evaluated in dry-run (dry-run
+# evaluates check+precondition up to and including the first pending step) —
+# unlike 0023's case here, where the failure is on the very first step, so
+# there is nothing before it to have already been reported pending.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --dry-run "$FIX/0023-failing-precondition.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "dry-run aborts on a failing pre-condition"
+assert_contains "$out" 'cparx: unmanaged prose at line 42. Either (a) move it above the marker,' \
+  "dry-run reproduces pre-condition stderr line 1 verbatim"
+assert_contains "$out" 'or (b) re-run with --adopt to take ownership.' \
+  "dry-run reproduces pre-condition stderr line 2 verbatim"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "dry-run wrote nothing"
+rm -rf "$tmp"; trap - EXIT
+
+echo
 echo "== run-migration.sh: pre-condition failure aborts at a terminal too =="
 
 # The same fixture, but stdin redirected from /dev/null so [ -t 0 ] is false —
@@ -404,15 +437,106 @@ rm -rf "$tmp"; trap - EXIT
 echo
 echo "== run-migration.sh: each block runs in its own shell =="
 
-# 0029's check and pre-condition each set a variable and define a function
-# that its apply block must NOT see. If apply observed either, it would write
-# "leaked" instead of "clean" — proof that env vars, shell functions and cwd
-# from an earlier block are not inherited.
+# 0029's check and pre-condition each set a variable, define a function, AND
+# cd elsewhere (/tmp) — none of which its apply block may see. If apply
+# observed the variable or function, it would write "leaked" instead of
+# "clean"; if apply inherited the earlier blocks' cwd instead of being cd'd
+# into the workdir fresh, "cwd.txt" would record /tmp (or fail to land in the
+# workdir at all).
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$FIX/0029-block-isolation.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "isolation fixture applies cleanly"
 assert_eq "$(cat "$tmp/iso.txt")" "clean" \
   "apply sees no env var or function left by check/precondition blocks"
+assert_eq "$(cat "$tmp/cwd.txt")" "$(cd "$tmp" && pwd)" \
+  "apply runs in the workdir, not the cwd check/precondition changed to"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: dry-run never writes outside the workdir =="
+
+# Regression guard for the scratch-mirror defect found in review round 1: an
+# earlier implementation copied the workdir into a scratch directory and ran
+# each pending step's apply there for real, on the theory that a copy is not
+# "the working tree." 0034's apply writes to an absolute path outside the
+# workdir; dry-run must never execute apply AT ALL, so this must never
+# appear, in a scratch copy or anywhere else.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+escape_target="$(mktemp -d)"; trap 'rm -rf "$tmp" "$escape_target"' EXIT
+out="$(ESCAPE_TARGET="$escape_target" bash "$MR/run-migration.sh" --dry-run "$FIX/0034-escape-probe.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "escape-probe dry-run exits 0"
+assert_contains "$out" 'date > "$ESCAPE_TARGET/ran"' "dry-run prints the apply source"
+assert_eq "$(ls "$tmp"/probe.txt 2>/dev/null; echo none)" "none" "dry-run wrote nothing in the workdir"
+assert_eq "$(ls "$escape_target"/ran 2>/dev/null; echo none)" "none" \
+  "dry-run wrote nothing outside the workdir either — apply never ran, not even against a copy"
+rm -rf "$tmp" "$escape_target"; trap - EXIT
+
+echo
+echo "== run-migration.sh: document existence/readability =="
+
+# A nonexistent document must be a hard error, not a silent zero-step,
+# zero-anything success: extract.sh's own awk error would otherwise go to
+# stderr while `steps` comes back empty, the loop runs zero times, and the
+# script exits 0 having done nothing at all.
+out="$(bash "$MR/run-migration.sh" "$FIX/0099-does-not-exist.md" 2>&1)"
+assert_eq "$?" "66" "a nonexistent document is an error, not a silent no-op success"
+assert_contains "$out" "no such file" "error names the problem"
+
+echo
+echo "== run-migration.sh: --on-failure validates its value =="
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --on-failure=bogus "$FIX/0016-conformant.md" "$tmp" 2>&1)"
+assert_eq "$?" "64" "an unrecognised --on-failure value is a usage error"
+assert_contains "$out" "bogus" "error names the offending value"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "nothing ran before the bad flag was rejected"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: a missing pre-condition block is named, not misreported =="
+
+# A step with no precondition block at all makes run_block return 127
+# (extract.sh found nothing to run). That must not be reported as though the
+# block ran and failed — the diagnostic should say the block is missing.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+cat > "$tmp/0099-missing-precondition.md" <<'EOF'
+---
+id: 0099
+slug: missing-precondition
+title: A step with no pre-condition block at all
+from_version: 1.8.0
+to_version: 1.9.0
+migration_format: executable
+applies_to:
+  - fixture.txt
+---
+
+# Migration 0099 — missing pre-condition block
+
+## Steps
+
+### Step 1: No pre-condition heading or fence at all
+
+**Idempotency check:**
+```bash role=check
+test -f fixture.txt
+```
+
+**Apply:**
+```bash role=apply
+echo "applied" > fixture.txt
+```
+
+**Rollback:**
+```bash role=rollback
+rm -f fixture.txt
+```
+EOF
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" "$tmp/0099-missing-precondition.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "a step with no pre-condition block aborts"
+assert_contains "$out" "pre-condition block missing" \
+  "diagnostic names the block as missing, not as having failed"
 rm -rf "$tmp"; trap - EXIT
 
 echo

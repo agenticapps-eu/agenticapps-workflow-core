@@ -7,6 +7,7 @@ to_version: 1.7.0
 migration_format: executable
 applies_to:
   - iso.txt
+  - cwd.txt
 ---
 
 # Migration 0029 — block isolation
@@ -17,13 +18,15 @@ applies_to:
 
 **Idempotency check:**
 ```bash role=check
+cd /tmp 2>/dev/null
 FOO=leaked
 iso_leak() { :; }
-test -f iso.txt
+exit 1
 ```
 
 **Pre-condition:**
 ```bash role=precondition
+cd /tmp 2>/dev/null
 FOO=leaked
 iso_leak() { :; }
 test -d .
@@ -36,9 +39,10 @@ if [ -n "${FOO:-}" ] || command -v iso_leak >/dev/null 2>&1; then
 else
   echo "clean" > iso.txt
 fi
+pwd > cwd.txt
 ```
 
 **Rollback:**
 ```bash role=rollback
-rm -f iso.txt
+rm -f iso.txt cwd.txt
 ```
