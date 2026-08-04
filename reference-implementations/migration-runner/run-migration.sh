@@ -120,11 +120,28 @@ applied=""
 # step may inherit env vars, functions, or a working directory left behind by
 # an earlier block or an earlier step — that dependency would be invisible in
 # the document and would break the moment a step is skipped as already
-# applied. A missing block (extract.sh exits 1) is reported as exit 127 so it
-# is never confused with a real block's own exit code of 1.
+# applied.
+#
+# BLOCK_MISSING is an OUT-OF-BAND signal, not a sentinel exit code. Fix
+# round 3 found that a sentinel of 127 collides with a REAL exit code: `bash
+# -c "$body"` also returns 127 when the block's own command is not found
+# (e.g. a pre-condition that shells out to `jq`/`gh`/`rg`/`openspec` on a
+# machine where it is not installed). A fully lint-clean, in-scope,
+# well-formed migration whose pre-condition happens to invoke a missing
+# tool would then be misreported as "block missing" — the exact
+# looks-correct-does-nothing-shaped misreport this format exists to guard
+# against, in the mirror direction: not a phantom success, but a false "the
+# document is malformed" pointed at a document that is not. Callers that
+# need to tell "extract.sh found nothing" apart from "the block ran and
+# exited 127 on its own" check $BLOCK_MISSING immediately after calling
+# run_block, before any other run_block call overwrites it.
 run_block() {
   local body
-  body="$(bash "$EXTRACT" block "$DOC" "$1" "$2" 2>/dev/null)" || return 127
+  BLOCK_MISSING=0
+  if ! body="$(bash "$EXTRACT" block "$DOC" "$1" "$2" 2>/dev/null)"; then
+    BLOCK_MISSING=1
+    return 1
+  fi
   ( cd "$WORKDIR" && bash -c "$body" )
 }
 
@@ -159,28 +176,6 @@ fail_policy() {
 # changed" (1) without parsing stderr.
 REFUSAL=65
 
-# _RUN_MIGRATION_TEST_ONLY_SKIP_LINT — NOT a documented feature, NOT for
-# real use, checked nowhere else in this file.
-#
-# The two gates immediately below are the entire point of this group: skip
-# them and this script is exactly the "executes whatever it is given"
-# runner the format exists to prevent. The ONLY reason this exists at all is
-# that fix round 2 closed L7 (every fence must close), which means every
-# required role that lint sees as present now genuinely IS present at
-# runtime too — so the dispatch loop's own "block missing" diagnostics
-# (run_block returning 127) are no longer reachable through this CLI from
-# ANY in-scope, lint-clean document. That is the correct, intended outcome:
-# lint should catch a malformed document before the runner ever tries to run
-# it. It also means the dispatch loop's own 127-handling has no way to be
-# exercised as a regression test without deliberately stepping around the
-# gate that makes it unreachable. This variable exists solely so
-# tools/migration-runner.test.sh can do that, on a document that is
-# otherwise perfectly ordinary and in-scope. It is unset (0) in every real
-# invocation and is not, and must not become, part of this script's usage.
-SKIP_LINT_FOR_TESTS="${_RUN_MIGRATION_TEST_ONLY_SKIP_LINT:-0}"
-
-if [ "$SKIP_LINT_FOR_TESTS" != "1" ]; then
-
 # A RUNNER EXECUTES ONLY MIGRATIONS THE LINTER JUDGED.
 #
 # The linter's silence on a below-threshold, non-opted-in document means NOT
@@ -193,6 +188,24 @@ if [ "$SKIP_LINT_FOR_TESTS" != "1" ]; then
 # using its own scope computation (never a second copy of the ID/threshold
 # rule here), before any structural rule or block ever runs. An opted-in
 # below-threshold migration is still in scope and still runs normally.
+#
+# THESE TWO GATES ALWAYS RUN. NOTHING IN THIS SCRIPT BYPASSES THEM.
+#
+# Fix round 2 added an environment-variable escape hatch
+# (_RUN_MIGRATION_TEST_ONLY_SKIP_LINT) so the test suite could reach
+# dispatch-loop code paths that these gates make hard to reach through this
+# CLI. Fix round 3 removed it: it was read from the process environment, so
+# anything upstream of an invocation could set it — a CI `env:` block, a
+# wrapper script, `.envrc`, `docker run -e`, an agent's own tool
+# configuration — and it is inherited transitively, so a migration whose own
+# apply block shells out to a nested run-migration.sh invocation would carry
+# the bypass into it. A bypassed run is byte-identical to a real one: no
+# output difference, no log line, nothing to grep for, because nobody was
+# ever told it existed. The test suite now reaches the same dispatch-loop
+# code via a stub-collaborator test double instead (a temp dir of symlinks
+# to the real run-migration.sh/extract.sh plus a stub lint-migration.sh that
+# exits 0) — see tools/migration-runner.test.sh. That keeps zero bypass
+# surface in this file.
 bash "$SCRIPT_DIR/lint-migration.sh" --scope-only --host "$HOST" "$DOC" >/dev/null
 scope_rc=$?
 case "$scope_rc" in
@@ -246,8 +259,6 @@ case "$lint_rc" in
     exit "$REFUSAL"
     ;;
 esac
-
-fi # SKIP_LINT_FOR_TESTS — see the comment above the scope gate
 
 steps="$(bash "$EXTRACT" steps "$DOC")"
 
@@ -343,7 +354,12 @@ for s in $steps; do
   run_block "$s" precondition
   rc=$?
   if [ "$rc" -ne 0 ]; then
-    if [ "$rc" -eq 127 ]; then
+    # BLOCK_MISSING, not "rc -eq 127": the block's OWN body can legitimately
+    # exit 127 (its command wasn't found — jq, gh, rg, openspec are the
+    # common ones), and that is a REAL pre-condition failure, not a missing
+    # block. Only BLOCK_MISSING (extract.sh itself found nothing) means the
+    # block is actually absent. See run_block's header comment.
+    if [ "$BLOCK_MISSING" -eq 1 ]; then
       echo "step $s: pre-condition block missing — aborting" >&2
     else
       echo "step $s: pre-condition failed — aborting" >&2

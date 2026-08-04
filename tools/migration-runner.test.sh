@@ -324,10 +324,25 @@ echo "== lint-migration.sh: L7 unclosed fence =="
 # before EOF is therefore PRESENT to L1 but ABSENT to the runner — found by
 # construction in review, using 0041-unclosed-fence-precondition.md: its
 # pre-condition fence is deliberately last in the file and never closed.
-# Before L7 existed, this fixture linted CLEAN (confirmed against the
-# committed pre-fix-round-2 lint-migration.sh, restored via `git stash` and
-# run in place — see the fix report for the transcript) — that clean exit is
-# the evidence L7 was needed, not merely a nice-to-have.
+# Before L7 existed, this fixture linted CLEAN — that clean exit is the
+# evidence L7 was needed, not merely a nice-to-have. FIX ROUND 3, minor:
+# this used to be narrated only in a comment and the fix report's
+# transcript; it is now MACHINE-CHECKED by pulling the actual pre-L7
+# lint-migration.sh out of git history and running it for real, so the
+# "evidence" is an executed assertion rather than a claim.
+oldlintdir="$(mktemp -d)"
+git -C "$ROOT" show e22db7f:reference-implementations/migration-runner/lint-migration.sh > "$oldlintdir/lint-migration.sh"
+chmod +x "$oldlintdir/lint-migration.sh"
+# extract.sh and THRESHOLDS are unchanged since e22db7f; symlink the real
+# ones in rather than pulling stale copies of files this test isn't about.
+ln -s "$MR/extract.sh" "$oldlintdir/extract.sh"
+ln -s "$MR/THRESHOLDS" "$oldlintdir/THRESHOLDS"
+out="$(bash "$oldlintdir/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
+assert_eq "$?" "0" \
+  "MACHINE-CHECKED: 0041 lints CLEAN under the actual pre-L7 (e22db7f) linter"
+assert_eq "$out" "" "the pre-L7 linter reports zero violations for this fixture, not merely exit 0"
+rm -rf "$oldlintdir"
+
 out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
 assert_eq "$?" "1" "L7: an unclosed fence at EOF exits 1"
 assert_contains "$out" "L7" "L7: names the rule"
@@ -513,6 +528,42 @@ assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
 rm -rf "$tmp"; trap - EXIT
 
 echo
+echo "== run-migration.sh: the 127 collision (a present pre-condition is not a missing one) =="
+
+# FIX ROUND 3. run_block used to return a sentinel of 127 to mean "the
+# block is missing" — but `bash -c "$body"` ALSO returns 127 when the
+# block's own command is not found (`command not found` is a real exit code,
+# not this script's invention). 0043-precondition-127.md is fully
+# lint-clean, in-scope, and L7-passing: check/apply/rollback are ordinary,
+# and the pre-condition fence is real, tagged, and properly closed — its
+# body just calls a command that does not exist on this machine. Confirmed
+# against the pre-fix run-migration.sh (committed at 3ad0641, restored via
+# `git stash` and run in place):
+#   bash: definitely-not-a-real-command-xyz: command not found
+#   step 1: pre-condition block missing — aborting
+#   rc=1
+# — telling the operator their migration is malformed and the block is
+# missing, when the block is present, ran, and told them (via its own exit
+# code) that a tool it needs is not installed. This is the same
+# looks-correct-does-nothing-shaped misreport this format exists to guard
+# against, pointed in the opposite direction: not a phantom success, but a
+# false "this document is broken" aimed at one that is not.
+#
+# The fix: run_block now sets an out-of-band $BLOCK_MISSING flag (0 or 1) at
+# entry, rather than overloading its own return value, so the block's REAL
+# exit code — even 127 — is never confused with "extract.sh found nothing."
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0043-precondition-127.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "a present pre-condition whose command isn't installed aborts"
+assert_contains "$out" "pre-condition failed" \
+  "diagnostic reports it as a failed pre-condition, not a missing block"
+assert_not_contains "$out" "pre-condition block missing" \
+  "a present-but-127-exiting block is not misreported as absent"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "apply never ran (pre-condition still hard-aborts, real failure or not)"
+rm -rf "$tmp"; trap - EXIT
+
+echo
 echo "== run-migration.sh: a missing pre-condition block is named, not misreported =="
 
 # FIX ROUND 1 retired this test on the theory that L1 and run_block share
@@ -525,42 +576,64 @@ echo "== run-migration.sh: a missing pre-condition block is named, not misreport
 # 0041-unclosed-fence-precondition.md and lint-migration.sh's new L7, which
 # closes exactly that gap.
 #
-# L7 closes the SPECIFIC mismatch the reviewer found, and — as far as this
-# investigation can tell — every other route to the same mismatch (L2's
-# heading check, L3's duplicate check, L4's unknown-role check, L5's
-# grammar check all still route through the same mr_roles/mr_block pair, so
-# a role either both see or both miss). That means, once L7 exists, this
-# specific fixture's shape (a step with NO precondition heading or fence at
-# all) again cannot reach run_block's 127 path while staying in-scope and
-# lint-clean: an in-scope document with a genuinely absent precondition
-# fails L1 before the dispatch loop ever runs, exactly as intended.
+# L7 closes the SPECIFIC mismatch the reviewer found for THIS FIXTURE'S
+# SHAPE (a step with no precondition heading or fence at all): once L7
+# exists, that specific shape cannot stay in-scope-and-lint-clean, so an
+# in-scope document with a genuinely absent precondition fails L1 before the
+# dispatch loop ever runs (asserted below). This is a claim about this one
+# fixture's shape only — FIX ROUND 3 found a completely different route to
+# the very same dispatch-loop branch (a PRESENT pre-condition whose own
+# command isn't installed, also producing a non-zero exit — see the
+# "127 collision" section elsewhere in this suite) — so this is not, and
+# must not be read as, a claim that the branch itself is unreachable in
+# general.
 #
-# Rather than assert that unreachability as a second RED/GREEN-style
-# negative claim (round 1's mistake was doing exactly that once, based on
-# an argument rather than a construction), this test exercises run_block's
-# 127-handling directly by deliberately stepping around the lint gate —
-# _RUN_MIGRATION_TEST_ONLY_SKIP_LINT, documented in run-migration.sh as
-# existing for exactly this purpose and nothing else. The fixture itself
-# (0042-missing-precondition-block.md) is an ordinary in-scope document that
-# a real invocation refuses at lint (asserted below too, for contrast); only
-# this test's invocation bypasses that gate to reach the branch beneath it.
+# FIX ROUND 2 exercised the branch via an environment-variable bypass in
+# run-migration.sh itself. FIX ROUND 3 removed that bypass entirely — an env
+# var is inherited transitively by anything downstream (a nested runner
+# invocation, a CI env: block, an agent's own tool config) and a bypassed
+# run is byte-identical to a real one, with nothing to grep for. This test
+# now uses a STUB-COLLABORATOR test double instead, with zero bypass surface
+# in the shipped script: run-migration.sh resolves SCRIPT_DIR from
+# ${BASH_SOURCE[0]} (the path as INVOKED, not a symlink target) and derives
+# both extract.sh and its lint-migration.sh calls from it, so a temp dir
+# containing SYMLINKS to the real run-migration.sh and extract.sh, plus a
+# STUB lint-migration.sh that unconditionally exits 0, reproduces "past the
+# lint gate" exactly — same output, same exit code — without run-migration.sh
+# containing any code that skips its own gates. Symlinks rather than copies
+# so this can never silently drift onto a stale copy of either script.
+# THRESHOLDS is not needed here since only the real linter reads it.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 
 # First, confirm normal operation still refuses it — this is what happens
-# to this exact fixture on every real invocation.
+# to this exact fixture on every real invocation, using the REAL linter.
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0042-missing-precondition-block.md" "$tmp" 2>&1)"
 assert_eq "$?" "65" "normally, this fixture is refused at the lint gate (L1), never reaching the dispatch loop"
 assert_contains "$out" "L1" "the refusal is attributed to the linter, not the dispatch loop"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "nothing ran"
 
-# Now exercise the dispatch loop's own handling directly.
-out="$(cd "$tmp" && _RUN_MIGRATION_TEST_ONLY_SKIP_LINT=1 bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0042-missing-precondition-block.md" "$tmp" 2>&1)"
-assert_eq "$?" "1" "with the lint gate bypassed, a step with no pre-condition block aborts"
+# Now exercise the dispatch loop's own handling directly, via the stub
+# collaborator described above.
+stubdir="$(mktemp -d)"
+ln -s "$MR/run-migration.sh" "$stubdir/run-migration.sh"
+ln -s "$MR/extract.sh" "$stubdir/extract.sh"
+cat > "$stubdir/lint-migration.sh" <<'STUB'
+#!/usr/bin/env bash
+# Stub collaborator for this test only — not part of the shipped scripts.
+# Always clean, for both --scope-only and the full-lint call: this stands
+# in for "a document that got past both real lint gates," not for anything
+# a real lint-migration.sh does.
+exit 0
+STUB
+chmod +x "$stubdir/lint-migration.sh"
+
+out="$(cd "$tmp" && bash "$stubdir/run-migration.sh" --host codex-workflow "$FIX/0042-missing-precondition-block.md" "$tmp" 2>&1)"
+assert_eq "$?" "1" "past a stubbed-clean lint gate, a step with no pre-condition block aborts"
 assert_contains "$out" "pre-condition block missing" \
   "diagnostic names the block as missing, not as having failed"
 assert_not_contains "$out" "pre-condition failed" \
   "a missing block is not misreported as a failed one"
-rm -rf "$tmp"; trap - EXIT
+rm -rf "$tmp" "$stubdir"; trap - EXIT
 
 echo
 echo "== run-migration.sh: --host is required, no default =="
