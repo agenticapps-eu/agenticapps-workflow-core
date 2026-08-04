@@ -62,7 +62,7 @@ before it would check the wrong moment.
 - [x] 5.2 Confirm the restored sentence is contiguous *and* inside *A machine's
       provisioning is a triple* in the folded canonical spec — placement, not
       survival
-- [ ] 5.3 Open the PR, linking the change directory, `REVIEW-RESPONSE.md`, and the
+- [x] 5.3 Open the PR, linking the change directory, `REVIEW-RESPONSE.md`, and the
       before/after placement evidence
 
 ## Notes from the fold (4.3 / 4.4)
