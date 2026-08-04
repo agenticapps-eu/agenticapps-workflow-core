@@ -65,6 +65,31 @@ if [ "${#SHIMMED_HOOKS[@]}" -eq 0 ]; then
   exit 65
 fi
 
+# Declared non-bindings. A repository may deliberately not bind a shimmed hook,
+# and once an absent shim is REPORTED rather than skipped, that opt-out is
+# indistinguishable from a deletion unless it is declared. Absent file = no
+# declared opt-outs, which is a stricter reading, not a looser one.
+OPT_OUTS_DECL="${OPT_OUTS_DECL:-$ROOT/reference-implementations/project-hooks/OPT-OUTS}"
+
+# $1=repo name, $2=hook. Echoes the reason and returns 0 when declared.
+opt_out_reason() {
+  local want_repo="$1" want_hook="$2" line repo hook reason
+  [ -f "$OPT_OUTS_DECL" ] || return 1
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    [ -n "${line// /}" ] || continue
+    read -r repo hook reason <<<"$line"
+    if [ "$repo" = "$want_repo" ] && [ "$hook" = "$want_hook" ]; then
+      printf '%s' "$reason"
+      return 0
+    fi
+  done < "$OPT_OUTS_DECL"
+  return 1
+}
+
+# Declared tool coverage per hook, read the same way as every other declaration.
+MATCHERS_DECL="${MATCHERS_DECL:-$ROOT/reference-implementations/project-hooks/MATCHERS}"
+
 STRICT=0
 OVERRIDES_ONLY=0
 FLEET_ROOT=""
@@ -192,7 +217,30 @@ report_markers() {
 
   for hook in "${SHIMMED_HOOKS[@]}"; do
     shim="$proj/.claude/hooks/$hook.sh"
-    [ -f "$shim" ] || continue
+
+    # ABSENCE IS A STATE, NOT THE LACK OF ONE. Both this axis and the identity
+    # axis below used to `continue` here, so a project with no shim at all
+    # contributed nothing and the total read clean — the strongest false
+    # clearance the instrument could emit, and the same `|| continue` shape as
+    # the currency-table defect repaired on 2026-08-04 in provisioning-check.sh.
+    if [ ! -f "$shim" ]; then
+      local reason
+      if reason=$(opt_out_reason "$name" "$hook"); then
+        echo "MARKER  $name  $hook  declared opt-out — $reason"
+        # An opt-out excuses the missing file. It does not excuse a live
+        # registration for it: settings.json would then point the host at a
+        # path that does not exist, and every matched call would error.
+        if [ -f "$proj/.claude/settings.json" ] \
+           && grep -q "/$hook\.sh" "$proj/.claude/settings.json"; then
+          echo "REGISTRATION  $name  $hook  declared opt-out, but settings.json still registers it — it points at a file that is not there"
+          findings=$((findings + 1))
+        fi
+      else
+        echo "MARKER  $name  $hook  ABSENT — this hook is declared shimmed and no shim file is present"
+        findings=$((findings + 1))
+      fi
+      continue
+    fi
 
     marker=$(head -10 "$shim" | grep -m1 '^# shim-contract:' | awk '{print $3}')
 
@@ -262,7 +310,14 @@ report_identity() {
 
   for hook in "${SHIMMED_HOOKS[@]}"; do
     shim="$proj/.claude/hooks/$hook.sh"
-    [ -f "$shim" ] || continue
+    # Reported once, on the marker axis, which is the axis that reads the file
+    # first. Counting the same absence twice would inflate the total and make
+    # two findings out of one fact — but it is not skipped in silence either:
+    # the line below says what was not compared and why.
+    if [ ! -f "$shim" ]; then
+      echo "IDENTITY  $name  $hook  not compared — no shim file (see MARKER above)"
+      continue
+    fi
 
     if [ "$resolved" = "$ROOT" ]; then
       echo "IDENTITY  $name  $hook  self-hosting — out of profile, byte-identity does not bind across profiles (ADR-0028)"
@@ -282,6 +337,90 @@ report_identity() {
       findings=$((findings + 1))
     fi
   done
+}
+
+# ---------------------------------------------------------------------------
+# Registration coverage — the matcher, not the file.
+#
+# A shim can be current, byte-identical and never fire. Five repositories
+# registered database-sentinel on `Bash|Edit|Write` while the implementation
+# declared `Bash|Edit|Write|MultiEdit`, so a MultiEdit to .env invoked nothing —
+# protection absent rather than degraded, and every existing axis reported those
+# repositories clean, because none of them read a matcher.
+#
+# NARROWER is a finding: the hook does not fire where it is meant to. WIDER is
+# reported and not counted: a project may guard more than the fleet requires, and
+# calling that non-conformant would push projects toward removing coverage.
+#
+# JSON is parsed with python3 where it exists. Where it does not, the axis says
+# it did not run — a check that quietly skips is the failure this whole change is
+# about, and "not checked" is a different sentence from "checked and clean".
+# ---------------------------------------------------------------------------
+report_matchers() {
+  local proj="$1" name settings
+  name=$(basename "$proj")
+  settings="$proj/.claude/settings.json"
+
+  [ -f "$MATCHERS_DECL" ] || { echo "MATCHER  $name  not checked — no declaration at $MATCHERS_DECL"; return 0; }
+  [ -f "$settings" ]      || { echo "MATCHER  $name  not checked — no .claude/settings.json"; return 0; }
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "MATCHER  $name  not checked — python3 unavailable, so settings.json was not parsed"
+    return 0
+  fi
+
+  local out
+  out=$(python3 - "$settings" "$MATCHERS_DECL" "$name" <<'PY'
+import json, sys
+
+settings, decl, name = sys.argv[1], sys.argv[2], sys.argv[3]
+
+expected = {}
+for line in open(decl):
+    line = line.split("#", 1)[0].strip()
+    if not line:
+        continue
+    hook, event, matcher = line.split(None, 2)
+    expected[hook] = (event, set(matcher.split("|")))
+
+try:
+    cfg = json.load(open(settings))
+except Exception as e:
+    print("MATCHER  %s  not checked — settings.json did not parse (%s)" % (name, e))
+    sys.exit(0)
+
+seen = {}
+for event, entries in (cfg.get("hooks") or {}).items():
+    for entry in entries or []:
+        matcher = entry.get("matcher") or ""
+        for h in entry.get("hooks") or []:
+            cmd = h.get("command") or ""
+            for hook in expected:
+                if "/%s.sh" % hook in cmd:
+                    seen.setdefault(hook, []).append((event, matcher))
+
+for hook, (want_event, want_tools) in sorted(expected.items()):
+    for event, matcher in seen.get(hook, []):
+        tools = set(t for t in matcher.split("|") if t)
+        missing = want_tools - tools
+        extra = tools - want_tools
+        if event != want_event:
+            print("MATCHER  %s  %s  registered on %s, declared %s  FINDING"
+                  % (name, hook, event, want_event))
+        if missing:
+            print("MATCHER  %s  %s  does not cover %s — registered '%s', declared '%s'  FINDING"
+                  % (name, hook, "|".join(sorted(missing)), matcher, "|".join(sorted(want_tools))))
+        elif extra:
+            print("MATCHER  %s  %s  wider than declared (also %s) — reported, not a finding"
+                  % (name, hook, "|".join(sorted(extra))))
+        else:
+            print("MATCHER  %s  %s  covers the declared set (%s)" % (name, hook, matcher))
+PY
+)
+  [ -n "$out" ] || return 0
+  printf '%s\n' "$out" | sed 's/  FINDING$//'
+  local n
+  n=$(printf '%s\n' "$out" | grep -c 'FINDING$' || true)
+  findings=$((findings + n))
 }
 
 # ---------------------------------------------------------------------------
@@ -360,6 +499,7 @@ for proj in "${PROJECTS[@]}"; do
   if [ "$OVERRIDES_ONLY" -eq 0 ]; then
     report_markers "$proj"
     report_identity "$proj"
+    report_matchers "$proj"
   fi
   report_override_vectors "$proj"
 done
