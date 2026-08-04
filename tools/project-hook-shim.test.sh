@@ -403,19 +403,134 @@ fi
 # finding-12 mistake repeated: a rule with an unstated exemption for the
 # repository that defines it is advisory.
 #
-# Its profile is self-hosting, so the expected answer is NOT the shim's exit 1.
-# This file resolves ONE path — $OPENSPEC_GATE or its working-tree default — and
-# its stated behaviour when that path is not usable is to warn, name it, and fail
-# open. A directory there must reach that branch instead of being `exec`ed.
+# Its profile is self-hosting, so the resolution-order clauses do not reach it.
+# The fail-open-and-report rule does (capability, "the version marker, the
+# behaviour-free rule and the fail-open-and-report rule do"). A directory there
+# must reach the report branch instead of being `exec`ed.
+#
+# THIS ASSERTION USED TO REQUIRE exit 0, and that is how the defect survived: the
+# suite encoded the construction the capability names as warning nobody — stderr
+# on a PreToolUse hook exiting 0 is discarded from the transcript. A test that
+# asserts the defect is worse than no test, because it answers the question
+# before anyone thinks to ask it.
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"
 CORE_BINDER="$ROOT/.claude/hooks/openspec-change-gate.sh"
 run_shim "$CORE_BINDER" "$PAYLOAD" OPENSPEC_GATE="$TMP/gate-plain-subdir"; rc=$?
-if [ "$rc" -eq 0 ] && grep -qi 'not found\|WARNING' "$TMP/err"; then
-  ok "core's self-hosting binder: a directory at the gate path warns and fails open"
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ] && [ "$rc" -ne 126 ] && grep -qi 'not found\|gated' "$TMP/err"; then
+  ok "core's self-hosting binder: a directory at the gate path reports and fails open non-zero"
 else
-  bad "core's self-hosting binder: a directory at the gate path warns and fails open" \
-      "got exit $rc — 126 means it exec'd the directory" \
+  bad "core's self-hosting binder: a directory at the gate path reports and fails open non-zero" \
+      "got exit $rc — 0 means the report is discarded from the transcript, 126 means it exec'd the directory" \
       "stderr: $(head -1 "$TMP/err")"
+fi
+
+echo
+echo "=== the suppressed report still says something ==="
+
+# THE DEFECT. report_rate_limited() returns silently inside the hour and control
+# falls through to an unconditional exit 1, so the host renders
+# "hook error — No stderr output": an alarm that fires as often as the message
+# would and says nothing.
+SUP_SHIM=$(make_shim database-sentinel)
+rm -f "$BIN/database-sentinel.sh"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc1=$?
+first=$(head -1 "$TMP/err")
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc2=$?
+second=$(head -1 "$TMP/err")
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc3=$?
+third=$(head -1 "$TMP/err")
+
+if [ "$rc2" -eq 1 ] && [ -n "$second" ]; then
+  ok "a suppressed repeat exits 1 AND writes a line"
+else
+  bad "a suppressed repeat exits 1 AND writes a line" \
+      "exit $rc2, stderr '$second'" \
+      "empty stderr with a non-zero exit renders as 'hook error — No stderr output'"
+fi
+
+if [ -n "$third" ]; then
+  ok "the third call inside the hour also says something"
+else
+  bad "the third call inside the hour also says something" "stderr was empty"
+fi
+
+# Four mandatory fields, because a test satisfied by any non-empty string would
+# pass a materially non-conformant message (Stage-2 round 2, codex).
+missing=""
+grep -qi 'database-sentinel'          <<<"$second" || missing="$missing hook-name"
+grep -qiE 'still|unchanged'           <<<"$second" || missing="$missing unchanged-state"
+grep -qiE 'allowed|did not run'       <<<"$second" || missing="$missing call-allowed"
+grep -qiE 'earlier|already|this hour' <<<"$second" || missing="$missing earlier-notice"
+if [ -z "$missing" ]; then
+  ok "the suppressed line names the hook, the unchanged state, the allowance and the earlier notice"
+else
+  bad "the suppressed line names the hook, the unchanged state, the allowance and the earlier notice" \
+      "missing:$missing" "line: '$second'"
+fi
+
+if [ -n "$second" ] && [ "$second" != "$first" ]; then
+  ok "the suppressed line differs from the full report's first line"
+else
+  bad "the suppressed line differs from the full report's first line" \
+      "a repeat that reads identically leaves the operator unable to tell it from a fresh failure"
+fi
+
+echo
+echo "=== no pre-exec path exits non-zero in silence ==="
+
+# The general rule, not the one instance. Each case is a path the shim itself
+# takes before exec; what an implementation does after exec is its own.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+run_shim "$SUP_SHIM" "$PAYLOAD" DATABASE_SENTINEL_OVERRIDE="$TMP/nonexistent-override.sh"; rc=$?
+if [ "$rc" -eq 0 ] || [ -s "$TMP/err" ]; then
+  ok "unusable override: non-zero exit carries a message"
+else
+  bad "unusable override: non-zero exit carries a message" "exit $rc with empty stderr"
+fi
+
+for probe in "unresolvable shared install" "suppressed repeat"; do
+  case "$probe" in
+    "unresolvable shared install") rm -rf "$TMP/state"; mkdir -p "$TMP/state" ;;
+  esac
+  run_shim "$SUP_SHIM" "$PAYLOAD"; rc=$?
+  if [ "$rc" -eq 0 ] || [ -s "$TMP/err" ]; then
+    ok "$probe: non-zero exit carries a message"
+  else
+    bad "$probe: non-zero exit carries a message" "exit $rc with empty stderr"
+  fi
+done
+
+# The inverse anti-pattern, which is what core's binder did: exit 0 having
+# written to stderr. Exit 0 discards stderr, so that shape warns nobody.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+run_shim "$SUP_SHIM" "$PAYLOAD"; rc=$?
+if [ "$rc" -ne 0 ] || [ ! -s "$TMP/err" ]; then
+  ok "no shim path writes to stderr and then exits 0"
+else
+  bad "no shim path writes to stderr and then exits 0" \
+      "exit 0 with stderr '$(head -1 "$TMP/err")' — discarded from the transcript, so it warns nobody"
+fi
+
+echo
+echo "=== a report that could not be recorded does not suppress the next one ==="
+
+# If the marker write fails, the shim has no memory of having reported.
+# Suppressing the next call would suppress on the strength of a state that was
+# never recorded.
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+chmod 500 "$TMP/state"
+run_shim "$SUP_SHIM" "$PAYLOAD"; mfirst=$(head -1 "$TMP/err")
+run_shim "$SUP_SHIM" "$PAYLOAD"; msecond=$(head -1 "$TMP/err")
+chmod 700 "$TMP/state"
+
+if [ -n "$mfirst" ] && [ "$msecond" = "$mfirst" ]; then
+  ok "an unwritable marker leaves every call reporting in full"
+else
+  bad "an unwritable marker leaves every call reporting in full" \
+      "first '$mfirst'" "second '$msecond'" \
+      "suppression here would rest on a record that was never made"
 fi
 
 # The three files carry the same contract and must be bumped together. A sibling
