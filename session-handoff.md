@@ -5,7 +5,8 @@
 - **Group 3 verified live** through a deployed 1.2.0 shim. Both defects
   reproduce and are gone; the 1.1.0 counterfactual was run beside each so the
   fix is measured against the defect, not against nothing.
-- **All seven fleet PRs opened** (groups 5 and 6). None merged.
+- **All seven fleet PRs opened, merged and pulled** (groups 5 and 6). The fleet
+  reports **0 findings, down from 46**. Group 7 is complete.
 - **The group 6 premise was found false**, which is the session's real result.
 - Core evidence branch `chore/fleet-propagation-evidence` pushed, with
   `PROPAGATION-EVIDENCE.md` new and tasks 3.x, 5.x, 6.x, 7.2–7.5, 8.1 ticked.
@@ -31,7 +32,17 @@ rewritten to name the mistake) rather than force-pushed away.
 **The instrument fix is deliberately not taken.** Reporting each project's
 checkout state beside its findings is its own change.
 
-## The seven PRs
+### And it happened once more, visibly, on the way to zero
+
+After the merges, with five checkouts pulled and two still on other branches,
+the scan read **7** — every one of them `fbc-platform`, whose checkout sat on an
+unpushed branch cut before the hooks were shimmed. The baseline's exact
+signature, isolated to the one tree that had not moved. `agenticapps-dashboard`
+was also on another branch and read clean, because that branch happened to be
+cut from this work's own shim commit: same situation, opposite reading, for a
+reason the instrument cannot see and does not mention.
+
+## The seven PRs — all merged (squash)
 
 | Repo | PR | Note |
 |---|---|---|
@@ -40,7 +51,7 @@ checkout state beside its findings is its own change.
 | `agenticapps-roadmap` | #13 | body corrected; net diff now matches the rest |
 | `callbot` | #100 | |
 | `fbc-platform` | #105 | built in a worktree — that checkout is mid-feature |
-| `fx-signal-agent` | #120 | |
+| `fx-signal-agent` | #120 | merged with 2 red checks, both failing on its `main` since 2026-07-29 |
 | `agents-task-viewer` | #18 | 2 shims + ADR 0009 + `bin/README.md` |
 
 ## Decisions
@@ -83,26 +94,28 @@ On `chore/fleet-propagation-evidence` (core, pushed, no PR yet):
 
 ## Next session: start here
 
-**Merge the seven fleet PRs, then `git pull` each of the seven checkouts**, and
-only then re-run `tools/project-hook-conformance.sh --fleet ~/Sourcecode` for
-task 7.1. Pulling is not housekeeping here — it is the difference between
-measuring the fleet and measuring this laptop again, which is the mistake this
-session made. Then core PR 2 (task 8.3) carries group 7's evidence, group 4's
-README corrections and the archive, and 8.4's second half is its review in a
-cleared session.
+**Open core PR 2** from `chore/fleet-propagation-evidence` (5 commits, pushed).
+It carries group 7's evidence, and still needs group 4's README corrections
+folded in plus the archive (task 8.3). Then 8.4's second half — its review in a
+**cleared** session, per §07 independence. That review is the last thing between
+this change and archiving.
 
 ## Open questions
 
-- **7.1's target of "0 findings, down from 30" is wrong twice.** The baseline is
-  46, and 0 is unreachable while the override-vector axis reports docs prose.
-  Decide what number 7.1 should actually assert before running it.
+- **The instrument change is still unwritten**, and is now the most valuable
+  thing this work produced: `--fleet` must report each project's checkout state
+  beside its findings. It misread the fleet twice today in opposite directions.
+- **7.1's target was wrong twice** — "0 findings, down from 30" when the baseline
+  was 46. It did reach 0, but only because the override-vector axis happens to
+  find no docs prose in the fleet repos; add one file naming a variable and 0
+  stops being reachable. `agents-task-viewer`'s `bin/README.md` was written
+  around exactly this.
 - **A second Claude session was live in `agenticapps-dashboard`** and checked out
   a branch off this work's commit mid-run. Worth knowing before assuming a repo's
   checkout is yours alone.
-- **`callbot` has an unpushed local commit on `main`** (`e962111`). Untouched;
-  its PR branch was cut from `origin/main`.
-- **A `git worktree` for `fbc-platform` is still registered** at the scratchpad
-  path. Remove it once #105 merges.
+- **Two local merge commits sit unpushed on `main`**: `callbot` (`ea23f9c`,
+  absorbing a duplicate proposal commit) and `fbc-platform`'s feature branch.
+  Neither is mine to push.
 - **27 branches carry genuinely unmerged content**, still unjudged for worth.
 - The convergence rule is still unwritten — twelfth session.
 - **Two neuroflash PRs remain open** (api-docs #14, terraform #185) — different
