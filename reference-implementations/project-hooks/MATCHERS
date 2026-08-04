@@ -28,6 +28,22 @@
 # defect — a project may guard more than the fleet requires — so it is reported
 # as wider and not as a failure. Both are reported; neither is silently passed.
 #
+# AND A HOOK REGISTERED NOWHERE IS THE THIRD DIRECTION, which the first revision
+# of this axis missed. A hook no settings entry names has no registration to be
+# narrow — the comparison loop simply had nothing to iterate, printed nothing,
+# and a shim that was current, byte-identical and wired to nothing scored clean
+# on every axis. That is the worse case by this file's own reasoning: protection
+# ABSENT rather than degraded, reported as neither.
+#
+# It is reachable by exactly the edit a contract rollout performs. The 1.2.0
+# propagation rewrites settings.json in five repositories, and dropping an entry
+# is the plausible mistake there — so the axis added to verify that rollout was
+# blind to the way the rollout most plausibly fails.
+#
+# A hook a project has DECLARED it does not bind (see OPT-OUTS) is exempt: no
+# registration is the correct state for it, and reporting it would leave the
+# declaration meaning nothing here.
+#
 # Format: <hook> <event> <matcher>. One per line, blank lines and # ignored.
 
 database-sentinel     PreToolUse   Bash|Edit|Write|MultiEdit

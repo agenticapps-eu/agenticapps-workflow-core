@@ -188,5 +188,46 @@ One PR cannot be both (codex round 2).
       before it merges and against core PR 2 before it merges. Two reviews, not
       one — PR 2 carries the claim that the fleet was actually reached, which is
       the claim most worth an independent reader.
+  - [x] 8.4a **Core PR 1 reviewed** in a cleared session. Four findings, each
+        reproduced before it was recorded; `CODE-REVIEW.md` holds the review and
+        the reproductions. All four fixed in group 9. The half of 8.4 that
+        remains is PR 2's review, so 8.4 stays open.
+
+## 9. The Stage-2 findings against PR 1
+
+Every one of these is the change's own principle applied to the change. Two are
+in-diff; one is a spec gap that is why the first had nothing to violate; one is
+pre-existing and is finding 6's second half.
+
+- [x] 9.1 RED first, all four, committed as `test(RED): …` before any
+      implementation edit — shim suite 60/4, conformance suite 55/5, and the new
+      sibling assertions failing against a mutated gate shim that the suite had
+      passed 56/56.
+- [x] 9.2 **The matcher axis reported a narrowed registration and said nothing
+      about a missing one.** `seen.get(hook, [])` is empty for a hook no entry
+      names, so the loop never ran: three current, byte-identical shims wired to
+      nothing scored `OK — no known vector found`, exit 0. Absence-reads-as-clean,
+      in the axis added to remove absence-reads-as-clean. Now a finding, with
+      declared opt-outs exempt.
+- [x] 9.3 **The sibling shim was asserted by nothing.** `$BIN/openspec-change-gate.sh`
+      is created in the gate-shim section and never removed, so `$GATE_SHIM`
+      never reached the unresolvable path where the 1.2.0 rate limiter lives.
+      Its suppressed line, four fields, and difference from the full report are
+      now driven directly — verified by mutation, which the suite previously
+      could not see.
+- [x] 9.4 **Finding 6 survived on candidate 2.** `-x` alone is true of any
+      searchable directory; the override branch was hardened at 1.1.0 and
+      candidate 2 kept the bare test eleven lines below the comment explaining
+      the bug. Both shims now require an executable regular file on both
+      candidates, and report an occupied path as occupied rather than as absent.
+- [x] 9.5 **The matcher axis shipped with no requirement.** `MATCHERS`,
+      `report_matchers` and the `REGISTRATION` finding class had no delta text,
+      which is why 9.2 violated nothing. The base requirement *Registration
+      matches the implementation's tool coverage* is now MODIFIED to specify the
+      same four properties the marker requirement specifies of itself — format,
+      authority, comparison, check — plus the absent case and the opt-out
+      exemption.
+- [x] 9.6 GREEN: 64/64 shim, 60/60 conformance, 12/12 wrapper, `openspec
+      validate --all` green.
 - [ ] 8.5 `openspec archive shim-suppressed-report-and-fleet-propagation -y`,
       then ship. Two separate acts.

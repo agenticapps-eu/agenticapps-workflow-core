@@ -352,6 +352,21 @@ report_identity() {
 # reported and not counted: a project may guard more than the fleet requires, and
 # calling that non-conformant would push projects toward removing coverage.
 #
+# NOT REGISTERED AT ALL is a finding, and it is the case this axis missed on its
+# first revision. `seen.get(hook, [])` yields an empty list for a hook no entry
+# names, the loop body never runs, and nothing is printed — so a shim that is
+# current, byte-identical and wired to nothing scored clean on every axis. That
+# is the same absence-reads-as-clean shape the marker axis was repaired for in
+# this change, surviving in the axis added to repair it, and it is the worse of
+# the two directions this header already distinguishes: protection ABSENT rather
+# than degraded. It matters most where this instrument is about to be relied on
+# — the propagation rewrites settings.json in five repositories, and a dropped
+# registration is the plausible mistake there.
+#
+# A DECLARED OPT-OUT is exempt, on the same terms as the marker axis: for a hook
+# a project deliberately does not bind, no registration is the correct state, and
+# reporting it would make the declaration mean nothing here.
+#
 # JSON is parsed with python3 where it exists. Where it does not, the axis says
 # it did not run — a check that quietly skips is the failure this whole change is
 # about, and "not checked" is a different sentence from "checked and clean".
@@ -368,11 +383,21 @@ report_matchers() {
     return 0
   fi
 
+  # The opt-out set for this project, resolved by the same reader the marker
+  # axis uses so the two axes cannot disagree about what is declared.
+  local opted="" hook
+  for hook in "${SHIMMED_HOOKS[@]}"; do
+    if opt_out_reason "$name" "$hook" >/dev/null; then
+      opted="$opted,$hook"
+    fi
+  done
+
   local out
-  out=$(python3 - "$settings" "$MATCHERS_DECL" "$name" <<'PY'
+  out=$(python3 - "$settings" "$MATCHERS_DECL" "$name" "$opted" <<'PY'
 import json, sys
 
 settings, decl, name = sys.argv[1], sys.argv[2], sys.argv[3]
+opted = set(h for h in sys.argv[4].split(",") if h)
 
 expected = {}
 for line in open(decl):
@@ -399,7 +424,16 @@ for event, entries in (cfg.get("hooks") or {}).items():
                     seen.setdefault(hook, []).append((event, matcher))
 
 for hook, (want_event, want_tools) in sorted(expected.items()):
-    for event, matcher in seen.get(hook, []):
+    registrations = seen.get(hook, [])
+    if not registrations:
+        if hook in opted:
+            print("MATCHER  %s  %s  not registered — declared opt-out, which is the "
+                  "correct state for it" % (name, hook))
+        else:
+            print("MATCHER  %s  %s  not registered — settings.json names no entry for "
+                  "it, so the hook never fires for any tool  FINDING" % (name, hook))
+        continue
+    for event, matcher in registrations:
         tools = set(t for t in matcher.split("|") if t)
         missing = want_tools - tools
         extra = tools - want_tools

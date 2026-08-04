@@ -77,6 +77,27 @@ answer SHALL NOT be "leave it non-zero and say nothing".
   of it says the channel is unestablished rather than that the operator was
   warned
 
+#### Scenario: A resolution candidate exists but cannot be executed
+
+- **WHEN** a path a shim resolves is present but is not an executable regular
+  file — a directory, a device, or a non-executable file — on **any** candidate,
+  not only the override
+- **THEN** the shim reports it in its own words and exits by this contract,
+  rather than `exec`ing it and letting the interpreter's own failure stand as the
+  report: `exec` on a directory yields exit 126 and a message naming the path but
+  neither the hook nor the fact that the call was allowed, which is the
+  contentless exit this requirement forbids wearing a different exit code
+
+  The rule was previously stated of the override alone. `-x` is true of any
+  searchable directory, so the bare test admits exactly the case it looks like it
+  excludes, and stating the rule of one candidate left the other holding the
+  defect the first was repaired for.
+
+  A candidate that is present but unusable SHALL be reported as **occupied**
+  rather than as absent. "Not installed" is false of a path something occupies,
+  and it sends the operator to the installer when the remedy is to find out what
+  is sitting there.
+
 ### Requirement: A rate limit governs verbosity, not the operator's notice
 
 A repetition policy of **once per interval** SHALL reduce what a suppressed
@@ -228,6 +249,106 @@ fleet-wide zero as proof.
   finding rather than a profile difference
 
 ## MODIFIED Requirements
+
+### Requirement: Registration matches the implementation's tool coverage
+
+When a shared implementation handles a tool, every project binding that hook
+SHALL register a matcher that delivers it. An implementation's coverage of a
+tool its matcher never delivers is inert.
+
+A matcher composed only of tool names is an **exact-string** comparison on the
+supported host: a matcher naming one tool does not deliver another whose name
+merely contains it. Coverage therefore cannot be inferred from a matcher that
+looks similar to the tool name, and SHALL be established against the host's
+documented matcher semantics.
+
+The claim in the other direction — that a matcher naming a tool implicitly
+covers related tools — was raised in review and checked against the host
+documentation, which contradicts it. It is recorded because it is the reading
+that would silently make this requirement unnecessary, and it is wrong.
+
+**This requirement had no check, and a requirement with no check makes nothing
+detectable.** That is the same argument the marker requirement makes of itself
+two requirements below, and it applied here unaddressed: nothing read matchers
+at fleet scope, so a registration could be narrower than the implementation it
+invokes — or absent altogether — while every axis reported the project current.
+Five repositories registered `database-sentinel` on `Bash|Edit|Write` against a
+declared `Bash|Edit|Write|MultiEdit`, and the instrument was blind to it. The
+four properties the marker requirement specifies are therefore specified here
+too:
+
+- **Format** — `<hook> <event> <matcher>` per line, matcher a `|`-separated set
+  of tool names, blank lines and `#` comments ignored.
+- **Authority** — a declaration tracked beside the shim template in the core
+  repository, not any project-local file. An expected set discovered from what a
+  scan happened to find cannot detect a missing member, which is the whole
+  reason it is declared rather than inferred.
+- **Comparison** — a registration is **conformant** when it names the declared
+  event and covers the declared tool set; **narrow** when it omits any declared
+  tool; **wider** when it adds tools beyond it; and **absent** when no entry
+  names the hook at all.
+- **Check** — a conformance tool SHALL evaluate every declared hook in every
+  scanned project against the declaration, and SHALL say when it could not
+  evaluate one rather than passing over it.
+
+**Narrow and absent are findings; wider is reported and not counted.** A project
+may guard more than the fleet requires, and treating that as non-conformant
+would push projects toward removing coverage.
+
+**An absent registration is the strongest form of this defect and SHALL be
+reported as a finding**, not passed over. A hook registered nowhere is one whose
+every tool is inert — protection absent rather than degraded — and it is
+reachable by exactly the edit a contract rollout performs: rewriting a project's
+`settings.json`. Reporting the narrowed case while a hook wired to nothing scores
+clean inverts the severity this requirement already distinguishes, and it is the
+absence-reads-as-clean shape ruled out for shim files two requirements above.
+
+A hook a project has **declared** it does not bind is exempt: for it, no
+registration is the correct state, and reporting it would leave the opt-out
+declaration meaning nothing on this axis.
+
+#### Scenario: A shared implementation gains a tool
+
+- **WHEN** a canonical implementation handles a tool some projects' matchers omit
+- **THEN** those projects' matchers are updated in the same change, and the
+  update is verified per project rather than assumed
+
+#### Scenario: A tool named in a matcher no longer exists on the host
+
+- **WHEN** a matcher or implementation covers a tool the host no longer provides
+- **THEN** the coverage is harmless but inert, and SHALL NOT be reported as a
+  delivered protection
+
+#### Scenario: A declared hook is registered nowhere
+
+- **WHEN** a project's settings name no entry for a hook it is declared to bind,
+  while its shim file is present, current and byte-identical to the authority
+- **THEN** the check reports it as a finding naming the hook, rather than
+  reporting the project clean on the strength of the axes that read the file
+
+#### Scenario: A registration is narrower than the declared coverage
+
+- **WHEN** a project registers a hook on fewer tools than the declaration names
+- **THEN** the check reports the tools that are not covered, by name
+
+#### Scenario: A registration is wider than the declared coverage
+
+- **WHEN** a project registers a hook on tools beyond the declared set
+- **THEN** the check reports it as wider and does not count it as a finding
+
+#### Scenario: A project has declared it does not bind the hook
+
+- **WHEN** a hook is declared as a project's opt-out and that project registers
+  no matcher for it
+- **THEN** the check reports the opt-out and raises no finding, on the same terms
+  the absent-shim axis applies to the same declaration
+
+#### Scenario: The registration cannot be read
+
+- **WHEN** the settings file is absent, does not parse, or the tooling needed to
+  read it is unavailable
+- **THEN** the check says the axis did not run and why, because "not checked" is
+  a different statement from "checked and clean"
 
 ### Requirement: The shim contract itself has a propagation path
 

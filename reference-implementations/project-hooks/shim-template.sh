@@ -132,7 +132,27 @@ if [ -n "$OVERRIDE" ]; then
 fi
 
 # --- candidate 2: the shared install ----------------------------------------
-if [ -x "$SHARED" ]; then
+# REGULAR FILE HERE TOO — and the omission is Stage-2 finding 6's second half.
+# The override branch above was hardened to `-f` and `-x` at contract 1.1.0,
+# under a comment explaining that `-x` is true of any searchable directory. This
+# candidate kept the bare `-x` eleven lines below that comment, so a directory at
+# the shared-install path was `exec`ed: bash exited 126 with its own "is a
+# directory" message, which is neither the exit code this contract defines nor a
+# sentence naming the hook or saying the call was allowed.
+#
+# A path that EXISTS but is not usable is reported specifically rather than
+# folded into "not installed", which would be false — something is installed
+# there. It is NOT rate limited, for the reason the override is not: the limit
+# exists for the benign, expected unprovisioned state, and a non-regular file in
+# the shared bin is an anomaly the operator has to see on the call that hit it.
+if [ -e "$SHARED" ] && { [ ! -f "$SHARED" ] || [ ! -x "$SHARED" ]; }; then
+  report "$HOOK hook: $SHARED exists but is not an executable regular file — this hook did NOT run, and the tool call was allowed" \
+         "  Something other than the published implementation occupies that path." \
+         "  Re-run install-shared-artifact.sh from agenticapps-workflow-core."
+  exit 1
+fi
+
+if [ -f "$SHARED" ] && [ -x "$SHARED" ]; then
   exec "$SHARED" "$@"
 fi
 

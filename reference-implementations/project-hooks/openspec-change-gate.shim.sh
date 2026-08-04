@@ -127,8 +127,22 @@ if [ -n "$OVERRIDE" ]; then
   exit 1
 fi
 
-# Candidate 2.
-if [ -x "$SHARED" ]; then
+# Candidate 2. REGULAR FILE, not merely `-x` — finding 6's second half, which
+# survived on this branch after the override branch above was hardened for it at
+# 1.1.0. A directory here was `exec`ed and bash exited 126 with its own message,
+# naming neither the gate nor the fact that the edit was allowed.
+#
+# An occupied-but-unusable path is reported specifically rather than as "not
+# installed", and is not rate limited: the limit is for the expected
+# unprovisioned state, not for an anomaly at the published path.
+if [ -e "$SHARED" ] && { [ ! -f "$SHARED" ] || [ ! -x "$SHARED" ]; }; then
+  report "$HOOK hook: $SHARED exists but is not an executable regular file — the §18 change gate did NOT run, and the edit was allowed" \
+         "  Something other than the published gate occupies that path; CI is the only remaining floor." \
+         "  Re-run install-shared-artifact.sh from agenticapps-workflow-core."
+  exit 1
+fi
+
+if [ -f "$SHARED" ] && [ -x "$SHARED" ]; then
   exec "$SHARED" "$@"
 fi
 

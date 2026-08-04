@@ -27,7 +27,8 @@ over to it.
 
 1. `$<HOOK>_OVERRIDE` — an explicit path naming an **executable regular file**,
    when set to a non-empty value.
-2. `~/.agenticapps/bin/<hook>.sh` — the shared install.
+2. `~/.agenticapps/bin/<hook>.sh` — the shared install, likewise an **executable
+   regular file**.
 
 There is **no third `<repo>/bin/` candidate.** A repo-local copy is the drift
 this directory exists to remove; keeping it as a fallback keeps the drift and
@@ -42,6 +43,21 @@ message, the invalid-override report never fired, and the exit code was not the
 conformance and diagnostics defect rather than a safety one — but the report is
 the whole mechanism by which an operator learns a hook is switched off, and it
 was the one thing that did not happen.
+
+**It applied to candidate 2 as well, and 1.1.0 fixed only candidate 1
+(shim-contract 1.2.0).** The bare `-x` survived on the shared-install branch
+eleven lines below the comment explaining why it was wrong on the override
+branch, so a directory at `~/.agenticapps/bin/<hook>.sh` reproduced finding 6
+exactly: exit 126, bash's message, no sentence naming the hook or the allowance.
+A rule stated of one of two candidates is a rule about one of them. Found in the
+Stage-2 review of the 1.2.0 change, which is also where the same shape was found
+in the test suite — every 1.2.0 assertion had been made of the template, and the
+sibling shim was reached by none of them.
+
+A candidate that **exists but is not usable** is now reported as *occupied*
+rather than as *not installed*, and is not rate limited. "Not installed" is false
+of a path something occupies, and it points the operator at the installer when
+the question is what is sitting there.
 
 **An override set to the empty string falls through, deliberately.** `FOO=` is
 the conventional way to neutralise a variable — it is how an operator says "no
@@ -59,6 +75,7 @@ chose.
 |---|---|---|
 | 1.0.0 | initial — two-candidate order, fail-open-and-report, the marker | 21 |
 | 1.1.0 | an override must name an executable **regular file**; empty means unset | 21 |
+| 1.2.0 | a suppressed report still emits one line; **candidate 2** must also name an executable regular file, and an occupied path is reported as occupied | in progress |
 
 A contract change must name **which profile each binder implements**, because a
 change that reaches every file and applies one profile's clauses to both has not
