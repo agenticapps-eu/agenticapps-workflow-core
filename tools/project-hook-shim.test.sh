@@ -548,6 +548,106 @@ else
       "suppression here would rest on a record that was never made"
 fi
 
+echo
+echo "=== the SIBLING's suppressed report, driven rather than assumed ==="
+
+# EVERY 1.2.0 ASSERTION ABOVE IS MADE OF THE TEMPLATE. The gate shim carries its
+# own copy of report_rate_limited, its own wording and its own marker, and until
+# now nothing drove any of it: $BIN/openspec-change-gate.sh is created near the
+# top of the gate-shim section and never removed, so $GATE_SHIM always resolved
+# candidate 2 and never reached the unresolvable path where the rate limiter
+# lives. Reverting that file's suppressed branch to the 1.1.0 silent `return 0`
+# — the exact defect this change exists to remove, in the file the change calls
+# the worst case in the fleet — left the whole suite green.
+#
+# That is finding 6's shape a third time, and the comment introducing the
+# gate-shim section already names it: "an assertion made of one of two
+# hand-synchronised files is an assertion about one of them."
+rm -f "$BIN/openspec-change-gate.sh"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+
+run_shim "$GATE_SHIM" "$PAYLOAD"; grc1=$?; gfirst=$(head -1 "$TMP/err")
+run_shim "$GATE_SHIM" "$PAYLOAD"; grc2=$?; gsecond=$(head -1 "$TMP/err")
+
+if [ "$grc1" -eq 1 ] && [ -n "$gfirst" ]; then
+  ok "gate shim: an unresolvable gate reports in full and exits 1"
+else
+  bad "gate shim: an unresolvable gate reports in full and exits 1" \
+      "exit $grc1, stderr '$gfirst'"
+fi
+
+if [ "$grc2" -eq 1 ] && [ -n "$gsecond" ]; then
+  ok "gate shim: a suppressed repeat exits 1 AND writes a line"
+else
+  bad "gate shim: a suppressed repeat exits 1 AND writes a line" \
+      "exit $grc2, stderr '$gsecond'" \
+      "empty stderr with a non-zero exit renders as 'hook error — No stderr output'"
+fi
+
+# The same four mandatory fields the template's line carries. The wording
+# differs between the two files by design — this one names the §18 gate — so the
+# fields are asserted, not the sentence.
+gmissing=""
+grep -qi 'openspec-change-gate'       <<<"$gsecond" || gmissing="$gmissing hook-name"
+grep -qiE 'still|unchanged'           <<<"$gsecond" || gmissing="$gmissing unchanged-state"
+grep -qiE 'allowed|did not run'       <<<"$gsecond" || gmissing="$gmissing call-allowed"
+grep -qiE 'earlier|already|this hour' <<<"$gsecond" || gmissing="$gmissing earlier-notice"
+if [ -z "$gmissing" ]; then
+  ok "gate shim: the suppressed line carries all four mandatory fields"
+else
+  bad "gate shim: the suppressed line carries all four mandatory fields" \
+      "missing:$gmissing" "line: '$gsecond'"
+fi
+
+if [ -n "$gsecond" ] && [ "$gsecond" != "$gfirst" ]; then
+  ok "gate shim: the suppressed line differs from the full report's first line"
+else
+  bad "gate shim: the suppressed line differs from the full report's first line" \
+      "first '$gfirst'" "second '$gsecond'"
+fi
+
+echo
+echo "=== candidate 2 must be an executable REGULAR file, not merely -x ==="
+
+# STAGE-2 FINDING 6, SECOND HALF. `-x` alone is true of any searchable
+# directory. That was repaired on the OVERRIDE path at contract 1.1.0, with a
+# comment in the template explaining precisely why — and candidate 2 kept the
+# bare `-x` eleven lines below that comment. A directory at the shared-install
+# path was therefore `exec`ed: bash exited **126** with its own "is a directory"
+# message, so the exit code was not the 1 this contract defines and the first
+# line the operator saw named neither the hook nor the fact that the call had
+# been allowed.
+#
+# It is the invariant two blocks above, on the one path that block does not
+# enumerate.
+for pair in "database-sentinel:$SUP_SHIM" "openspec-change-gate:$GATE_SHIM"; do
+  hook="${pair%%:*}"; shim="${pair#*:}"
+  rm -rf "$TMP/state"; mkdir -p "$TMP/state"
+  rm -f "$BIN/$hook.sh"
+  mkdir -p "$BIN/$hook.sh"
+  run_shim "$shim" "$PAYLOAD"; rc=$?
+  first=$(head -1 "$TMP/err")
+  rmdir "$BIN/$hook.sh"
+
+  if [ "$rc" -eq 1 ]; then
+    ok "$hook: a directory at the shared-install path exits 1, not 126"
+  else
+    bad "$hook: a directory at the shared-install path exits 1, not 126" \
+        "got exit $rc — 126 means bash was asked to exec a directory"
+  fi
+  # NAMING THE HOOK IS NOT ENOUGH TO DISTINGUISH THE TWO OUTCOMES: bash's own
+  # "is a directory" quotes the full path, which contains the hook name. The
+  # assertion is therefore that the line says the call was ALLOWED — the thing
+  # only the shim's own report says, and the thing the operator needs.
+  if grep -qF "$hook" <<<"$first" && grep -qiE 'allowed|did NOT run' <<<"$first"; then
+    ok "$hook: the report is the shim's own, naming the hook and the allowance"
+  else
+    bad "$hook: the report is the shim's own, naming the hook and the allowance" \
+        "first line: '$first'" \
+        "bash's 'is a directory' names the path but neither the hook's identity nor the allowance"
+  fi
+done
+
 # The three files carry the same contract and must be bumped together. A sibling
 # left behind is the drift the marker exists to surface, and it would surface it
 # in the fleet rather than here.

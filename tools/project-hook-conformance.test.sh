@@ -379,5 +379,57 @@ OUT=$(bash "$TOOL" "$WIDE" 2>&1)
 has "$OUT" "NotebookEdit" "a gate registration stripped of NotebookEdit is reported"
 
 echo
+echo "=== a hook registered NOWHERE is a finding, not a silence ==="
+
+# THE AXIS REPORTED A NARROWED REGISTRATION AND SAID NOTHING ABOUT A MISSING ONE.
+# `seen.get(hook, [])` yields an empty list for a hook no entry names, the loop
+# body never runs, and a shim that is current, byte-identical and wired to
+# nothing scored clean on every axis: MARKER current, IDENTITY matches, no
+# MATCHER line at all, `OK — no known vector found`, exit 0.
+#
+# That is the absence-reads-as-clean shape this change repaired on the marker
+# axis, surviving in the axis added to repair it — and it is the case MATCHERS'
+# own header calls the worse of the two, "protection absent rather than
+# degraded". It matters beyond the instrument: the propagation rewrites
+# settings.json in five repositories, and a dropped registration is the
+# plausible mistake there.
+DEAD="$(mkproject dead-registration "$TEMPLATE_VERSION")"
+cat > "$DEAD/.claude/settings.json" <<'EOF'
+{"hooks":{}}
+EOF
+OUT=$(bash "$TOOL" "$DEAD" 2>&1)
+
+if printf '%s' "$OUT" | grep -q 'OK — no known vector found'; then
+  bad "a hook registered nowhere counts as a finding" \
+      "every shim was current and byte-identical, and the scan reported clean"
+else
+  ok "a hook registered nowhere counts as a finding"
+fi
+
+# All three, so the axis is not reporting one by luck of iteration order.
+for h in database-sentinel openspec-change-gate normalize-claude-md; do
+  has_re "$OUT" "MATCHER.*$h.*not registered" \
+    "$h is named as registered nowhere"
+done
+
+# A settings.json that registers SOME of the declared hooks is the realistic
+# case — the whole-file wipe above would be noticed. This one would not.
+PARTIAL="$(mkproject partial-registration "$TEMPLATE_VERSION")"
+cat > "$PARTIAL/.claude/settings.json" <<'EOF'
+{"hooks":{"PreToolUse":[{"matcher":"Bash|Edit|Write|MultiEdit","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/database-sentinel.sh"}]}]}}
+EOF
+OUT=$(bash "$TOOL" "$PARTIAL" 2>&1)
+has_re "$OUT" "MATCHER.*openspec-change-gate.*not registered" \
+  "a hook dropped from an otherwise healthy settings.json is reported"
+hasnt "$OUT" "MATCHER  partial-registration  database-sentinel  not registered" \
+  "the hook that IS registered is not reported unregistered"
+
+# THE NEGATIVE CASE IS ALREADY ASSERTED, and deliberately not duplicated here:
+# the declared-opt-out block above scans a project whose opted-out hook is both
+# unfiled and unregistered, and requires a clean scan. If this axis reported an
+# opted-out hook as unregistered, that assertion would fail — which is what
+# makes the opt-out declaration mean something on this axis too.
+
+echo
 echo "  passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]
