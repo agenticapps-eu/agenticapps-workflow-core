@@ -362,4 +362,9 @@ pre-existing and is finding 6's second half.
         8.4's second half is the review of the PR that carries it. Named here
         because a `--yes` that walks past a warning should leave a record of
         what it walked past.
-  - [ ] 8.5b Ship — the second act, after 8.4's review closes and #74 merges.
+  - [x] 8.5b **Shipped.** #74 squash-merged as `e69e471` after 8.4b approved it
+        and the gate re-ran green on the review's two corrections. All eight
+        PRs are now merged: core #73, the seven fleet PRs, and core #74. The
+        tick is here rather than left open because an archived change whose
+        last task still reads "ship" is the same fiction-about-itself the
+        contract table carried at 4.4.
