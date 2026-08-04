@@ -149,6 +149,16 @@ jobs:
         # is not the same as testing the code core runs.
         run: bash tools/test-install-core-git-hooks.sh
 
+      - name: Check spec placement, not just spec validity
+        # `openspec validate` answers "does this parse". It cannot answer "is
+        # every sentence in the requirement it belongs to". The archive fold at
+        # 09f829e severed a paragraph across two requirements and validate
+        # stayed green for three commits, because a torn sentence is
+        # schema-valid. The line-multiset diff guarding that refactor proved
+        # every line survived — which was true, and useless: every line did
+        # survive, in the wrong requirement.
+        run: bash tools/spec-placement.test.sh
+
       - name: Run the change gate
         # exit 0 = every active change validates (review NOTEs may still print);
         # exit 1 = `openspec validate --all` is red, or the openspec CLI is
