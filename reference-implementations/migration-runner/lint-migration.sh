@@ -74,11 +74,24 @@
 # migration MAY opt in early by declaring `migration_format: executable`;
 # that can only ADD it to scope, never remove one that's already in it.
 #
-# Usage: lint-migration.sh (--threshold N | --host NAME) <doc>
+# Usage: lint-migration.sh [--scope-only] (--threshold N | --host NAME) <doc>
 # Exit 0 = clean. Exit 1 = one violation line per problem, on stderr, in
 # `L<n>: step <s>: <message>` form for per-step rules; whole-document
 # problems (filename ID, threshold, frontmatter cross-checks) are reported
 # without a step number.
+#
+# --scope-only answers ONE question — "would the full lint above even
+# examine this document, or would it skip it as frozen pre-format history?"
+# — without running any structural rule. Exit 0 = in scope (the document
+# will be examined: either it's at/above threshold, it opted in, or its
+# filename ID couldn't even be parsed, which is never a skip — see below).
+# Exit 1 = truly out of scope: below threshold and no migration_format
+# declared at all. This exists so a CALLER (run-migration.sh) can tell "the
+# linter examined this and found it clean" apart from "the linter never
+# looked at this," which a bare exit-0-from-full-lint cannot distinguish —
+# both look identical from outside. Deliberately the SAME scope computation
+# as the full lint below, just short-circuited before any L-rule runs, so
+# there is exactly one implementation of the scope rule to drift.
 
 set -uo pipefail
 
@@ -86,8 +99,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 THRESHOLD=""
 DOC=""
+SCOPE_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --scope-only) SCOPE_ONLY=1; shift ;;
     --threshold) THRESHOLD="${2:?--threshold needs a value}"; shift 2 ;;
     --host)
       # Resolve from the declared file rather than making every caller
@@ -109,7 +124,7 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-: "${DOC:?usage: lint-migration.sh (--threshold N | --host NAME) <doc>}"
+: "${DOC:?usage: lint-migration.sh [--scope-only] (--threshold N | --host NAME) <doc>}"
 
 # NO "NO THRESHOLD GIVEN" PATH. Omitting both flags is an error, not an
 # empty scope — see the header comment above. A caller who forgot --host
@@ -140,6 +155,15 @@ VALID="check precondition apply verify rollback"
 base="$(basename "$DOC")"
 file_id="$(printf '%s' "$base" | sed -n 's/^\([0-9][0-9]*\)-.*/\1/p')"
 if [ -z "$file_id" ]; then
+  if [ "$SCOPE_ONLY" -eq 1 ]; then
+    # An unparseable ID is never a skip (see the threshold requirement's own
+    # "unparseable filename is a violation" scenario) — it must always be
+    # EXAMINED, by the full lint pass, which reports the real diagnostic.
+    # --scope-only therefore answers "in scope" here rather than inventing a
+    # violation of its own: the caller is expected to run the full lint next.
+    echo "in-scope: $DOC (unparseable filename ID — full lint will report it)"
+    exit 0
+  fi
   echo "lint: $DOC: filename does not begin with a numeric migration ID" >&2
   exit 1
 fi
@@ -156,6 +180,20 @@ if [ "$((10#$file_id))" -ge "$((10#$THRESHOLD))" ]; then
   above=1; in_scope=1
 fi
 [ "$fm_fmt" = "executable" ] && in_scope=1
+
+if [ "$SCOPE_ONLY" -eq 1 ]; then
+  # "In scope" here means "the full lint pass would examine this document at
+  # all" — which includes the in_scope=1 case above AND a below-threshold
+  # document that declared a garbage migration_format value (that document
+  # is not skipped either; the full pass reports it as an L0 violation
+  # below). The ONLY true skip is below-threshold with NOTHING declared.
+  if [ "$in_scope" -eq 1 ] || [ -n "$fm_fmt" ]; then
+    echo "in-scope: $DOC"
+    exit 0
+  fi
+  echo "out-of-scope: $DOC: id $file_id is below threshold $THRESHOLD and declares no migration_format"
+  exit 1
+fi
 
 # Below the threshold and not opted in, this document predates the executable
 # format. It is frozen history — skip it rather than reporting violations

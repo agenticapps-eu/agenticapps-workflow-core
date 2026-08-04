@@ -62,7 +62,13 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --on-failure=*) ON_FAILURE="${1#*=}"; shift ;;
-    --host) HOST="${2:?--host needs a value}"; shift 2 ;;
+    --host)
+      if [ $# -lt 2 ]; then
+        echo "run-migration: --host needs a value" >&2
+        exit 64
+      fi
+      HOST="$2"; shift 2
+      ;;
     *) if [ -z "$DOC" ]; then DOC="$1"; else WORKDIR="$1"; fi; shift ;;
   esac
 done
@@ -136,6 +142,62 @@ fail_policy() {
   return 1
 }
 
+# EXIT-CODE SCHEME (fix round 1, per spec's "Refusal is distinguishable from
+# failure by exit code"):
+#   64 = usage error — a problem with how THIS SCRIPT was invoked (missing
+#        --host, unresolvable --host/threshold, bad --on-failure). Already
+#        used above for the other usage checks.
+#   65 = REFUSAL — a pre-execution refusal because the DOCUMENT does not
+#        qualify to run: out of scope, a lint violation, zero steps, or a
+#        step with no apply block. Nothing has executed yet in every one of
+#        these cases; the tree is guaranteed untouched.
+#   66 = missing/unreadable document (already used above).
+#   1  = a failure once execution has begun (a step's check/precondition/
+#        apply/verify), where earlier steps may already have applied.
+# A CI caller can therefore always tell "refused, tree untouched" (65, or 64/
+# 66 for a usage/environment problem) from "ran partway, tree may have
+# changed" (1) without parsing stderr.
+REFUSAL=65
+
+# A RUNNER EXECUTES ONLY MIGRATIONS THE LINTER JUDGED.
+#
+# The linter's silence on a below-threshold, non-opted-in document means NOT
+# EXAMINED, not EXAMINED AND FOUND WELL-FORMED — lint-migration.sh exits 0 in
+# both cases, and a runner that treats "exit 0" as "approved" cannot tell
+# them apart. Renaming a migration to a low-numbered filename would then
+# evaporate the format gate at run time: the very same "no threshold, nothing
+# in scope, everything passes" hole --host closes globally, reopened per
+# document. --scope-only asks lint-migration.sh the scope question alone,
+# using its own scope computation (never a second copy of the ID/threshold
+# rule here), before any structural rule or block ever runs. An opted-in
+# below-threshold migration is still in scope and still runs normally.
+bash "$SCRIPT_DIR/lint-migration.sh" --scope-only --host "$HOST" "$DOC" >/dev/null
+scope_rc=$?
+case "$scope_rc" in
+  0) : ;; # in scope — the linter will actually examine this document
+  1)
+    echo "refusing to run: $DOC is out of scope for $HOST (below threshold, not opted in) — the linter never examined it, which is not the same as approving it" >&2
+    exit "$REFUSAL"
+    ;;
+  65)
+    # A bad/unresolvable --host or --threshold is a problem with this
+    # invocation, not with the document — same class as the other usage
+    # errors above, so it gets the same code lint-migration.sh itself
+    # documents as "usage" for a caller of THIS script (64), not the
+    # document-refusal code (65) despite lint's own internal 65 meaning
+    # something different ("bad threshold/host") in its own contract.
+    exit 64
+    ;;
+  66)
+    echo "run-migration: $DOC: no such file" >&2
+    exit 66
+    ;;
+  *)
+    echo "run-migration: lint-migration.sh --scope-only exited unexpectedly ($scope_rc)" >&2
+    exit "$REFUSAL"
+    ;;
+esac
+
 # LINT BEFORE EXECUTING ANYTHING.
 #
 # Rejecting a bad migration at lint time is not enough on its own, because
@@ -144,16 +206,24 @@ fail_policy() {
 # fence un-annotated — and report success having changed nothing. That is
 # the exact silent-no-op failure this whole format exists to prevent, and it
 # is worst when the step it silently skipped was the security-relevant one.
-# lint-migration.sh's own exit code is propagated unchanged (1 = violation,
-# 65 = bad/unknown host, 66 = missing file) rather than collapsed to a single
-# generic failure, exactly like this script already mirrors lint's exit 66
-# for a missing document above.
 bash "$SCRIPT_DIR/lint-migration.sh" --host "$HOST" "$DOC"
 lint_rc=$?
-if [ "$lint_rc" -ne 0 ]; then
-  echo "refusing to run: $DOC does not satisfy the executable format" >&2
-  exit "$lint_rc"
-fi
+case "$lint_rc" in
+  0) : ;;
+  1)
+    echo "refusing to run: $DOC does not satisfy the executable format" >&2
+    exit "$REFUSAL"
+    ;;
+  65) exit 64 ;; # bad/unresolvable host or threshold — a usage problem, see above
+  66)
+    echo "run-migration: $DOC: no such file" >&2
+    exit 66
+    ;;
+  *)
+    echo "run-migration: lint-migration.sh exited unexpectedly ($lint_rc)" >&2
+    exit "$REFUSAL"
+    ;;
+esac
 
 steps="$(bash "$EXTRACT" steps "$DOC")"
 
@@ -166,7 +236,7 @@ steps="$(bash "$EXTRACT" steps "$DOC")"
 # knows what "ran to completion" is about to mean.
 if [ -z "$steps" ]; then
   echo "refusing to run: $DOC declares no steps" >&2
-  exit 1
+  exit "$REFUSAL"
 fi
 
 # ABORT IF ANY STEP YIELDS NO APPLY BLOCK.
@@ -184,7 +254,7 @@ for s in $steps; do
   apply_rc=$?
   if [ "$apply_rc" -ne 0 ] || [ -z "$apply_body" ]; then
     echo "refusing to run: $DOC step $s has no apply block" >&2
-    exit 1
+    exit "$REFUSAL"
   fi
 done
 
@@ -200,18 +270,25 @@ pending_step=""
 for s in $steps; do
   if [ "$DRY_RUN" -eq 1 ] && [ "$pending_seen" -eq 1 ]; then
     echo "step $s: would apply (not evaluated — follows pending step $pending_step):"
-    # Capture first and check the exit status explicitly — piping straight
-    # into sed silently swallows extract.sh's own exit code, since sed still
-    # exits 0 having formatted zero lines of input. The pre-flight scan above
-    # already guarantees every step has a non-empty apply block before this
-    # loop ever runs, so this is defense in depth, not the primary guard.
+    # Check the exit status and emptiness explicitly BEFORE printing — piping
+    # straight into sed would silently swallow extract.sh's own exit code,
+    # since sed still exits 0 having formatted zero lines of input. The
+    # pre-flight scan above already guarantees every step has a non-empty
+    # apply block before this loop ever runs, so this is defense in depth,
+    # not the primary guard — hence the reserved refusal code, unreachable in
+    # practice but consistent with the pre-flight scan's own refusal above.
+    # The presence check captures via "$(...)" (which strips trailing
+    # newlines) purely to test emptiness/exit code; the actual print re-runs
+    # extract.sh and pipes it directly, so a body with meaningful trailing
+    # blank lines prints byte-for-byte as extract.sh produced it, not
+    # re-normalized through a second round of newline stripping.
     apply_src="$(bash "$EXTRACT" block "$DOC" "$s" apply)"
     apply_rc=$?
     if [ "$apply_rc" -ne 0 ] || [ -z "$apply_src" ]; then
       echo "step $s: has no apply block — aborting" >&2
-      exit 1
+      exit "$REFUSAL"
     fi
-    printf '%s\n' "$apply_src" | sed 's/^/    /'
+    bash "$EXTRACT" block "$DOC" "$s" apply | sed 's/^/    /'
     continue
   fi
 
@@ -252,16 +329,18 @@ for s in $steps; do
 
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "step $s: would apply:"
-    # Same fix as the other dry-run print site above: capture and check the
-    # exit status explicitly rather than piping straight into sed, which
-    # would otherwise mask extract.sh having found nothing.
+    # Same fix as the other dry-run print site above: check the exit status
+    # and emptiness explicitly before printing, rather than piping straight
+    # into sed (which would mask extract.sh having found nothing), and print
+    # via a fresh direct pipe so trailing blank lines in the body survive
+    # byte-for-byte rather than being stripped by command substitution.
     apply_src="$(bash "$EXTRACT" block "$DOC" "$s" apply)"
     apply_rc=$?
     if [ "$apply_rc" -ne 0 ] || [ -z "$apply_src" ]; then
       echo "step $s: has no apply block — aborting" >&2
-      exit 1
+      exit "$REFUSAL"
     fi
-    printf '%s\n' "$apply_src" | sed 's/^/    /'
+    bash "$EXTRACT" block "$DOC" "$s" apply | sed 's/^/    /'
     # This step is now the first pending one. Nothing past this point is
     # ever executed or evaluated — not against WORKDIR, and not against any
     # copy of it — so every later step's blocks are skipped outright above.

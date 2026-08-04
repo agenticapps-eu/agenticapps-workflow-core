@@ -494,56 +494,29 @@ assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
 rm -rf "$tmp"; trap - EXIT
 
 echo
-echo "== run-migration.sh: a missing pre-condition block is named, not misreported =="
+echo "== run-migration.sh: (retired) a missing pre-condition block =="
 
-# A step with no precondition block at all makes run_block return 127
-# (extract.sh found nothing to run). That must not be reported as though the
-# block ran and failed — the diagnostic should say the block is missing.
+# RETIRED in fix round 1, not merely renumbered. The prior version of this
+# test kept its ad-hoc fixture BELOW every host's threshold, with no
+# migration_format declared, specifically so lint-migration.sh would skip it
+# (exit 0, out of scope) and never see the missing precondition — leaving
+# run_block's own 127-detection in the dispatch loop as the only thing that
+# caught it.
 #
-# This fixture is deliberately BELOW every host's threshold and declares no
-# migration_format at all, so lint-migration.sh skips it entirely (exit 0,
-# out of scope) rather than catching the missing precondition itself via L1
-# — group 5's lint-before-execute step must not preempt this scenario, or it
-# would only ever exercise lint's diagnostic and never the runner's own
-# run_block-returned-127 handling this test exists to cover.
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-cat > "$tmp/0002-missing-precondition.md" <<'EOF'
----
-id: 0002
-slug: missing-precondition
-title: A step with no pre-condition block at all
-from_version: 1.8.0
-to_version: 1.9.0
-applies_to:
-  - fixture.txt
----
-
-# Migration 0002 — missing pre-condition block
-
-## Steps
-
-### Step 1: No pre-condition heading or fence at all
-
-**Idempotency check:**
-```bash role=check
-test -f fixture.txt
-```
-
-**Apply:**
-```bash role=apply
-echo "applied" > fixture.txt
-```
-
-**Rollback:**
-```bash role=rollback
-rm -f fixture.txt
-```
-EOF
-out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$tmp/0002-missing-precondition.md" "$tmp" 2>&1)"
-assert_eq "$?" "1" "a step with no pre-condition block aborts"
-assert_contains "$out" "pre-condition block missing" \
-  "diagnostic names the block as missing, not as having failed"
-rm -rf "$tmp"; trap - EXIT
+# Fix round 1 closes exactly that gap (see "the runner executes only
+# migrations the linter judged" below): a below-threshold, non-opted-in
+# document is now refused BEFORE the dispatch loop ever runs, which means
+# the fixture that used to reach run_block's 127 path can no longer reach it
+# at all without also being refused first. And the fixture cannot be made
+# in-scope instead, because lint's L1 and run_block share the exact same
+# extraction primitive (extract.sh) — any role L1 sees as present, run_block
+# necessarily also finds, and any role missing enough to trip run_block's
+# 127 path is, by the same construction, missing enough to trip L1 first.
+# There is no longer a document shape that is both in-scope-and-lint-clean
+# AND missing a required role at runtime. The dispatch loop's own
+# rc-eq-127 handling (see run_block's header comment and the "pre-condition
+# block missing" branch below it) is kept as defense in depth — it is
+# still correct code, just no longer reachable from this CLI, by design.
 
 echo
 echo "== run-migration.sh: --host is required, no default =="
@@ -560,12 +533,28 @@ assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
   "nothing ran when --host was omitted"
 rm -rf "$tmp"; trap - EXIT
 
-# An unknown host name is not a default either — it propagates
-# lint-migration.sh's own exit code (65) and its own diagnostic, exactly like
-# the runner already mirrors lint's exit 66 for a missing document.
+# --host with no value at all (the flag is the last argument) is a usage
+# error too, and a CLEAN one — fix round 1's minor fix: this used to hit
+# bash's own "${2:?...}" expansion directly, producing a raw
+# "line N: 2: --host needs a value" message and exit 1, unlike every other
+# usage error's clean exit 64.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --host 2>&1)"
+assert_eq "$?" "64" "a bare --host with no value is a clean usage error, not a raw bash message"
+assert_contains "$out" "--host needs a value" "error names the missing value"
+assert_not_contains "$out" "line " "error is not a raw bash parameter-expansion message"
+rm -rf "$tmp"; trap - EXIT
+
+# An unknown host name is a usage problem with how THIS SCRIPT was invoked —
+# not a property of the document — so fix round 1 maps it to 64 (the same
+# usage-error code as the other bad-argument cases above), even though
+# lint-migration.sh's OWN internal contract calls this exit 65 ("bad
+# threshold/host") for itself. The runner's 65 is reserved exclusively for
+# document refusals (see the next section) and must not be muddied by a
+# caller's own typo.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(bash "$MR/run-migration.sh" --host nonexistent-host "$FIX/0016-conformant.md" "$tmp" 2>&1)"
-assert_eq "$?" "65" "an unknown --host value propagates lint's own exit code"
+assert_eq "$?" "64" "an unknown --host value is a usage error (64), not a document refusal (65)"
 assert_contains "$out" "nonexistent-host" "error names the unresolved host"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
   "nothing ran for an unresolvable host"
@@ -586,9 +575,16 @@ echo "== run-migration.sh: refuses a migration that would do nothing =="
 #   fixture.txt: applied
 # — a lint violation, fully executed, reported as success. The runner must
 # now lint first and refuse before any block runs at all.
+#
+# Exit code 65 (not a bare 1): fix round 1 reserves 65 for every
+# pre-execution refusal (lint violation, zero steps, no apply block, out of
+# scope) and leaves 1 for a failure once execution has begun, so a caller can
+# tell "refused, tree untouched" from "ran partway, tree may have changed"
+# by exit code alone. 0024-failing-check.md elsewhere in this suite still
+# exits 1 — it fails mid-dispatch, not at the pre-execution gate.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0017-bad-l1-missing-rollback.md" "$tmp" 2>&1)"
-assert_eq "$?" "1" "the runner refuses a migration that fails the linter"
+assert_eq "$?" "65" "the runner refuses a migration that fails the linter"
 assert_contains "$out" "L1" "the runner's output includes the linter's own violation"
 assert_contains "$out" "rollback" "the violation names the missing role"
 assert_contains "$out" "does not satisfy the executable format" \
@@ -614,7 +610,7 @@ rm -rf "$tmp"; trap - EXIT
 # is empty, and the accident above cannot fire at all).
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0035-all-illustration.md" "$tmp" 2>&1)"
-assert_eq "$?" "1" "the runner refuses an all-illustration migration"
+assert_eq "$?" "65" "the runner refuses an all-illustration migration"
 assert_not_contains "$out" "step 1: applied" "the runner does not report success"
 assert_contains "$out" "L1: step 1: missing required role 'check'" \
   "the linter names the missing check role"
@@ -641,7 +637,7 @@ rm -rf "$tmp"; trap - EXIT
 # fixture) — only the runner's own zero-steps refusal closes this one.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0039-zero-steps.md" "$tmp" 2>&1)"
-assert_eq "$?" "1" "the runner refuses a zero-step migration"
+assert_eq "$?" "65" "the runner refuses a zero-step migration"
 assert_contains "$out" "declares no steps" "the runner names the zero-steps problem"
 rm -rf "$tmp"; trap - EXIT
 
@@ -658,11 +654,73 @@ rm -rf "$tmp"; trap - EXIT
 # silent-no-op outcome from the operator's point of view.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0038-zero-apply-step.md" "$tmp" 2>&1)"
-assert_eq "$?" "1" "the runner refuses a step whose apply block is empty"
+assert_eq "$?" "65" "the runner refuses a step whose apply block is empty"
 assert_not_contains "$out" "step 1: applied" "the runner does not report success"
 assert_contains "$out" "step 1 has no apply block" "the runner names the empty apply block"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
   "nothing was written by the empty apply block"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: a runner executes only migrations the linter judged =="
+
+# FIX ROUND 1, Important 1. The linter's silence on a below-threshold,
+# non-opted-in document means NOT EXAMINED, not EXAMINED AND FOUND
+# WELL-FORMED — lint-migration.sh exits 0 in both cases. Before this fix, the
+# runner treated "lint exited 0" as "approved," so renaming ANY migration —
+# however malformed — to a low-numbered filename made the format gate
+# evaporate at run time. Confirmed against the round-0 (this group's first
+# submission) runner, committed at 647ca93, using
+# 0004-belowthreshold-no-rollback.md (below every host's threshold, no
+# migration_format declared, every role real and tagged EXCEPT rollback,
+# which is missing outright):
+#   step 1: applied
+#   rc=0
+#   fixture.txt: applied
+# — exactly the same shape as the reviewer's own verification
+# (0003-no-rollback.md, same defect). The fix asks lint-migration.sh's own
+# scope computation directly (--scope-only), rather than duplicating the
+# ID/threshold rule here, and refuses before the linter's structural rules —
+# let alone the dispatch loop — ever run.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0004-belowthreshold-no-rollback.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "the runner refuses a below-threshold migration the linter never examined"
+assert_not_contains "$out" "step 1: applied" "the runner does not report success"
+assert_contains "$out" "out of scope" "the runner names it as out of scope, distinctly from a format violation"
+assert_not_contains "$out" "L1" "no structural lint rule ever ran against an unexamined document"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
+  "no block of the unexamined migration ever ran"
+rm -rf "$tmp"; trap - EXIT
+
+# The other side of the same requirement: opting in below the threshold adds
+# a migration to scope and it runs normally — opting in can only ever ADD
+# scope, never remove it, so this must not be refused.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0006-belowthreshold-optin-conformant.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "an opted-in below-threshold migration that satisfies the format runs normally"
+assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "applied" \
+  "the opted-in below-threshold migration actually applied"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== run-migration.sh: refusal is distinguishable from failure by exit code =="
+
+# FIX ROUND 1, Important 2. Every pre-execution refusal above (lint
+# violation, zero steps, no apply block, out of scope) shares exit 65 with
+# the working tree guaranteed untouched. A failure once execution has begun
+# is a different code (1) precisely because the tree may already have
+# changed — a CI caller needs to tell these apart without parsing stderr.
+# 0024-failing-check.md's step 1 check exits 2 (can't tell if it's already
+# applied), which is a MID-DISPATCH failure, not a pre-execution refusal:
+# the document itself is lint-clean and well-scoped, so it reaches the
+# dispatch loop before failing.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0017-bad-l1-missing-rollback.md" "$tmp" 2>&1)"
+refusal_rc="$?"
+out2="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0024-failing-check.md" "$tmp" 2>&1)"
+failure_rc="$?"
+assert_eq "$refusal_rc" "65" "a pre-execution refusal (lint violation) is exit 65"
+assert_eq "$failure_rc" "1" "a mid-dispatch failure (check could not run) is exit 1, not 65"
 rm -rf "$tmp"; trap - EXIT
 
 echo

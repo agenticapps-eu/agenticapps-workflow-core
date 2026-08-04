@@ -141,6 +141,53 @@ security-relevant one.
 - **THEN** the runner SHALL exit non-zero
 - **AND** SHALL NOT report success
 
+### Requirement: A runner executes only migrations the linter judged
+
+A runner SHALL refuse to execute a migration that the format linter declined to
+judge — that is, one below its host's threshold that does not opt in. Refusal
+SHALL be reported as out of scope, distinctly from a format violation.
+
+Otherwise the format gate evaporates on rename. A migration numbered below the
+threshold is skipped by the linter and exits 0 clean, so a runner that treats
+"the linter did not object" as "the linter approved" will execute a document
+with no rollback block, no pre-condition, or no steps at all. The linter's
+silence there means *not examined*, not *examined and found well-formed*, and a
+runner must not confuse the two.
+
+This also matches what below-threshold means: those migrations are frozen
+history that nothing should replay. A runner asked to apply one is being asked
+to do something the design has already ruled out.
+
+#### Scenario: A below-threshold migration is refused rather than run unjudged
+- **WHEN** a runner is given a migration whose filename ID is below the host's threshold
+- **AND** that migration declares no `migration_format`
+- **THEN** the runner SHALL exit non-zero reporting it as out of scope
+- **AND** SHALL NOT execute any block
+
+#### Scenario: An opted-in migration below the threshold is runnable
+- **WHEN** a below-threshold migration declares `migration_format: executable` and satisfies the format
+- **THEN** the runner SHALL execute it normally
+
+### Requirement: Refusal is distinguishable from failure by exit code
+
+A runner SHALL use a distinct exit code for every refusal that happens before
+any block executes, and SHALL reserve other non-zero codes for failures that
+occur once execution has begun.
+
+A caller — a CI job especially — needs to tell "refused, nothing ran, the tree
+is untouched" from "ran partway, the tree may have changed" without parsing
+stderr. Collapsing both into exit 1 makes the safe outcome and the dangerous one
+indistinguishable at exactly the moment the distinction matters most.
+
+#### Scenario: Pre-execution refusals share one code
+- **WHEN** a runner refuses because of a lint violation, a zero-step document, a step with no apply block, or an out-of-scope migration
+- **THEN** it SHALL exit with the same reserved refusal code in every case
+- **AND** the working tree SHALL be unchanged
+
+#### Scenario: A runtime failure is a different code
+- **WHEN** a step's `apply` fails after earlier steps applied
+- **THEN** the runner SHALL exit with a code distinct from the refusal code
+
 ### Requirement: An ID threshold scopes which migrations must be executable
 
 The format linter SHALL determine a migration's ID from its **filename**, and
