@@ -149,11 +149,22 @@ Worth keeping as a method note: **absence of evidence on the only surface you
 can observe is not evidence of absence on the surfaces you cannot.** The
 original text got this right in its caveat and wrong in its conclusion.
 
-#### A defect this settled probe exposed
+#### A defect this settled probe exposed — FIXED at shim-contract 1.2.0
 
-The report is rate-limited to once per hour per hook per machine. **The exit
-code is not.** So the first unresolved call that hour reports properly, and
-every subsequent one exits 1 with empty stderr, which the host renders as:
+**Fixed.** A suppressed call now emits one line — naming the hook, the unchanged
+state, that the call was allowed, and that the full notice was already made this
+hour — and keeps its non-blocking exit code. The rate limit governs verbosity,
+which is the only thing it can govern: the exit code interrupts regardless. The
+rule generalises beyond this instance and is now normative — a shim never exits
+non-zero having written nothing, so whatever suppresses a report must also be
+asked what the exit code should be.
+
+What follows is the defect as found, kept because the reasoning is what argued
+the fix.
+
+The report was rate-limited to once per hour per hook per machine. **The exit
+code was not.** So the first unresolved call that hour reported properly, and
+every subsequent one exited 1 with empty stderr, which the host renders as:
 
 ```
 PreToolUse:Bash hook error
@@ -169,10 +180,12 @@ reporting every time is the alarm fatigue this directory rejects elsewhere — b
 a *contentless* alarm fires exactly as often as the message would have and tells
 the operator nothing at all, which is worse than the repetition it was adopted
 to prevent. **If it is worth exiting non-zero, it is worth saying why; if it is
-not worth saying, it should exit 0.** Rate-limiting the exit code alongside the
-message, or reporting a one-line "still unresolved, see earlier notice", would
-both resolve it. Not fixed here — recorded so the fix is argued rather than
-assumed.
+not worth saying, it should exit 0.**
+
+Of the two remedies named here, the second was taken. Exiting 0 when suppressed
+would have delivered the interval policy's intent and made every remaining call
+that hour an *unannounced* fail-open — silent protection loss, which is the
+posture this directory rejected when it rejected fail-closed.
 
 #### The original headless run, retained for provenance
 
@@ -569,6 +582,19 @@ documented opt-out.
 
 Measured on this machine, 2026-08-02, across all seven repos.
 
+> **Corrected the same day, by the instrument.** The note below counted three
+> repos in one family, because one family is what was looked at.
+> `project-hook-conformance.sh --fleet ~/Sourcecode` reads the declared set and
+> reports **five** repos carrying unmarked inlined copies of **all three**
+> shimmed hooks — `agenticapps-roadmap`, `agents-task-viewer`, `callbot`,
+> `fbc-platform`, `fx-signal-agent` — across two families. Only
+> `agenticapps-dashboard` and `cparx` bind through contract shims.
+>
+> The count came from the repos the author happened to open rather than from
+> `FLEET`, which is the failure `FLEET` was written to prevent: a binder missing
+> from an ad-hoc list is indistinguishable from one that passed. The paragraph is
+> kept rather than rewritten, because the correction is the point.
+>
 > **Re-measured 2026-08-04: the reconciliation has not propagated.** Of the four
 > repos in the `agenticapps` family that bind `database-sentinel`, only
 > `agenticapps-dashboard` binds it through a shim. The other three —
