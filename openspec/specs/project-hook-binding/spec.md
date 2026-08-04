@@ -550,34 +550,40 @@ Two consequences are normative:
   separate things, and they SHALL be stated separately:
 
   - a **policy**: a project SHALL NOT set any shim's override variable; and
-  - a **detection**: a conformance check reports violations against the
-    repository.
+  - a **detection**: the setting is visible in the repository's own tracked
+    files, so it is found by reading them.
 
   Between them lies a window in which the value is live and unreported, and this
   capability SHALL NOT be read as closing it. Detection is what is on offer.
 
-  The detection is specified as follows:
+  **No automated scan is required, and one SHALL NOT be inferred from this
+  sentence.** A scan was built, run across all seven repositories, and retired.
+  It found no vector in any of them. What retired it was not its result but its
+  cost: the instrument reached six times the size of the contract it measured,
+  and every reading of its output produced another defect in the instrument
+  rather than in the fleet. A capability that mandates measurement gets the
+  measurement it mandates, so this one stops mandating it and states what a
+  reviewer should look for instead:
 
-  - A conformance check SHALL scan every project for repository content that sets
-    any shim's override variable, or instructs an operator to set it. The
-    `.claude/settings.json` `env` block (and any settings file the host merges) is
-    the vector the host injects directly, and it is **not** the only one. The scan
-    SHALL also cover repository-shipped environment files (`.envrc` and
+  - The vectors are `.claude/settings.json`'s `env` block (and any settings file
+    the host merges), repository-shipped environment files (`.envrc` and
     equivalents), bootstrap and setup scripts, task-runner definitions, and
-    documented setup instructions.
-  - **The scan is incomplete by construction and SHALL report itself as such.** A
-    reviewer noted that a repository can put the export in prose that a human then
-    runs, and the resulting process environment is byte-for-byte identical to one
-    the operator chose. Nothing distinguishes them, and no enumeration of file
-    types is closed. A green result SHALL be reported as *no known vector found*,
+    documented setup instructions. The first is the one the host injects
+    directly; it is not the only one.
+  - **Any detection is incomplete by construction and SHALL be described as
+    such.** A repository can put the export in prose that a human then runs, and
+    the resulting process environment is byte-for-byte identical to one the
+    operator chose. Nothing distinguishes them, and no enumeration of file types
+    is closed. A clean reading SHALL be reported as *no known vector found*,
     never as *no override is set*.
-  - The finding is reported against the **repository**, not suppressed at
+  - The concern is raised against the **repository**, not suppressed at
     runtime: the value still takes effect on a machine that has it, which is
     precisely why it must be visible in review rather than silently ignored.
-  - No project in the fleet sets `env` in `.claude/settings.json` today —
-    verified across all seven for **that vector only**. The wider scan above has
-    never been run, so its baseline is established by the task that implements
-    it rather than inherited from this sentence.
+  - As of 2026-08-04 no project in the fleet sets `env` in
+    `.claude/settings.json`, and the retired scan reported no known vector across
+    all seven for the wider set either. That is a dated observation about seven
+    checkouts on one machine, not a property of the fleet, and it SHALL NOT be
+    quoted as one.
 
   This is a weaker guarantee than the previous wording claimed, and the weakening
   is the point: the strong version was unenforceable, so it guaranteed nothing
@@ -599,18 +605,18 @@ conflicting, which they will be unless the distinction is stated.
 
 - **WHEN** a repository's own `.claude/settings.json` defines the override
   variable in its `env` block
-- **THEN** the conformance check reports that repository by name, because the
-  value **will** take effect at runtime — the shim cannot tell it apart from an
-  operator-exported variable, so the defence is detection in review, not
-  rejection at the tool boundary
+- **THEN** the value **will** take effect at runtime — the shim cannot tell it
+  apart from an operator-exported variable, so the defence is review of the
+  repository's own files, not rejection at the tool boundary
 
 #### Scenario: A repository sets the override outside the settings file
 
 - **WHEN** a repository ships an `.envrc`, a bootstrap script, or setup
   instructions that export a shim's override variable
-- **THEN** the scan covers those vectors too, and where the export reaches the
-  operator's shell by a route the scan cannot enumerate, the check reports **no
-  known vector found** rather than reporting the repository clean
+- **THEN** that violates the policy above and is raised against the repository,
+  and where the export reaches the operator's shell by a route no reading of the
+  repository can enumerate, a clean reading is reported as **no known vector
+  found** rather than as a repository that sets nothing
 
 #### Scenario: A repository points the override at code it ships
 
@@ -1889,73 +1895,4 @@ lie.
 - **WHEN** the effect of a once-per-interval policy is stated
 - **THEN** it is stated as a reduction in verbosity, not in how often the
   operator is interrupted, because the exit code is not subject to the interval
-
-### Requirement: An absent shim is a finding, not a silence
-
-A conformance check SHALL report a declared hook for which a project has **no
-shim file** as a finding. Skipping it produces the strongest false clearance the
-instrument can emit: a project that lost its shim, or never received one, scores
-identically to a project whose shim is current, and the total says zero.
-
-The marker and identity axes both read a file, so both are written to skip when
-the file is missing. That is a reasonable local decision and a wrong global one —
-the check's purpose is to report each project's state, and "no shim where one is
-declared" is a state, not the absence of one.
-
-**A deliberate non-binding SHALL be declared to be distinguishable from a
-missing one.** At least one project opts out of a shimmed hook on argued grounds
-and receives no file at all. Without a declaration the instrument cannot tell
-that project from one whose shim was deleted by accident, so it must either
-report both or neither — and reporting neither is what the previous behaviour
-chose. The declaration SHALL name the project, the hook and the reason, and an
-opt-out SHALL be reported as an opt-out rather than passed over in silence.
-
-#### Scenario: A declared hook has no shim in a project
-
-- **WHEN** the check reads a project that binds a shimmed hook and finds no shim
-  file
-- **THEN** it reports the absence by name, rather than skipping the file and
-  contributing nothing to the total
-
-#### Scenario: A project opts out of a shimmed hook
-
-- **WHEN** a project is declared as deliberately not binding a hook
-- **THEN** the check reports it as a declared opt-out with its reason, and the
-  same project's *undeclared* absence of any other shimmed hook is still a
-  finding
-
-### Requirement: The authority's own binder is scored, never assumed
-
-A fleet check that excludes the authority repository SHALL NOT be cited as
-evidence that the authority conforms. `--fleet` resolves the declared binders and
-deliberately omits core, because comparing the template against itself would
-score nothing — a correct exclusion that becomes a false clearance the moment a
-change reports "the fleet is clean" and means "every repo except the one holding
-the authority".
-
-A contract change SHALL therefore score the self-hosting binder explicitly, by
-naming it, and SHALL report its version and conformance beside the fleet's rather
-than inside a total that structurally cannot contain it.
-
-**This is not hypothetical.** At contract 1.1.0 the authority repo's own binder
-failed open by printing a warning to stderr and exiting **0** — the exact
-construction this capability names as warning nobody, since a `PreToolUse` hook
-exiting 0 has its stderr discarded. It sat in the repository that publishes the
-rule, and no run of the instrument could report it, because the instrument
-excludes core by design and the change that would have caught it accepted a
-fleet-wide zero as proof.
-
-#### Scenario: A contract change reports its propagation
-
-- **WHEN** a change states that every binder has been reached
-- **THEN** the self-hosting binder is named with its version and conformance
-  alongside the declared fleet, and a fleet-scoped zero is never presented as
-  covering it
-
-#### Scenario: The authority's binder violates a rule the authority publishes
-
-- **WHEN** the self-hosting binder is scored against the fail-open-and-report rule
-- **THEN** it is held to that rule exactly as a published-resolution shim is, its
-  exemption reaching only the resolution-order clauses, and a violation is a
-  finding rather than a profile difference
 

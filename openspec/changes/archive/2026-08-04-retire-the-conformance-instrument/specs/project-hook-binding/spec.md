@@ -305,6 +305,15 @@ conflicting, which they will be unless the distinction is stated.
   apart from an operator-exported variable, so the defence is review of the
   repository's own files, not rejection at the tool boundary
 
+#### Scenario: A repository sets the override outside the settings file
+
+- **WHEN** a repository ships an `.envrc`, a bootstrap script, or setup
+  instructions that export a shim's override variable
+- **THEN** that violates the policy above and is raised against the repository,
+  and where the export reaches the operator's shell by a route no reading of the
+  repository can enumerate, a clean reading is reported as **no known vector
+  found** rather than as a repository that sets nothing
+
 #### Scenario: A repository points the override at code it ships
 
 - **WHEN** the override names an executable file that exists — supplied by the
