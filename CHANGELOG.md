@@ -20,6 +20,57 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**Spec 1.5.0 → 1.6.0 — minor. New `spec/21-installer-prerequisites.md`: an
+installer asks before it changes software the workflow does not own.** Four
+host installers hold two incompatible answers to the same question.
+`codex-workflow` and `opencode-workflow` run `npm i -g @fission-ai/openspec`
+when the CLI is absent, with no prompt; `claude-workflow` and
+`pi-agentic-apps-workflow` print the command and never install. None of the
+four offers. Nobody decided that — it accumulated, the way the three
+unscoreable-target behaviours did before §20, and it gets the same remedy:
+state the contract, then score it.
+
+The boundary is **ownership, not location**. The test is whether a write could
+change software the operator did not install by running this installer. A
+global npm package could; `~/.agenticapps/bin/` could not, because nothing else
+on the machine uses it. A location rule would have condemned all four
+installers rather than the two with the defect, and would have put a prompt in
+front of the mechanism `docs/PLAN-lightweight-fleet.md` step 2 designates as
+the primary way core publishes an artifact.
+
+**Conformance impact — MUST-level, and every host shipping an installer is
+affected, though not all in the same way.** A host implementation must now:
+declare its prerequisites and report by name each one that is absent; report
+every file it writes into a directory this workflow owns; obtain explicit
+acceptance before an install that crosses the ownership boundary, printing the
+command first; read that acceptance from the terminal, treating only `y`/`yes`
+as acceptance and empty, unrecognised and EOF input as declining; ask once per
+install command rather than once per run; detect a non-interactive run by
+standard input not being a terminal, and in that case report and stop rather
+than installing or assuming satisfied; accept
+`AGENTICAPPS_INSTALL_PREREQS=1` and `--install-prereqs` if it can install
+anything, and never read their absence as acceptance; treat an out-of-date
+prerequisite as an install requiring the same acceptance; redact credentials
+from any command it prints; name every step it skipped and exit non-zero when
+one was; and leave in place, while reporting, any prerequisite installed on the
+operator's behalf when the workflow is removed.
+
+**Offering is SHOULD, and that is the load-bearing exception.** An installer
+that only detects and instructs is conformant. What the section forbids is
+installing without asking, not declining to install at all — so
+`claude-workflow` and `pi-agentic-apps-workflow` already satisfy the consent
+requirement and gain only the reporting obligation on their
+`~/.agenticapps/bin/` write.
+
+**Two hosts are non-conformant today**, and plainly: `codex-workflow` and
+`opencode-workflow` both reach an unguarded `npm i -g`. Both describe that
+behaviour as deliberate in their own comments, so it should be reverted
+deliberately rather than quietly. Their capability is preserved exactly — it
+becomes what the opt-in does. This change edits no host repo; nothing breaks
+until a host adopts, and adoption is that host's own change. Scored by
+`tools/installer-prereq-conformance.sh`, which is subject to §20 and reports
+statically undecidable rows as inconclusive rather than passing.
+
 **`spec/12-authoring-conventions.md` 0.10.0 → 0.11.0 — minor. `AGENTS.md`
 carries one host-neutral workflow section, whatever the agent count.** §12
 gains a "Shared instruction files across hosts" subsection. Each host's setup

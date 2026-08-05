@@ -179,8 +179,22 @@ done
 
 # ── writes ──────────────────────────────────────────────────────────────────
 WRITE_VERB='(mkdir|cp|install|ln|mv|tee|chmod|touch|rm|cat[[:space:]]+[^|]*>)'
-OWNED_WRITES="$(grep -nE "$WRITE_VERB" "$RAW" | grep -E '\.agenticapps' || true)"
-OWNED_REPORTS="$(grep -nE '(echo|printf)' "$RAW" | grep -E '\.agenticapps' || true)"
+# The workflow's own directory is almost never written through its literal
+# path. Every installer in the fleet binds it once — `AA_BIN`, `AGENTICAPPS_BIN`
+# — and writes through the variable thereafter. Matching only the literal finds
+# the write in one installer out of four and reports the rest as having nothing
+# to judge, which is the harness declining to look while sounding like it
+# looked. So: resolve any variable bound to an .agenticapps path, then treat a
+# write or a report through that variable as a write or a report.
+OWNED_VARS="$(grep -oE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*\.agenticapps' "$RAW" \
+  | sed 's/=.*//' | tr -d ' \t' | sort -u || true)"
+OWNED_PAT='\.agenticapps'
+for v in $OWNED_VARS; do
+  OWNED_PAT="${OWNED_PAT}|[\$][{]?${v}"
+done
+
+OWNED_WRITES="$(grep -nE "$WRITE_VERB" "$RAW" | grep -E "$OWNED_PAT" || true)"
+OWNED_REPORTS="$(grep -nE '(echo|printf)' "$RAW" | grep -E "$OWNED_PAT" || true)"
 # Provisioning destinations. The host-shaped directories are the obvious half;
 # the second half is a write into a RESOLVED destination — `$HOOKS_DIR`,
 # `$DEST`, `$TARGET_ROOT`. Core's own `install-core-git-hooks.sh` provisions
@@ -234,7 +248,12 @@ else
        printf '%s\n' "$before" | grep -qE "$GUARD_OPTIN"; then
       :
     else
-      cmd="$(sed -n "${ln}p" "$CODE" | sed 's/^[0-9]*|//' | grep -oE "$GLOBAL_INSTALL" | head -1)"
+      # The whole line, not just the matched pattern. §21 requires the check to
+      # name the command; `npm i -g` with the package sheared off names the
+      # pattern that matched, and leaves the operator to go and find what it
+      # was actually going to install.
+      cmd="$(sed -n "${ln}p" "$CODE" | sed 's/^[0-9]*|//;s/^[[:space:]]*//;s/[[:space:]]*$//' \
+        | LC_ALL=C tr -c '[:print:]' '?' | cut -c1-120)"
       unguarded="$unguarded
   line $src: $cmd"
     fi

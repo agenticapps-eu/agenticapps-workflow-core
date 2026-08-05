@@ -325,6 +325,33 @@ fx notaninstaller <<'EOF'
 echo "hello"
 EOF
 
+# The real fleet reaches ~/.agenticapps/bin/ through a variable — `AA_BIN` in
+# claude-workflow and codex-workflow, `AGENTICAPPS_BIN` in pi. A detector
+# grepping for the literal path finds the write in one installer out of four
+# and reports the other three as having nothing to judge. That is a false
+# "inconclusive" on the row the ownership boundary turns on, which is worse
+# than a false FAIL: it is the harness quietly declining to look.
+fx indirect <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+AA_BIN="$HOME/.agenticapps/bin"
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec — validation will not run."
+mkdir -p "$AA_BIN"
+cp gate.sh "$AA_BIN/openspec-change-gate.sh"
+EOF
+
+fx indirectreports <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+AA_BIN="$HOME/.agenticapps/bin"
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec — validation will not run."
+mkdir -p "$AA_BIN"
+cp gate.sh "$AA_BIN/openspec-change-gate.sh"
+echo "wrote $AA_BIN/openspec-change-gate.sh"
+EOF
+
 # A command substitution inside a string is CODE, and the quote strip must not
 # take it with the string. If it does, the harness cannot see an install
 # performed as `out="$(npm install -g pkg)"` — which is the consent row, its
@@ -379,6 +406,8 @@ REMOVER="$WORK/remover.sh"
 NOTANINSTALLER="$WORK/notaninstaller.sh"
 HOOKISH="$WORK/hookish.sh"
 SUBSTITUTED="$WORK/substituted.sh"
+INDIRECT="$WORK/indirect.sh"
+INDIRECTREPORTS="$WORK/indirectreports.sh"
 
 echo "═══ installer-prereq-conformance.test.sh"
 echo
@@ -453,6 +482,10 @@ if selected "fleet"; then
   want_row  "codexish: the unguarded npm i -g is the finding" "consent-guard" "FAIL"
   want_out  "codexish names the command it caught" "npm i -g"
   want_out  "codexish names the line" "line [0-9]+"
+  # §21 requires the check to name the installer AND the command. A bare
+  # `npm i -g` with the package sheared off names the pattern that matched,
+  # not the command the operator has to go and look at.
+  want_out  "codexish names WHAT would be installed" "@fission-ai/openspec"
   want_row  "codexish: no interactive path either" "non-interactive" "FAIL"
   want_row  "codexish: opt-in absent"              "opt-in"          "FAIL"
   want_row  "codexish: but its prerequisites ARE declared" "prereq-detection" "PASS"
@@ -478,6 +511,15 @@ if selected "fleet"; then
   run "$REPOLOCAL"
   want_code "repolocal exits clean" 0
   want_row  "repolocal: repo writes need no prompt" "consent-guard" "PASS"
+
+  # The fleet's actual idiom: the path lives in a variable.
+  run "$INDIRECT"
+  want_row  "indirect: an owned write through a variable is still seen" "owned-writes-reported" "FAIL"
+  want_code "and makes the run red" 1
+
+  run "$INDIRECTREPORTS"
+  want_row  "indirectreports: reported through the same variable" "owned-writes-reported" "PASS"
+  want_code "and exits clean" 0
   echo
 fi
 

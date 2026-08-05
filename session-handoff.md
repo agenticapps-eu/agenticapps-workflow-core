@@ -1,98 +1,98 @@
-# Session Handoff — 2026-08-05
+# Session Handoff — 2026-08-05 (second session)
 
 ## Accomplished
 
-**Three branches, two of them finished and green.**
+**Everything opened this session is merged. Three PRs, all on `main`.**
 
-`factiv/cparx` PR #125 — removed both vestigial host installs. `.opencode/`
-had a tracked config and a `0.5.0` stamp but no skills; `.codex/` had the same
-two files and was never committed. Both marker-delimited blocks stripped from
-`AGENTS.md` (285 → 93 lines), leaving the coding-discipline preamble and the
-observability block. All six CI jobs pass; CodeRabbit reviewed it for real, no
-findings. **Those were the last two stale `0.5.0` stamps in the fleet.**
+| PR | What | Commit |
+|---|---|---|
+| #79 | §12 0.10.0 → 0.11.0 + conformance harness + 77-assertion suite | `5d74f3e` |
+| #80 | `installer-prerequisite-consent` proposed (Part 2a) | `50f6686` |
+| #81 | Archive fold — 13 requirements into two durable specs | `f7efcaa` |
 
-`agenticapps-workflow-core` PR #78 (executable migration format) — was red,
-now green. The four CI failures were one bug: seven rollback blocks used
-`sed -i '' 'script' file`, the BSD spelling where the backup suffix is a
-separate argument. GNU sed reads `''` as the script and the sed expression as a
-filename. `spec/08-migration-format.md`'s own worked example had the
-mirror-image bug — bare `sed -i`, which BSD rejects — so the one example the
-format teaches from would have failed on every macOS, and CI (Linux) could
-never have caught it. All now use `sed -i.bak … && rm -f …bak`.
+`openspec/specs/` gained `host-neutral-instruction-files` (7 requirements) and
+`agent-lifecycle-management` (6). `openspec validate --all` 8/8, harness suite
+77/77, `spec-placement.test.sh` clean.
 
-Then two follow-on fixes on the same PR: `tree_snapshot` preflights `shasum`
-and exits 2 rather than returning an empty snapshot on a box without Perl
-(which made seventeen rollback assertions fail while blaming the fixtures), and
-a new **L11** lint rule rejects non-portable `sed -i`. 567 → 587 assertions,
-green under bash 3.2 + BSD sed and bash 5 + GNU sed 4.9 in a container.
+**One round of plan review on #79 and #80. Six reviewers, six
+REQUEST-CHANGES** — and they were right. Most findings were contradictions the
+changes shipped with, not scope the reviewers wanted added. All addressed
+before merge.
 
-`feat/host-neutral-agents-md` — new OpenSpec change proposed, all four
-artifacts written and reconciled, `openspec validate --all` green, pushed. **No
-PR opened; nothing implemented yet.**
+The two that mattered:
+
+- **#79 had no repair path for stale content.** Adding an agent is a no-op once
+  present, and byte-identical *forbade* a later host rewriting the section — so
+  a repo provisioned from a GSD-citing template would cite GSD forever. The
+  change diagnoses template drift and its own mechanism made drift permanent.
+  Fixed: the section carries a content version and a newer host offers an update.
+- **#80's central claim was false on its own rule.** It said two installers were
+  non-conformant. The delta drew the consent boundary at "outside the target
+  repository", and all four write `~/.agenticapps/bin/` unconditionally
+  (verified: claude:149, codex:211, opencode:329, pi:148) — so it condemned all
+  four and put a prompt in front of `PLAN-lightweight-fleet` step 2's publishing
+  mechanism. Boundary rewritten to **ownership, not location**.
+
+Also fixed on #79: removal contradicted itself three ways; the marker literal
+existed only in prose so no host could implement from the spec; provisioning
+couldn't converge from a half-installed state; the denylist was normative with
+contents deferred; the proposal said duplicates "collapse" while the delta
+forbade it; a report was required to name a host the file records no provenance
+for.
 
 ## Decisions
 
-- **A duplicate `AGENTS.md` section is reported, never auto-collapsed.** The
-  cparx pair had drifted, so merging means choosing between `gsd-execute-plan`
-  and `gsd-execute-phase` — and both were wrong, since GSD was deleted
-  2026-07-28. A tool that picked silently would ship a dead reference with the
-  authority of having been fixed.
-- **A link per agent is the only host-specific content in `AGENTS.md`**
-  (Donald). This *replaced* a rule already written — "the shared file is
-  touched only at the boundaries" — which was wrong in an interesting way: it
-  protected the file by making agents invisible in it, so nothing recorded
-  which agents were installed and removal had no per-agent handle to pull.
-- **The host-neutral section survives the last agent leaving** (Donald).
-  Symmetry is the wrong goal; a repo briefly without an agent would lose
-  documentation it is about to want back.
-- **A host identifier inside the section warns, does not fail** (Donald), and
-  **the links are exempt** — a correctness condition, not a nicety, since a
-  check that flagged them would fire on the one thing the spec permits.
-- **`CLAUDE.md` is out of scope entirely** (Donald). Claude is its only reader,
-  so there is nothing to deduplicate and claude-workflow's lack of a marker
-  convention is not a defect.
-- **Core binds this with a conformance harness, not an implementation** — it
-  cannot provision an agent into a repo it does not own, and the templates that
-  write these blocks live in `codex-workflow` and `pi-agentic-apps-workflow`.
+- **Consent boundary is ownership.** Could this write change software the
+  operator did not install by running this installer? `~/.agenticapps/bin/`
+  cannot — reported, not prompted. `npm i -g` can — acceptance required.
+- **A system runtime is never offered** (Donald: "not thinking of npm"). `npm`,
+  `node`, `git`, host CLIs — detect and instruct only. What may be offered is a
+  package installed *through* a runtime already present. Closed #80 task 1.2.
+- **Multi-agent is permanent** (Donald). Step 4 removed as a gating question
+  from both changes: only *which* hosts is open. Saved to memory.
+- **Links are a frontmatter list carrying paths** (Donald, over a per-agent
+  marker pair). Frontmatter sits outside the markers, making the link exemption
+  structural rather than a special case.
+- **Host *names* warn, host *paths* fail.**
+- **`installer-prerequisite-consent` deliberately NOT archived** — proposal
+  only; folding its delta would assert a capability nothing implements.
 
 ## Files modified
 
-- `factiv/cparx`: `AGENTS.md` (-190), `.opencode/workflow-{config.md,version.txt}`
-  deleted, `.codex/` removed. A backup of the untracked `.codex/` (it held a
-  real 2026-07-28 review record) exists in that session's scratchpad only.
-- `reference-implementations/migration-runner/lint-migration.sh` — L11 added
-- `reference-implementations/migration-runner/README.md` — L0–L11, L11 rationale
-- `reference-implementations/migration-runner/test-fixtures/` — 7 sed fixes, 6 files
-- `spec/08-migration-format.md` — the worked example's `sed -i`
-- `tools/migration-runner.test.sh` — preflight + L11 section (587 assertions)
-- `openspec/changes/host-neutral-agents-md/` — proposal, design, 2 specs, tasks
+All merged to `main`:
+
+- `spec/12-authoring-conventions.md` — 0.11.0, new subsection
+- `CHANGELOG.md` — the 0.11.0 entry
+- `tools/agents-md-conformance.sh`, `tools/agents-md-conformance.test.sh` — new
+- `.github/workflows/openspec-gate.yml` — two steps
+- `openspec/specs/{host-neutral-instruction-files,agent-lifecycle-management}/` — new
+- `openspec/changes/archive/2026-08-05-host-neutral-agents-md/` — archived
+- `openspec/changes/installer-prerequisite-consent/` — active, proposal only
 
 ## Next session: start here
 
-**Run `/opsx:apply` on `host-neutral-agents-md`.** You are already on branch
-`feat/host-neutral-agents-md`, off main, artifacts complete and validated.
-Task group 1 is the three decisions above, already marked `[x]` — carry them,
-do not re-litigate. Start at **2.5**, which settles the link's shape (markdown
-link under a fixed heading / marker-delimited block / frontmatter list),
-because tasks 3.3 and 4.8 both write spec text that depends on it. Before that,
-2.2 and 2.3 need the GSD references and the drifted step names resolved against
-what the workflow does today — neither cparx block can be the basis for
-canonical text, since both cite a deleted system.
-
-Both other PRs are green and mergeable, and nothing here is blocked on them:
-core #78 and cparx #125.
+**`/opsx:apply` on `installer-prerequisite-consent`** — the only active change.
+Its blocking questions are answered (ownership boundary, opt-in flag name,
+runtimes never offered), so start at task group 2: write
+`spec/NN-installer-prerequisites.md`, assigning the section number first. Task
+1.5 is still open but does not block — what happens to a prerequisite installed
+on the operator's behalf when the workflow is removed.
 
 ## Open questions
 
-- **The link's shape** — task 2.5, blocks the spec text.
-- **The host-identifier denylist has no source.** It needs a list and a rule
-  for a new host not on it, which is the case where the warning is most useful
-  and least likely to fire.
-- **CodeRabbit has still never reviewed core #78.** It reports `pass` with
-  "Review rate limited" — the state is not the review. cparx #125 got a real one.
-- **`sed -i` portability was invisible to every reviewer, in both directions**,
-  because each spelling reads correct to whoever shares the author's sed. L11
-  closes it for migrations; nothing checks the rest of the tree.
-- **`.planning/skill-observations/*` is still being written into these repos**
-  despite the global rule that `.planning/` is frozen. Unchanged across three
-  handoffs now. Worth finding the writer or gitignoring it.
+- **CodeRabbit has reviewed none of these PRs.** All three showed a green check;
+  #81's body reads "Review limit reached — we couldn't start this review", and
+  #79/#80 were PENDING at merge. The state is not the review.
+- **The plan reviews predate the merged text.** Both `REVIEWS.md` record 3/3
+  REQUEST-CHANGES against versions since rewritten in response. That is the
+  honest state of one round plus fixes — the reviewers never saw the corrected
+  specs, including #80's ownership boundary, which their sharpest finding forced.
+- **Concurrent provisioning** is an accepted limit in
+  `host-neutral-instruction-files`.
+- **Nothing verifies a linked file is actually read** — the harness can check a
+  link resolves, not that a runtime dereferences it.
+- **The producer/consumer asymmetry is still unowned.** The section version
+  repairs stale *section* prose; nothing checks a correction applied to
+  consumers reaches the producer template.
+- **`.planning/skill-observations/*` is still being written** despite the freeze
+  rule. Unchanged across four handoffs.

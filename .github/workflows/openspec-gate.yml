@@ -185,6 +185,29 @@ jobs:
             echo "      CLAUDE.md is out of scope per spec §12 and is deliberately not substituted."
           fi
 
+      - name: Test the installer-prerequisite harness, both directions
+        # §21 scores host installers, which live in four other repos and write
+        # to the operator's machine — the very act under discussion — so core
+        # cannot run them. Fixtures are therefore the only place this harness
+        # is ever exercised, and four of them reproduce the shapes actually on
+        # disk: the unguarded `npm i -g`, the detect-and-instruct pair, the
+        # `~/.agenticapps/bin/`-only write, and the repo-local write.
+        #
+        # Both directions on every push. A harness that fails everything is as
+        # useless as one that passes everything, and pointing it only at the
+        # broken shape would catch just the first.
+        run: bash tools/installer-prereq-conformance.test.sh
+
+      - name: Score core's own installer against §21
+        # Core owns exactly one installer, and unlike the four host ones it is
+        # core's to score. Shipping a contract core itself violates is a
+        # failure this repo has already had, so the check runs here rather than
+        # on a promise to remember.
+        #
+        # Not `if [ -f ]`-guarded: this file is core's, so its absence is a
+        # defect and must fail rather than skip into a green run.
+        run: bash tools/installer-prereq-conformance.sh tools/install-core-git-hooks.sh
+
       - name: Run the change gate
         # exit 0 = every active change validates (review NOTEs may still print);
         # exit 1 = `openspec validate --all` is red, or the openspec CLI is

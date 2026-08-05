@@ -117,6 +117,20 @@ four defaults — the divergence this contract exists to remove, reintroduced on
 level down. Defaulting to no is the direction that fails safe: a declined
 install is recoverable by re-running, an unwanted global install is not.
 
+**Removal is not the mirror of installation — nothing installed on the
+operator's behalf is taken away.** The ownership test runs in both directions.
+A global package the operator accepted may, by the time the workflow is
+removed, be resolved by projects this workflow never touched; uninstalling it
+would change software the workflow does not own, which is the act consent
+exists to prevent. So the uninstaller leaves it and reports what it left,
+naming the command that removes it — the same reporting obligation that keeps
+the `~/.agenticapps/bin/` exemption from making a write invisible.
+
+*Alternative considered:* offer to remove it, with the same prompt shape as the
+install. Symmetric, and rejected on the same grounds the blanket prompt was: it
+asks about the outcome the operator almost always wants, and buys that symmetry
+with a second consent surface to state, to implement four times, and to score.
+
 **Core binds this with a conformance harness, not by editing the installers.**
 The established shape, and the same reasoning as `host-neutral-agents-md`: core
 cannot land a coordinated four-repo change without the PR train
@@ -210,7 +224,6 @@ Remaining, and genuinely open:
   the harness does not recognise, or reach the install through an indirection.
   Rows that cannot be decided report inconclusive, so this bounds what the
   harness can claim rather than what the contract requires.
-- **Whether the same rule should govern uninstall.** Nothing here says what
-  happens to a prerequisite installed on the operator's behalf when the workflow
-  is removed. Leaving it installed is probably right — other things may now
-  depend on it — but it is unstated.
+Uninstall was on this list and is now answered under Decisions: a prerequisite
+installed on the operator's behalf is never removed automatically, and what is
+left behind is reported.

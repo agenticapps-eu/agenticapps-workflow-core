@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.5.0
+spec_version: 1.6.0
 ---
 
 # 00 — Overview
@@ -65,10 +65,11 @@ contracts in their own idiom.
 - Sections 01, 03, 04, 05, 11 are **canonical prose** — host
   implementations reproduce these blocks verbatim. Substitution is
   permitted only inside `{{...}}` placeholders.
-- Sections 02, 06, 07, 08, 10, 12, 13, 14, 15, 16, 17, 18, 19 are
+- Sections 02, 06, 07, 08, 10, 12, 13, 14, 16, 17, 18, 19, 21 are
   **declarative contracts** — host implementations satisfy the listed
   MUST / SHOULD / MAY requirements in whatever idiom is natural for the
-  host runtime.
+  host runtime. (Section 15 was on this list until it was retired at
+  v1.2.0; see below.)
 - Sections 16–19 are the **OpenSpec front end** (spec v1.0.0). A host
   citing 1.0.0 or later implements them; §02 and §07 are remapped onto
   the OpenSpec lifecycle for those hosts and remain as written for hosts
@@ -129,7 +130,18 @@ non-conformant one. The grounds are measured and recorded in the
 CHANGELOG's gate 2.0.0 entry: blocking cost three rollbacks and a
 six-repository outage on 2026-07-30, and prevented nothing identifiable,
 because third-party reviewer CLIs failed for reasons unrelated to change
-quality. Hosts may claim
+quality. Spec **v1.6.0** adds section 21 (installer prerequisites and
+consent) as an additive minor section. Four host installers had two
+incompatible answers to "may this install software on my machine" — two
+run `npm i -g` unprompted, two only instruct — and none of them offers.
+§21 states the one answer: an installer declares its prerequisites,
+reports what is missing, and obtains explicit acceptance before any write
+that could change software the operator did not install by running it.
+The boundary is **ownership, not location**, which is what keeps the
+contract aimed at the two genuinely unconsented installs rather than at
+all four hosts' `~/.agenticapps/bin/` write. Offering is SHOULD, so a
+detect-and-instruct installer stays conformant; installing without asking
+is what the section forbids. Hosts may claim
 conformance against any
 of those versions; the version the host claims is the version the host's
 `implements_spec` field names.
