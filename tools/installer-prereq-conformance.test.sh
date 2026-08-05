@@ -392,6 +392,155 @@ write_hook || exit 1
 printf 'installed: %s\n' "$HOOKS_DIR/pre-commit"
 EOF
 
+# ── fixtures for what the harness can READ ──────────────────────────────────
+# Every one of these was green before the reader was fixed, and every one of
+# them is an installer the contract has something to say about. They are here
+# because a detector that is wrong in the quiet direction looks exactly like a
+# detector that is right.
+
+# One gated site, one ungated site added later. THE shape adoption produces:
+# nobody rewrites an installer in a single pass, so the second prerequisite
+# arrives in its own block months after the first was done properly. While the
+# guard search was "does `read` appear earlier in the file", the first correct
+# gate satisfied every site below it for the rest of the file's life — the row
+# going green exactly as the fleet began adopting §21, and never failing again.
+fx halfadopted <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+INSTALL_PREREQS="${AGENTICAPPS_INSTALL_PREREQS:-0}"
+case "${1:-}" in --install-prereqs) INSTALL_PREREQS=1 ;; esac
+have() { command -v "$1" >/dev/null 2>&1; }
+have npm || { echo "npm required — install Node.js"; exit 1; }
+if ! have openspec; then
+  echo "missing: openspec. would run: npm install -g @fission-ai/openspec"
+  if [ "$INSTALL_PREREQS" = "1" ]; then
+    npm install -g @fission-ai/openspec
+  elif [ -t 0 ]; then
+    printf 'install it? [y/N] '; read -r a
+    case "$a" in y|yes) npm install -g @fission-ai/openspec ;; *) exit 1 ;; esac
+  else
+    echo "skipped: set AGENTICAPPS_INSTALL_PREREQS=1 to install unattended"
+    exit 1
+  fi
+fi
+if ! have some-linter; then
+  npm i -g @agenticapps/some-linter
+fi
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# The command is one command; the line break is a line break. No single line
+# holds both the verb and the flag, so the census matched nothing and the
+# consent row reported that no install reaches outside the workflow's surface.
+# codex-workflow already breaks this exact line — one token to the right.
+fx continued <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+have() { command -v "$1" >/dev/null 2>&1; }
+have npm || { echo "npm required"; exit 1; }
+if ! have openspec; then
+  npm install \
+    -g @fission-ai/openspec
+fi
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# A loop over a manifest is not a question put to the operator. This is
+# codexish with one unrelated `while read` bolted on, and that was enough to
+# turn its FAIL into a PASS.
+fx loopread <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+have() { command -v "$1" >/dev/null 2>&1; }
+have npm || { echo "npm required"; exit 1; }
+while IFS= read -r skill; do
+  echo "found skill: $skill"
+done < skills.txt
+have openspec || npm i -g @fission-ai/openspec
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# An installer writing its own README. The install command inside the body is
+# documentation being generated, not an install being performed — the same
+# distinction the quote strip exists to draw, one construct over. Scored as
+# code it produced three findings against a script that installs nothing.
+fx docheredoc <<'OUTER'
+#!/usr/bin/env bash
+set -euo pipefail
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec — validation will not run."
+cat > README.md <<'DOC'
+To set up openspec yourself, read the docs and run:
+  npm i -g @fission-ai/openspec
+DOC
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+OUTER
+
+# `<<<` is a herestring, and reading it as a heredoc opens a body whose
+# terminator never arrives — blanking every line below it. The pi installer
+# opens with two of these, and the fix for heredocs introduced this bug and
+# hid the rest of that file until this fixture caught it.
+fx herestring <<'OUTER'
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=. read -r a1 a2 a3 <<<"${1:-0.0.0}"
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec — validation will not run."
+npx some-generator --out .claude
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+OUTER
+
+# A heredoc that is never closed. Everything below it is unreadable, and the
+# one thing a §20 harness must not do with an unreadable file is score it.
+fx unterminated <<'OUTER'
+#!/usr/bin/env bash
+set -euo pipefail
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec"
+cat > README.md <<'DOC'
+this body never ends
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+OUTER
+
+# `export` binds the owned directory exactly as a bare assignment does. Missing
+# it produced "writes nothing into the workflow's own directory" about a script
+# whose next two lines write there — the same false inconclusive as matching
+# the literal path, one keyword over.
+fx exportowned <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+export AA_BIN="$HOME/.agenticapps/bin"
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec"
+mkdir -p "$AA_BIN"
+cp gate.sh "$AA_BIN/gate.sh"
+EOF
+
+# Three files in, one named. §21 says every file by name; the row used to be
+# satisfied by any mention of the directory at all.
+fx ownedpartial <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec"
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+cp reviewer.sh "$HOME/.agenticapps/bin/reviewer.sh"
+cp drift.sh "$HOME/.agenticapps/bin/drift.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
 REFERENCE="$WORK/reference.sh"
 CODEXISH="$WORK/codexish.sh"
 CLAUDEISH="$WORK/claudeish.sh"
@@ -408,6 +557,14 @@ HOOKISH="$WORK/hookish.sh"
 SUBSTITUTED="$WORK/substituted.sh"
 INDIRECT="$WORK/indirect.sh"
 INDIRECTREPORTS="$WORK/indirectreports.sh"
+HALFADOPTED="$WORK/halfadopted.sh"
+CONTINUED="$WORK/continued.sh"
+LOOPREAD="$WORK/loopread.sh"
+DOCHEREDOC="$WORK/docheredoc.sh"
+HERESTRING="$WORK/herestring.sh"
+UNTERMINATED="$WORK/unterminated.sh"
+EXPORTOWNED="$WORK/exportowned.sh"
+OWNEDPARTIAL="$WORK/ownedpartial.sh"
 
 echo "═══ installer-prereq-conformance.test.sh"
 echo
@@ -489,7 +646,11 @@ if selected "fleet"; then
   want_row  "codexish: no interactive path either" "non-interactive" "FAIL"
   want_row  "codexish: opt-in absent"              "opt-in"          "FAIL"
   want_row  "codexish: but its prerequisites ARE declared" "prereq-detection" "PASS"
-  want_row  "codexish: and its owned write IS reported"    "owned-writes-reported" "PASS"
+  # It says "installed into $HOME/.agenticapps/bin" and never names the file it
+  # put there. §21 requires each file BY NAME: the operator who reads that line
+  # knows a write happened and nothing about what is now on their machine.
+  want_row  "codexish: naming the directory is not naming the file" "owned-writes-reported" "FAIL"
+  want_out  "and the unnamed file is the finding" "openspec-change-gate.sh"
 
   run "$CLAUDEISH"
   want_code "claudeish exits clean" 0
@@ -592,6 +753,63 @@ if selected "coverage"; then
   printf '#!/usr/bin/env bash\nhave() { command -v "$1"; }\nhave openspec || echo miss\nmkdir -p "$HOME/.agenticapps/bin"\necho "wrote $HOME/.agenticapps/bin/x"\n' > "$WORK/plain.sh"
   run "$WORK/plain.sh"
   want_code "a minimal but recognisable installer scores" 0
+  echo
+fi
+
+# ── G. what the harness can read ────────────────────────────────────────────
+# The rows above assume the code view shows the harness the script. These pin
+# that assumption. Each fixture below scored green before the reader was fixed.
+if selected "reading"; then
+  echo "── G. reading the file (the quiet direction)"
+
+  # The one that arms itself on adoption.
+  run "$HALFADOPTED"
+  want_row  "halfadopted: the ungated second site is the finding" "consent-guard" "FAIL"
+  want_out  "and it names the ungated install, not the gated one" "some-linter"
+  want_not_out "the gated site is not reported as unguarded" "line [0-9]+: npm install -g @fission-ai"
+  want_code "one gated install does not make the run clean" 1
+  want_row  "halfadopted: its opt-in handling is still correct" "opt-in" "PASS"
+
+  run "$CONTINUED"
+  want_row  "continued: a line break does not hide the install" "consent-guard" "FAIL"
+  want_out  "and the whole command is named" "npm install +-g @fission-ai/openspec"
+  want_code "and the run is red" 1
+
+  run "$LOOPREAD"
+  want_row  "loopread: a while-read loop is not consent" "consent-guard" "FAIL"
+  want_code "and the run is red" 1
+
+  run "$CODEXISH"
+  want_not_out "no stray character is appended to the command named" "openspec\?"
+
+  run "$DOCHEREDOC"
+  want_row  "docheredoc: a generated README is not an install" "consent-guard" "PASS"
+  want_row  "docheredoc: nor does it invoke npm"               "prereq-detection" "PASS"
+  want_code "and an installer that installs nothing is clean" 0
+
+  run "$HERESTRING"
+  want_row  "herestring: the file below it is still read" "prereq-detection" "FAIL"
+  want_out  "and npx, invoked after the herestring, is seen" "npx"
+  want_row  "herestring: and its owned write is still seen" "owned-writes-reported" "PASS"
+
+  run "$UNTERMINATED"
+  want_code "an unterminated heredoc aborts rather than scoring a truncated file" 2
+  want_out  "and says the file could not be read" "unterminated heredoc"
+
+  run "$EXPORTOWNED"
+  want_row  "exportowned: export binds the owned directory too" "owned-writes-reported" "FAIL"
+  want_code "and makes the run red" 1
+
+  run "$OWNEDPARTIAL"
+  want_row  "ownedpartial: naming one of three files is not reporting" "owned-writes-reported" "FAIL"
+  want_out  "and the unnamed files are named" "reviewer.sh"
+  want_out  "both of them"                    "drift.sh"
+  want_not_out "the reported one is not listed as unreported" "never named:.*gate\.sh"
+
+  # The line number an operator is sent to must be the line in THEIR file.
+  # `$RAW` has its comments removed, so its numbering is a file nobody has.
+  run "$LEAKY"
+  want_out "the leak is reported at its source line" "line 7$"
   echo
 fi
 

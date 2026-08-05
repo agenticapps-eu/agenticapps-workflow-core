@@ -104,12 +104,33 @@ WORK="$(mktemp -d)"
 CODE="$WORK/code"
 
 # ── the code view ───────────────────────────────────────────────────────────
-# Emits `NNN|<code>` per source line. Comments blank, quoted literals gone,
-# `$…` expansions appended so a variable read inside a string survives.
+# Emits `NNN|<code>`, one output line per source line. Comments blank, quoted
+# literals gone, `$…` expansions appended so a variable read inside a string
+# survives. Two constructs span lines and must be resolved here, because every
+# scan below reads one line at a time:
+#
+#   HEREDOC BODIES ARE DATA. An installer that writes its own README with
+#   `cat > README.md <<'DOC'` puts an `npm i -g …` inside the body, and a
+#   line-at-a-time reader scores the documentation as an install site. That is
+#   the mistake the quote strip exists to prevent, one construct over.
+#
+#   CONTINUED COMMANDS ARE ONE COMMAND. `npm install \` newline `-g pkg` has
+#   no line containing both the verb and the flag, so the census matched
+#   nothing and the consent row reported that no install reaches outside the
+#   workflow's surface — of a script whose next line installs globally.
+#   codex-workflow's real site already breaks that line; it happens to break
+#   one token to the right.
+#
+# A joined command is emitted at its LAST physical line carrying its FIRST
+# line's number, so `head -n` prefixes stay usable and the number reported to
+# the operator is where the command starts.
 awk '
-{
-  raw = $0
-  if (raw ~ /^[ \t]*#/) { print NR "|"; next }
+function even_quotes(s,   n) {
+  n = gsub(/"/, "\"", s);   if (n % 2) return 0
+  n = gsub(/\047/, "\047", s); if (n % 2) return 0
+  return 1
+}
+function emit(n, raw,   exps, t, r) {
   exps = ""
   t = raw
   while (match(t, /\$\([^)]*\)|\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@*?]/)) {
@@ -120,9 +141,66 @@ awk '
   gsub(/"[^"]*"/, " ", r)
   gsub(/\047[^\047]*\047/, " ", r)
   sub(/[ \t]#.*$/, "", r)
-  print NR "|" r " " exps
+  print n "|" r " " exps
+}
+{
+  raw = $0
+
+  if (inhere) {
+    line = raw
+    sub(/^[ \t]+/, "", line)
+    if (line == hereterm) inhere = 0
+    print NR "|"
+    next
+  }
+
+  if (buf == "" && raw ~ /^[ \t]*#/) { print NR "|"; next }
+  if (buf == "") bufstart = NR
+
+  if (raw ~ /\\[ \t]*$/) {
+    sub(/\\[ \t]*$/, " ", raw)
+    buf = buf raw
+    print NR "|"
+    next
+  }
+
+  logical = buf raw
+  buf = ""
+
+  # `<<WORD` / `<<-WORD`, quoted or not, but never `<<<` and never a `<<` that
+  # sits inside a string — an odd quote count before it means it is text.
+  #
+  # The `<<<` test is a check on the PRECEDING character, not an alternation.
+  # A herestring `read -r a b c <<<"$1"` matches `<<"$1"` starting one
+  # character in, and reading that as a heredoc opens a body whose terminator
+  # is `$1` — never found, so every line after it goes blank. The pi installer
+  # has two herestrings on line 118, and the whole rest of the file went dark.
+  if (match(logical, /<<-?[ \t]*("[^"]+"|\047[^\047]+\047|[A-Za-z_][A-Za-z0-9_]*)/)) {
+    prev = (RSTART > 1) ? substr(logical, RSTART - 1, 1) : ""
+    if (prev != "<" && even_quotes(substr(logical, 1, RSTART - 1))) {
+      hereterm = substr(logical, RSTART, RLENGTH)
+      sub(/^<<-?[ \t]*/, "", hereterm)
+      gsub(/["\047]/, "", hereterm)
+      inhere = 1
+    }
+  }
+
+  emit(bufstart, logical)
+}
+END {
+  if (buf != "") emit(bufstart, buf)
+  # A heredoc whose terminator is never found blanks every line after it, and
+  # a truncated view is the one thing this must never score silently — it is
+  # the harness declining to look while sounding like it looked.
+  if (inhere) print "0|__UNTERMINATED_HEREDOC__ " hereterm
 }
 ' "$INSTALLER" > "$CODE"
+
+if grep -q '__UNTERMINATED_HEREDOC__' "$CODE"; then
+  echo "  UNSCOREABLE  $LABEL — unterminated heredoc; the file could not be read" >&2
+  echo "        everything after it would have been scored as if it were absent" >&2
+  exit 2
+fi
 
 # Raw view minus whole-line comments, for report detection — a reported path
 # lives INSIDE a string, so the code view is the wrong instrument for it.
@@ -186,8 +264,15 @@ WRITE_VERB='(mkdir|cp|install|ln|mv|tee|chmod|touch|rm|cat[[:space:]]+[^|]*>)'
 # to judge, which is the harness declining to look while sounding like it
 # looked. So: resolve any variable bound to an .agenticapps path, then treat a
 # write or a report through that variable as a write or a report.
-OWNED_VARS="$(grep -oE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*\.agenticapps' "$RAW" \
-  | sed 's/=.*//' | tr -d ' \t' | sort -u || true)"
+#
+# `export AA_BIN=…`, `readonly`, `local` and `declare` bind it just as plainly
+# as a bare assignment does, and anchoring on the identifier alone missed all
+# four — the same false "nothing to judge" as matching the literal path, one
+# keyword over.
+OWNED_VARS="$(grep -oE '^[[:space:]]*(export|readonly|declare|local|typeset)?[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*\.agenticapps' "$RAW" \
+  | sed 's/=.*//' \
+  | sed -E 's/^[[:space:]]*(export|readonly|declare|local|typeset)[[:space:]]+//' \
+  | tr -d ' \t' | sort -u || true)"
 OWNED_PAT='\.agenticapps'
 for v in $OWNED_VARS; do
   OWNED_PAT="${OWNED_PAT}|[\$][{]?${v}"
@@ -234,17 +319,45 @@ else
 fi
 
 # ── R2 consent-guard (tasks 3.3, 3.4) ───────────────────────────────────────
+# A guard reaches a site only until a construct CLOSES above it. `fi`, `done`,
+# `esac`, `else` and `}` at column 0 end the branch the guard was in, so a
+# guard above one of them settles nothing about a site below it.
+#
+# Searching the whole prefix instead made the row "does the word `read` occur
+# earlier in this file", and that fails in the direction that costs the most:
+# the FIRST correctly gated site in a script permanently satisfies every site
+# added after it. An installer with one gated install and one ungated install
+# scores clean. The row would go green exactly as the fleet started adopting
+# §21 and never fail again.
+#
+# A `while`/`until` read is a loop over input, not a question put to the
+# operator, so it is not consent evidence.
 GUARD_READ='(^|[;&|(){}]|[[:space:]])read([[:space:]]|$)'
+LOOP_READ='(^|[[:space:]])(while|until)([[:space:]]|$)'
+CUTTER='^[0-9]+\|(fi|done|esac|else|elif|;;|\})([[:space:]]|$)'
+# The opt-in is read once at the top and TESTED near the site — through the
+# variable it was bound to, which is the shape all four hosts will write. Only
+# the code view is searched, so a `--install-prereqs` inside a usage string is
+# still a mention rather than a guard.
+OPTIN_VARS="$(code_body | grep -E 'AGENTICAPPS_INSTALL_PREREQS|--install-prereqs' \
+  | grep -oE '[A-Za-z_][A-Za-z0-9_]*=' | sed 's/=$//' \
+  | grep -v '^AGENTICAPPS_INSTALL_PREREQS$' | sort -u || true)"
 GUARD_OPTIN='AGENTICAPPS_INSTALL_PREREQS|--install-prereqs'
+for v in $OPTIN_VARS; do
+  GUARD_OPTIN="$GUARD_OPTIN|(^|[^A-Za-z0-9_])${v}([^A-Za-z0-9_]|$)"
+done
 if [ "$SITE_COUNT" -eq 0 ]; then
-  ok "consent-guard: no install reaches outside the workflow's own surface"
+  ok "consent-guard: no out-of-boundary install command was found"
   note "detecting and instructing is conformant; only installing unasked is not."
+  note "the census reads command shapes — an install through a variable, or"
+  note "through a package manager not on its list, would not be seen."
 else
   unguarded=""
   for ln in $(grep -nE "$GLOBAL_INSTALL" "$CODE" | cut -d: -f1); do
     src="$(sed -n "${ln}p" "$CODE" | cut -d'|' -f1)"
-    before="$(head -n "$ln" "$CODE")"
-    if printf '%s\n' "$before" | grep -qE "$GUARD_READ" || \
+    cut_at="$(head -n "$((ln - 1))" "$CODE" | grep -nE "$CUTTER" | tail -1 | cut -d: -f1)"
+    before="$(sed -n "$((${cut_at:-0} + 1)),${ln}p" "$CODE")"
+    if printf '%s\n' "$before" | grep -vE "$LOOP_READ" | grep -qE "$GUARD_READ" || \
        printf '%s\n' "$before" | grep -qE "$GUARD_OPTIN"; then
       :
     else
@@ -252,8 +365,11 @@ else
       # name the command; `npm i -g` with the package sheared off names the
       # pattern that matched, and leaves the operator to go and find what it
       # was actually going to install.
+      # `tr -c '[:print:]'` also converts the trailing newline, which appended a
+      # stray `?` to every command this row named — it read as part of the
+      # command the operator was being sent to look at.
       cmd="$(sed -n "${ln}p" "$CODE" | sed 's/^[0-9]*|//;s/^[[:space:]]*//;s/[[:space:]]*$//' \
-        | LC_ALL=C tr -c '[:print:]' '?' | cut -c1-120)"
+        | tr -d '\n' | LC_ALL=C tr -c '[:print:]' '?' | cut -c1-120)"
       unguarded="$unguarded
   line $src: $cmd"
     fi
@@ -263,8 +379,9 @@ else
     printf '%s\n' "$unguarded" | grep -v '^$' | while IFS= read -r l; do note "$l"; done
     note "§21 — consent is required to change software the workflow does not own."
   else
-    ok "consent-guard: every out-of-boundary install has a guard before it"
-    note "a guard was found before each site; that it dominates them is not provable here."
+    ok "consent-guard: every out-of-boundary install has a guard in its branch"
+    note "a consent read or the opt-in was found in each site's own branch, with"
+    note "no construct closing between; that it dominates the site is not provable here."
   fi
 fi
 
@@ -273,6 +390,8 @@ if [ "$SITE_COUNT" -eq 0 ]; then
   huh "non-interactive: no consent-requiring install, so nothing to gate"
 elif code_body | grep -qE '\-t[[:space:]]+0'; then
   ok "non-interactive: stdin is tested for being a terminal"
+  note "the test is present somewhere in the script; that this particular test"
+  note "is the one gating the install is not established here."
 else
   bad "non-interactive: no test for an absent terminal before an install"
   note "§21 names the rule — standard input not being a terminal."
@@ -294,20 +413,48 @@ else
 fi
 
 # ── R5 owned-writes-reported ────────────────────────────────────────────────
+# §21 requires every file written into the owned directory to be reported BY
+# NAME. Naming the directory once tells the operator a write happened and
+# nothing about what is now in it, which is the reporting obligation met in
+# form rather than substance. Files are enumerated from the write itself; a
+# write through a glob or a loop resolves to no filename, and the row says so
+# rather than passing on evidence it does not have.
+OWNED_FILES="$(printf '%s\n' "$OWNED_WRITES" \
+  | grep -E '(cp|install|ln|mv|tee|touch|cat[[:space:]]+[^|]*>)' \
+  | grep -oE "($OWNED_PAT)[^\"'[:space:]]*" \
+  | grep -oE '/[A-Za-z0-9._-]+\.[A-Za-z0-9]+$' | tr -d '/' | sort -u || true)"
+REPORTED_TEXT="$(grep -E '(echo|printf)' "$RAW" || true)"
 if [ -z "$OWNED_WRITES" ]; then
   huh "owned-writes-reported: writes nothing into the workflow's own directory"
-elif [ -n "$OWNED_REPORTS" ]; then
-  ok "owned-writes-reported: the write into ~/.agenticapps/ is reported"
-else
+elif [ -z "$OWNED_REPORTS" ]; then
   bad "owned-writes-reported: writes ~/.agenticapps/ and never says so"
   note "the exemption from consent is paired with the obligation to report;"
   note "without the pair it is a loophole rather than a boundary."
+else
+  unnamed=""
+  for f in $OWNED_FILES; do
+    printf '%s\n' "$REPORTED_TEXT" | grep -qF "$f" || unnamed="$unnamed $f"
+  done
+  if [ -n "$unnamed" ]; then
+    bad "owned-writes-reported: written into ~/.agenticapps/ but never named:$unnamed"
+    note "§21 — every file written into a directory this workflow owns is"
+    note "reported by name. Naming the directory is not naming the files."
+  elif [ -n "$OWNED_FILES" ]; then
+    ok "owned-writes-reported: every file written into ~/.agenticapps/ is named"
+  else
+    huh "owned-writes-reported: the directory is reported, but no write here"
+    note "resolves to a filename, so whether each file is named is undecided."
+  fi
 fi
 
 # ── R6 redaction ────────────────────────────────────────────────────────────
 SECRET='_authToken|[A-Za-z_]*TOKEN[[:space:]]*=|token=|password=|passwd=|api[_-]?key=|://[^/[:space:]]*:[^@[:space:]]*@|npm_[A-Za-z0-9]{12,}|gh[pousr]_[A-Za-z0-9]{20,}'
 PRINTED="$(grep -nE '(echo|printf)' "$RAW" || true)"
-LEAKS="$(printf '%s\n' "$PRINTED" | grep -nE "$SECRET" | cut -d: -f2 || true)"
+# Numbered from the SOURCE, not from `$RAW`. `$RAW` has its comment lines
+# removed, so its line numbers are positions in a file the operator does not
+# have — this row was sending them to a line that was not the one.
+LEAKS="$(grep -nE '(echo|printf)' "$INSTALLER" | grep -vE '^[0-9]+:[[:space:]]*#' \
+  | grep -E "$SECRET" | cut -d: -f1 || true)"
 if [ -n "$LEAKS" ]; then
   bad "redaction: a printed line carries something credential-shaped"
   printf '%s\n' "$LEAKS" | grep -v '^$' | head -5 | while IFS= read -r l; do note "line $l"; done
