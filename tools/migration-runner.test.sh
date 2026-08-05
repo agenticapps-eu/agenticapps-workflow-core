@@ -55,6 +55,12 @@ assert_not_contains() { # $1=haystack $2=needle $3=description
 }
 
 tree_snapshot() { # $1=dir -> relative-path + checksum for every file, sorted
+  # BLIND SPOTS, recorded here because group 7 is the first caller to lean on
+  # this as its primary rollback oracle rather than a spot-check: `-type f`
+  # only, so it reports nothing about empty directories, symlinks (neither
+  # their target nor their own existence), or file modes/permissions — an
+  # apply/rollback pair that differs only in one of those leaves this
+  # function blind and an equality check built on it will pass regardless.
   ( cd "$1" && find . -type f -print0 | xargs -0 shasum | sort )
 }
 
@@ -1351,27 +1357,88 @@ echo "== rollback fixtures: the blocks the runner never reaches (group 7) =="
 # wrong. This section drives extract.sh DIRECTLY — never run-migration.sh —
 # so it reaches blocks the runner's own tests structurally cannot.
 #
-# FIXTURE SELECTION — surveyed, not assumed. `bash lint-migration.sh
-# --threshold 16 <fixture>` was run against every file in test-fixtures/.
-# Every "bad-*"/malformed fixture (plus 0028, 0030, 0035, 0038,
-# unparseable-filename.md) fails lint and is excluded on that basis alone.
-# 0004/0005 pass lint but never opt in and sit below every host threshold —
-# genuinely out of scope, excluded. Of what remains — lint-clean AND in
-# scope — the fixtures iterated below are the subset whose OWN purpose is a
-# fully well-formed, successfully-applying migration ("fully well-formed",
-# "complete, well-formed step", in their own titles): 0006, 0016, 0029,
-# 0031, 0034, 0040, 0043. Fixtures like 0036/0037/0047/0048 also pass lint,
-# but exist specifically so that some step's `apply` deliberately fails
-# (`exit 7`/`exit 9`) or `verify` fails — there is no successful post-apply
-# state for THAT step to roll back from, and 0036/0037/0048's rollbacks are
-# already directly exercised further up this file via run-migration.sh's own
-# interactive rollback path (feeding "b" at the A2 prompt) — they are not
-# the least-exercised case this group exists to close. `grep` over this
-# file confirms 0006/0029/0031/0034/0040/0043 never appear anywhere else
-# except as `extract.sh`/`--dry-run` calls, and 0043's own existing test
-# (above) shows its pre-condition hard-aborts BEFORE apply ever runs — so
-# its apply+rollback pair has never executed anywhere before this section.
-ROLLBACK_FIXTURES="0006-belowthreshold-optin-conformant.md 0016-conformant.md 0029-block-isolation.md 0031-heredoc-step-heading.md 0034-escape-probe.md 0040-symlink-escape-probe.md 0043-precondition-127.md"
+# FIXTURE SELECTION — surveyed, not assumed, and re-surveyed in fix round 1.
+# `bash lint-migration.sh --threshold 16 <fixture>` was run against every
+# file in test-fixtures/. Every "bad-*"/malformed fixture (plus 0028, 0030,
+# 0035, 0038, unparseable-filename.md) fails lint and is excluded on that
+# basis alone. 0004/0005 pass lint but never opt in and sit below every host
+# threshold — genuinely out of scope, excluded. That leaves EXACTLY SIXTEEN
+# lint-clean, in-scope fixtures: 0006, 0016, 0023, 0024, 0029, 0031, 0034,
+# 0036, 0037, 0039, 0040, 0043, 0046, 0047, 0048, 0051.
+#
+# Fix round 1's finding: excluding a fixture WHOLESALE because "some step
+# deliberately fails" was wrong — 0023/0024/0051 all fail in `precondition`/
+# `check`, never in `apply`, so every one of their applies succeeds when
+# driven directly (exactly what this group does) and their exclusion had no
+# real basis. The fix is per-STEP, not per-fixture: `mr_rollback_roundtrip`
+# already tolerates a failing apply via `continue` (below), so every
+# lint-clean in-scope fixture is now in ROLLBACK_FIXTURES and each step's
+# own apply decides its own fate.
+#
+# Three fixtures still need a per-step (not per-fixture) carve-out, each
+# VERIFIED BY RUNNING IT — not assumed:
+#
+# - 0037-failing-verify.md and 0048-rollback-order-and-membership.md: EVERY
+#   step whose apply succeeds (0037's steps 1 and 2; 0048's steps 1 and 2)
+#   was run directly and its rollback provably does NOT restore the
+#   pre-apply tree — both append a line to a shared `rollback.log` that
+#   persists after "rollback" (0037 step 1: apply gives tree={s1.txt},
+#   rollback gives tree={rollback.log}, a real mismatch, checked by hand);
+#   0048 step 1's rollback never even removes s1.txt, and 0048 step 2's
+#   rollback deliberately `exit 1`s — that fixture's own stated purpose
+#   ("a rollback that itself fails") requires that. That log is the exact
+#   mechanism the existing "A2 interactive rollback" tests further up this
+#   file use to prove rollback ORDER and membership across a whole
+#   multi-step migration — these two fixtures were built for that
+#   multi-step, log-based property, not for this group's single-step,
+#   full-tree-parity oracle, and forcing them through it would flag their
+#   own by-design behaviour as a defect. Both fixtures are left out of
+#   ROLLBACK_FIXTURES entirely (every non-apply-failing step in each was
+#   individually verified to mismatch — this is not the old blanket
+#   "contains a failing step" excuse); 0036 and 0047 also contain a
+#   deliberately-failing apply step and are NOT excluded, because their
+#   OTHER steps were individually verified clean (see below).
+# - 0046-apply-dropped-by-step1.md: step 2 (apply writes only s2.txt,
+#   rollback removes only s2.txt) was run directly and round-trips clean —
+#   included below with no special-casing. Step 1 is different: its apply
+#   body itself rewrites `0046-doc.md` — a COPY of the migration document,
+#   present in the workdir only so this fixture can probe extract.sh's live
+#   re-read behaviour, and never declared in the fixture's own `applies_to`
+#   list — while its rollback (`rm -f s1.txt`) scopes only to its own
+#   declared artefact and never restores that copy. Run directly: apply
+#   rc=0, rollback rc=0, but the tree still mismatches on 0046-doc.md's
+#   content afterward — genuine, by-design, and orthogonal to whether s1.txt
+#   itself round-trips correctly (it does). `mr_step_excluded` below skips
+#   exactly this one step, by name, with this reasoning attached; step 2
+#   runs normally.
+#
+# Cross-checked against the WHOLE suite before finalising this list: the
+# eight rollback blocks that execute nowhere else at all are 0023/1, 0024/1,
+# 0046/1 (excluded above, so still never runs anywhere — a real, currently-
+# unclosed gap, noted rather than hidden), 0046/2, 0047/1, 0047/3, 0051/1,
+# 0051/2. 0036/2 and 0048/3 also never run anywhere, but are correctly
+# excluded (their own apply fails — no post-apply state exists to roll back
+# from, by spec design). 0036/1, 0037/1, 0037/2, 0048/1 and 0048/2 DO already
+# run — via the existing "A2 interactive rollback" tests further up this
+# file — so, while 0036/1 is exercised again below (it costs nothing and
+# round-trips clean), 0037/0048's steps are not: re-proving a property a
+# dedicated existing test already covers, at the cost of forcing a
+# multi-step-only fixture through a single-step oracle it was never built
+# for, is not worth it.
+#
+# CORRECTED EVIDENCE (fix round 1). An earlier version of this comment
+# claimed grep showed 0006/0029/0031/0034/0040/0043 "never appear anywhere
+# else except as extract.sh/--dry-run calls" — false: 0006 (line ~929),
+# 0029 (line ~509) and 0043 (line ~584) all appear in FULL, non-dry-run
+# `run-migration.sh` invocations elsewhere in this file. The conclusion
+# survives anyway, for a more precise reason: 0006's and 0029's existing
+# runs are happy-path (every step applies and — where present — verifies
+# cleanly, exit 0), and 0043's hard-aborts at its pre-condition BEFORE apply
+# ever runs (exit 1) — rollback is only ever invoked from `fail_policy`'s
+# interactive branch (A2), and none of those three existing invocations
+# reaches it. So their steps' rollback blocks genuinely have zero prior
+# executions; the "only extract.sh/--dry-run" phrasing was simply wrong.
+ROLLBACK_FIXTURES="0006-belowthreshold-optin-conformant.md 0016-conformant.md 0023-failing-precondition.md 0024-failing-check.md 0029-block-isolation.md 0031-heredoc-step-heading.md 0034-escape-probe.md 0036-failing-apply.md 0040-symlink-escape-probe.md 0043-precondition-127.md 0046-apply-dropped-by-step1.md 0047-skip-continues.md 0051-failing-precondition-after-apply.md"
 
 # 0039-zero-steps.md is lint-clean and in scope but declares no steps at
 # all — confirmed directly rather than assumed, so it is excluded from the
@@ -1379,6 +1446,77 @@ ROLLBACK_FIXTURES="0006-belowthreshold-optin-conformant.md 0016-conformant.md 00
 out="$(bash "$MR/extract.sh" steps "$FIX/0039-zero-steps.md")"
 assert_eq "$out" "" \
   "0039-zero-steps.md: extract.sh confirms zero steps — nothing for this section to iterate"
+
+# mr_snapshot $1=workdir $2=escape_target(optional) — FIX ROUND 1, IMPORTANT
+# 2. `tree_snapshot` alone is blind to anything outside $1: 0034's apply
+# writes to an absolute path OUTSIDE the workdir ($ESCAPE_TARGET/ran) and
+# 0040's writes through a symlink `find -type f` neither reports nor
+# descends (escape-link/ran). A mutation that deletes either fixture's own
+# cleanup line (`rm -rf "$ESCAPE_TARGET"` / `rm -f escape-link/ran`) left
+# the suite fully green under a workdir-only snapshot — proven by running
+# that exact mutation (see task-7-report.md fix round 1) — because half of
+# what "rollback" is supposed to undo was never in the picture the
+# equality check compares. Folding the escape target's own tree into the
+# same snapshot string closes that: an apply that escapes is now visible to
+# the SAME check every other fixture is held to, not a second bespoke one.
+mr_snapshot() {
+  local et="${2:-}"
+  # `[ -d "$et" ]` guards 0034's own correct rollback behaviour: it removes
+  # $ESCAPE_TARGET entirely (`rm -rf`), not merely the file inside it, and
+  # tree_snapshot cd-ing into a directory that no longer exists would
+  # otherwise print a stderr "No such file or directory" every run. Falling
+  # back to tree_snapshot "$1" alone when $et is missing is safe, not a new
+  # blind spot: an EXISTING-but-empty escape target already snapshots to the
+  # same nothing an ABSENT one does, so this changes no comparison's result
+  # — it only silences noise from a directory a correct rollback is allowed
+  # to remove outright. It does NOT weaken Important 2's fix: a rollback
+  # that leaves the escape target present with its file still inside it
+  # (the mutation this guards against, see the report) hits the `-d` branch
+  # and is fully visible to the equality check either way.
+  if [ -n "$et" ] && [ -d "$et" ]; then
+    printf '%s\n%s' "$(tree_snapshot "$1")" "$(tree_snapshot "$et")"
+  else
+    tree_snapshot "$1"
+  fi
+}
+
+# mr_step_excluded $1=fixture $2=step -> prints why and returns 0 (skip) for
+# the one step (see the fixture-selection comment above) whose apply and
+# rollback both succeed but whose rollback provably cannot restore the tree
+# for a documented, executed reason unrelated to a failing apply. Every
+# other exclusion in this section is already handled by the ordinary
+# apply-failed `continue` path below — this function exists ONLY for that
+# one different case, named individually rather than folded into a
+# fixture-wide judgement.
+mr_step_excluded() {
+  case "$1:$2" in
+    "0046-apply-dropped-by-step1.md:1")
+      echo "  SKIP  $1 step $2: apply rewrites 0046-doc.md (a workdir copy of the document itself, not a declared applies_to artefact) and rollback never restores it — verified directly (apply rc=0, rollback rc=0, tree still mismatches on 0046-doc.md); step 2 is unaffected and runs below"
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# mr_apply_expected_to_fail $1=fixture $2=step -> true for the two steps in
+# this selection whose OWN fixture purpose (named in its slug/title) is a
+# deliberately-failing apply (0036's step 2: `exit 7`; 0047's step 2: `exit
+# 9`) — included in ROLLBACK_FIXTURES because their OTHER steps are real,
+# exercisable rollbacks, but these two specific steps have no post-apply
+# state to roll back from by design. Asserting "apply ran and exited 0"
+# unconditionally against a step whose entire documented purpose is to fail
+# would register a permanent, expected FAIL on every run; asserting the
+# OPPOSITE here instead — that it deliberately fails — keeps the check
+# meaningful (it would go red if one of these ever started succeeding,
+# which would itself be a change worth noticing) without polluting the
+# total with a "failure" that is not one.
+mr_apply_expected_to_fail() {
+  case "$1:$2" in
+    "0036-failing-apply.md:2") return 0 ;;
+    "0047-skip-continues.md:2") return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 # mr_rollback_roundtrip <fixture> — cumulative, per-step round trip against
 # ONE tmp workdir for the whole fixture. For step i: snapshot the tree
@@ -1392,9 +1530,11 @@ assert_eq "$out" "" \
 # the "before" snapshot exactly (Scenario 1). Then re-apply step i so step
 # i+1's own pre-condition-shaped assumptions about prior state hold for the
 # next iteration (e.g. 0016 step 2's apply appends to a file step 1's apply
-# created) — that re-apply is setup, not itself under test.
+# created) — that re-apply's own exit status is checked too (fix round 1:
+# it used to be discarded, the one unchecked shell-out in this function),
+# even though it is setup, not itself under test.
 mr_rollback_roundtrip() {
-  local fixture="$1" doc tmp escape_target="" step body rc before after_apply after_rollback
+  local fixture="$1" doc tmp escape_target="" step steps_list body rc before after_apply after_rollback
   doc="$FIX/$fixture"
   tmp="$(mktemp -d)"
 
@@ -1408,18 +1548,33 @@ mr_rollback_roundtrip() {
       ln -s "$escape_target" "$tmp/escape-link"
       ;;
   esac
+  # 0046-apply-dropped-by-step1.md needs no case here: its step 1 (the only
+  # one whose apply touches a workdir-resident "0046-doc.md" copy) is
+  # skipped entirely by mr_step_excluded above, so nothing ever needs that
+  # copy to exist — step 2's own apply/rollback pair concerns only s2.txt.
 
-  for step in $(bash "$MR/extract.sh" steps "$doc"); do
-    before="$(tree_snapshot "$tmp")"
+  steps_list="$(bash "$MR/extract.sh" steps "$doc")"
+  assert_eq "$([ -n "$steps_list" ] && echo nonempty || echo empty)" "nonempty" \
+    "$fixture: extract.sh reports at least one step (pins against a silently-empty list the way 0039's explicit zero-step check does above)"
+
+  for step in $steps_list; do
+    if mr_step_excluded "$fixture" "$step"; then continue; fi
+
+    before="$(mr_snapshot "$tmp" "$escape_target")"
 
     body="$(bash "$MR/extract.sh" block "$doc" "$step" apply 2>/dev/null)"; rc=$?
     assert_eq "$rc" "0" "$fixture step $step: apply block extracted"
     if [ "$rc" -ne 0 ]; then continue; fi
     ( cd "$tmp" && bash -c "$body" ); rc=$?
+    if mr_apply_expected_to_fail "$fixture" "$step"; then
+      assert_eq "$([ "$rc" -ne 0 ] && echo failed || echo succeeded)" "failed" \
+        "$fixture step $step: apply deliberately fails as designed (rc=$rc) — no post-apply state exists to roll back from, so nothing further is checked for this step"
+      continue
+    fi
     assert_eq "$rc" "0" "$fixture step $step: apply ran and exited 0"
     if [ "$rc" -ne 0 ]; then continue; fi
 
-    after_apply="$(tree_snapshot "$tmp")"
+    after_apply="$(mr_snapshot "$tmp" "$escape_target")"
     assert_eq "$([ "$after_apply" != "$before" ] && echo changed || echo unchanged)" "changed" \
       "$fixture step $step: apply changed the tree (guards the rollback check below against two empty snapshots matching for the wrong reason)"
 
@@ -1443,14 +1598,16 @@ mr_rollback_roundtrip() {
     ( cd "$tmp" && bash -c "$body" ); rc=$?
     assert_eq "$rc" "0" "$fixture step $step: rollback ran and exited 0"
 
-    after_rollback="$(tree_snapshot "$tmp")"
+    after_rollback="$(mr_snapshot "$tmp" "$escape_target")"
     assert_eq "$after_rollback" "$before" \
       "$fixture step $step: rollback returned the tree to its pre-apply state"
 
-    # Setup only, not under test: reapply so the next step's own apply sees
-    # the state it expects.
+    # Setup only, not itself under test, but its OWN exit status is now
+    # checked too (fix round 1, minor 2): a silent failure here would judge
+    # step i+1 against a tree this comment no longer accurately describes.
     body="$(bash "$MR/extract.sh" block "$doc" "$step" apply 2>/dev/null)"
-    ( cd "$tmp" && bash -c "$body" ) >/dev/null 2>&1
+    ( cd "$tmp" && bash -c "$body" ) >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "0" "$fixture step $step: re-apply for chaining exited 0 (setup, checked so it cannot silently leave a different tree than later steps assume)"
   done
 
   rm -rf "$tmp"
@@ -1490,9 +1647,7 @@ assert_eq "$rc" "0" "surgical: step 2 rollback extracted"
 assert_eq "$?" "0" "surgical: step 2 rolled back"
 
 assert_eq "$(cat "$tmp/fixture.txt" 2>/dev/null)" "applied" \
-  "surgical: step 1's work SURVIVES — step 2's rollback removed only its own line"
-assert_not_contains "$(cat "$tmp/fixture.txt" 2>/dev/null)" "second" \
-  "surgical: step 2's own contribution is gone from the tree"
+  "surgical: step 1's work SURVIVES, and step 2's own contribution is gone — an EXACT match to just 'applied' proves both at once (fix round 1: a separate assert_not_contains 'second' here was dropped as vacuous, since it was already implied by this equality and would have passed even against a missing file)"
 
 rm -rf "$tmp"
 
