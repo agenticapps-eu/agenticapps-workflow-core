@@ -117,6 +117,43 @@ enforcing nothing.
 - **THEN** the format linter SHALL report a violation quoting the offending value
 - **AND** SHALL exit non-zero
 
+### Requirement: Every fence a migration opens SHALL be closed
+
+The format linter SHALL reject a migration in which a fenced code block is
+opened and never closed before end of file.
+
+A step's role listing is read from a fence's *opening* line, but block
+extraction only succeeds on that fence's *closing* line. An unclosed fence is
+therefore present to anything that lists roles but absent to anything that
+extracts a block body — a document in that state lints clean and then fails
+at runtime reporting a role "missing" that the linter itself just confirmed
+was there. This is a gap in the linter's own role listing, not a runner
+defect, and closing it there is what keeps "lints clean" meaning "will run,"
+rather than "was examined and happened not to notice."
+
+#### Scenario: An unclosed fence is rejected
+- **WHEN** a step's `precondition` fence is the last thing in the document and is never closed
+- **THEN** the format linter SHALL report a violation naming the step and the line the fence opened on
+- **AND** SHALL exit non-zero, even though every role the step requires appears to be present
+
+### Requirement: A tagged fence's body SHALL NOT be empty or whitespace-only
+
+The format linter SHALL reject a role-tagged fence whose captured body is
+empty or contains only whitespace, for any of the five roles.
+
+`bash -c ''`, and a fence containing only blank lines, exits 0. The
+three-valued `check` contract reads exit 0 as "already applied," so a
+tagged-but-empty `check` fence makes a runner report a step skipped and apply
+nothing on a tree where nothing was ever applied — the same silent-no-op
+class an un-annotated fence produces, one layer further in: this fence *is*
+tagged, and still does nothing. An empty `precondition` passes just as
+vacuously, for the same reason.
+
+#### Scenario: A tagged-but-empty check is rejected
+- **WHEN** a step's `check` fence is opened as ` ```bash role=check ` and its body is empty
+- **THEN** the format linter SHALL report a violation naming the step and the role
+- **AND** SHALL exit non-zero
+
 ### Requirement: A runner refuses a migration that would do nothing
 
 Before executing any step, a runner SHALL lint the migration and SHALL abort
@@ -416,6 +453,44 @@ most likely to be silently wrong.
 #### Scenario: A rollback affects only its own step
 - **WHEN** two steps are applied and only the second step's `rollback` is executed
 - **THEN** the first step's changes SHALL remain on disk
+
+### Requirement: An apply block SHALL NOT touch paths outside `applies_to`
+
+A step's `apply` block SHALL modify only files and directories the
+migration's `applies_to` field declares. `applies_to` is therefore more than
+plan-output metadata: it is the boundary that makes the rollback-parity
+scenario above meaningful. A rollback's obligation to return the working
+tree to its pre-apply state SHALL be read as bounded by what `apply` was
+permitted to touch — not as a promise to undo an effect `apply` should never
+have produced in the first place.
+
+This is an obligation on the migration author, in the same unenforced sense
+as the non-mutation rule below: no structural rule in this linter checks
+which paths an `apply` block actually writes to, so a violation is only
+ever caught by review or by its symptom (a rollback that does not restore
+something). Stating it normatively is still worth doing, because the
+alternative — silence — reads as license: an `apply` that reaches outside
+its declared scope, and a `rollback` that consequently cannot undo it,
+would otherwise look like a bug in the format rather than a violation of
+it.
+
+`0046-apply-dropped-by-step1.md`, a fixture in this change, is the concrete
+case this resolves: its step 1 `apply` rewrites a workdir-resident copy of
+the migration document itself — a path absent from its `applies_to`, which
+declares only `s1.txt` and `s2.txt` — and its `rollback` (`rm -f s1.txt`)
+does not restore that copy. Under this requirement, step 1 is non-conformant
+in that one respect; the fixture exists to exercise a runner's defense
+against a document that mutates out from under the dispatch loop (the
+`BLOCK_MISSING` branch — see the "runner executes only migrations the linter
+judged" requirement's own exit-code discussion), not to demonstrate a
+compliant rollback. Its rollback's failure to restore the document is
+therefore not a defect in the fixture, the runner, or this spec — it is the
+predicted consequence of an apply that reached where it should not have.
+
+#### Scenario: An apply that touches an undeclared path is non-conformant
+- **WHEN** a step's `apply` block modifies a file not listed in the migration's `applies_to`
+- **THEN** that step's rollback is not required to restore that file
+- **AND** the step SHALL be considered non-conformant with this requirement, independent of whether the format linter can detect it
 
 ### Requirement: Check and pre-condition blocks do not mutate the tree
 

@@ -70,15 +70,15 @@ Stage 2 review changed".
 
 ## 8. Revise spec §08
 
-- [ ] 8.1 Bump `spec_version` 0.9.1 → 0.10.0
-- [ ] 8.2 Add the "Executable form" subsection — role/heading table, exact info-string grammar, un-annotated fences as illustration, unrecognised roles rejected, `role=` only on `bash`, consecutive step numbering and the next-step-heading boundary
-- [ ] 8.3 Add the threshold rules — ID from filename, frontmatter cross-check, declaration may add to scope but never remove
-- [ ] 8.4 Add the requirement that a runner lints first and refuses a migration yielding no executable work
-- [ ] 8.5 Amend the atomicity contract — `precondition` always hard-aborts; the policy governs `apply` and `verify`; TTY prompts; non-TTY aborts and rolls back nothing; the override is a SHALL, not a SHOULD; rollback runs in reverse order and excludes the failed step
-- [ ] 8.6 Add the `check`/`precondition` non-mutation obligation, and correct the dry-run promise from "prints the diff" to "prints the source"
-- [ ] 8.7 Add the diagnostics warning — verbatim stderr reaches CI logs, so blocks must not emit secrets or personal data
-- [ ] 8.8 Add the Conformance MUST that a host runs the format linter
-- [ ] 8.9 Run `openspec validate --all` and commit
+- [x] 8.1 Bump `spec_version` 0.9.1 → 0.10.0
+- [x] 8.2 Add the "Executable form" subsection — role/heading table, exact info-string grammar, un-annotated fences as illustration, unrecognised roles rejected, `role=` only on `bash`, consecutive step numbering and the next-step-heading boundary
+- [x] 8.3 Add the threshold rules — ID from filename, frontmatter cross-check, declaration may add to scope but never remove
+- [x] 8.4 Add the requirement that a runner lints first and refuses a migration yielding no executable work
+- [x] 8.5 Amend the atomicity contract — `precondition` always hard-aborts; the policy governs `apply` and `verify`; TTY prompts; non-TTY aborts and rolls back nothing; the override is a SHALL, not a SHOULD; rollback runs in reverse order and excludes the failed step
+- [x] 8.6 Add the `check`/`precondition` non-mutation obligation, and correct the dry-run promise from "prints the diff" to "prints the source"
+- [x] 8.7 Add the diagnostics warning — verbatim stderr reaches CI logs, so blocks must not emit secrets or personal data
+- [x] 8.8 Add the Conformance MUST that a host runs the format linter
+- [x] 8.9 Run `openspec validate --all` and commit
 
 ## 9. CI and documentation
 
