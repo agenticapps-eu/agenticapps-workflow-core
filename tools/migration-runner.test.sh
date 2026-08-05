@@ -61,7 +61,18 @@ tree_snapshot() { # $1=dir -> relative-path + checksum for every file, sorted
   # their target nor their own existence), or file modes/permissions — an
   # apply/rollback pair that differs only in one of those leaves this
   # function blind and an equality check built on it will pass regardless.
-  ( cd "$1" && find . -type f -print0 | xargs -0 shasum | sort )
+  #
+  # PORTABILITY (group 7 fix round 2, found by running in an Alpine
+  # container, not by reasoning): the previous `find ... -print0 | xargs -0
+  # shasum` skips invoking `shasum` on empty input under BSD xargs (macOS),
+  # but GNU and busybox xargs (Linux) run it once regardless — `shasum`
+  # then reads stdin as data and hashes zero bytes, so an EMPTY directory
+  # snapshots to `da39a3ee...  -` on Linux instead of to nothing. `find
+  # -exec ... +` does not have this discrepancy on any of the three: the
+  # utility is invoked only if at least one file matched, consistently.
+  # Verified both ways: see task-7-report.md fix round 2 for the Linux
+  # container run this replaced.
+  ( cd "$1" && find . -type f -exec shasum {} + 2>/dev/null | sort )
 }
 
 echo "== extract.sh =="
@@ -1370,10 +1381,19 @@ echo "== rollback fixtures: the blocks the runner never reaches (group 7) =="
 # deliberately fails" was wrong — 0023/0024/0051 all fail in `precondition`/
 # `check`, never in `apply`, so every one of their applies succeeds when
 # driven directly (exactly what this group does) and their exclusion had no
-# real basis. The fix is per-STEP, not per-fixture: `mr_rollback_roundtrip`
-# already tolerates a failing apply via `continue` (below), so every
-# lint-clean in-scope fixture is now in ROLLBACK_FIXTURES and each step's
-# own apply decides its own fate.
+# real basis. The fix is per-STEP, not per-fixture — but NOT because
+# `mr_rollback_roundtrip` already tolerated a failing apply on its own (fix
+# round 2 correction: an earlier version of this comment claimed exactly
+# that, and it was false — left alone, a failing apply records `FAIL …
+# apply ran and exited 0` and `continue`s, it does not "tolerate" anything).
+# `mr_apply_expected_to_fail` (below) is the actual per-step mechanism: it
+# names 0036 step 2 and 0047 step 2 specifically and asserts the OPPOSITE
+# — that they deliberately fail — so those two steps stay meaningful
+# instead of being either silently skipped or a permanent false FAIL. Most
+# of the sixteen lint-clean in-scope fixtures are in ROLLBACK_FIXTURES
+# below, each step's own apply (or `mr_apply_expected_to_fail`, or
+# `mr_step_excluded`) deciding its fate — 0037, 0039 and 0048 are the three
+# NOT in that list, exactly as the next paragraph says.
 #
 # Three fixtures still need a per-step (not per-fixture) carve-out, each
 # VERIFIED BY RUNNING IT — not assumed:
@@ -1405,11 +1425,19 @@ echo "== rollback fixtures: the blocks the runner never reaches (group 7) =="
 #   present in the workdir only so this fixture can probe extract.sh's live
 #   re-read behaviour, and never declared in the fixture's own `applies_to`
 #   list — while its rollback (`rm -f s1.txt`) scopes only to its own
-#   declared artefact and never restores that copy. Run directly: apply
-#   rc=0, rollback rc=0, but the tree still mismatches on 0046-doc.md's
-#   content afterward — genuine, by-design, and orthogonal to whether s1.txt
-#   itself round-trips correctly (it does). `mr_step_excluded` below skips
-#   exactly this one step, by name, with this reasoning attached; step 2
+#   declared artefact and never restores that copy. This harness deliberately
+#   creates no such copy (unlike the existing BLOCK_MISSING test, which
+#   does), so run exactly as this section runs it: apply rc=2 (`awk: can't
+#   open file 0046-doc.md`), s1.txt written anyway (the `echo` before the
+#   `awk` in the same body already ran) plus a stray empty
+#   `0046-doc.md.new`. Run the OTHER way, WITH the copy present (as the
+#   BLOCK_MISSING test does): apply rc=0, rollback rc=0, and the tree still
+#   mismatches on 0046-doc.md's content afterward. Both were verified by
+#   running them; either way step 1 cannot demonstrate a clean round trip
+#   here, genuinely and by design, orthogonal to whether s1.txt itself
+#   round-trips correctly (it does, in the second scenario).
+#   `mr_step_excluded` below skips exactly this one step, by name, with
+#   this reasoning attached; step 2
 #   runs normally.
 #
 # Cross-checked against the WHOLE suite before finalising this list: the
@@ -1465,14 +1493,23 @@ mr_snapshot() {
   # $ESCAPE_TARGET entirely (`rm -rf`), not merely the file inside it, and
   # tree_snapshot cd-ing into a directory that no longer exists would
   # otherwise print a stderr "No such file or directory" every run. Falling
-  # back to tree_snapshot "$1" alone when $et is missing is safe, not a new
-  # blind spot: an EXISTING-but-empty escape target already snapshots to the
-  # same nothing an ABSENT one does, so this changes no comparison's result
-  # — it only silences noise from a directory a correct rollback is allowed
-  # to remove outright. It does NOT weaken Important 2's fix: a rollback
-  # that leaves the escape target present with its file still inside it
-  # (the mutation this guards against, see the report) hits the `-d` branch
-  # and is fully visible to the equality check either way.
+  # back to tree_snapshot "$1" alone when $et is missing is safe — but ONLY
+  # because tree_snapshot itself was fixed (fix round 2) to use `find -exec
+  # ... +` rather than `find -print0 | xargs -0`: under the OLD
+  # implementation, "an EXISTING-but-empty escape target already snapshots
+  # to the same nothing an ABSENT one does" was an unverified claim this
+  # comment used to state as fact, and it was FALSE on Linux — BSD xargs
+  # skips invoking `shasum` on empty input, GNU/busybox xargs run it once
+  # against an empty stdin, hashing zero bytes into a real (non-empty) line
+  # — so an empty existing directory and a missing one snapshotted
+  # DIFFERENTLY there, and this exact fallback broke 0034's own assertion
+  # on Linux (reproduced in a container; see task-7-report.md). `find -exec
+  # ... +` does not invoke its utility on zero matches on any of the three
+  # xargs/find variants tested, so the claim is now actually true, verified
+  # on both platforms, not assumed. This does NOT weaken Important 2's own
+  # fix: a rollback that leaves the escape target present with its file
+  # still inside it (the mutation that check guards against) hits the `-d`
+  # branch and is fully visible to the equality check either way.
   if [ -n "$et" ] && [ -d "$et" ]; then
     printf '%s\n%s' "$(tree_snapshot "$1")" "$(tree_snapshot "$et")"
   else
@@ -1491,7 +1528,7 @@ mr_snapshot() {
 mr_step_excluded() {
   case "$1:$2" in
     "0046-apply-dropped-by-step1.md:1")
-      echo "  SKIP  $1 step $2: apply rewrites 0046-doc.md (a workdir copy of the document itself, not a declared applies_to artefact) and rollback never restores it — verified directly (apply rc=0, rollback rc=0, tree still mismatches on 0046-doc.md); step 2 is unaffected and runs below"
+      echo "  SKIP  $1 step $2: apply rewrites 0046-doc.md (a workdir copy of the document itself, not a declared applies_to artefact), and this harness deliberately creates no such copy — verified directly, apply actually exits rc=2 here (awk: can't open file 0046-doc.md), leaving s1.txt written plus a stray empty 0046-doc.md.new; WITH the copy present (as the existing BLOCK_MISSING test provides it), apply rc=0 but rollback (rm -f s1.txt only) still never restores that copy either way — genuinely unexercisable here either way, not a rollback this group can pass; step 2 is unaffected and runs below"
       return 0
       ;;
     *) return 1 ;;
@@ -1515,6 +1552,34 @@ mr_apply_expected_to_fail() {
     "0036-failing-apply.md:2") return 0 ;;
     "0047-skip-continues.md:2") return 0 ;;
     *) return 1 ;;
+  esac
+}
+
+# mr_expected_step_count $1=fixture -> echoes the exact step count fix round
+# 1 originally read off the fixture at survey time. Fix round 2 minor: a
+# bare non-emptiness check on `extract.sh steps` still lets a renamed
+# heading in a multi-step fixture silently drop every assertion for the
+# missing step (proved: renaming 0047's own "### Step 3:" heading vanishes
+# 8 assertions with nothing red anywhere in this section) — pinning the
+# exact count catches that specific shape, cheaply, on top of the existing
+# reliance on other tests elsewhere in this file going red for most rename
+# shapes.
+mr_expected_step_count() {
+  case "$1" in
+    0006-belowthreshold-optin-conformant.md) echo 1 ;;
+    0016-conformant.md) echo 2 ;;
+    0023-failing-precondition.md) echo 1 ;;
+    0024-failing-check.md) echo 1 ;;
+    0029-block-isolation.md) echo 1 ;;
+    0031-heredoc-step-heading.md) echo 1 ;;
+    0034-escape-probe.md) echo 1 ;;
+    0036-failing-apply.md) echo 2 ;;
+    0040-symlink-escape-probe.md) echo 1 ;;
+    0043-precondition-127.md) echo 1 ;;
+    0046-apply-dropped-by-step1.md) echo 2 ;;
+    0047-skip-continues.md) echo 3 ;;
+    0051-failing-precondition-after-apply.md) echo 2 ;;
+    *) echo -1 ;; # deliberately unmatchable — a fixture reaching here was added to ROLLBACK_FIXTURES without a case here too
   esac
 }
 
@@ -1554,8 +1619,11 @@ mr_rollback_roundtrip() {
   # copy to exist — step 2's own apply/rollback pair concerns only s2.txt.
 
   steps_list="$(bash "$MR/extract.sh" steps "$doc")"
-  assert_eq "$([ -n "$steps_list" ] && echo nonempty || echo empty)" "nonempty" \
-    "$fixture: extract.sh reports at least one step (pins against a silently-empty list the way 0039's explicit zero-step check does above)"
+  local expected_count actual_count
+  expected_count="$(mr_expected_step_count "$fixture")"
+  actual_count="$(printf '%s' "$steps_list" | wc -w | tr -d '[:space:]')"
+  assert_eq "$actual_count" "$expected_count" \
+    "$fixture: extract.sh reports exactly $expected_count step(s) — the exact COUNT is pinned, not just non-emptiness, so a renamed heading that silently drops one step's worth of assertions is caught here rather than passing through unnoticed"
 
   for step in $steps_list; do
     if mr_step_excluded "$fixture" "$step"; then continue; fi
