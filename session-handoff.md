@@ -44,46 +44,28 @@ plus all five installers: no crash, every exit in {0,1,2}.
 own before and after. The fixes changed what the harness can see, not what it
 found in what it could already see.
 
-## Decisions
+## Decisions (fourth session, merged as #82 / 2827fa1)
 
 - **Guard reach is cut by a construct closing at column 0** (`fi`, `done`,
   `esac`, `else`, `elif`, `;;`, `}`). Block-structure parsing was rejected as
-  more machinery than the claim needs; the closing-construct rule fails every
-  probe correctly and false-fails none of the sixteen existing fixtures. The
-  opt-in is resolved through the variable it is bound to, because reading it at
-  the top and testing it near the site is the shape all four hosts will write.
+  more machinery than the claim needs. The opt-in resolves through the variable
+  it is bound to, because reading it at the top and testing it near the site is
+  the shape every host actually wrote.
 - **A `while`/`until` read is not consent evidence.** It is a loop over input,
-  not a question put to the operator. `codexish` plus one unrelated manifest
-  loop was enough to flip its FAIL to PASS.
-- **An unterminated heredoc now aborts (exit 2)** rather than scoring a
-  truncated file. §20 says a harness never reports a verdict it did not reach,
-  and a blanked tail is the strongest possible version of that failure.
+  not a question put to the operator.
+- **An unterminated heredoc aborts (exit 2)** rather than scoring a truncated
+  file. A blanked tail is the strongest possible version of the failure §20
+  exists to prevent.
 - **Fixing heredocs introduced a worse bug, caught by pointing it at the real
   fleet again.** `<<<` matched as a heredoc one character in, opening a body
-  whose terminator never arrived — the pi installer went dark from line 118 and
-  its `prereq-detection` FAIL silently became INCONCLUSIVE. The `<<<` test is a
-  check on the preceding character; the `herestring` fixture pins it. Same
-  lesson as last session: **the fixtures were not enough, the real installers
-  were.**
-- **codexish's expectation flipped to FAIL** on `owned-writes-reported`. It
-  names the directory and not the file, which §21 forbids. The real
-  codex-workflow installer names its file and still passes.
-
-## Files modified
-
-Both on `feat/installer-prerequisite-consent`, PR #82. **Uncommitted.**
-
-- `tools/installer-prereq-conformance.sh` — code view rewritten (heredocs,
-  continuations, unterminated-heredoc abort); guard reach scoped; opt-in
-  variable resolution; `export`-bound owned dirs; per-file owned-write scoring;
-  redaction line numbers; the stray `?`
-- `tools/installer-prereq-conformance.test.sh` — 8 new fixtures
-  (`halfadopted`, `continued`, `loopread`, `docheredoc`, `herestring`,
-  `unterminated`, `exportowned`, `ownedpartial`) and section G; codexish's
-  owned-write expectation flipped
-
-No spec change. §21 already said everything the harness now scores; the
-implementation had drifted from it, not the other way round.
+  whose terminator never arrived — pi went dark from line 118 and its
+  `prereq-detection` FAIL silently became INCONCLUSIVE. Pinned by the
+  `herestring` fixture. **The fixtures were not enough; the real installers
+  were.** This has now been the lesson three sessions running.
+- **codexish flipped to FAIL** on `owned-writes-reported`: it names the
+  directory and not the file. The real codex-workflow installer names its file.
+- **No spec change.** §21 already said everything the harness now scores; the
+  implementation had drifted from it, not the other way round.
 
 ## The fleet adoption (fifth session, same day)
 
