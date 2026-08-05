@@ -346,6 +346,28 @@ GUARD_OPTIN='AGENTICAPPS_INSTALL_PREREQS|--install-prereqs'
 for v in $OPTIN_VARS; do
   GUARD_OPTIN="$GUARD_OPTIN|(^|[^A-Za-z0-9_])${v}([^A-Za-z0-9_]|$)"
 done
+# A consent prompt extracted into a helper is still a consent prompt, and the
+# helper is the shape a host writes once it has more than one prerequisite to
+# ask about. The first real adoption of §21 wrote `prereq_consent()` and called
+# it on the line above the install — the good shape — and the branch-scoped
+# scan could not see the `read` inside the function body, so it reported the
+# best available implementation as unguarded. Resolve functions whose body
+# reads consent or the opt-in, then count a CALL to one as a guard. This is the
+# move `prereq-detection` already makes for `have()`.
+GUARD_FNS="$(code_body | awk -v gr="$GUARD_READ" -v lr="$LOOP_READ" -v go="$GUARD_OPTIN" '
+function guardy(s) { return ((s ~ gr && s !~ lr) || s ~ go) }
+/^[A-Za-z_][A-Za-z0-9_]*\(\)/ {
+  name = $0; sub(/\(\).*/, "", name)
+  if ($0 ~ /\}[ \t]*$/) { if (guardy($0)) print name; next }
+  infn = 1; hit = 0; next
+}
+infn && /^\}/ { if (hit) print name; infn = 0; next }
+infn { if (guardy($0)) hit = 1 }
+' || true)"
+GUARD_FN=""
+for f in $GUARD_FNS; do
+  GUARD_FN="${GUARD_FN:+$GUARD_FN|}(^|[;&|(){}]|[[:space:]])${f}([[:space:]]|$)"
+done
 if [ "$SITE_COUNT" -eq 0 ]; then
   ok "consent-guard: no out-of-boundary install command was found"
   note "detecting and instructing is conformant; only installing unasked is not."
@@ -357,8 +379,14 @@ else
     src="$(sed -n "${ln}p" "$CODE" | cut -d'|' -f1)"
     cut_at="$(head -n "$((ln - 1))" "$CODE" | grep -nE "$CUTTER" | tail -1 | cut -d: -f1)"
     before="$(sed -n "$((${cut_at:-0} + 1)),${ln}p" "$CODE")"
+    # A definition is not a call, so function-definition lines are dropped
+    # before the call test — otherwise defining the helper in the same branch
+    # would count as using it.
     if printf '%s\n' "$before" | grep -vE "$LOOP_READ" | grep -qE "$GUARD_READ" || \
-       printf '%s\n' "$before" | grep -qE "$GUARD_OPTIN"; then
+       printf '%s\n' "$before" | grep -qE "$GUARD_OPTIN" || \
+       { [ -n "$GUARD_FN" ] && printf '%s\n' "$before" \
+           | grep -vE '^[0-9]+\|[[:space:]]*[A-Za-z_][A-Za-z0-9_]*\(\)' \
+           | grep -qE "$GUARD_FN"; }; then
       :
     else
       # The whole line, not just the matched pattern. §21 requires the check to
