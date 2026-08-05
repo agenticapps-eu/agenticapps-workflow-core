@@ -58,4 +58,4 @@ re-litigated.
 - [x] 6.2 Confirm no host repo was edited — all four working trees carry only pre-existing untracked files (2026-07-25 and 2026-07-31 mtimes, none from today). The installers were read, never written
 - [x] 6.3 Report to the host repos that `codex-workflow` and `opencode-workflow` are non-conformant, with the harness output as the evidence — `CONFORMANCE-EVIDENCE.md`. The consent row sorts the fleet exactly as predicted: `codex-workflow:333` and `opencode-workflow:373` reach `npm i -g @fission-ai/openspec` unguarded; claude and pi pass it. Two findings the proposal did not predict: all four fail `prereq-detection` on an unchecked `git`, and `pi` alone fails the new `~/.agenticapps/` reporting obligation the migration plan assumed all four would gain
 - [x] 6.4 Confirm the deferred curl-able installer is still recorded and gated on `PLAN-lightweight-fleet` step 4 — it was lost once already, which is why this change exists. Recorded in the proposal's Non-goals and Impact, and in the design's Decisions
-- [ ] 6.5 Open the PR and archive the change
+- [x] 6.5 Open the PR and archive the change
