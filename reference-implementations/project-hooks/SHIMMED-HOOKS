@@ -22,5 +22,4 @@
 # One hook name per line, without the .sh. Blank lines and # comments ignored.
 
 database-sentinel
-normalize-claude-md
 openspec-change-gate
