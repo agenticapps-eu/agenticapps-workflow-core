@@ -66,13 +66,16 @@ exactly this).
 
 ## The linter — L0 through L8
 
-`lint-migration.sh` runs nine rules. All are described in more depth in the
-script's own header comment; this table is the index.
+`lint-migration.sh` runs nine *numbered*, per-step-or-per-fence rules. All
+are described in more depth in the script's own header comment; this table
+is the index. It also reports three whole-document violation classes that
+are not part of this numbering at all — those are covered separately, in
+"Whole-document checks and the opt-in mechanism" below.
 
 | Rule | Catches |
 |---|---|
 | **L0** | `migration_format:` frontmatter present but not the literal value `executable` |
-| **L1** | a step missing one of `check` / `precondition` / `apply` / `rollback`, or carrying more than one `verify` |
+| **L1** | a step missing one of `check` / `precondition` / `apply` / `rollback` (presence only — a duplicate of any role, including a second `verify`, is L3's job, not L1's) |
 | **L2** | a role-tagged fence sitting under the wrong heading (e.g. `role=apply` following **Rollback:**) |
 | **L3** | any role appearing more than once within a step |
 | **L4** | a `role=` value that is not one of the five valid roles |
@@ -192,12 +195,15 @@ failures only.**
   answer, and an unrecognised answer at the prompt are all treated as
   "abort, do not roll back" — never as consent. A prompt whose default is
   destruction is not consent.
-- **Rollback order is reverse document order**, and it **excludes the
-  failed step**. A step whose `apply` succeeded and whose `verify` then
-  failed **is** rolled back (its `apply` completed; its rollback describes a
-  state that exists). A step whose `apply` itself failed is **never** rolled
-  back (its state is unknown; rolling it back could destroy work it did not
-  create). This is why the runner tracks two lists, `applied` and the wider
+- **Rollback order is reverse document order**, and it **excludes a step
+  whose `apply` itself failed**. A step whose `apply` succeeded and whose
+  `verify` then failed **is** rolled back (its `apply` completed; its
+  rollback describes a state that exists). Only a step whose `apply` itself
+  failed is **never** rolled back (its state is unknown; rolling it back
+  could destroy work it did not create) — on a destructive operation this
+  is the distinction that matters, so it is named explicitly rather than
+  left to "the failed step," which a skimming reader could misread as
+  excluding the verify-failed case too. This is why the runner tracks two lists, `applied` and the wider
   `rollbackable` — a step joins `rollbackable` the moment its own `apply`
   succeeds, before `verify` runs, which is what makes a verify-failed step
   eligible while an apply-failed step is not.
@@ -266,6 +272,39 @@ migration runnable.
 Raising a threshold is a recorded decision — it excuses migrations from the
 format, which is the one thing that lets a silent no-op back in. Lowering
 one is free.
+
+## Whole-document checks and the opt-in mechanism
+
+L0 through L8 are the numbered rules, each attached to one step or one
+fence. The linter also reports three violation classes that are properties
+of the *document as a whole* — its filename, and the relationship between
+its filename and its frontmatter — rather than of any single step, so they
+are not part of that numbering:
+
+| Message prefix | Catches |
+|---|---|
+| `lint: <file>: filename does not begin with a numeric migration ID` | the file's basename has no parseable `<digits>-` prefix at all. **Never a skip** — an ID the linter cannot read is a violation, not a quiet route out of scope |
+| `threshold: <file>: id <N> is at or above threshold <T> but frontmatter does not declare migration_format: executable` | a migration in scope by filename ID that never declared the frontmatter field the format requires there — a spec MUST (§08, "Threshold scope") |
+| `id-mismatch: <file>: frontmatter id '<A>' does not match filename id '<B>'` (or: frontmatter `id` is not numeric) | frontmatter `id:`, where present, disagreeing with the filename that actually decides scope |
+
+**The ID-from-filename rule was itself a Stage 2 review finding, not part of
+the original design.** The first draft read a migration's ID from
+frontmatter `id:`; reading it from the filename instead — the design that
+shipped — means deleting one line can never evade the linter.
+`0026-bad-no-frontmatter-id.md` (no `id:` line at all) and
+`0027-bad-id-mismatch.md` are its dedicated regression fixtures;
+`0030-scope-by-filename.md` carries a frontmatter `id` that is deliberately
+below every threshold, so only reading the filename puts it in scope at
+all — a fixture that exists specifically to catch a future "simplification"
+back to reading frontmatter.
+
+**Opting in below threshold.** A migration below its host's threshold MAY
+declare `migration_format: executable` in frontmatter to opt in early — once
+declared, it is judged exactly as if its filename ID had put it in scope. A
+declaration can only ADD a migration to scope, never remove one the filename
+ID already established there; L0 rejects any other value the field might
+carry (a typo written deliberately is worth reporting, not silently
+ignored). This is the opt-in mechanism referenced above, under THRESHOLDS.
 
 ## `applies_to`'s dual meaning
 

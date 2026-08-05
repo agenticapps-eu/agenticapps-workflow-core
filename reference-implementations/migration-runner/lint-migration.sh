@@ -2,8 +2,10 @@
 # migration-runner-version: 0.1.0
 # lint-migration.sh — enforce the executable migration format.
 #
-# L1  every step has exactly one check, precondition, apply, rollback;
-#     verify is 0 or 1
+# L1  every step has check/precondition/apply/rollback each PRESENT at
+#     least once (verify is optional, so absent is fine). PRESENCE only —
+#     a duplicate of any role, including a second verify, is L3's job, not
+#     L1's; see the "L1's job is presence only" note further down.
 # L2  each role= fence sits under its matching **Label:** heading
 # L3  no duplicate roles within a step
 # L4  unknown role values are rejected

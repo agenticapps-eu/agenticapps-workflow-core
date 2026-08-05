@@ -362,32 +362,20 @@ echo "== lint-migration.sh: L7 unclosed fence =="
 # trusted — and if any of those guards fail, the two "MACHINE-CHECKED"
 # assertions below are recorded as FAIL rather than silently skipped, so a
 # broken extraction shrinks the pass count instead of vanishing from it.
-oldlintdir="$(mktemp -d)"
-git -C "$ROOT" show e22db7f:reference-implementations/migration-runner/lint-migration.sh > "$oldlintdir/lint-migration.sh" 2>/dev/null
-show_rc=$?
-assert_eq "$show_rc" "0" "git show e22db7f:...lint-migration.sh succeeds (the commit must stay reachable)"
-assert_eq "$(test -s "$oldlintdir/lint-migration.sh" && echo nonempty || echo empty)" "nonempty" \
-  "the extracted pre-L7 lint-migration.sh is non-empty, not a git-show failure masked by an empty file"
-assert_not_contains "$(cat "$oldlintdir/lint-migration.sh" 2>/dev/null)" "L7" \
-  "the extracted script is genuinely the pre-L7 revision (contains no L7 rule)"
-
-if [ "$show_rc" -eq 0 ] && [ -s "$oldlintdir/lint-migration.sh" ]; then
-  chmod +x "$oldlintdir/lint-migration.sh"
-  # extract.sh and THRESHOLDS are unchanged since e22db7f; symlink the real
-  # ones in rather than pulling stale copies of files this test isn't about.
-  ln -s "$MR/extract.sh" "$oldlintdir/extract.sh"
-  ln -s "$MR/THRESHOLDS" "$oldlintdir/THRESHOLDS"
-  out="$(bash "$oldlintdir/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
-  assert_eq "$?" "0" \
-    "MACHINE-CHECKED: 0041 lints CLEAN under the actual pre-L7 (e22db7f) linter"
-  assert_eq "$out" "" "the pre-L7 linter reports zero violations for this fixture, not merely exit 0"
-else
-  fail=$((fail + 2))
-  echo "  FAIL  MACHINE-CHECKED: 0041 lints CLEAN under the actual pre-L7 (e22db7f) linter (skipped: extraction failed above)"
-  echo "  FAIL  the pre-L7 linter reports zero violations for this fixture, not merely exit 0 (skipped: extraction failed above)"
-fi
-rm -rf "$oldlintdir"
-
+# TASK 9, FIX ROUND 1: the MACHINE-CHECKED assertions that used to follow
+# this comment — extracting the pre-L7 (e22db7f) lint-migration.sh from git
+# history via `git show` and running it for real against this fixture —
+# were removed. They asserted a historical fact about code that no longer
+# exists (that the OLD linter lints this clean) and never executed TODAY's
+# linter, so they could not have caught a regression in it: provenance, not
+# a guard. That also made them a hard CI dependency on this repo's own git
+# history surviving indefinitely (via `git show <sha>`), which breaks for
+# every future PR once this branch's commits are unreachable, and which a
+# host running these scripts from a shared install has no history for at
+# all. The RED-state evidence is preserved above, in prose, including the
+# exact verbatim output this fixture used to produce under the pre-L7
+# linter. The assertion that actually matters — that TODAY's linter still
+# catches this — is immediately below, and it regresses the moment L7 does.
 out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0041-unclosed-fence-precondition.md" 2>&1)"
 assert_eq "$?" "1" "L7: an unclosed fence at EOF exits 1"
 assert_contains "$out" "L7" "L7: names the rule"
@@ -1076,27 +1064,17 @@ assert_contains "$out" "'precondition'" "L8: names the empty role (precondition)
 #   never closed before end of file
 # — L8 fired first, and is simply FALSE (the body is real, non-empty
 # content; extraction never got to return it). L7 alone is correct.
-tmp8="$(mktemp -d)"
-git show 4592eaa:reference-implementations/migration-runner/lint-migration.sh > "$tmp8/lint-migration.sh" 2>/dev/null
-show_rc8=$?
-assert_eq "$show_rc8" "0" "git show 4592eaa:...lint-migration.sh succeeds (the commit must stay reachable)"
-assert_eq "$(test -s "$tmp8/lint-migration.sh" && echo nonempty || echo empty)" "nonempty" \
-  "the extracted pre-fix lint-migration.sh is non-empty, not a git-show failure masked by an empty file"
-assert_not_contains "$(cat "$tmp8/lint-migration.sh" 2>/dev/null)" "extract_rc" \
-  "the extracted script is genuinely the pre-fix revision (contains no exit-status check)"
-if [ "$show_rc8" -eq 0 ] && [ -s "$tmp8/lint-migration.sh" ]; then
-  chmod +x "$tmp8/lint-migration.sh"
-  ln -s "$MR/extract.sh" "$tmp8/extract.sh"
-  ln -s "$MR/THRESHOLDS" "$tmp8/THRESHOLDS"
-  out="$(bash "$tmp8/lint-migration.sh" --host codex-workflow "$FIX/0045-unclosed-fence-verify.md" 2>&1)"
-  assert_contains "$out" "L8: step 1: role 'verify' is empty or whitespace-only" \
-    "MACHINE-CHECKED: the pre-fix (4592eaa) L8 really does misreport this as empty"
-else
-  fail=$((fail + 1))
-  echo "  FAIL  MACHINE-CHECKED: the pre-fix (4592eaa) L8 really does misreport this as empty (skipped: extraction failed above)"
-fi
-rm -rf "$tmp8"
-
+# TASK 9, FIX ROUND 1: the MACHINE-CHECKED assertions that used to follow
+# this comment — extracting the pre-fix (4592eaa) lint-migration.sh from
+# git history and running it for real against this fixture to prove L8
+# used to misreport it — were removed, for the same reason as the L7 block
+# above: a historical fact about deleted code, never executing today's
+# linter, and a hard dependency on this repo's own git history (`git show
+# <sha>`) that breaks for every future PR once the commit is unreachable,
+# and that a shared install has no history for regardless. The RED-state
+# evidence is preserved above, in prose, verbatim. The assertion that
+# matters — that TODAY's linter no longer misreports this — is immediately
+# below, and it regresses the moment that fix does.
 out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0045-unclosed-fence-verify.md" 2>&1)"
 assert_eq "$?" "1" "L8 fix: 0045 still lints dirty (L7 fires)"
 assert_contains "$out" "L7" "L8 fix: L7 still correctly diagnoses the unclosed fence"
