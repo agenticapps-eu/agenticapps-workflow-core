@@ -44,62 +44,90 @@ plus all five installers: no crash, every exit in {0,1,2}.
 own before and after. The fixes changed what the harness can see, not what it
 found in what it could already see.
 
-## Decisions
+## Decisions (fourth session, merged as #82 / 2827fa1)
 
 - **Guard reach is cut by a construct closing at column 0** (`fi`, `done`,
   `esac`, `else`, `elif`, `;;`, `}`). Block-structure parsing was rejected as
-  more machinery than the claim needs; the closing-construct rule fails every
-  probe correctly and false-fails none of the sixteen existing fixtures. The
-  opt-in is resolved through the variable it is bound to, because reading it at
-  the top and testing it near the site is the shape all four hosts will write.
+  more machinery than the claim needs. The opt-in resolves through the variable
+  it is bound to, because reading it at the top and testing it near the site is
+  the shape every host actually wrote.
 - **A `while`/`until` read is not consent evidence.** It is a loop over input,
-  not a question put to the operator. `codexish` plus one unrelated manifest
-  loop was enough to flip its FAIL to PASS.
-- **An unterminated heredoc now aborts (exit 2)** rather than scoring a
-  truncated file. §20 says a harness never reports a verdict it did not reach,
-  and a blanked tail is the strongest possible version of that failure.
+  not a question put to the operator.
+- **An unterminated heredoc aborts (exit 2)** rather than scoring a truncated
+  file. A blanked tail is the strongest possible version of the failure §20
+  exists to prevent.
 - **Fixing heredocs introduced a worse bug, caught by pointing it at the real
   fleet again.** `<<<` matched as a heredoc one character in, opening a body
-  whose terminator never arrived — the pi installer went dark from line 118 and
-  its `prereq-detection` FAIL silently became INCONCLUSIVE. The `<<<` test is a
-  check on the preceding character; the `herestring` fixture pins it. Same
-  lesson as last session: **the fixtures were not enough, the real installers
-  were.**
-- **codexish's expectation flipped to FAIL** on `owned-writes-reported`. It
-  names the directory and not the file, which §21 forbids. The real
-  codex-workflow installer names its file and still passes.
+  whose terminator never arrived — pi went dark from line 118 and its
+  `prereq-detection` FAIL silently became INCONCLUSIVE. Pinned by the
+  `herestring` fixture. **The fixtures were not enough; the real installers
+  were.** This has now been the lesson three sessions running.
+- **codexish flipped to FAIL** on `owned-writes-reported`: it names the
+  directory and not the file. The real codex-workflow installer names its file.
+- **No spec change.** §21 already said everything the harness now scores; the
+  implementation had drifted from it, not the other way round.
 
-## Files modified
+## The fleet adoption (fifth session, same day)
 
-Both on `feat/installer-prerequisite-consent`, PR #82. **Uncommitted.**
+**§21 is adopted in all four hosts. Six PRs, all CI-green.**
 
-- `tools/installer-prereq-conformance.sh` — code view rewritten (heredocs,
-  continuations, unterminated-heredoc abort); guard reach scoped; opt-in
-  variable resolution; `export`-bound owned dirs; per-file owned-write scoring;
-  redaction line numbers; the stray `?`
-- `tools/installer-prereq-conformance.test.sh` — 8 new fixtures
-  (`halfadopted`, `continued`, `loopread`, `docheredoc`, `herestring`,
-  `unterminated`, `exportowned`, `ownedpartial`) and section G; codexish's
-  owned-write expectation flipped
+| repo | PR | before | after |
+|---|---|---|---|
+| `claude-workflow` | #113 | 3 passed, 1 failed | 4 passed, 0 failed |
+| `codex-workflow` | #35 | 2 passed, 4 failed | 6 passed, 0 failed |
+| `opencode-workflow` | #24 | 2 passed, 4 failed | 6 passed, 0 failed |
+| `pi-agentic-apps-workflow` | #20 | 1 passed, 2 failed | 3 passed, 0 failed |
+| core | #83 | — | the git row is four of four, not three |
+| core | #84 | — | two harness fixes, below |
 
-No spec change. §21 already said everything the harness now scores; the
-implementation had drifted from it, not the other way round.
+codex and opencode were the two the section was written about. Both now offer
+rather than install: y/yes only, case-insensitive, EOF and anything
+unrecognised decline, no terminal means report-and-refuse, `--install-prereqs`
+/ `AGENTICAPPS_INSTALL_PREREQS=1` authorise it unattended, a failed install
+reports its exit status, and a skipped step exits non-zero. The consent branch
+was exercised directly for every path §21 names, not just scored statically.
+
+**Adopting the contract found two more harness defects, both the same shape:
+indirection through a helper.**
+
+- **A consent prompt in a function was not a guard.** The first adoption wrote
+  `prereq_consent()` and called it above the install — the shape §21 wants —
+  and the branch-scoped scan could not see the `read` inside the body. The
+  harness failed the best implementation available while passing nothing
+  better. Functions whose body reads consent or the opt-in are now resolved.
+- **A report through a logging helper was not a report.** pi names every file
+  it writes, through `done_`, under a header naming the directory, and the row
+  read literal echo/printf only — so it was told it says nothing. Loggers are
+  now resolved, and a dispatcher (`run() { …; else "$@"; fi; }`) deliberately
+  is not: counting it would make `run cp gate.sh "$AA_BIN/x"` its own report.
+
+pi needed **no repo change** for the owned-write row. It was a false FAIL.
+
+Two unrelated bugs found while working in the same files: opencode's
+`--skip-upstream` has been documented and rejected by its own arg parser since
+it was introduced (the second `for arg` loop that reads it never runs, because
+the first hits `*)` and exits 2), and pi told the operator "not a git
+repository" about a repository that is one, whenever git itself was absent.
 
 ## Next session: start here
 
-**Commit the two files and push to PR #82** — nothing else is pending on this
-branch, and the working tree is verified green. Then the fleet work the third
-session queued is still waiting: `codex-workflow:333` and
-`opencode-workflow:373` non-conformant on consent, `pi` on the reporting
-obligation, and all four on the unchecked `git`. Each is that host's own
-change.
+**Merge the four host PRs.** #83 and #84 are already on main; #84 carries the
+two harness fixes that make three of those four score clean, so it had to land
+first. #113 / #35 / #24 / #20 in any order. All were CI-green.
 
-Worth knowing before that work starts: the consent row is now much harder to
-satisfy accidentally, so a host adopting §21 will get a real answer rather than
-a green one.
+After that the fleet is conformant and there is no §21 work left. The open
+question worth taking next is publishing the harness — see below.
 
 ## Open questions
 
+- **Nothing enforces §21 on any host.** The harness lives only in core's
+  `tools/` — it is not published to `~/.agenticapps/bin/`, no host CI runs it,
+  and no host repo references it. All four adoptions were scored by running
+  core's checkout by path. So conformance is voluntary and unverified from the
+  host side, and the next host installer that adds a global install will not be
+  caught by anything. Either publish the harness the way the gate and the
+  reviewer wrapper are published, or accept that core scores the fleet by hand.
+  This is the decision worth taking before anything else.
 - **`non-interactive` is still file-scoped.** Any `-t 0` anywhere passes the
   row, including an unrelated colour-detection test. Scoping it per-site the
   way consent now is would false-fail the conformant reference, whose tty test

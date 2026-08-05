@@ -541,6 +541,128 @@ cp drift.sh "$HOME/.agenticapps/bin/drift.sh"
 echo "wrote $HOME/.agenticapps/bin/gate.sh"
 EOF
 
+# The shape the first real §21 adoption produced: the prompt lives in a helper,
+# because a host with more than one prerequisite to ask about writes it once.
+# The helper is the GOOD pattern, and the branch-scoped guard scan could not see
+# the `read` inside its body — so the harness failed the best implementation
+# available while passing nothing better.
+fx fnguard <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+INSTALL_PREREQS=0
+case "${AGENTICAPPS_INSTALL_PREREQS:-0}" in 1) INSTALL_PREREQS=1 ;; esac
+for arg in "$@"; do
+  case "$arg" in --install-prereqs) INSTALL_PREREQS=1 ;; esac
+done
+have() { command -v "$1" >/dev/null 2>&1; }
+prereq_consent() {
+  local reply
+  if [ "$INSTALL_PREREQS" -eq 1 ]; then return 0; fi
+  if [ ! -t 0 ]; then
+    echo "no terminal — re-run with --install-prereqs to authorise: $2"
+    return 1
+  fi
+  printf 'install %s with %s? [y/N] ' "$1" "$2"
+  IFS= read -r reply || reply=""
+  case "$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')" in
+    y|yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+have npm || { echo "npm required — install Node.js"; exit 1; }
+if ! have openspec; then
+  if prereq_consent "openspec" "npm install -g @fission-ai/openspec"; then
+    npm install -g @fission-ai/openspec
+  fi
+fi
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# The other half of that: a helper that asks nothing must not launder an
+# install just by being called. Otherwise "call any function first" is the new
+# way to pass the row.
+fx fnnoguard <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+have() { command -v "$1" >/dev/null 2>&1; }
+banner() {
+  echo "─────────────────────────"
+  echo "$1"
+}
+have npm || { echo "npm required"; exit 1; }
+if ! have openspec; then
+  banner "installing openspec"
+  npm install -g @fission-ai/openspec
+fi
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# And the helper must not reach past a closed construct either — the same rule
+# the inline guard obeys. Site one asks; site two, added later, does not.
+fx fnhalfadopted <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+have() { command -v "$1" >/dev/null 2>&1; }
+prereq_consent() {
+  local reply
+  printf 'install %s? [y/N] ' "$1"
+  IFS= read -r reply || reply=""
+  case "$reply" in y|yes) return 0 ;; *) return 1 ;; esac
+}
+have npm || { echo "npm required"; exit 1; }
+if ! have openspec; then
+  if prereq_consent "openspec"; then
+    npm install -g @fission-ai/openspec
+  fi
+fi
+if ! have some-linter; then
+  npm i -g @agenticapps/some-linter
+fi
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+echo "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# Output goes through a logging helper in any installer with more than a
+# handful of messages. Reading only literal echo/printf made those reports
+# invisible: pi names every file it writes, under a header naming the
+# directory, and was reported as writing ~/.agenticapps/ and never saying so.
+fx loggerreports <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+say()  { printf '  %s\n' "$*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || say "missing: openspec — validation will not run."
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+say "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# The other half: a dispatcher is not a logger. `run()` contains an echo and
+# every mutating call in three of the four installers goes through it, so
+# counting it would make `run cp gate.sh "$AA_BIN/x"` its own report — the
+# write reporting itself.
+fx dispatcheronly <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+DRY_RUN=0
+run() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "would run: $*"
+  else
+    "$@"
+  fi
+}
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec"
+run mkdir -p "$HOME/.agenticapps/bin"
+run cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+EOF
+
 REFERENCE="$WORK/reference.sh"
 CODEXISH="$WORK/codexish.sh"
 CLAUDEISH="$WORK/claudeish.sh"
@@ -565,6 +687,11 @@ HERESTRING="$WORK/herestring.sh"
 UNTERMINATED="$WORK/unterminated.sh"
 EXPORTOWNED="$WORK/exportowned.sh"
 OWNEDPARTIAL="$WORK/ownedpartial.sh"
+FNGUARD="$WORK/fnguard.sh"
+FNNOGUARD="$WORK/fnnoguard.sh"
+FNHALFADOPTED="$WORK/fnhalfadopted.sh"
+LOGGERREPORTS="$WORK/loggerreports.sh"
+DISPATCHERONLY="$WORK/dispatcheronly.sh"
 
 echo "═══ installer-prereq-conformance.test.sh"
 echo
@@ -805,6 +932,28 @@ if selected "reading"; then
   want_out  "and the unnamed files are named" "reviewer.sh"
   want_out  "both of them"                    "drift.sh"
   want_not_out "the reported one is not listed as unreported" "never named:.*gate\.sh"
+
+  # The guard that a host actually writes lives in a helper.
+  run "$FNGUARD"
+  want_row  "fnguard: a consent prompt in a helper is still a consent prompt" "consent-guard" "PASS"
+  want_code "and a properly guarded installer is clean" 0
+
+  run "$FNNOGUARD"
+  want_row  "fnnoguard: calling a helper that asks nothing guards nothing" "consent-guard" "FAIL"
+  want_code "and the run is red" 1
+
+  run "$FNHALFADOPTED"
+  want_row  "fnhalfadopted: the helper does not reach past a closed construct" "consent-guard" "FAIL"
+  want_out  "and the ungated site is the one named" "some-linter"
+
+  # A report made through a logging helper is still a report.
+  run "$LOGGERREPORTS"
+  want_row  "loggerreports: a report through a helper is still a report" "owned-writes-reported" "PASS"
+  want_code "and the installer is clean" 0
+
+  run "$DISPATCHERONLY"
+  want_row  "dispatcheronly: a dispatcher is not a logger" "owned-writes-reported" "FAIL"
+  want_code "and the run is red" 1
 
   # The line number an operator is sent to must be the line in THEIR file.
   # `$RAW` has its comments removed, so its numbering is a file nobody has.
