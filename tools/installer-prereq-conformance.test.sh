@@ -325,6 +325,46 @@ fx notaninstaller <<'EOF'
 echo "hello"
 EOF
 
+# A command substitution inside a string is CODE, and the quote strip must not
+# take it with the string. If it does, the harness cannot see an install
+# performed as `out="$(npm install -g pkg)"` — which is the consent row, its
+# central job, defeated by a pair of quotes.
+fx substituted <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+if ! command -v openspec >/dev/null 2>&1; then
+  OUT="$(npm install -g @fission-ai/openspec)"
+  echo "$OUT"
+fi
+mkdir -p "$ROOT/.claude/skills"
+echo "provisioned $ROOT/.claude/skills"
+EOF
+
+# core's own `install-core-git-hooks.sh` shape: provisions a git hook into a
+# resolved destination, checks nothing, installs nothing. It is unmistakably an
+# installer, and the first draft of the recognisability screen called it
+# UNSCOREABLE because it writes neither ~/.agenticapps/ nor a `.claude/`-shaped
+# path. A screen that cannot see core's own installer would have let core ship
+# a contract it never scored itself against — the failure this repo has had
+# before.
+fx hookish <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+HOOKS_DIR="$(git rev-parse --git-path hooks)"
+write_hook() {
+  mkdir -p "$HOOKS_DIR" || return 1
+  cat > "$HOOKS_DIR/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+exec bash tools/gate.sh --ci
+HOOK
+  chmod +x "$HOOKS_DIR/pre-commit"
+}
+write_hook || exit 1
+printf 'installed: %s\n' "$HOOKS_DIR/pre-commit"
+EOF
+
 REFERENCE="$WORK/reference.sh"
 CODEXISH="$WORK/codexish.sh"
 CLAUDEISH="$WORK/claudeish.sh"
@@ -337,6 +377,8 @@ UNCHECKED="$WORK/unchecked.sh"
 LEAKY="$WORK/leaky.sh"
 REMOVER="$WORK/remover.sh"
 NOTANINSTALLER="$WORK/notaninstaller.sh"
+HOOKISH="$WORK/hookish.sh"
+SUBSTITUTED="$WORK/substituted.sh"
 
 echo "═══ installer-prereq-conformance.test.sh"
 echo
@@ -375,6 +417,13 @@ if selected "screening"; then
   run "$NOTANINSTALLER"
   want_code "an unrecognisable target aborts rather than scoring nothing" 2
   want_out  "and says it could not recognise an installer" "not recognisable as an installer"
+
+  # The other side of that screen, and the one that costs something when it is
+  # wrong: a hook installer provisions neither ~/.agenticapps/ nor `.claude/`,
+  # and must still be recognised.
+  run "$HOOKISH"
+  want_not_out "a git-hook installer is recognised as an installer" "not recognisable as an installer"
+  want_out     "and its rows are scored"                            "coverage: [1-9][0-9]* of [0-9]+ rows scored"
   echo
 fi
 
@@ -451,6 +500,12 @@ fi
 if selected "rows"; then
   echo "── E. the remaining rows, each failing alone"
 
+  run "$SUBSTITUTED"
+  want_code "an install hidden in a command substitution is still found" 1
+  want_row  "substituted: the quote strip did not eat the install" "consent-guard" "FAIL"
+  want_row  "substituted: and git, invoked only inside \$(), is seen" "prereq-detection" "FAIL"
+  want_out  "substituted names git as the undeclared tool" "prereq-detection.*git"
+
   run "$UNCHECKED"
   want_code "an undeclared prerequisite is non-conformant" 1
   want_row  "unchecked: npx is invoked and never checked" "prereq-detection" "FAIL"
@@ -480,9 +535,12 @@ if selected "coverage"; then
 
   run "$CLAUDEISH"
   want_out "coverage line is emitted on a mostly-inconclusive run" "coverage: [0-9]+ of [0-9]+ rows scored"
-  # claudeish leaves non-interactive and opt-in undecided; the scored total
-  # must exclude them, or "I could not tell" becomes "I checked".
-  want_out "inconclusive rows are excluded from the scored total" "coverage: 5 of 7 rows scored, 2 inconclusive"
+  # claudeish leaves non-interactive, opt-in and uninstall undecided — it
+  # installs nothing and removes nothing, so three of the seven rows have no
+  # subject. The scored total must exclude them, or "I could not tell" becomes
+  # "I checked". 4 + 3 = 7 is the whole assertion: every row is accounted for,
+  # and only four of them are evidence.
+  want_out "inconclusive rows are excluded from the scored total" "coverage: 4 of 7 rows scored, 3 inconclusive"
 
   run "$REFERENCE"
   want_out "the total line names all three counts" "TOTAL: [0-9]+ passed, [0-9]+ failed, [0-9]+ inconclusive"

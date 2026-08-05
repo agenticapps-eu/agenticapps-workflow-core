@@ -36,6 +36,17 @@ set -uo pipefail
 
 MARKER='# managed-by: agenticapps-workflow-core tools/install-core-git-hooks.sh'
 
+# DECLARED PREREQUISITE (§21). `git` is the only external tool this script
+# needs, and every destination it writes comes from `git rev-parse`. Without
+# the check the failure surfaces as rev-parse's own "command not found", which
+# names the symptom rather than the missing tool — and §21 requires an
+# installer to report a missing prerequisite BY NAME and say what will not work
+# without it. `git` is a system runtime, so it is reported and never offered.
+command -v git >/dev/null 2>&1 || {
+  printf 'missing: git — the hooks directory is resolved with git rev-parse,\n' >&2
+  printf 'so the gate cannot be installed without it. Install git, then re-run.\n' >&2
+  exit 1; }
+
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   printf 'not inside a git repository\n' >&2; exit 1; }
 cd "$ROOT" || exit 1
