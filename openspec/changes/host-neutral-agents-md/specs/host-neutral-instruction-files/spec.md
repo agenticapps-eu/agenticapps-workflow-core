@@ -42,11 +42,28 @@ file in that agent's own directory. Everything else that differs between agents
 SHALL live in that agent's directory (`.codex/`, `.opencode/`, `.pi/` or
 equivalent).
 
-The measured host-specific surface is small — the binding repo name, the host
-config path, and the skill or prompt invocation syntax. Everything else in the
-observed duplicate blocks was identical once host names were normalised out. A
-link is enough to reach all of it, and is the smallest thing that can be added
-and removed per agent without touching prose any other agent reads.
+The links SHALL be carried as a frontmatter list keyed by agent identifier,
+whose value is the path to that agent's own file:
+
+```yaml
+---
+agents:
+  codex: .codex/AGENTS.md
+  pi: .pi/AGENTS.md
+---
+```
+
+Each entry's value SHALL be a path. A bare identifier is an inventory of what
+is installed, not a pointer to where its instructions are, and an agent reading
+the shared file would have no way to reach its own.
+
+The measured host-specific surface is small. Across the three live host
+templates, four values carry it: the host directory, the binding repo, the
+invocation syntax for skills and prompts, and the trigger-skill install root.
+Everything else in the observed blocks was identical once host names were
+normalised out. A link is enough to reach all of it, and is the smallest thing
+that can be added and removed per agent without touching prose any other agent
+reads.
 
 #### Scenario: Invocation syntax differs between agents
 
@@ -67,6 +84,14 @@ and removed per agent without touching prose any other agent reads.
 
 - **WHEN** a host's provisioning adds its link to the shared instruction file
 - **THEN** this SHALL NOT be reported as a violation
+
+#### Scenario: An entry names an agent without pointing at its file
+
+- **WHEN** a frontmatter agent entry carries a bare identifier rather than a
+  path to that agent's own file
+- **THEN** the condition SHALL be reported as a violation
+- **AND** the report SHALL state that the entry is an inventory rather than a
+  link, since nothing in the shared file then reaches that agent's instructions
 
 ### Requirement: A host identifier inside the workflow section is a warning
 

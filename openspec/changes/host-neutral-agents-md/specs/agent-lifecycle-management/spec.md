@@ -58,12 +58,19 @@ never committed at all.
 ### Requirement: The shared instruction file carries one link per installed agent
 
 The shared instruction file SHALL carry one link per installed agent, each
-pointing at that agent's own file in its own directory. Adding an agent SHALL
-add its link; removing an agent SHALL remove its link. No add or remove SHALL
-change any other agent's link.
+pointing at that agent's own file in its own directory, as a frontmatter list
+keyed by agent identifier. Adding an agent SHALL add its entry; removing an
+agent SHALL remove its entry. No add or remove SHALL change any other agent's
+entry.
 
 The link is the only host-specific content permitted in the shared file, so it
 is also the only thing an add or remove may write there.
+
+Because the entries share one frontmatter block, an add or remove rewrites that
+block. "Unchanged" for another agent's entry therefore means its identifier and
+path are unchanged — not that its bytes were untouched. The byte-identical
+claim is made only of the host-neutral section, where it is both achievable and
+the property that matters, since that section is the content every agent reads.
 
 #### Scenario: First agent arrives
 

@@ -85,6 +85,26 @@ reason as the per-host manifest above — it is new state that can drift from
 disk, and an agent reading `AGENTS.md` would have no pointer to its own
 instructions.
 
+**The links are a frontmatter list, and the entries carry paths.** Donald's
+choice, over a per-agent marker pair. The entries are `codex: .codex/AGENTS.md`,
+not a bare `- codex`, and that distinction is what keeps this decision
+consistent with the manifest rejection directly above: an entry carrying a path
+is still a pointer to the agent's own instructions, whereas a bare id would be
+exactly the inventory that paragraph rules out. The list lives in `AGENTS.md`
+itself, so it also cannot drift from the file it describes the way a separate
+manifest could.
+
+The cost is that adding or removing an entry rewrites the frontmatter block. No
+tool can then prove it left the other entries byte-untouched, so the lifecycle
+requirements below say another agent's link is *unchanged* in content rather
+than byte-identical — the byte-identical claim is kept for the host-neutral
+section, where it is achievable and where it is the property that actually
+matters. *Alternative considered:* a marker pair per agent, which makes the
+byte-identical claim provable for links too. Not chosen; the frontmatter list
+buys a single well-known location and no delimiter overhead, and the rewrite
+hazard falls on the host installers rather than on core, whose harness only
+reads this file.
+
 **The host-neutral section survives the last agent leaving.** Removing it would
 be symmetric with adding it, and symmetry is the wrong goal: a repo that
 briefly has no agent would lose documentation it is about to want back, and
@@ -107,13 +127,35 @@ weaker existing decision stands unchanged: removal reports state it did not
 install and leaves it alone. Recorded here so the question is visibly not
 adopted rather than silently dropped.
 
-**One marker name, host-neutral, with the legacy names recognised for
-detection only.** Today's markers are host-scoped
-(`BEGIN: agentic-apps-workflow sections`, `BEGIN: opencode-workflow sections`).
-The new section needs a single name. Legacy names must still be *recognised*,
-or the duplicate check cannot see the state it exists to report — but they are
-recognised for reporting, not rewritten, consistent with the no-auto-collapse
-decision.
+**The marker name stays `agentic-apps-workflow sections`, and the marker was
+never the problem.** This design originally recorded that today's markers are
+host-scoped — `BEGIN: agentic-apps-workflow sections` and
+`BEGIN: opencode-workflow sections` — and that the new section therefore needs a
+single host-neutral name. A marker inventory across the family shows both halves
+of that are wrong.
+
+`agentic-apps-workflow sections` is not host-scoped. It is already host-neutral,
+and all three live templates — codex, opencode and pi — already write exactly
+it. `BEGIN: opencode-workflow sections` appears nowhere in the family except in
+this design's own earlier text. The host-scoped markers that do exist,
+`codex-workflow global section` and `opencode-workflow global section`, are
+written into the *global* agents file (`$CODEX_HOME/AGENTS.md`,
+`$OPENCODE_CONFIG_DIR/AGENTS.md`), which is a different file from the project's
+`AGENTS.md` and out of scope here.
+
+This inverts the diagnosis. Two hosts did not collide because they used
+different names — they collided because they used the *same* name and neither
+looked for it before appending. A single host-neutral marker is not the fix; it
+is the pre-existing condition. It is also why the cparx pair could not be merged
+mechanically: with both blocks carrying an identical marker, nothing in the file
+records which host wrote which, so even the provenance needed to choose between
+them was absent.
+
+The requirement is therefore about behaviour, not naming: a host MUST look for
+the marker and MUST NOT append a second block when it is present. There is no
+rename, and the legacy-name list for project files is empty — but the harness
+must still not mistake a global-file marker for a project one, since the two
+differ only by a word.
 
 **Core binds this with a conformance harness, not an implementation.** Follows
 the established `tools/*-conformance.sh` shape: a host repo points the script
@@ -167,14 +209,19 @@ into Decisions above: the host-identifier check warns rather than fails; a
 per-agent link is the only host-specific content permitted in `AGENTS.md`; and
 the host-neutral section is not removed when the last agent leaves.
 
+The link's shape, which task 2.5 held open, has also been answered and moved
+into Decisions above: a frontmatter list whose entries carry paths.
+
 Remaining, and genuinely open:
 
-- **The link's shape is unspecified.** A markdown link under a fixed heading, a
-  marker-delimited link block, and a frontmatter list are all workable, and
-  they differ in how cheaply a tool can add and remove exactly one entry
-  without reflowing its neighbours. Task 2.5 settles this before the spec text
-  is written.
 - **The host-identifier denylist has no source.** It needs a list of known host
   identifiers and a rule for what happens when a new host appears that is not
   on it — which is the case where the warning is most useful and least likely
   to fire.
+- **The producer/consumer asymmetry this change surfaced is unowned.** Reading
+  the three live templates side by side found the gate's "≥ 2 external
+  reviewers, enforced" claim still in `pi-agentic-apps-workflow`'s template —
+  false since gate 2.0.0, and corrected in all seven projects' shims on
+  2026-08-02 without the template that seeds new projects being touched. This
+  change fixes the duplication that let it hide; nothing yet checks that a
+  correction applied to consumers reaches the producer.

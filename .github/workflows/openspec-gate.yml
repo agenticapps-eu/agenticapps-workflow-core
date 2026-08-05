@@ -159,6 +159,32 @@ jobs:
         # survive, in the wrong requirement.
         run: bash tools/spec-placement.test.sh
 
+      - name: Test the AGENTS.md conformance harness, both directions
+        # This harness scores a host repo's shared instruction file. Core has
+        # none: it is a spec repo carrying a CLAUDE.md, and CLAUDE.md is out of
+        # scope by the very requirement the harness enforces. So "run it
+        # against core itself" is unsatisfiable as stated, and substituting
+        # CLAUDE.md would mean enforcing a rule the spec says does not apply.
+        #
+        # The honest substitute is to run it against fixtures in BOTH
+        # directions on every push — a conformant layout must pass, and each
+        # forbidden layout must fail. A harness only ever pointed at other
+        # people's repos is one nothing here ever proves works, which is how
+        # it shipped scoring an appended duplicate section green.
+        run: bash tools/agents-md-conformance.test.sh
+
+      - name: Score core's own shared instruction file, if it has one
+        # Reported, never silently skipped. The day core gains an AGENTS.md —
+        # the day a second agent is provisioned here — it gets scored, rather
+        # than from whenever someone remembers to revisit this step.
+        run: |
+          if [ -f AGENTS.md ]; then
+            bash tools/agents-md-conformance.sh AGENTS.md
+          else
+            echo "NOTE: core has no AGENTS.md, so there is nothing to score."
+            echo "      CLAUDE.md is out of scope per spec §12 and is deliberately not substituted."
+          fi
+
       - name: Run the change gate
         # exit 0 = every active change validates (review NOTEs may still print);
         # exit 1 = `openspec validate --all` is red, or the openspec CLI is

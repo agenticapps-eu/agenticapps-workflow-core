@@ -20,6 +20,39 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**`spec/12-authoring-conventions.md` 0.10.0 → 0.11.0 — minor. `AGENTS.md`
+carries one host-neutral workflow section, whatever the agent count.** §12
+gains a "Shared instruction files across hosts" subsection. Each host's setup
+skill appends its own block to `AGENTS.md` without looking to see whether
+another host already has, so a project with two hosts gets two near-duplicate
+copies that then drift. With one host installed the flaw is invisible, which is
+why the fleet was conformant by accident rather than by rule.
+
+**Conformance impact — MUST-level, and hosts writing `AGENTS.md` are
+affected.** A host implementation must now: carry at most one workflow section;
+check for the marker before appending and not append a second block; keep
+host-specific detail in its own directory (`.codex/`, `.opencode/`, `.pi/`);
+write no host-specific content into the shared file beyond one frontmatter
+entry `agents: {<id>: <path>}` pointing at its own file; delimit the section so
+it can be located and removed by markers alone; and treat `CLAUDE.md` as out of
+scope. A duplicate section is reported with line ranges, never collapsed — the
+copies have drifted and the file records no provenance to choose between them.
+A host identifier inside the section body is a warning, not a failure, and the
+per-agent entries are exempt from that check.
+
+These are MUSTs where the rest of §12 is SHOULDs. The distinction is the
+failure mode: a host that appends a second block damages a file every *other*
+agent reads, and the damage stays invisible until a second host arrives.
+
+Two findings from the source material are folded into the text rather than
+carried as rationale elsewhere. The marker was never the problem — all three
+live host templates already write the same host-neutral marker
+(`agentic-apps-workflow sections`), so hosts collide *because* the name is
+shared and none looks first; a rename would fix nothing, and the shared name is
+also why a duplicate cannot be merged mechanically. And the host-specific
+surface is four values, not the three previously assumed: the host directory,
+the binding repo, the invocation syntax, and the trigger-skill install root.
+
 **Spec 1.4.0 → 1.5.0 — minor. §18's review clause becomes reported, not
 enforced.** The spec now describes the gate that shipped. Gate 2.0.0 withdrew
 blocking on review state; §18 and §17 were not swept for it, so core's own
