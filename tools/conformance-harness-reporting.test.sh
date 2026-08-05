@@ -63,6 +63,7 @@ run-plan-review-conformance.sh:M:norost
 reviewer-cli-conformance.sh:M:roster
 resolve-core-artifact-conformance.sh:S:norost
 shared-install-conformance.sh:S:norost
+installer-prereq-conformance.sh:S:norost
 "
 
 ok()   { echo "  PASS  $1"; pass=$((pass + 1)); }

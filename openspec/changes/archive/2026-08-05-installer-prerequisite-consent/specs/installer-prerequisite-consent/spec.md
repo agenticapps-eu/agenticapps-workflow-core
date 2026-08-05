@@ -268,3 +268,33 @@ an automated caller reads.
 - **WHEN** an installer completes with one or more steps skipped
 - **THEN** its summary SHALL distinguish completed work from skipped work
 - **AND** it SHALL exit non-zero
+
+### Requirement: A prerequisite installed on the operator's behalf is left in place on removal
+
+An uninstaller SHALL NOT remove a prerequisite that was installed on the
+operator's behalf, and SHALL report what it is leaving installed together with
+the command that removes it.
+
+The ownership test runs in both directions. By the time the workflow is
+removed, a package the operator accepted may be resolved by projects this
+workflow never touched, so removing it changes software the workflow does not
+own — the act consent exists to prevent. Reporting is what stops that from
+becoming an unnoticed residue: the operator learns the machine still carries
+something this workflow put there, and how to take it away themselves.
+
+This governs prerequisites only. The workflow's own artifacts under
+`~/.agenticapps/bin/` are the workflow, not a prerequisite, and removing them
+is what uninstalling means.
+
+#### Scenario: The workflow is removed after a prerequisite was installed for it
+
+- **WHEN** an uninstaller runs and a prerequisite was installed on the
+  operator's behalf during a previous install
+- **THEN** it SHALL NOT remove that prerequisite
+- **AND** SHALL report the prerequisite by name and the command that removes it
+
+#### Scenario: The workflow's own artifacts are removed
+
+- **WHEN** an uninstaller removes the workflow's own artifacts from a directory
+  this workflow owns
+- **THEN** those removals SHALL NOT be governed by this requirement
