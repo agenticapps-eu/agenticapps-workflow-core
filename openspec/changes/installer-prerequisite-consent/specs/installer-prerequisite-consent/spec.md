@@ -1,136 +1,246 @@
 ## ADDED Requirements
 
-### Requirement: An installer detects its prerequisites and reports what is missing
+### Requirement: An installer declares its prerequisites and reports which are missing
 
-An installer SHALL check for every external tool it depends on before doing
-work that requires it, and SHALL report which prerequisites are missing rather
-than failing partway through on the first use.
+An installer SHALL declare the external tools it depends on and SHALL report
+which of them are absent before doing work that requires them.
 
-Detection is the part all four current installers already do. Stating it makes
-the report the observable, so an operator learns what is missing in one place
-instead of discovering it at the point of failure.
+A *declared prerequisite* is a tool the installer names as a dependency —
+`openspec`, `npm`, the host CLI. It is not every executable the script invokes.
+Read literally, "every external tool" would include `mkdir`, `grep` and `sed`,
+which no installer checks and which would make the requirement either
+universally violated or interpreted four different ways. Scoping it to a
+declared set is what makes it checkable, and declaring the set is the part that
+does the work.
 
-#### Scenario: A prerequisite is absent
+#### Scenario: A declared prerequisite is absent
 
-- **WHEN** an installer runs and a tool it depends on is not present
+- **WHEN** an installer runs and a declared prerequisite is not present
 - **THEN** it SHALL report that prerequisite by name
 - **AND** SHALL state what will not work without it
 
-#### Scenario: Every prerequisite is present
+#### Scenario: Every declared prerequisite is present
 
-- **WHEN** all prerequisites are present
+- **WHEN** all declared prerequisites are present
 - **THEN** the installer SHALL proceed without prompting about any of them
 
-### Requirement: Installing outside the target repository requires the operator's acceptance
+#### Scenario: A prerequisite is present but too old
 
-An installer SHALL NOT install software outside the target repository without
-the operator explicitly accepting first. It SHALL offer, state what will be
-installed and by what command, and wait for acceptance.
+- **WHEN** an installer requires a minimum version of a prerequisite and the
+  installed version is older
+- **THEN** it SHALL report the found and required versions
+- **AND** SHALL treat upgrading it as an install requiring acceptance under the
+  requirements below, since replacing a tool already on the machine changes
+  software the operator did not ask this installer to touch
 
-A global package install is not a repository-local side effect. It changes a
-tool every other project on that machine resolves, and the operator asked for
-one repository to be provisioned.
+### Requirement: Consent is required to change software the workflow does not own
 
-#### Scenario: A missing prerequisite can be installed automatically
+An installer SHALL obtain the operator's explicit acceptance before any write
+that can affect software outside the workflow's own control surface. It SHALL
+NOT require separate acceptance for writes the operator's request already
+covers.
 
-- **WHEN** an installer finds a missing prerequisite it is capable of installing
-- **THEN** it SHALL name the prerequisite and the exact command it would run
+The boundary is **ownership — not location, and not size**:
+
+| Write | Consent | Why |
+|---|---|---|
+| Files into the target repository | Not required | Running an installer against a repo is the request to change that repo |
+| The workflow's own shared directory (`~/.agenticapps/bin/`) | Not required, but SHALL be reported | Created, owned and used exclusively by this workflow. Installing the workflow is what the operator asked for, and these files are what the workflow *is* |
+| A third-party package manager's global namespace (`npm i -g`, `pip install --user`) | **Required** | Mutates a namespace shared with software this workflow did not install; it can upgrade or replace a package other projects resolve |
+| A host's global configuration outside the repo | **Required** | Shared with the operator's other work on that host |
+
+The test is: *could this write change software the operator did not install by
+running this installer?* A file under `~/.agenticapps/bin/` cannot — nothing
+else uses it. A global npm package can.
+
+Drawing the line at "outside the repository" instead would catch all four host
+installers on their `~/.agenticapps/bin/` write, which every one of them
+performs unconditionally, and would put a prompt in front of the mechanism
+`docs/PLAN-lightweight-fleet.md` step 2 designates as the primary way core
+publishes an artifact — friction against the one operation that document wants
+to stay cheap. Drawing it at "large installs" would need a size rule nobody can
+state. Ownership separates the two real cases without appealing to either.
+
+#### Scenario: A global package would be installed
+
+- **WHEN** an installer finds a missing prerequisite it could install into a
+  third-party package manager's global namespace
+- **THEN** it SHALL name the prerequisite and the command it would run
 - **AND** SHALL install it only after the operator accepts
+
+#### Scenario: The workflow's own shared directory is written
+
+- **WHEN** an installer writes the workflow's own artifacts into
+  `~/.agenticapps/bin/` or an equivalent directory this workflow owns
+- **THEN** no acceptance prompt SHALL be required
+- **AND** the write SHALL be reported, naming each file
 
 #### Scenario: The operator declines
 
-- **WHEN** the operator declines the offer
-- **THEN** the installer SHALL NOT install the prerequisite
-- **AND** SHALL continue with the work that does not require it, or stop and
-  report, but SHALL NOT treat declining as an error in the operator's input
+- **WHEN** the operator declines an install offer
+- **THEN** the installer SHALL NOT perform that install
+- **AND** SHALL continue with work that does not depend on it
+- **AND** SHALL NOT treat declining as an error in the operator's input
 
-#### Scenario: Installing without asking
+#### Scenario: The install command fails after acceptance
 
-- **WHEN** an installer installs software outside the target repository with no
-  acceptance obtained and no explicit opt-in flag
-- **THEN** the condition SHALL be reported as a violation naming the installer
-  and the command it ran
+- **WHEN** the operator accepts and the install command exits non-zero
+- **THEN** the installer SHALL report the failure and the command's exit status
+- **AND** SHALL NOT proceed as though the prerequisite were present
 
-### Requirement: Writes inside the target repository do not require separate acceptance
+#### Scenario: A conformance check finds an unguarded install
 
-An installer SHALL treat provisioning files into the repository it was pointed
-at as covered by the operator's request to run it, and SHALL NOT require
-per-file acceptance for them.
+- **WHEN** a conformance check finds an install of the consent-requiring kind
+  reachable without acceptance and without the opt-in flag
+- **THEN** the check SHALL report it as a violation, naming the installer and
+  the command
 
-The boundary is what distinguishes this requirement from an installer that
-cannot install anything. Running an installer against a repository is a request
-to change that repository; it is not a request to change the machine.
+### Requirement: Repository-local writes are covered by the request but not unbounded
+
+An installer SHALL treat provisioning into the target repository as covered by
+the operator's request, and SHALL NOT overwrite or delete a file in that
+repository which it did not provision without reporting the conflict.
+
+Not requiring consent is not the same as permission to destroy. The operator
+asked for the repo to be provisioned; they did not ask for an unrelated file
+that happens to share a path to be replaced silently.
 
 #### Scenario: Provisioning the target repository
 
-- **WHEN** an installer writes skills, hooks or configuration into the target
-  repository
+- **WHEN** an installer writes skills, hooks or configuration it owns into the
+  target repository
 - **THEN** no acceptance prompt SHALL be required for those writes
 
-#### Scenario: Writing to a shared location outside the repository
+#### Scenario: A repository file the installer did not provision is in the way
 
-- **WHEN** an installer writes to a location shared across projects — a global
-  package root, a shared binary directory, or a host's global configuration
-- **THEN** that write SHALL require acceptance, regardless of how small it is
+- **WHEN** provisioning would overwrite or delete a repository file the
+  installer did not provision
+- **THEN** it SHALL report the conflict naming the path
+- **AND** SHALL NOT replace the file without acceptance
 
-### Requirement: A non-interactive run resolves the ambiguity by reporting, not by choosing
+### Requirement: Consent is obtained interactively with a default of no
 
-When no interactive input is available, an installer SHALL NOT install outside
-the target repository and SHALL NOT proceed as though the prerequisite were
-satisfied. It SHALL report what is missing and what the operator can do about
-it, and exit non-zero if it cannot complete its work.
+An installer requesting acceptance SHALL read the operator's answer from the
+terminal, SHALL treat only an explicit affirmative as acceptance, and SHALL
+treat empty input, unrecognised input, and end-of-input as declining.
 
-Both silent answers are wrong in the same way: each converts the absence of a
+Leaving the affirmative set and the default to each host produces four
+different prompts with four different defaults, which is the divergence this
+contract exists to remove. Defaulting to no fails safe: a declined install is
+recoverable by re-running, an unwanted global install is not.
+
+Acceptance SHALL be requested per install command, not once for the whole run.
+A single blanket prompt makes the operator agree to a set they have not been
+shown in full.
+
+#### Scenario: The operator accepts
+
+- **WHEN** the operator answers with an explicit affirmative (`y` or `yes`,
+  case-insensitive)
+- **THEN** the install SHALL proceed
+
+#### Scenario: The operator gives empty or unrecognised input
+
+- **WHEN** the operator submits an empty line, an unrecognised answer, or the
+  input stream ends
+- **THEN** the answer SHALL be treated as declining
+- **AND** the install SHALL NOT proceed
+
+#### Scenario: Several installs are offered
+
+- **WHEN** more than one consent-requiring install is needed
+- **THEN** each SHALL be offered separately with its own command shown
+
+### Requirement: A non-interactive run reports rather than choosing
+
+An installer SHALL detect that no interactive input is available, and in that
+case SHALL NOT perform a consent-requiring install and SHALL NOT proceed as
+though the prerequisite were satisfied. Standard input not being a terminal
+SHALL be the detection rule.
+
+Both silent answers are wrong the same way: each converts the absence of a
 decision into a decision, and neither is visible afterwards. Reporting is the
-only outcome an operator can act on.
+only outcome an operator can act on. Naming the detection rule matters as much
+as the behaviour — four hosts inventing four notions of "non-interactive"
+reproduces the divergence rather than fixing it.
 
-#### Scenario: No interactive input available
+#### Scenario: No interactive input is available
 
-- **WHEN** an installer runs with no interactive input — a pipeline, a CI job,
-  or a piped shell
-- **AND** a prerequisite it would offer to install is missing
-- **THEN** it SHALL NOT install it
+- **WHEN** standard input is not a terminal and a consent-requiring install is
+  needed
+- **THEN** the installer SHALL NOT perform it
 - **AND** SHALL report the prerequisite, the command that would install it, and
-  the flag that authorises doing so unattended
+  the opt-in flag that authorises doing so unattended
 
-#### Scenario: Non-interactive run cannot complete its work
+#### Scenario: The run cannot complete without the prerequisite
 
-- **WHEN** the missing prerequisite prevents the installer from completing
+- **WHEN** the missing prerequisite prevents the installer from completing its
+  work
 - **THEN** it SHALL exit non-zero
 - **AND** SHALL NOT report success for work it did not do
 
-### Requirement: An explicit flag substitutes for interactive acceptance
+### Requirement: A named opt-in flag substitutes for interactive acceptance
 
-An installer SHALL provide an explicit opt-in flag or environment variable that
-authorises installing prerequisites without a prompt, and SHALL treat its
-presence as the operator's acceptance.
+An installer capable of performing a consent-requiring install SHALL accept the
+environment variable `AGENTICAPPS_INSTALL_PREREQS=1` and the command-line flag
+`--install-prereqs`, and SHALL treat either as the operator's acceptance for
+every install in that run. An installer that performs no such install is not
+required to accept them.
 
-Without this, requiring consent would make unattended installation impossible
-and invite a fork that skips the check entirely. The flag keeps automation
-working while leaving the decision recorded at the call site, where it can be
-read, rather than inside the installer, where it cannot.
+The name is fixed by this requirement. Leaving it to each host guarantees four
+spellings, which defeats "one answer stated once" and makes the non-interactive
+report — which must name the flag that authorises the install — unscoreable.
 
-#### Scenario: The opt-in flag is passed
+Requiring the flag of every installer regardless would oblige an
+install-nothing installer to advertise a capability it does not have, which is
+why the obligation is scoped to those that can install.
 
-- **WHEN** an installer runs with the documented opt-in flag set and a
-  prerequisite is missing
-- **THEN** it MAY install the prerequisite without prompting
-- **AND** SHALL report each thing it installed because of the flag
+#### Scenario: The opt-in is set
 
-#### Scenario: The flag is absent
+- **WHEN** an installer runs with `AGENTICAPPS_INSTALL_PREREQS=1` or
+  `--install-prereqs` and a prerequisite is missing
+- **THEN** it MAY perform the install without prompting
+- **AND** SHALL report each thing it installed because of the opt-in
 
-- **WHEN** the flag is not set
-- **THEN** its absence SHALL NOT be interpreted as acceptance
+#### Scenario: The opt-in is absent
 
-### Requirement: Proceeding without a prerequisite is reported, not assumed
+- **WHEN** neither the variable nor the flag is set
+- **THEN** their absence SHALL NOT be interpreted as acceptance
 
-When an installer continues after a prerequisite was declined or could not be
-installed, it SHALL report which steps it skipped and what the operator must do
-to complete them.
+#### Scenario: An installer that installs nothing
+
+- **WHEN** an installer only detects and instructs, never installing a
+  consent-requiring prerequisite
+- **THEN** it SHALL NOT be required to accept the opt-in
+- **AND** SHALL NOT be reported as non-conformant for lacking it
+
+### Requirement: A reported command does not leak credentials
+
+An installer SHALL NOT print a command containing a credential, token, or
+registry secret. Where the real command carries one, it SHALL print the command
+with the secret replaced by a placeholder.
+
+The requirement to show the exact command exists so the operator can judge it,
+and installer output routinely lands in CI logs. An unredacted registry URL with
+an embedded token turns a transparency measure into a disclosure.
+
+#### Scenario: The install command carries a secret
+
+- **WHEN** the command that would be run contains a credential or token
+- **THEN** the printed form SHALL replace it with a placeholder
+- **AND** SHALL remain specific enough to identify what would be installed
+
+### Requirement: Skipped work is reported and distinguished from completed work
+
+An installer that continues after an install was declined or failed SHALL name
+the steps it skipped and what the operator must do to complete them, and its
+summary SHALL distinguish completed work from skipped work. It SHALL exit
+non-zero when a step it was asked to perform was skipped.
 
 An installer that silently omits a step exits 0 having done less than the
-operator believes. That is the same failure as a harness certifying nothing and
-returning green.
+operator believes — the same failure as a harness certifying nothing and
+returning green. Reporting alone is not sufficient, because a zero exit is what
+an automated caller reads.
 
 #### Scenario: A step is skipped for a missing prerequisite
 
@@ -138,7 +248,8 @@ returning green.
 - **THEN** it SHALL name the skipped step and the prerequisite it needed
 - **AND** SHALL state the command that completes it later
 
-#### Scenario: The installer finishes with steps skipped
+#### Scenario: The run finishes with steps skipped
 
 - **WHEN** an installer completes with one or more steps skipped
 - **THEN** its summary SHALL distinguish completed work from skipped work
+- **AND** it SHALL exit non-zero

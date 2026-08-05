@@ -49,15 +49,40 @@ whether `codex`, `opencode` and `pi` are worth keeping at all.
 
 ## Decisions
 
-**The boundary is the target repository, not the file count.** Consent attaches
-to writes that outlive and outrange the operator's request — a global npm
-package, `~/.agenticapps/bin/`, a host's global config — and not to
-provisioning the repository they pointed the installer at. The alternative
-boundaries are worse in both directions: prompting per repo-local file makes the
-installer unusable, and prompting only for "large" installs needs a size rule
-nobody can state. *Alternative considered:* consent for anything the installer
-did not create in this run. Rejected — that catches idempotent re-provisioning
-of files the installer itself wrote last time, which is the normal case.
+**The boundary is ownership, not location.** Consent attaches to writes that can
+change software the workflow does not own — a third-party package manager's
+global namespace, a host's global configuration — and not to provisioning the
+repository the operator pointed the installer at, nor to the workflow's own
+shared directory.
+
+This is a correction. The first draft of this design drew the line at "outside
+the target repository", and the first plan review found what that costs: all
+four installers write the shared change-gate and reviewer-cli into
+`~/.agenticapps/bin/` unconditionally (`claude-workflow:149`,
+`codex-workflow:211`, `opencode-workflow:329`,
+`pi-agentic-apps-workflow:148`). The location rule therefore condemned all four
+rather than the two with the actual defect, and put a prompt in front of the
+mechanism `PLAN-lightweight-fleet` step 2 designates as the primary way core
+publishes an artifact — friction against the one operation that document wants
+to stay cheap. The proposal, design and migration plan all said "two". They were
+wrong on their own rule.
+
+The ownership test is: *could this write change software the operator did not
+install by running this installer?* `~/.agenticapps/bin/openspec-change-gate.sh`
+cannot — nothing else on the machine uses it, and installing the workflow is
+what the operator asked for. `npm i -g @fission-ai/openspec` can: it mutates a
+shared namespace and may upgrade or replace a package other projects resolve.
+That is a real difference in kind, not a carve-out for convenience.
+
+The workflow's own directory is still **reported**, so the exemption does not
+make the write invisible — which is what would turn a principled boundary into
+a loophole.
+
+*Alternatives considered:* consent for everything outside the repo — the
+original rule, rejected above on evidence. Consent only for "large" installs —
+needs a size rule nobody can state. Consent for anything the installer did not
+create in this run — catches idempotent re-provisioning of files the installer
+itself wrote last time, which is the normal case.
 
 **A non-interactive run reports and stops rather than picking a default.** The
 tempting defaults are "install anyway" (today's codex/opencode behaviour, which
@@ -69,12 +94,28 @@ considered:* treat non-interactive as implied consent, on the grounds that CI
 wants the tool installed. Rejected — that is precisely the current behaviour,
 and CI is where an unreviewed global install is least visible.
 
-**An explicit flag substitutes for the prompt.** Without one, requiring consent
-would make unattended installs impossible and invite exactly the fork that skips
-the check. With one, the decision is recorded at the call site where it can be
-read in a CI config or a shell history, rather than inside a script where it
-cannot. The flag's absence is never acceptance — otherwise the flag would be
-decoration.
+**An explicit flag substitutes for the prompt, and the spec names it.** Without
+one, requiring consent would make unattended installs impossible and invite
+exactly the fork that skips the check. With one, the decision is recorded at the
+call site where it can be read in a CI config or a shell history, rather than
+inside a script where it cannot. The flag's absence is never acceptance —
+otherwise the flag would be decoration.
+
+Leaving the *name* open, as the first draft did, would have produced four
+spellings across four hosts and defeated the "one answer stated once" goal this
+change is for. It would also make the non-interactive report unscoreable, since
+that report has to name the flag that authorises the install. Fixed as
+`AGENTICAPPS_INSTALL_PREREQS=1` / `--install-prereqs`. The obligation to accept
+it is scoped to installers that can actually perform such an install, so a
+detect-and-instruct installer is not required to advertise a capability it does
+not have.
+
+**Consent has a stated shape, not just a stated requirement.** Terminal input,
+explicit affirmative only, empty and unrecognised and EOF all decline, one
+prompt per install command. Left open, four hosts would ship four prompts with
+four defaults — the divergence this contract exists to remove, reintroduced one
+level down. Defaulting to no is the direction that fails safe: a declined
+install is recoverable by re-running, an unwanted global install is not.
 
 **Core binds this with a conformance harness, not by editing the installers.**
 The established shape, and the same reasoning as `host-neutral-agents-md`: core
@@ -131,24 +172,45 @@ because `claude-workflow`'s installer is subject to it too.
    `tools/install-core-git-hooks.sh`, the one installer that is core's own.
 2. Each host repo runs the harness and adopts on its own schedule.
 3. `codex-workflow` and `opencode-workflow` gain the prompt and the opt-in flag.
-   Their current auto-install becomes the flag's behaviour, so the capability is
-   preserved and only the default changes.
+   Their current auto-install becomes the opt-in's behaviour, so the capability
+   is preserved and only the default changes.
 4. `claude-workflow` and `pi-agentic-apps-workflow` gain the offer, which they
    do not have today — they only instruct.
+5. All four gain the reporting obligation on their `~/.agenticapps/bin/` write.
+   No prompt, no behaviour change — they must say what they wrote there. This is
+   the step the "two hosts are affected" framing missed entirely: every
+   installer is touched by this contract, just not all in the same way.
 
 Rollback is deleting the harness and reverting the spec section; no downstream
 repo depends on this until it adopts.
 
 ## Open Questions
 
+The `~/.agenticapps/bin/` boundary, which the first plan review found was an
+open question the delta had already made normative, is answered above: it is the
+workflow's own directory, so it is reported rather than prompted.
+
+Step 4's answer is **not** an open question for this change, though the first
+draft treated it as one. More than one agent host is a settled constraint — only
+which hosts is open — so a cross-host consent contract is permanently
+load-bearing rather than contingent on a fleet that might collapse to one. That
+is also why the contract is written against "an installer" rather than an
+enumerated four.
+
+Remaining, and genuinely open:
+
 - **Which prerequisites warrant an offer at all.** Offering to install `npm` or
-  a host CLI is a much larger imposition than offering to install one global npm
-  package, and the contract currently treats them alike.
-- **Whether `~/.agenticapps/bin/` is inside or outside the boundary.** It is
-  outside the target repo by the rule as written, so writing the shared gate
-  would require consent — but `PLAN-lightweight-fleet` step 2 makes that write
-  the primary publishing mechanism, and prompting on it every time would be
-  friction against the one thing that repo wants to be cheap.
-- **Whether step 4's answer changes this change's value.** If three hosts are
-  archived, this reduces to a contract over `claude-workflow`'s installer and
-  core's own, which is still worth stating but is a much smaller claim.
+  a host CLI is a much larger imposition than one global npm package, and
+  installing a system runtime is platform-dependent in a way a shell script
+  handles badly. The contract currently treats them alike, and probably should
+  not — the likely answer is that runtimes are detected and instructed, never
+  offered.
+- **How a harness recognises consent statically.** It can find an install
+  command and look for a guard, but a script could obtain acceptance in a shape
+  the harness does not recognise, or reach the install through an indirection.
+  Rows that cannot be decided report inconclusive, so this bounds what the
+  harness can claim rather than what the contract requires.
+- **Whether the same rule should govern uninstall.** Nothing here says what
+  happens to a prerequisite installed on the operator's behalf when the workflow
+  is removed. Leaving it installed is probably right — other things may now
+  depend on it — but it is unstated.
