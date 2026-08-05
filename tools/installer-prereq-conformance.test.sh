@@ -627,6 +627,42 @@ cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
 echo "wrote $HOME/.agenticapps/bin/gate.sh"
 EOF
 
+# Output goes through a logging helper in any installer with more than a
+# handful of messages. Reading only literal echo/printf made those reports
+# invisible: pi names every file it writes, under a header naming the
+# directory, and was reported as writing ~/.agenticapps/ and never saying so.
+fx loggerreports <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+say()  { printf '  %s\n' "$*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || say "missing: openspec — validation will not run."
+mkdir -p "$HOME/.agenticapps/bin"
+cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+say "wrote $HOME/.agenticapps/bin/gate.sh"
+EOF
+
+# The other half: a dispatcher is not a logger. `run()` contains an echo and
+# every mutating call in three of the four installers goes through it, so
+# counting it would make `run cp gate.sh "$AA_BIN/x"` its own report — the
+# write reporting itself.
+fx dispatcheronly <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+DRY_RUN=0
+run() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "would run: $*"
+  else
+    "$@"
+  fi
+}
+have() { command -v "$1" >/dev/null 2>&1; }
+have openspec || echo "missing: openspec"
+run mkdir -p "$HOME/.agenticapps/bin"
+run cp gate.sh "$HOME/.agenticapps/bin/gate.sh"
+EOF
+
 REFERENCE="$WORK/reference.sh"
 CODEXISH="$WORK/codexish.sh"
 CLAUDEISH="$WORK/claudeish.sh"
@@ -654,6 +690,8 @@ OWNEDPARTIAL="$WORK/ownedpartial.sh"
 FNGUARD="$WORK/fnguard.sh"
 FNNOGUARD="$WORK/fnnoguard.sh"
 FNHALFADOPTED="$WORK/fnhalfadopted.sh"
+LOGGERREPORTS="$WORK/loggerreports.sh"
+DISPATCHERONLY="$WORK/dispatcheronly.sh"
 
 echo "═══ installer-prereq-conformance.test.sh"
 echo
@@ -907,6 +945,15 @@ if selected "reading"; then
   run "$FNHALFADOPTED"
   want_row  "fnhalfadopted: the helper does not reach past a closed construct" "consent-guard" "FAIL"
   want_out  "and the ungated site is the one named" "some-linter"
+
+  # A report made through a logging helper is still a report.
+  run "$LOGGERREPORTS"
+  want_row  "loggerreports: a report through a helper is still a report" "owned-writes-reported" "PASS"
+  want_code "and the installer is clean" 0
+
+  run "$DISPATCHERONLY"
+  want_row  "dispatcheronly: a dispatcher is not a logger" "owned-writes-reported" "FAIL"
+  want_code "and the run is red" 1
 
   # The line number an operator is sent to must be the line in THEIR file.
   # `$RAW` has its comments removed, so its numbering is a file nobody has.

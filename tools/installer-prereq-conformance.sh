@@ -279,7 +279,36 @@ for v in $OWNED_VARS; do
 done
 
 OWNED_WRITES="$(grep -nE "$WRITE_VERB" "$RAW" | grep -E "$OWNED_PAT" || true)"
-OWNED_REPORTS="$(grep -nE '(echo|printf)' "$RAW" | grep -E "$OWNED_PAT" || true)"
+# Output goes through a logging helper in any installer with more than a handful
+# of messages — `info`, `warn`, `done_`, `bold`. Reading only literal `echo` and
+# `printf` made every one of those reports invisible, and pi, which names each
+# file it writes under a header naming the directory, was reported as writing
+# ~/.agenticapps/ and never saying so.
+#
+# A dispatcher is not a logger, and this is the distinction that matters:
+# `run() { if dry-run; then echo "would run: $*"; else "$@"; fi; }` contains an
+# echo, and every mutating call in three of the four installers goes through it.
+# Counting it would make `run cp gate.sh "$AA_BIN/x"` its own report. So a
+# function qualifies only if it prints and does not execute its arguments.
+# Scanned over $RAW rather than the code view, because the quote strip moves
+# `"$@"` to the end of the line and destroys the command position that tells
+# the two apart.
+PRINT_FNS="$(awk '
+function isprint_line(s) { return (s ~ /(^|[^A-Za-z0-9_])(echo|printf)([^A-Za-z0-9_]|$)/) }
+function dispatches(s)   { return (s ~ /(^|[;&|]|then|else|do)[ \t]*"?\$@/) }
+/^[ \t]*[A-Za-z_][A-Za-z0-9_]*\(\)/ {
+  name = $0; sub(/^[ \t]*/, "", name); sub(/\(\).*/, "", name)
+  if ($0 ~ /\}[ \t]*$/) { if (isprint_line($0) && !dispatches($0)) print name; next }
+  infn = 1; hit = 0; bad = 0; next
+}
+infn && /^[ \t]*\}/ { if (hit && !bad) print name; infn = 0; next }
+infn { if (isprint_line($0)) hit = 1; if (dispatches($0)) bad = 1 }
+' "$RAW" || true)"
+PRINT_PAT="echo|printf"
+for f in $PRINT_FNS; do PRINT_PAT="$PRINT_PAT|$f"; done
+PRINT_PAT="($PRINT_PAT)"
+
+OWNED_REPORTS="$(grep -nE "$PRINT_PAT" "$RAW" | grep -E "$OWNED_PAT" || true)"
 # Provisioning destinations. The host-shaped directories are the obvious half;
 # the second half is a write into a RESOLVED destination — `$HOOKS_DIR`,
 # `$DEST`, `$TARGET_ROOT`. Core's own `install-core-git-hooks.sh` provisions
@@ -451,7 +480,7 @@ OWNED_FILES="$(printf '%s\n' "$OWNED_WRITES" \
   | grep -E '(cp|install|ln|mv|tee|touch|cat[[:space:]]+[^|]*>)' \
   | grep -oE "($OWNED_PAT)[^\"'[:space:]]*" \
   | grep -oE '/[A-Za-z0-9._-]+\.[A-Za-z0-9]+$' | tr -d '/' | sort -u || true)"
-REPORTED_TEXT="$(grep -E '(echo|printf)' "$RAW" || true)"
+REPORTED_TEXT="$(grep -E "$PRINT_PAT" "$RAW" || true)"
 if [ -z "$OWNED_WRITES" ]; then
   huh "owned-writes-reported: writes nothing into the workflow's own directory"
 elif [ -z "$OWNED_REPORTS" ]; then
@@ -477,11 +506,11 @@ fi
 
 # ── R6 redaction ────────────────────────────────────────────────────────────
 SECRET='_authToken|[A-Za-z_]*TOKEN[[:space:]]*=|token=|password=|passwd=|api[_-]?key=|://[^/[:space:]]*:[^@[:space:]]*@|npm_[A-Za-z0-9]{12,}|gh[pousr]_[A-Za-z0-9]{20,}'
-PRINTED="$(grep -nE '(echo|printf)' "$RAW" || true)"
+PRINTED="$(grep -nE "$PRINT_PAT" "$RAW" || true)"
 # Numbered from the SOURCE, not from `$RAW`. `$RAW` has its comment lines
 # removed, so its line numbers are positions in a file the operator does not
 # have — this row was sending them to a line that was not the one.
-LEAKS="$(grep -nE '(echo|printf)' "$INSTALLER" | grep -vE '^[0-9]+:[[:space:]]*#' \
+LEAKS="$(grep -nE "$PRINT_PAT" "$INSTALLER" | grep -vE '^[0-9]+:[[:space:]]*#' \
   | grep -E "$SECRET" | cut -d: -f1 || true)"
 if [ -n "$LEAKS" ]; then
   bad "redaction: a printed line carries something credential-shaped"
