@@ -105,7 +105,7 @@ a green one.
   way consent now is would false-fail the conformant reference, whose tty test
   sits in the `elif` after the opt-in branch. The PASS now carries a note
   saying so, which is disclosure rather than a fix.
-- **`prereq-detection` still reads a fixed list of 16 known tools.** Unchanged
+- **`prereq-detection` still reads a fixed list of 17 known tools.** Unchanged
   from last session. A prerequisite outside the list is invisible and the row
   does not say so.
 - **A `read` in the same branch as an install is still counted even if it is

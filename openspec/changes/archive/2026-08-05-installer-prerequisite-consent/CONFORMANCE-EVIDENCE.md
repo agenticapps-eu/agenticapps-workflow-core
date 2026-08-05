@@ -4,6 +4,12 @@ Produced by `tools/installer-prereq-conformance.sh` on 2026-08-05, run from
 `agenticapps-workflow-core` against each host's `install.sh` **read-only**.
 No host repository was edited (task 6.2); each host adopts on its own schedule.
 
+The transcripts below were regenerated after the stage-2 review of this branch
+fixed six defects in the harness. The verdicts are unchanged — the fixes
+changed what the harness can see, not what it found in what it could already
+see — but the row wording moved, and the first transcripts recorded `exit=0`
+for all four runs when every one of them has a failed row and exits 1.
+
 ## What it found
 
 | Installer | consent-guard | owned-writes-reported | prereq-detection | Verdict |
@@ -45,62 +51,66 @@ $ tools/installer-prereq-conformance.sh ../claude-workflow/install.sh
 ═══ ../claude-workflow/install.sh
   FAIL  prereq-detection: invoked but never checked: git
         §21 — an installer declares the external tools it depends on.
-  PASS  consent-guard: no install reaches outside the workflow's own surface
+  PASS  consent-guard: no out-of-boundary install command was found
         detecting and instructing is conformant; only installing unasked is not.
+        the census reads command shapes — an install through a variable, or
+        through a package manager not on its list, would not be seen.
   INCONCLUSIVE  non-interactive: no consent-requiring install, so nothing to gate
   INCONCLUSIVE  opt-in: installs nothing, so it is not required to accept the opt-in
-  PASS  owned-writes-reported: the write into ~/.agenticapps/ is reported
+  PASS  owned-writes-reported: every file written into ~/.agenticapps/ is named
   PASS  redaction: commands are printed and none carries a credential
   INCONCLUSIVE  uninstall-preserves-prereqs: no removal path, so nothing to judge
 
 ─── coverage: 4 of 7 rows scored, 3 inconclusive
 ═══ TOTAL: 3 passed, 1 failed, 3 inconclusive
-exit=0
+exit=1
 
 $ tools/installer-prereq-conformance.sh ../codex-workflow/install.sh
 ═══ ../codex-workflow/install.sh
   FAIL  prereq-detection: invoked but never checked: git
         §21 — an installer declares the external tools it depends on.
   FAIL  consent-guard: install reachable with no consent read and no opt-in
-          line 333: npm i -g @fission-ai/openspec \?
+          line 333: npm i -g @fission-ai/openspec            || echo    ${YELLOW} ${RESET}
         §21 — consent is required to change software the workflow does not own.
   FAIL  non-interactive: no test for an absent terminal before an install
         §21 names the rule — standard input not being a terminal.
   FAIL  opt-in: not accepted: AGENTICAPPS_INSTALL_PREREQS --install-prereqs
         both spellings are fixed by §21; a host-chosen name is four names.
-  PASS  owned-writes-reported: the write into ~/.agenticapps/ is reported
+  PASS  owned-writes-reported: every file written into ~/.agenticapps/ is named
   PASS  redaction: commands are printed and none carries a credential
   INCONCLUSIVE  uninstall-preserves-prereqs: no removal path, so nothing to judge
 
 ─── coverage: 6 of 7 rows scored, 1 inconclusive
 ═══ TOTAL: 2 passed, 4 failed, 1 inconclusive
-exit=0
+exit=1
 
 $ tools/installer-prereq-conformance.sh ../opencode-workflow/install.sh
 ═══ ../opencode-workflow/install.sh
   FAIL  prereq-detection: invoked but never checked: git
         §21 — an installer declares the external tools it depends on.
   FAIL  consent-guard: install reachable with no consent read and no opt-in
-          line 373: npm i -g @fission-ai/openspec \?
+          line 373: npm i -g @fission-ai/openspec          || echo    ${YELLOW} ${RESET}
         §21 — consent is required to change software the workflow does not own.
   FAIL  non-interactive: no test for an absent terminal before an install
         §21 names the rule — standard input not being a terminal.
   FAIL  opt-in: not accepted: AGENTICAPPS_INSTALL_PREREQS --install-prereqs
         both spellings are fixed by §21; a host-chosen name is four names.
-  PASS  owned-writes-reported: the write into ~/.agenticapps/ is reported
+  PASS  owned-writes-reported: every file written into ~/.agenticapps/ is named
   PASS  redaction: commands are printed and none carries a credential
   INCONCLUSIVE  uninstall-preserves-prereqs: no removal path, so nothing to judge
 
 ─── coverage: 6 of 7 rows scored, 1 inconclusive
 ═══ TOTAL: 2 passed, 4 failed, 1 inconclusive
-exit=0
+exit=1
 
 $ tools/installer-prereq-conformance.sh ../pi-agentic-apps-workflow/install.sh
 ═══ ../pi-agentic-apps-workflow/install.sh
   FAIL  prereq-detection: invoked but never checked: git
         §21 — an installer declares the external tools it depends on.
-  PASS  consent-guard: no install reaches outside the workflow's own surface
+  PASS  consent-guard: no out-of-boundary install command was found
         detecting and instructing is conformant; only installing unasked is not.
+        the census reads command shapes — an install through a variable, or
+        through a package manager not on its list, would not be seen.
   INCONCLUSIVE  non-interactive: no consent-requiring install, so nothing to gate
   INCONCLUSIVE  opt-in: installs nothing, so it is not required to accept the opt-in
   FAIL  owned-writes-reported: writes ~/.agenticapps/ and never says so
@@ -111,6 +121,5 @@ $ tools/installer-prereq-conformance.sh ../pi-agentic-apps-workflow/install.sh
 
 ─── coverage: 3 of 7 rows scored, 4 inconclusive
 ═══ TOTAL: 1 passed, 2 failed, 4 inconclusive
-exit=0
-
+exit=1
 ```

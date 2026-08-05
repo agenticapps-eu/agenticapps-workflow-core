@@ -1,7 +1,15 @@
 # installer-prerequisite-consent Specification
 
 ## Purpose
-TBD - created by archiving change installer-prerequisite-consent. Update Purpose after archive.
+Governs what a host's installer does when a prerequisite is absent: it declares
+and reports what it depends on, and asks before it changes software this
+workflow does not own. The boundary is ownership, not location — a global `npm`
+package is shared with everything else on the machine, while `~/.agenticapps/`
+is created and used by this workflow alone, so the first requires consent and
+the second requires only that it be reported by name. Also fixes the shape of
+the question, the non-interactive rule, the spelling of the opt-in, and what an
+uninstaller may not take with it.
+
 ## Requirements
 ### Requirement: An installer declares its prerequisites and reports which are missing
 
