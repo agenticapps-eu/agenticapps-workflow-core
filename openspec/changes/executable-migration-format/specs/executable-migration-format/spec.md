@@ -456,13 +456,39 @@ most likely to be silently wrong.
 
 ### Requirement: An apply block SHALL NOT touch paths outside `applies_to`
 
-A step's `apply` block SHALL modify only files and directories the
-migration's `applies_to` field declares. `applies_to` is therefore more than
-plan-output metadata: it is the boundary that makes the rollback-parity
-scenario above meaningful. A rollback's obligation to return the working
-tree to its pre-apply state SHALL be read as bounded by what `apply` was
-permitted to touch — not as a promise to undo an effect `apply` should never
-have produced in the first place.
+For a migration within the executable form's scope (see "An ID threshold
+scopes which migrations must be executable" — the same population whose
+steps must express role-tagged fenced blocks at all), a step's `apply` block
+SHALL modify only files and directories the migration's `applies_to` field
+declares. `applies_to` is therefore more than plan-output metadata for such a
+migration: it is the boundary that makes the rollback-parity scenario above
+meaningful. A rollback's obligation to return the working tree to its
+pre-apply state SHALL be read as bounded by what `apply` was permitted to
+touch — not as a promise to undo an effect `apply` should never have
+produced in the first place. Below the threshold this requirement does not
+bind: `applies_to` remains plan-output metadata only, and the fleet's
+existing practice there is unaffected.
+
+This excludes bookkeeping that does not outlive the step: a scratch sibling
+file the step itself deletes before the step ends, a path created via
+`mktemp`, and `mkdir -p` of a declared path's parent directory. None of these
+are "an effect that should never have occurred" in the sense this
+requirement targets — they are working storage gone by the time a rollback
+would ever need to reason about the tree. Without this carve-out the
+requirement would forbid the idiom every host's existing migrations already
+use for exactly this purpose; the threshold scoping above already exempts
+that existing history as frozen, but a *new*, at-or-above-threshold migration
+should not have to avoid `mktemp` just to stay conformant.
+
+A fleet audit for this requirement (Stage 2 review) also surfaced a case this
+carve-out deliberately does **not** cover: `claude-workflow`'s migration
+`0034` makes a permanent, deliberate `.pre-0034` rollback backup that lives
+outside its `applies_to` by design and is not deleted before the step ends.
+`0034`'s ID (34) is below `claude-workflow`'s own threshold (35, per
+`THRESHOLDS`), so it is exempt from this requirement as frozen history, not
+because its backup fits the carve-out — a future migration wanting the same
+permanent-backup pattern at or above its host's threshold would need to
+declare the backup path in `applies_to`.
 
 This is an obligation on the migration author, in the same unenforced sense
 as the non-mutation rule below: no structural rule in this linter checks
@@ -488,7 +514,7 @@ therefore not a defect in the fixture, the runner, or this spec — it is the
 predicted consequence of an apply that reached where it should not have.
 
 #### Scenario: An apply that touches an undeclared path is non-conformant
-- **WHEN** a step's `apply` block modifies a file not listed in the migration's `applies_to`
+- **WHEN** an in-scope step's `apply` block modifies a file not listed in the migration's `applies_to`, and that file is not scratch bookkeeping the step deletes before it ends
 - **THEN** that step's rollback is not required to restore that file
 - **AND** the step SHALL be considered non-conformant with this requirement, independent of whether the format linter can detect it
 

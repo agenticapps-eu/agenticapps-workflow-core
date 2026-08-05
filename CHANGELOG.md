@@ -20,6 +20,97 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**Spec 1.5.0 → 2.0.0 — major. §08 gains an executable form: role-tagged
+fenced blocks, a filename-keyed threshold, and a runner contract, binding at
+or above each host's declared migration ID.** Below that threshold, §08's
+prior text — prose, agent, or interactive steps, satisfying the same
+quartet — is unchanged and remains fully conformant; the addition binds only
+new migrations a host chooses to write at or above its own threshold. No
+host in the fleet has adopted it yet, and none becomes non-conformant by
+this bump: every existing migration in all four hosts sits below its host's
+declared threshold (`claude-workflow` 0035, `codex-workflow` 0016,
+`opencode-workflow` 0012, `pi-agentic-apps-workflow` 0011 —
+`reference-implementations/migration-runner/THRESHOLDS`), so this is
+backward-compatible for everything that already exists.
+
+It is a major, not a minor, because two clauses in the pre-existing text are
+reworded in a way that would make a naively-conformant implementation of the
+*old* text non-conformant to the *new* one, independent of the threshold:
+the dry-run MUST changes from "prints the diff each step would apply" to
+"prints the source, and evaluates only up to the first pending step" — a
+host printing diffs today is not printing what 2.0.0 requires — and the
+atomicity contract now mandates specific non-interactive behaviour (abort in
+place, report which steps applied, roll back nothing) that the 1.x text
+left unstated. Per this file's own versioning policy, a reworded canonical
+requirement is a major regardless of how narrow its binding population is.
+
+### Added — §08 executable form
+- **The role/heading table and info-string grammar**: `check`,
+  `precondition`, `apply`, `verify` (optional), `rollback`, each backed by a
+  `bash role=<name>` fence following its matching heading; un-annotated
+  fences remain illustration; an unrecognised role, a non-`bash` fence, or
+  any grammar deviation is a violation.
+- **Consecutive step numbering, bounded by the next `### Step` heading**
+  (never `N+1`), recognised only outside fenced code blocks — closes a class
+  where a heredoc body containing `### Step 2` could silently truncate a
+  step.
+- **Two structural rules found during implementation, not designed up
+  front**: every opened fence MUST be closed before end of file (a fence
+  visible to role-listing but never closed lints clean and fails at
+  runtime), and a tagged fence's body MUST NOT be empty or whitespace-only
+  (a tagged-but-empty `check` is a silent no-op indistinguishable from
+  success).
+- **A filename-keyed threshold**: a migration's ID comes from its filename,
+  never frontmatter, so it cannot be evaded by deleting a line; a
+  declaration (`migration_format: executable`) can only add a migration to
+  scope, never remove one; a runner refuses to execute a migration the
+  linter did not judge, reporting that refusal as *out of scope* — distinct
+  from a format violation — via a single reserved exit code shared by every
+  pre-execution refusal.
+- **A runner-lints-first obligation**: before executing any step, a runner
+  MUST lint and MUST abort on a violation, a zero-step document, or a step
+  with no `apply` block — closing a hole where an all-illustration document
+  could report success having changed nothing.
+- **A scope boundary on `applies_to`**, for a migration at or above the
+  threshold: a step's `apply` MUST NOT modify anything `applies_to` does not
+  declare (excluding scratch bookkeeping a step deletes before it ends,
+  `mktemp` paths, and `mkdir -p` of a declared path's parent) — otherwise the
+  rollback-parity requirement below is unenforceable in spirit even where it
+  cannot be enforced in fact.
+
+### Changed — §08 atomicity, dry-run, diagnostics
+- **Dry-run** prints the pending step's `apply` **source**, not a diff, and
+  never evaluates a step behind the first pending one — including via a
+  scratch-copy workaround, which a review found could still write outside
+  itself (`$HOME`, a copied `.git`, a preserved symlink).
+- **Atomicity**: `precondition` failure always hard-aborts regardless of
+  terminal; the retry/skip/rollback prompt governs `apply` and `verify`
+  failures only; a non-interactive failure aborts in place, reports which
+  steps applied, and rolls back nothing (silence is not consent); rollback
+  runs applied steps in reverse document order, including a step whose
+  `apply` succeeded and `verify` then failed, excluding one whose `apply`
+  itself failed.
+- **Diagnostics**: a failing `precondition`'s stderr reaches the caller
+  verbatim, never paraphrased; because that output (and dry-run's printed
+  `apply` source) commonly reaches CI logs, migration authors MUST NOT emit
+  secrets or personal data from any block.
+- **`check`/`precondition` non-mutation** is stated as an author obligation
+  the linter does not and cannot enforce — dry-run executes these blocks, so
+  a runner cannot itself guarantee they write nothing.
+
+Conformance impact for host implementers: **none required today.** A host
+citing 1.5.0 (or any prior §08 version) stays conformant with what it cites;
+the executable form binds nothing retroactively. A host that wants to adopt
+it must cite 2.0.0, declare its own threshold, run the format linter on
+every migration at or above that threshold, and wire the linter into CI
+(the Conformance MUST is itself conditioned on having adopted the form — no
+host is non-conformant for lacking a linter it never committed to running).
+
+The reference implementation is `reference-implementations/migration-runner/`
+(`extract.sh`, `lint-migration.sh`, `run-migration.sh`, `THRESHOLDS`),
+proposed and delta-specified in
+`openspec/changes/executable-migration-format/`.
+
 **Spec 1.4.0 → 1.5.0 — minor. §18's review clause becomes reported, not
 enforced.** The spec now describes the gate that shipped. Gate 2.0.0 withdrew
 blocking on review state; §18 and §17 were not swept for it, so core's own

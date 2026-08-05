@@ -1,7 +1,7 @@
 ---
 id: 08-migration-format
 section_type: declarative-contract
-spec_version: 0.10.0
+spec_version: 2.0.0
 ---
 
 # 08 — Migration Format
@@ -72,23 +72,9 @@ Every migration MUST include YAML frontmatter with at minimum:
 | `title` | MUST | Human-readable one-line title |
 | `from_version` | MUST | Installed version that this migration upgrades from. The update flow skips this migration if the project's installed version is less than `from_version`. |
 | `to_version` | MUST | Version after this migration successfully applies. The update flow writes this to the project's installed-version field on success. |
-| `applies_to` | MUST | List of files / directories this migration touches (for impact awareness in plan output) |
+| `applies_to` | MUST | List of files / directories this migration touches (for impact awareness in plan output; at or above the executable-form threshold it is also the scope boundary described in "Executable form" below) |
 | `requires` | MAY | List of external dependencies (skills, tools, CLIs) that must be installed before this migration applies. Each entry SHOULD include `verify` (test command) and `install` (install command). |
 | `optional_for` | MAY | List of conditional groups. Each entry has a `tag`, a `detect` shell command, and a `note`. Steps tagged with the same `tag` are skipped if `detect` returns non-zero. |
-
-`applies_to` is more than plan-output metadata: a step's **Apply** block MUST
-NOT modify any file or directory outside the paths `applies_to` declares. This
-is what makes the Rollback contract below meaningful rather than aspirational
-— a rollback's obligation to return the working tree to its pre-apply state
-extends only as far as apply was permitted to reach. A step whose apply
-touches an undeclared path is non-conformant, and the format does not require
-— and no runner or test harness can be expected to provide — a rollback for
-an effect that should never have occurred. (This resolves a live example: a
-fixture's step 1 apply rewrites a workdir-resident copy of its own migration
-document, a path absent from its `applies_to`, and its rollback does not
-restore that copy. That step is non-conformant under this rule; it exists to
-exercise a runner's defense against a document that mutates out from under
-the dispatch loop, not as a template to imitate.)
 
 ### Step structure
 
@@ -129,8 +115,8 @@ the document's readable structure. What the role tag adds is the one thing a
 heading cannot express: that a given fence is, or is not, meant to run.
 
 **Info-string grammar.** A tagged fence's info string MUST match exactly:
-the literal `bash`, one or more spaces, `role=`, a role name, then nothing
-but optional trailing whitespace. A fence carrying additional keys (` ```bash
+the literal `bash`, one or more spaces or tabs, `role=`, a role name, then
+nothing but optional trailing whitespace. A fence carrying additional keys (` ```bash
 role=apply retry=2 `), a non-`bash` language (` ```yaml role=apply `), a
 different case, or any other trailing content is not a valid tagged fence
 and MUST be rejected by the format linter — "close enough" is not honoured
@@ -194,6 +180,28 @@ declares nothing at all is skipped entirely (see "Threshold scope"); one
 that declares an unrecognised value has been touched deliberately, and a
 typo there is worth reporting rather than silently ignoring.
 
+**`applies_to` is a scope boundary, not only impact-awareness metadata, for a
+migration at or above the threshold.** A step's `apply` block MUST NOT
+modify any file or directory outside the paths its migration's `applies_to`
+declares. This is what makes the Rollback contract meaningful rather than
+aspirational: a rollback's obligation to return the working tree to its
+pre-apply state extends only as far as `apply` was permitted to reach. A step
+whose `apply` reaches outside its declared scope is non-conformant, and the
+format does not require — and no runner or test harness can be expected to
+provide — a rollback for an effect that should never have occurred.
+
+This excludes ordinary bookkeeping that never outlives the step: a scratch
+sibling file the step itself deletes before the step ends, a `mktemp`-created
+path, and `mkdir -p` of a declared path's parent directory. None of those are
+"an effect that should never have occurred" — they are working storage, gone
+by the time the step's rollback would ever need to reason about the tree.
+
+**This is stated as an obligation on the migration author, in the same
+unenforced sense as the non-mutation rule in "Non-mutation and diagnostics"
+below: no rule in this format's linter checks which paths an `apply` block
+actually writes to.** A host MAY add such a check; none is required, and none
+ships with the reference linter today.
+
 ### Threshold scope
 
 The executable form above binds only at or above a host-declared threshold
@@ -221,8 +229,11 @@ migration ID.
   filename ID; a mismatch (or a non-numeric frontmatter `id`) **MUST** be
   reported as a violation. This cross-check can only disagree in the
   direction of "frontmatter is wrong" — the filename alone decides scope.
-- Each host **MUST** declare its threshold in a form the linter reads
-  unambiguously (one threshold per host). A linter invoked without a
+- A threshold **MUST** be declared for each host in a form the linter reads
+  unambiguously (one threshold per host) — the spec is silent on who declares
+  it or where; core's own reference linter reads it from a file it ships
+  (`THRESHOLDS`), which satisfies this without requiring any host itself to
+  have written anything. A linter invoked without a
   resolvable threshold for the host in question **MUST** fail rather than
   proceed — there is deliberately no "no threshold given" path that treats
   an absent threshold as an empty scope, because that would make every
@@ -237,13 +248,24 @@ not *examined and found well-formed*; a runner that conflates the two would
 let a below-threshold document with no rollback block, no pre-condition, or
 no steps at all be renamed into apparent compliance.
 
-A runner **MUST** use a distinct, reserved exit code for every refusal that
-happens before any block has executed — a lint violation, a zero-step
-document, a step with no `apply` block, or an out-of-scope migration — and
-**MUST** reserve other non-zero exit codes for failures that occur once
+A runner **MUST** use a single reserved exit code for every pre-execution
+refusal — a lint violation, a zero-step document, a step with no `apply`
+block, or an out-of-scope migration all SHARE one code — and that code
+**MUST** be distinct from any code used for a failure that occurs once
 execution has begun. A caller cannot otherwise tell "refused, the tree is
 untouched" from "ran partway, the tree may have changed" without parsing
-diagnostic text.
+diagnostic text. (This is deliberately one shared code, not one code per
+refusal kind: the caller's only load-bearing question is *did anything run*,
+and a distinct code per kind would answer a question nobody needs answered
+that way.)
+
+This exit-code contract is scoped to refusal versus post-execution failure;
+it does not cover usage errors (the runner itself was invoked wrong — a
+missing required flag, an unresolvable threshold) or environment errors (the
+named document does not exist or cannot be read). Those **MAY** use their own
+codes, distinct from both the refusal code and the failure code, at the
+host's discretion — they are not migration-refusal outcomes at all, and nothing
+above requires them to share the refusal code.
 
 ### A runner lints before executing
 
@@ -274,11 +296,28 @@ silently skipped was the security-relevant one.
     `jq -e '.hooks.pre_phase.design_critique' <host-config-json> >/dev/null`).
   - For file creation: file existence at the expected path with
     expected content (e.g. `test -f templates/<artifact>.md`).
-- A migration without working idempotency checks is non-conformant.
-  The update flow MUST refuse to apply it twice; the second run
-  MUST error.
+- A migration without working idempotency checks is non-conformant. This is
+  the failure-to-detect case, distinct from the three-valued `check` contract
+  in "Atomicity contract" below: a *working* check on a second run exits 0
+  and the step is skipped cleanly (exit 0 overall, no error — that is the
+  correct, conformant idempotent behaviour). What this bullet describes is a
+  check that never correctly reports "already applied," so a second run
+  proceeds to re-apply a step whose effects already exist; that MUST surface
+  as a failure — either the check itself is wrong and reported as such, or
+  the re-applied `apply`/`verify` naturally errors against a tree that no
+  longer matches its pre-condition's assumptions. Silently succeeding twice
+  with a different result each time is what this rule exists to prevent.
 
 ### Atomicity contract
+
+The three-option failure policy (retry / skip / rollback) below binds every
+migration, exactly as it always has. The dispatch mechanics that follow it —
+block exit codes, "hard-abort", the fixed check/precondition/apply/verify
+order — describe an **executable-form** runner (a migration at or above the
+host's threshold) dispatching role-tagged fences. A migration below the
+threshold satisfies the same three-option policy in whatever idiom prose or
+agent steps allow (per "Executable form" above); it has no blocks to
+sequence or exit codes to read.
 
 A step is dispatched in this fixed order: `check`, then `precondition`, then
 `apply`, then `verify` if present.
@@ -296,12 +335,18 @@ A step is dispatched in this fixed order: `check`, then `precondition`, then
   to be violated. **The interactive failure policy below governs `apply`
   and `verify` failures only** — it does not apply to `check` or
   `precondition`.
+- A `verify` block exiting non-zero **MUST** be treated as the step having
+  failed: the step **MUST NOT** be recorded as applied, regardless of which
+  failure-policy outcome follows. `apply` having run is not sufficient
+  evidence the step succeeded once a `verify` block exists to check further.
 - When an `apply` or `verify` block fails and standard input is a terminal,
   the runner **MUST** prompt the user with three options:
   1. **Retry** — re-run the failing block (idempotent steps are safe to
      re-run).
   2. **Skip with warning** — log the skip, continue with the next step. The
-     migration is recorded as `partial`.
+     migration is recorded as `partial` — satisfied by the runner's own
+     diagnostic output, since this format defines no separate journal or
+     state file to record it in.
   3. **Rollback** — run the rollback blocks of every step that has already
      applied, in **reverse document order**, excluding the failed step
      itself. A step whose `apply` succeeded and whose `verify` then failed
@@ -329,6 +374,11 @@ A step is dispatched in this fixed order: `check`, then `precondition`, then
 
 ### Non-mutation and diagnostics
 
+This subsection describes blocks, which exist only in the **executable
+form** (at or above the host's threshold). A below-threshold migration's
+prose or agent-instruction steps carry no equivalent obligation beyond what
+"Idempotency contract" and "Atomicity contract" already state in prose terms.
+
 - A `check` or `precondition` block **MUST NOT** write to the working tree.
   Their role is to answer a question, and dry-run mode executes them. This
   is an obligation on the migration author, not something a runner can
@@ -351,6 +401,14 @@ A step is dispatched in this fixed order: `check`, then `precondition`, then
   skipped as already applied.
 
 ### Dry-run mode
+
+Dry-run itself is a universal MUST, unchanged from before the executable
+form existed. The specifics below — printing a block's **source**, evaluating
+only up to the first pending step, the prohibition on a scratch-copy
+workaround — describe what dry-run means for an **executable-form** migration
+dispatching role-tagged blocks. A below-threshold migration satisfies the
+same "preview before applying, write nothing" obligation in whatever form its
+prose or agent instructions allow; it has no block source to print.
 
 - **MUST** support a dry-run mode that evaluates `check` and `precondition`
   up to and including the first pending step, prints the **source** of the
@@ -531,10 +589,16 @@ A host implementation:
 - **MUST** support the frontmatter fields, step structure,
   idempotency contract, atomicity contract, and dry-run mode listed
   above.
-- **MUST**, for every migration at or above its declared threshold, run a
-  format linter that enforces the executable form and threshold-scope rules
-  above, and **MUST** wire that linter into CI so a violation fails the
-  build rather than merely being available to run locally.
+- A host that has adopted the executable form (i.e. cites this spec version
+  and has migrations at or above a declared threshold) **MUST** satisfy
+  "Executable form," "Threshold scope," and "A runner lints before
+  executing" above for those migrations, **MUST** run a format linter
+  enforcing those rules, and **MUST** wire it into CI so a violation fails
+  the build rather than merely being available to run locally. No host is
+  touched by this change, and no host has adopted the executable form as of
+  this spec version — so no host is retroactively non-conformant for lacking
+  any of the above; a host **SHOULD** plan for these obligations as part of
+  adopting the executable form.
 - **SHOULD** ship test fixtures for every non-baseline migration.
 - **MAY** define host-specific frontmatter fields beyond the
   required minimum (e.g. host-runtime-extension version pins).

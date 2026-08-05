@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.5.0
+spec_version: 2.0.0
 ---
 
 # 00 — Overview
@@ -129,7 +129,21 @@ non-conformant one. The grounds are measured and recorded in the
 CHANGELOG's gate 2.0.0 entry: blocking cost three rollbacks and a
 six-repository outage on 2026-07-30, and prevented nothing identifiable,
 because third-party reviewer CLIs failed for reasons unrelated to change
-quality. Hosts may claim
+quality. Spec **v2.0.0** is the second major: section 08 (migration format)
+gains an **executable form** — role-tagged fenced blocks (`check`,
+`precondition`, `apply`, `verify`, `rollback`), a filename-keyed threshold
+per host, a runner contract, and a scope boundary on `applies_to` — binding
+only migrations at or above each host's declared threshold
+(`reference-implementations/migration-runner/THRESHOLDS`). Every migration
+that exists across the fleet today sits below its host's threshold, so
+nothing already written becomes non-conformant; it is a major rather than a
+minor because two clauses of the pre-existing text are reworded in a way
+that binds independently of the threshold — dry-run now prints the pending
+step's source rather than a diff, and the atomicity contract states
+non-interactive failure behaviour the 1.x text left unstated. Two structural
+rules (an opened fence must be closed; a tagged fence's body must not be
+empty) were found during implementation rather than designed up front and
+are recorded as such. Hosts may claim
 conformance against any
 of those versions; the version the host claims is the version the host's
 `implements_spec` field names.
