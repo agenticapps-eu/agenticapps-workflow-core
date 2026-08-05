@@ -33,16 +33,28 @@ declared threshold (`claude-workflow` 0035, `codex-workflow` 0016,
 `reference-implementations/migration-runner/THRESHOLDS`), so this is
 backward-compatible for everything that already exists.
 
-It is a major, not a minor, because two clauses in the pre-existing text are
-reworded in a way that would make a naively-conformant implementation of the
-*old* text non-conformant to the *new* one, independent of the threshold:
-the dry-run MUST changes from "prints the diff each step would apply" to
-"prints the source, and evaluates only up to the first pending step" — a
-host printing diffs today is not printing what 2.0.0 requires — and the
-atomicity contract now mandates specific non-interactive behaviour (abort in
-place, report which steps applied, roll back nothing) that the 1.x text
-left unstated. Per this file's own versioning policy, a reworded canonical
+It is a major, not a minor, because **one** clause in the pre-existing text
+binds independent of the threshold and is a genuine tightening: the
+atomicity contract now mandates specific non-interactive failure behaviour
+(abort in place, report which steps applied, roll back nothing) that the 1.x
+text left completely unstated. That clause sits in the three-option failure
+policy itself, which has always bound every migration — it is not part of
+the executable-form dispatch mechanics (block exit codes, the fixed
+check/precondition/apply/verify order) that bind only at or above a host's
+threshold. Per this file's own versioning policy, a reworded canonical
 requirement is a major regardless of how narrow its binding population is.
+
+Two other clauses were reworded in this pass (three reworded in total,
+counting the atomicity clause above) but do **not** independently justify
+the major: the dry-run MUST's wording ("prints the source" instead
+of "prints the diff") is scoped to the executable form in the shipped text,
+so a below-threshold migration's dry-run is unaffected and no host is
+obliged to rewrite anything there; and the "recorded as `partial`" clause
+dropped its "in the version-bump record" location in favour of "satisfied by
+the runner's own diagnostic output," which *loosens* rather than tightens —
+a host already conformant to the stricter old wording trivially satisfies
+the new one. Neither is a basis for treating this as breaking; the
+atomicity clause above is what makes it one.
 
 ### Added — §08 executable form
 - **The role/heading table and info-string grammar**: `check`,

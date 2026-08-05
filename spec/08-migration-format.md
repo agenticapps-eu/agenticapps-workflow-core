@@ -374,10 +374,16 @@ A step is dispatched in this fixed order: `check`, then `precondition`, then
 
 ### Non-mutation and diagnostics
 
-This subsection describes blocks, which exist only in the **executable
-form** (at or above the host's threshold). A below-threshold migration's
-prose or agent-instruction steps carry no equivalent obligation beyond what
-"Idempotency contract" and "Atomicity contract" already state in prose terms.
+The first, second, and fourth bullets below describe blocks, which exist
+only in the **executable form** (at or above the host's threshold); a
+below-threshold migration's prose or agent-instruction steps carry no
+equivalent obligation beyond what "Idempotency contract" and "Atomicity
+contract" already state in prose terms. **The no-secrets/no-personal-data
+bullet is the exception and binds every migration, regardless of form**: a
+prose-form step is still, in practice, a shell command whose output can
+reach the same CI log or session transcript as an executable-form block's —
+the risk this rule exists to close is a property of *emitting output
+somewhere it is retained*, not of being fenced and tagged.
 
 - A `check` or `precondition` block **MUST NOT** write to the working tree.
   Their role is to answer a question, and dry-run mode executes them. This
@@ -389,11 +395,11 @@ prose or agent-instruction steps carry no equivalent obligation beyond what
   it. A pre-condition is where a migration explains what it found and what
   the operator may do about it; substituting the runner's own wording
   destroys the only useful output.
-- Because diagnostic output (including a failing `precondition`'s stderr,
-  and the `apply` source dry-run prints) commonly reaches CI logs that are
-  more widely readable than the repository itself, migration authors
-  **MUST NOT** emit secrets or personal data from any block's output or
-  source.
+- Because diagnostic output (including a failing pre-condition's stderr, and
+  an `apply`'s source where dry-run prints one) commonly reaches CI logs
+  that are more widely readable than the repository itself, migration
+  authors **MUST NOT** emit secrets or personal data from any step's output
+  or source — executable-form block or prose-form step alike.
 - Each block **MUST** execute in its own shell. A step **MUST NOT** rely on
   environment variables, shell functions, or a working directory
   established by an earlier block or an earlier step — such a dependency
@@ -590,7 +596,9 @@ A host implementation:
   idempotency contract, atomicity contract, and dry-run mode listed
   above.
 - A host that has adopted the executable form (i.e. cites this spec version
-  and has migrations at or above a declared threshold) **MUST** satisfy
+  and has migrations at or above a declared threshold, **or** has any
+  migration declaring `migration_format: executable` regardless of its ID)
+  **MUST** satisfy
   "Executable form," "Threshold scope," and "A runner lints before
   executing" above for those migrations, **MUST** run a format linter
   enforcing those rules, and **MUST** wire it into CI so a violation fails

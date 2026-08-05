@@ -137,10 +137,16 @@ only migrations at or above each host's declared threshold
 (`reference-implementations/migration-runner/THRESHOLDS`). Every migration
 that exists across the fleet today sits below its host's threshold, so
 nothing already written becomes non-conformant; it is a major rather than a
-minor because two clauses of the pre-existing text are reworded in a way
-that binds independently of the threshold — dry-run now prints the pending
-step's source rather than a diff, and the atomicity contract states
-non-interactive failure behaviour the 1.x text left unstated. Two structural
+minor because the atomicity contract now states non-interactive failure
+behaviour (abort in place, report which steps applied, roll back nothing)
+that the 1.x text left completely unstated, and that clause sits in the
+three-option failure policy that has always bound every migration, not in
+the threshold-scoped dispatch mechanics. Two other rewordings in the same
+pass — dry-run now prints the pending step's source rather than a diff, and
+"recorded as partial" drops its "version-bump record" location — do not
+themselves justify the major: the first is scoped to the executable form in
+the shipped text, so it does not bind below the threshold, and the second
+loosens rather than tightens. Two structural
 rules (an opened fence must be closed; a tagged fence's body must not be
 empty) were found during implementation rather than designed up front and
 are recorded as such. Hosts may claim

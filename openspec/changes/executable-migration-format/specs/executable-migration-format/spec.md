@@ -207,9 +207,10 @@ to do something the design has already ruled out.
 
 ### Requirement: Refusal is distinguishable from failure by exit code
 
-A runner SHALL use a distinct exit code for every refusal that happens before
-any block executes, and SHALL reserve other non-zero codes for failures that
-occur once execution has begun.
+A runner SHALL use a single reserved exit code for every refusal that happens
+before any block executes — every such refusal SHARES that one code — and
+SHALL reserve other non-zero codes for failures that occur once execution
+has begun.
 
 A caller — a CI job especially — needs to tell "refused, nothing ran, the tree
 is untouched" from "ran partway, the tree may have changed" without parsing
@@ -454,7 +455,7 @@ most likely to be silently wrong.
 - **WHEN** two steps are applied and only the second step's `rollback` is executed
 - **THEN** the first step's changes SHALL remain on disk
 
-### Requirement: An apply block SHALL NOT touch paths outside `applies_to`
+### Requirement: Within the executable form's scope, an apply block SHALL NOT touch paths outside `applies_to`
 
 For a migration within the executable form's scope (see "An ID threshold
 scopes which migrations must be executable" — the same population whose
