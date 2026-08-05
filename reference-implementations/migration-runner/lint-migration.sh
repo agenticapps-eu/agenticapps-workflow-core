@@ -764,10 +764,14 @@ EOF
         # one line can both invoke sed and open a heredoc.
         if (probe ~ /(^|[ \t;&|(])sed[ \t]/) {
           # ONE message for both non-portable spellings, because the text
-          # cannot tell them apart and does not need to: `sed -i ''` and
-          # `sed -i 'script'` are the same shape — a standalone `-i` token —
-          # and the fix is identical. Naming one of them specifically would
+          # cannot tell them apart and does not need to: the BSD form and the
+          # GNU form are the same shape here — a standalone -i token — and the
+          # fix is identical. Naming one of them specifically would
           # mis-describe the other half the time.
+          # (No apostrophes in this comment: it sits inside a single-quoted
+          # awk program, where one would end the program mid-file. The pair
+          # that used to be here was balanced, so it worked by accident and
+          # shellcheck flagged it as SC1078 — see the same note above L10.)
           if (probe ~ /[ \t]-i([ \t]|$)/) {
             printf "%s\n", "`sed -i` carries no ATTACHED suffix, so it means two different things on the two seds: BSD takes the NEXT ARGUMENT as the backup suffix, GNU takes it as the SCRIPT. Whichever the author meant, it is a hard error on the other. Use `sed -i.bak ... && rm -f <file>.bak`, the one form both accept: " probe
           } else if (probe ~ /[ \t]--in-place([ \t=]|$)/) {
