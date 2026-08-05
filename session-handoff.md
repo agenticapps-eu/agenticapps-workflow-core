@@ -69,7 +69,7 @@ found in what it could already see.
 
 ## The fleet adoption (fifth session, same day)
 
-**§21 is adopted in all four hosts. Six PRs, all CI-green.**
+**§21 is adopted in all four hosts. Six PRs, all CI-green, all merged.**
 
 | repo | PR | before | after |
 |---|---|---|---|
@@ -111,12 +111,18 @@ repository" about a repository that is one, whenever git itself was absent.
 
 ## Next session: start here
 
-**Merge the four host PRs.** #83 and #84 are already on main; #84 carries the
-two harness fixes that make three of those four score clean, so it had to land
-first. #113 / #35 / #24 / #20 in any order. All were CI-green.
+**Nothing is pending.** All six PRs are merged, and every installer scores zero
+failures from its own main:
 
-After that the fleet is conformant and there is no §21 work left. The open
-question worth taking next is publishing the harness — see below.
+    claude-workflow    bb59fe6   4 passed, 0 failed, 3 inconclusive
+    codex-workflow     5421812   6 passed, 0 failed, 1 inconclusive
+    opencode-workflow  9bf6015   6 passed, 0 failed, 1 inconclusive
+    pi                 1f3af6e   3 passed, 0 failed, 4 inconclusive
+    core (own)         348a878   3 passed, 0 failed, 4 inconclusive
+
+There is no §21 work left. **Start with the first open question below —
+publishing the harness.** Until that is settled, nothing stops the next
+installer change from reintroducing exactly what this fixed.
 
 ## Open questions
 
@@ -141,7 +147,7 @@ question worth taking next is publishing the harness — see below.
 - **The bash 5.2 / GNU sed / mawk leg was not re-run** — no bash 5 or GNU
   coreutils on this machine. CI covers it; local verification was bash 3.2/BSD
   only.
-- **The plan reviews still predate the merged text**, and **CodeRabbit still
-  has not reviewed #82**. Unchanged.
+- **CodeRabbit did review #82**, unlike #79-#81 — 8 actionable comments, two of
+  them real. Do not assume it skips; read the body.
 - **`.planning/skill-observations/*` is still being written** despite the
   freeze rule. Unchanged across six handoffs.
