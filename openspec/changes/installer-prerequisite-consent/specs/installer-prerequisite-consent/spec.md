@@ -24,6 +24,21 @@ does the work.
 - **WHEN** all declared prerequisites are present
 - **THEN** the installer SHALL proceed without prompting about any of them
 
+#### Scenario: The missing prerequisite is a system runtime
+
+- **WHEN** a missing declared prerequisite is a system runtime or a host CLI —
+  `npm`, `node`, `git`, or the agent's own command
+- **THEN** the installer SHALL report it and state how to install it
+- **AND** SHALL NOT offer to install it, regardless of the opt-in
+
+A runtime is a different kind of act from a package installed through one.
+Installing it is platform-dependent in ways a shell script handles badly — a
+package manager per operating system, a version manager that may already own
+the tool, and a `sudo` prompt the installer cannot reason about. What may be
+offered is a package installed *through* a runtime that is already present,
+which is the `@fission-ai/openspec` case the two unconsented installs actually
+perform.
+
 #### Scenario: A prerequisite is present but too old
 
 - **WHEN** an installer requires a minimum version of a prerequisite and the
