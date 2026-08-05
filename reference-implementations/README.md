@@ -11,6 +11,7 @@ Host repos that adopt (or will adopt) the AgenticApps workflow spec — and, as 
 | [`run-plan-review/`](run-plan-review/) | [§18](../spec/18-retargeted-change-gate.md) (review production) | `tools/run-plan-review-conformance.sh` |
 | [`reviewer-cli/`](reviewer-cli/) | [§18](../spec/18-retargeted-change-gate.md) (vendor dispatch) | `tools/reviewer-cli-conformance.sh` — 14/14 |
 | [`shared-install/`](shared-install/) | the shared-path install contract | `tools/shared-install-conformance.sh` — 12/12 |
+| [`migration-runner/`](migration-runner/) | [§08](../spec/08-migration-format.md) executable form (2.0.0) | `tools/migration-runner.test.sh` — 426/426 |
 
 The gate **consumes** review evidence; `run-plan-review` **produces** it, calling
 `reviewer-cli` once per vendor for dispatch. All three install to the shared
@@ -45,16 +46,28 @@ tools/change-gate-conformance.sh  --family
 tools/reviewer-cli-conformance.sh --family
 ```
 
-**Current spec version:** 1.0.0 (released 2026-07-24) — the first major,
-replacing the GSD-engine front end with the **OpenSpec + Superpowers** front
-end (§16–§19, ADR-0021). **No host cites 1.0.0 yet:** it coexists with the 0.x
-line (§09 "Two front ends coexist"), the fleet below remains valid at
-**0.10.0**, and the first adoption target is the cParX app repo (pilot recorded
-in `PILOT-REPORT.md` / `MEASUREMENT.md`, migrated via
-`docs/recipes/0001-planning-to-openspec.md`). See `CHANGELOG.md`
-in the spec root for the host-implementer actions required to move a
-host row between versions. Host rows below move via the
-host's own adoption PR, not via this file.
+**Current spec version:** 2.0.0 — §08 gains an executable form (role-tagged
+fenced blocks, a filename-keyed per-host threshold, and the
+[`migration-runner/`](migration-runner/) linter/runner below). Major because
+one clause in the atomicity contract (non-interactive failure: abort in
+place, report which steps applied, roll back nothing) now binds every
+migration regardless of threshold adoption — see `CHANGELOG.md`'s entry at
+the repo root for the full conformance-impact accounting. **No host cites
+2.0.0 yet:** every migration in the fleet sits below its host's declared
+threshold (`migration-runner/THRESHOLDS`: `claude-workflow` 0035,
+`codex-workflow` 0016, `opencode-workflow` 0012,
+`pi-agentic-apps-workflow` 0011), so no host is retroactively
+non-conformant by this bump alone. 1.0.0 (released 2026-07-24) was itself
+the first major, replacing the GSD-engine front end with the **OpenSpec +
+Superpowers** front end (§16–§19, ADR-0021). **No host cites 1.0.0 either:**
+it coexists with the 0.x line (§09 "Two front ends coexist"), the fleet
+below remains valid at **0.10.0**, and the first adoption target is the
+cParX app repo (pilot recorded in `PILOT-REPORT.md` / `MEASUREMENT.md`,
+migrated via `docs/recipes/0001-planning-to-openspec.md`). See
+`CHANGELOG.md` at the **repo root** (not the spec root — there is no
+`spec/CHANGELOG.md`) for the host-implementer actions required to move a
+host row between versions. Host rows below move via the host's own
+adoption PR, not via this file.
 
 | Host repo | Type | Spec version implemented | Conformance level | Notes |
 |---|---|---|---|---|

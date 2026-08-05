@@ -73,6 +73,36 @@ jobs:
           # Do not leave a credential in the workspace that working-tree shell
           # could reach.
           persist-credentials: false
+          # FULL HISTORY, NOT THE DEFAULT SHALLOW CLONE. tools/migration-runner.test.sh
+          # (see "Test the migration runner" below) contains two assertions that run
+          # `git show <sha>:path` against specific commits on the branch that added
+          # the migration-runner suite (~test.sh:351 and ~test.sh:1080) — they capture
+          # a file's content at a point in this repo's own history and diff it
+          # against the working copy, to prove a fix round actually changed the bytes
+          # it claims to. The default `actions/checkout` depth is 1: a single-commit,
+          # historyless checkout in which NEITHER referenced sha is present at all, so
+          # both assertions would fail the instant this job runs — not because
+          # anything is broken, but because the tree they're reading from was never
+          # fetched. `fetch-depth: 0` fetches full history so those commits are
+          # reachable from the checked-out ref.
+          #
+          # This fixes the case that matters THE MOMENT this step is wired in: a
+          # `pull_request` run against this feature branch's own tip, whose ancestry
+          # already contains both commits. It does NOT fix every future case — once
+          # this branch is squash-merged into `main` (this repo's own convention; see
+          # recent merge commits), the two hardcoded SHAs are commits on the deleted
+          # topic branch, not ancestors of the squash commit, and a subsequent `push:
+          # branches: [main]` run of this same job will not find them even with
+          # `fetch-depth: 0`, because full-history-of-a-ref only reaches that ref's
+          # own ancestors. That is a known, recorded limitation (see
+          # .superpowers/sdd/2026-08-04-executable-migration-format/task-6-report.md,
+          # "recorded, not fixed: git show <sha> reachability under CI") left for a
+          # follow-up to close — either by giving that push-triggered run a source of
+          # the pre-squash history, or by rewriting those two assertions to capture
+          # their comparison at test-authoring time instead of depending on the sha
+          # staying reachable forever. Do not remove this comment when that follow-up
+          # lands; replace it with what actually shipped.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with: { node-version: "22" }
@@ -158,6 +188,29 @@ jobs:
         # every line survived — which was true, and useless: every line did
         # survive, in the wrong requirement.
         run: bash tools/spec-placement.test.sh
+
+      - name: Test the migration runner
+        # §08's executable form (spec_version 2.0.0) ships a reference
+        # extractor/linter/runner at reference-implementations/migration-runner/,
+        # and this is its test suite: 426 assertions driving extract.sh,
+        # lint-migration.sh, and run-migration.sh against
+        # reference-implementations/migration-runner/test-fixtures/ through the
+        # real CLI, not a reimplementation of their logic.
+        #
+        # THIS RUNS THE TEST SUITE, NOT A LINT SWEEP OF THE FIXTURES DIRECTORY.
+        # That distinction is load-bearing: most files under test-fixtures/ are
+        # named bad-*.md and every one of them EXISTS to fail the linter — each
+        # is a regression guard for one specific rule (L0-L8) or runner
+        # behaviour. Pointing lint-migration.sh at that directory broadly, or
+        # asserting every fixture lints clean, would make this gate self-fail
+        # on fixtures that are working exactly as designed. The suite already
+        # asserts each fixture's *expected* verdict (clean, or a specific
+        # violation line) — that is the thing to run, never a substitute scan.
+        #
+        # This suite's own two `git show <sha>:path` assertions are why the
+        # checkout above was changed to `fetch-depth: 0` — see that step's
+        # comment for what breaks without it, and what still isn't fixed by it.
+        run: bash tools/migration-runner.test.sh
 
       - name: Run the change gate
         # exit 0 = every active change validates (review NOTEs may still print);

@@ -11,66 +11,66 @@ Stage 2 review changed".
 
 ## 1. Extractor
 
-- [ ] 1.1 Write `test-fixtures/conformant.md` — two steps, all five roles on step 1, and one un-annotated `bash` fence as a tripwire that must never execute
-- [ ] 1.2 Write `tools/migration-runner.test.sh` with the extractor assertions, including that step 1 is not confused with a step 10 and that a numbering gap does not merge steps
-- [ ] 1.3 Run it and observe the assertions fail (`extract.sh` does not exist)
-- [ ] 1.4 Write `extract.sh` — `mr_steps`, `mr_roles`, `mr_block`, plus the CLI. Bound each step at **the next `### Step ` heading of any number**, never at `N+1`. Enforce the exact info-string grammar: literal `bash`, whitespace, `role=`, role name, optional trailing whitespace, nothing else
-- [ ] 1.5 Port the delimiter guard and literal-prefix matching from codex's `extract_step_block()`
-- [ ] 1.6 Run, observe green, commit
+- [x] 1.1 Write `test-fixtures/conformant.md` — two steps, all five roles on step 1, and one un-annotated `bash` fence as a tripwire that must never execute — SHIPPED AS `0016-conformant.md`: renamed (with 6 sibling fixtures) in group 3's fix round 1, once the filename-keyed threshold scheme required a numeric ID prefix. Content matches: two steps, all five roles on step 1, one un-annotated tripwire fence.
+- [x] 1.2 Write `tools/migration-runner.test.sh` with the extractor assertions, including that step 1 is not confused with a step 10 and that a numbering gap does not merge steps
+- [x] 1.3 Run it and observe the assertions fail (`extract.sh` does not exist)
+- [x] 1.4 Write `extract.sh` — `mr_steps`, `mr_roles`, `mr_block`, plus the CLI. Bound each step at **the next `### Step ` heading of any number**, never at `N+1`. Enforce the exact info-string grammar: literal `bash`, whitespace, `role=`, role name, optional trailing whitespace, nothing else — Task 1 review found `mr_steps` (unlike `mr_roles`/`mr_block`) had no fence-state tracking: a heredoc containing the literal line `### Step 2` invented a phantom step. Fixed in fix round 1, with 3 committed regression fixtures, before this item's commit.
+- [x] 1.5 Port the delimiter guard and literal-prefix matching from codex's `extract_step_block()`
+- [x] 1.6 Run, observe green, commit — commits b5cc723..0bfd5aa, 1 fix round, review clean, 15 assertions.
 
 ## 2. Linter — structural rules L1, L3, L5
 
-- [ ] 2.1 Build `bad-l1-missing-rollback.md`, `bad-l3-duplicate-apply.md`, `bad-l5-role-on-yaml.md`, and `bad-infostring-extra-key.md` per the plan's fixture table
-- [ ] 2.2 Append the structural-rule assertions, including that a step with no `verify` passes
-- [ ] 2.3 Run and observe them fail
-- [ ] 2.4 Write `lint-migration.sh` implementing L1 (exactly one each of check/precondition/apply/rollback, at most one verify), L3 (no duplicates), L5 (`role=` only on `bash` fences, and only in the exact grammar)
-- [ ] 2.5 Run, observe green, commit
+- [x] 2.1 Build `bad-l1-missing-rollback.md`, `bad-l3-duplicate-apply.md`, `bad-l5-role-on-yaml.md`, and `bad-infostring-extra-key.md` per the plan's fixture table — shipped renamed with numeric ID prefixes (`0017-bad-l1-missing-rollback.md`, `0018-bad-l3-duplicate-apply.md`, `0019-bad-l5-role-on-yaml.md`, `0025-bad-infostring-extra-key.md`), same reason as 1.1.
+- [x] 2.2 Append the structural-rule assertions, including that a step with no `verify` passes
+- [x] 2.3 Run and observe them fail
+- [x] 2.4 Write `lint-migration.sh` implementing L1 (exactly one each of check/precondition/apply/rollback, at most one verify), L3 (no duplicates), L5 (`role=` only on `bash` fences, and only in the exact grammar) — review found the draft's L5 grammar check was unanchored (would have passed `bash role=apply retry=2`), its output format contradicted the stated `L<n>: step <s>:` contract, and it wrote a `/tmp/mr-l5.$$` scratch file outside the test temp dir; all three fixed before commit.
+- [x] 2.5 Run, observe green, commit — commits 0bfd5aa..b36af64, review clean (spec OK, quality approved), 27 assertions.
 
 ## 3. Linter — L2, L4, and the filename-keyed threshold
 
-- [ ] 3.1 Write `reference-implementations/migration-runner/THRESHOLDS` — one row per host: claude-workflow 0035, codex-workflow 0016, opencode-workflow 0012, pi-agentic-apps-workflow 0011
-- [ ] 3.2 Build `bad-l2-wrong-heading.md`, `bad-l4-typo-role.md`, `bad-threshold-no-frontmatter.md`, `bad-no-frontmatter-id.md` (in scope by filename, no `id:` line at all), `bad-optin-below-threshold.md` (below threshold, declares `migration_format: executable`, omits a role), and `bad-nonconsecutive-steps.md`
-- [ ] 3.3 Append the assertions for L2, L4, and the threshold gate
-- [ ] 3.4 Run and observe them fail — **confirm `bad-l4-typo-role.md` currently exits 0**, since a misspelled role is indistinguishable from illustration until L4 exists. That observation is the justification for the rule
-- [ ] 3.5 Derive the migration ID **from the filename basename**, never from frontmatter. `bad-no-frontmatter-id.md` is the regression guard: deleting the `id:` line must not evade the linter
-- [ ] 3.6 Cross-check the filename ID against frontmatter `migration_format`: at or above threshold without the declaration is a violation; below threshold *with* it is judged anyway; any other value is a violation
-- [ ] 3.7 Add the consecutive-numbering check and the single-pass L2/L4 scan that tracks the most recent `**Label:**` heading
-- [ ] 3.8 Run, observe green, commit
+- [x] 3.1 Write `reference-implementations/migration-runner/THRESHOLDS` — one row per host: claude-workflow 0035, codex-workflow 0016, opencode-workflow 0012, pi-agentic-apps-workflow 0011
+- [x] 3.2 Build `bad-l2-wrong-heading.md`, `bad-l4-typo-role.md`, `bad-threshold-no-frontmatter.md`, `bad-no-frontmatter-id.md` (in scope by filename, no `id:` line at all), `bad-optin-below-threshold.md` (below threshold, declares `migration_format: executable`, omits a role), and `bad-nonconsecutive-steps.md` — shipped with numeric ID prefixes (`0020-bad-l2-wrong-heading.md`, `0021-bad-l4-typo-role.md`, `0022-bad-threshold-no-frontmatter.md`, `0026-bad-no-frontmatter-id.md`, `0009-bad-optin-below-threshold.md`, `0028-bad-nonconsecutive-steps.md`); fix round 1 also renamed 7 previously-un-prefixed fixtures from earlier groups to match.
+- [x] 3.3 Append the assertions for L2, L4, and the threshold gate
+- [x] 3.4 Run and observe them fail — **confirm `bad-l4-typo-role.md` currently exits 0**, since a misspelled role is indistinguishable from illustration until L4 exists. That observation is the justification for the rule
+- [x] 3.5 Derive the migration ID **from the filename basename**, never from frontmatter. `bad-no-frontmatter-id.md` is the regression guard: deleting the `id:` line must not evade the linter — review found this load-bearing rule had NO regression guard in the first draft (every in-scope fixture was also in scope another way); `0030-scope-by-filename.md` was added specifically as the guard whose frontmatter `id` would put it below every threshold, so only the filename can put it in scope.
+- [x] 3.6 Cross-check the filename ID against frontmatter `migration_format`: at or above threshold without the declaration is a violation; below threshold *with* it is judged anyway; any other value is a violation
+- [x] 3.7 Add the consecutive-numbering check and the single-pass L2/L4 scan that tracks the most recent `**Label:**` heading — review found (for the third time in this plan, after `mr_roles`/`mr_block` in the spec review and `mr_steps` in task 1) that the L2/L4 scan evaluated step-boundary rules BEFORE fence-state rules, so a heredoc containing `### Step 2` silently suppressed every L2/L4 check for the rest of that step. Fixed in fix round 1 and promoted to a standing Global Constraint for the rest of the plan (fence state first, step boundary second, content third).
+- [x] 3.8 Run, observe green, commit — commits b36af64..0bd78db, 1 fix round (7 findings: fence-ordering fix, threshold/host input validation, a file-existence check, the L0 unknown-`migration_format` branches, plus the fixture renames and guard above), review clean, 73 assertions.
 
 ## 4. Runner — dispatch, dry-run, and exit-code semantics
 
-- [ ] 4.1 Append assertions for the happy path, the second run reporting skipped, dry-run printing apply source and writing nothing, a `check` exiting 2 aborting rather than re-applying, and a failing `precondition` aborting even with a terminal attached
-- [ ] 4.2 Run and observe them fail
-- [ ] 4.3 Write `run-migration.sh` — argument parsing, TTY-derived default policy, the per-step check/precondition/apply/verify loop, and the dry-run branch
-- [ ] 4.4 Implement the three-valued `check` contract: 0 applied, 1 not applied, anything else aborts
-- [ ] 4.5 Make a `precondition` failure hard-abort regardless of TTY, reproducing its stderr verbatim
-- [ ] 4.6 Run, observe green, commit
+- [x] 4.1 Append assertions for the happy path, the second run reporting skipped, dry-run printing apply source and writing nothing, a `check` exiting 2 aborting rather than re-applying, and a failing `precondition` aborting even with a terminal attached
+- [x] 4.2 Run and observe them fail
+- [x] 4.3 Write `run-migration.sh` — argument parsing, TTY-derived default policy, the per-step check/precondition/apply/verify loop, and the dry-run branch
+- [x] 4.4 Implement the three-valued `check` contract: 0 applied, 1 not applied, anything else aborts
+- [x] 4.5 Make a `precondition` failure hard-abort regardless of TTY, reproducing its stderr verbatim
+- [x] 4.6 Run, observe green, commit — review found 2 CRITICAL defects in the first draft's dry-run, both reproduced by execution, not inferred: dry-run ran every pending step's `apply` against a `cp -R` scratch mirror, and the reviewer proved two escapes by running them (an `apply` writing to `$HOME` landed for real during `--dry-run`; `cp -R` preserves symlinks, so a purely relative write escaped through a workdir symlink back into the real tree) — a scratch mirror also carries `.git` along, so a scratch-run `git push` would hit the real remote with real credentials. Separately, a `DRY_RUN` gate on the three-valued check made dry-run exit 0 where a real run aborts at step 1. Fix round 1 removed the scratch-mirror mechanism entirely rather than hardening it ("the working tree was not modified" must be a runner property, not a property of the fixtures it was tested against) — spec/08 was amended to match: dry-run evaluates only up to and including the first pending step and reports later steps' `apply` sources as unevaluated. Commits 0bd78db..d8bf718, review clean, 115 assertions.
 
 ## 5. Runner — refuse a migration that would do nothing
 
-- [ ] 5.1 Build `all-illustration.md` — in scope by filename, `migration_format: executable`, one step whose only fences carry no `role=`
-- [ ] 5.2 Append assertions: the runner exits non-zero on a migration that fails the linter, exits non-zero on `all-illustration.md`, exits non-zero on a zero-step document, and in every case executes nothing
-- [ ] 5.3 Run and observe them fail — the runner currently exits 0 on all three, which is the defect the Stage 2 review found
-- [ ] 5.4 Make the runner lint before executing and abort on any violation, on zero steps, and on any step yielding no `apply` block
-- [ ] 5.5 Run, observe green, commit
+- [x] 5.1 Build `all-illustration.md` — in scope by filename, `migration_format: executable`, one step whose only fences carry no `role=` — shipped as `0035-all-illustration.md` (fixture-ID renumbering; see group 3/4 notes).
+- [x] 5.2 Append assertions: the runner exits non-zero on a migration that fails the linter, exits non-zero on `all-illustration.md`, exits non-zero on a zero-step document, and in every case executes nothing
+- [x] 5.3 Run and observe them fail — the runner currently exits 0 on all three, which is the defect the Stage 2 review found — **honest negative result recorded during implementation**: `0035-all-illustration.md` did NOT actually demonstrate the old runner exiting 0. The old runner aborted on it, but by accident — an untagged `check` fence is indistinguishable from "the check could not run" via `run_block`'s missing-block-as-127 convention. The implementer declined to assert the assumed-but-false behaviour and instead found `0038-zero-apply-step.md`, which does walk past the accident and reports false success; this is the fixture that actually demonstrates the defect this task exists to close.
+- [x] 5.4 Make the runner lint before executing and abort on any violation, on zero steps, and on any step yielding no `apply` block
+- [x] 5.5 Run, observe green, commit — the longest task in the plan: 4 fix rounds, commits d8bf718..e3136b3, 185 assertions. Along the way this task also: found a below-threshold migration was skipped by the linter (exit 0) and then executed UNJUDGED, which the spec was amended to close (a runner now refuses anything the linter didn't judge); replaced the single non-zero exit code with the 65-refusal/1-runtime-failure split documented in this repo's README and the spec; **added lint rule L7** ("every opened fence must close"), not originally scoped to this task, once review found `mr_roles` reports a role from a fence's *opening* line while `mr_block` only confirms one on its *closing* line, so an unclosed fence lints clean and fails at runtime; fixed a BLOCK_MISSING/exit-127 collision (a lint-clean precondition shelling out to a missing tool like `jq` was misreported as "block missing"); and caught (fix round 4) a regression its own prior round had introduced, where a missing `check` block was briefly read as "not yet applied, proceed" instead of aborting.
 
 ## 6. Runner — A2 failure policy
 
-- [ ] 6.1 Build `failing-apply.md` (step 2's apply exits 7), `failing-verify.md` (apply succeeds, verify exits 1), and `failing-precondition.md` (two-option remediation on stderr, exit 3)
-- [ ] 6.2 Append assertions — the load-bearing ones being that step 1's work **survives** a step 2 failure, that a failing `verify` does not mark its step applied, and that skip **continues to the next step** rather than exiting
-- [ ] 6.3 Run and observe them fail
-- [ ] 6.4 Implement `fail_policy()` for `apply` and `verify` failures only: TTY prompts; non-TTY aborts reporting which steps applied and rolling back nothing; skip continues and records partial; rollback runs applied steps in **reverse** document order and never rolls back the failed step
-- [ ] 6.5 Run, observe green, commit
+- [x] 6.1 Build `failing-apply.md` (step 2's apply exits 7), `failing-verify.md` (apply succeeds, verify exits 1), and `failing-precondition.md` (two-option remediation on stderr, exit 3) — shipped as `0036-failing-apply.md`, `0037-failing-verify.md`, `0023-failing-precondition.md` (fixture-ID renumbering; see group 3/4 notes). `0024-failing-check.md` and `0051-failing-precondition-after-apply.md` were added beyond this item during review to close gaps found below.
+- [x] 6.2 Append assertions — the load-bearing ones being that step 1's work **survives** a step 2 failure, that a failing `verify` does not mark its step applied, and that skip **continues to the next step** rather than exiting
+- [x] 6.3 Run and observe them fail
+- [x] 6.4 Implement `fail_policy()` for `apply` and `verify` failures only: TTY prompts; non-TTY aborts reporting which steps applied and rolling back nothing; skip continues and records partial; rollback runs applied steps in **reverse** document order and never rolls back the failed step
+- [x] 6.5 Run, observe green, commit — 2 fix rounds, commits e3136b3..63a183b, 271 assertions. Fix round 1 closed a load-bearing, CRITICAL defect found only under a real terminal: the suite (and the runner itself, invoked with no `--on-failure` and no stdin redirect) **hung forever**, because `[ -t 0 ]` resolved to `prompt` and `read` blocked — invisible until this review because task 9.2's CI wiring hadn't happened yet, so a developer's own terminal was the one invocation path that didn't work. Confirmed by construction with a `pty.fork()` harness in both directions (hangs pre-fix, completes post-fix). Fix round 2 closed an asymmetry the round-1 fix left behind: `apply`/`verify` hard-aborts reported which steps had applied; `check`/`precondition` hard-aborts (added in group 5) did not, at 4 sites. Also recorded here, for group 9: two `git show <sha>:` assertions require a full-depth CI checkout (see task 9.2's note below).
 
 ## 7. Rollback fixtures — the blocks the runner never reaches
 
-- [ ] 7.1 Append assertions that execute each `rollback` block directly against its own step's post-apply state, including that step 2's rollback is surgical and leaves step 1 intact
-- [ ] 7.2 Run — these should pass immediately; a failure means a fixture's rollback is wrong, which is the rot this group exists to catch
-- [ ] 7.3 Commit
+- [x] 7.1 Append assertions that execute each `rollback` block directly against its own step's post-apply state, including that step 2's rollback is surgical and leaves step 1 intact
+- [x] 7.2 Run — these should pass immediately; a failure means a fixture's rollback is wrong, which is the rot this group exists to catch — the implementer's first pass DID pass immediately (338 assertions green), but review then found the pass was too easy to satisfy: 8 rollback blocks in lint-clean, in-scope fixtures were excluded from execution entirely (an exclusion list applied per-fixture rather than per-step, missing 4 fixtures outright), and the tree-comparison oracle (`tree_snapshot`) was blind to exactly the two escape-probe fixtures whose rollbacks matter most — one writes an absolute path outside the workdir, one writes through a symlink that `find` neither reports as `-type f` nor descends into. Both fixed in fix round 1 (all 8 blocks now execute; both escape mutations now go red where they previously stayed green).
+- [x] 7.3 Commit — commits 63a183b..61fc097, 2 fix rounds, 426 assertions. Fix round 2 found round 1's fix was **macOS-only**: `tree_snapshot` piped `find` into `xargs shasum`, and BSD `xargs` skips the command on empty input while GNU/busybox `xargs` runs it once on an empty stream — a difference invisible on the implementer's and reviewer's own machines but certain to bite the moment task 9.2 put this suite on `ubuntu-latest`. Reproduced end-to-end in an Alpine container before the one-line fix (`find ... -exec shasum {} +` instead of piping through `xargs`), and reconfirmed on both platforms afterward. Also recorded, resolved by group 8: `0046` step 1's `apply` mutates a workdir-resident copy of the migration document itself, which is outside its declared `applies_to`, with no restore in its rollback — flagged as a spec-scoping question here, decided in group 8 (the `applies_to` write-boundary rule is scoped to the executable-form threshold, and excludes scratch bookkeeping the step itself cleans up).
 
 ## 8. Revise spec §08
 
-- [x] 8.1 Bump `spec_version` 0.9.1 → 0.10.0
+- [x] 8.1 Bump `spec_version` 0.9.1 → 0.10.0 — **CORRECTED IN FIX ROUND 1, NOT SHIPPED AS WRITTEN.** Section `spec_version` stamps carry the whole-spec version at which that section last changed, not a per-section counter, and 0.10.0 was already released (CHANGELOG, 2026-07-19) against §08's OLD 231-line text, with hosts already citing `implements_spec: 0.10.0` against it. The actual bump is **1.5.0 → 2.0.0** (whole-spec version), landed on both `spec/08-migration-format.md` and `spec/00-overview.md`, with a `CHANGELOG.md` entry under `[Unreleased]`. Major, because the atomicity contract's non-interactive-failure clause (see 8.5) binds every migration regardless of threshold adoption — not (as first drafted) the dry-run wording change, which fix round 2 found was scoped to the executable form only and so cannot itself justify a major.
 - [x] 8.2 Add the "Executable form" subsection — role/heading table, exact info-string grammar, un-annotated fences as illustration, unrecognised roles rejected, `role=` only on `bash`, consecutive step numbering and the next-step-heading boundary
 - [x] 8.3 Add the threshold rules — ID from filename, frontmatter cross-check, declaration may add to scope but never remove
 - [x] 8.4 Add the requirement that a runner lints first and refuses a migration yielding no executable work
@@ -78,12 +78,12 @@ Stage 2 review changed".
 - [x] 8.6 Add the `check`/`precondition` non-mutation obligation, and correct the dry-run promise from "prints the diff" to "prints the source"
 - [x] 8.7 Add the diagnostics warning — verbatim stderr reaches CI logs, so blocks must not emit secrets or personal data
 - [x] 8.8 Add the Conformance MUST that a host runs the format linter
-- [x] 8.9 Run `openspec validate --all` and commit
+- [x] 8.9 Run `openspec validate --all` and commit — 3 fix rounds, commits 61fc097..a7baa20, §08 231→540 lines. Fix round 1 also found the `applies_to` write-boundary rule had landed above the "everything above holds unconditionally" line, which would have made 6/16 (substantive) to 16/16 (counting `mktemp`) of codex-workflow's own migrations non-conformant on the day this shipped; rescoped to the executable-form threshold, with scratch-sibling/`mktemp` carve-outs, and marked explicitly unenforced. Fix round 2 corrected a self-contradiction between the CHANGELOG's stated rationale for the major and the same commit's own scoping fix. Fix round 3 corrected a CHANGELOG line ("no conformance impact required today") that contradicted the major's own rationale one paragraph above it.
 
 ## 9. CI and documentation
 
-- [ ] 9.1 Write `reference-implementations/migration-runner/README.md` — the role table, why L4 exists, why the runner lints first, the A2 policy and its rollback consequence, the THRESHOLDS file, and the note that the installer will publish these under `# migration-runner-version:` arbitration
-- [ ] 9.2 Add the `Test the migration runner` step to `.github/workflows/openspec-gate.yml`. It runs the **test suite**, which drives the linter against fixtures and asserts their expected verdicts. It MUST NOT lint `test-fixtures/` broadly — most of those files fail the linter by design, so a broad scan would make the gate self-fail
-- [ ] 9.3 Note in the README that dry-run is **not** a safe preview of an untrusted migration: it still executes `check` and `precondition`, and the non-mutation rule binds honest authors, not hostile ones
-- [ ] 9.4 Run the full local suite — test file, linter against the conformant fixture, `openspec validate --all`, and the change gate `--ci`
-- [ ] 9.5 Commit
+- [x] 9.1 Write `reference-implementations/migration-runner/README.md` — the role table, why L4 exists, why the runner lints first, the A2 policy and its rollback consequence, the THRESHOLDS file, and the note that the installer will publish these under `# migration-runner-version:` arbitration — also covers all nine linter rules (L0–L8, not just L4), why L7 and L8 exist (both found by review, same as L4), the exit-code scheme, the failure policy in full, and `applies_to`'s dual meaning (impact metadata below threshold, unenforced write boundary at/above it).
+- [x] 9.2 Add the `Test the migration runner` step to `.github/workflows/openspec-gate.yml`. It runs the **test suite**, which drives the linter against fixtures and asserts their expected verdicts. It MUST NOT lint `test-fixtures/` broadly — most of those files fail the linter by design, so a broad scan would make the gate self-fail — also set `fetch-depth: 0` on the job's checkout (previously unset, i.e. depth 1) with a comment explaining why: two assertions in the suite do `git show <sha>:path` against commits on this feature branch (test.sh ~:368, ~:1082), which are absent from a depth-1 clone and — per group 6's own note — will also be absent from `main` after this branch's squash-merge, once the topic branch is deleted. `fetch-depth: 0` fixes the case that fires first (this PR's own run, and any push to this branch before merge); the post-squash-merge `push: branches: [main]` case is recorded as a known, NOT-fixed-here limitation, per the standing instruction against asserting sufficiency without an executed case.
+- [x] 9.3 Note in the README that dry-run is **not** a safe preview of an untrusted migration: it still executes `check` and `precondition`, and the non-mutation rule binds honest authors, not hostile ones
+- [x] 9.4 Run the full local suite — test file, linter against the conformant fixture, `openspec validate --all`, and the change gate `--ci` — also ran the suite under a real pty (`pty.fork()` harness per task-6-report.md) to confirm no invocation hangs outside CI/pipe contexts: 426 passed, 0 failed, exit 0, ~9-10s, both piped and under a pty.
+- [x] 9.5 Commit
