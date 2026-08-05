@@ -70,7 +70,7 @@ grep -qx '```bash' NOTES.md && grep -qx 'bash tools/migration-runner.test.sh' NO
 
 **Rollback:**
 ```bash role=rollback
-sed -i '' '/^## Running the suite$/,$d' NOTES.md
+sed -i.bak '/^## Running the suite$/,$d' NOTES.md && rm -f NOTES.md.bak
 ```
 
 ### Step 2: emit a fence via an indented heredoc
@@ -104,7 +104,7 @@ grep -qx ' ```text' NOTES.md
 
 **Rollback:**
 ```bash role=rollback
-sed -i '' '/^## Indented escape$/,$d' NOTES.md
+sed -i.bak '/^## Indented escape$/,$d' NOTES.md && rm -f NOTES.md.bak
 ```
 
 ### Step 3: emit a fence via a tab-stripped heredoc
@@ -138,5 +138,5 @@ grep -qx '```text' NOTES.md && grep -qx 'payload' NOTES.md
 
 **Rollback:**
 ```bash role=rollback
-sed -i '' '/^## Dash escape$/,$d' NOTES.md
+sed -i.bak '/^## Dash escape$/,$d' NOTES.md && rm -f NOTES.md.bak
 ```

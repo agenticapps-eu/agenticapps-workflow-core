@@ -48,5 +48,5 @@ EOFF
 
 **Rollback:**
 ```bash role=rollback
-sed -i '' '/^## Release notes$/,$d' NOTES.md
+sed -i.bak '/^## Release notes$/,$d' NOTES.md && rm -f NOTES.md.bak
 ```

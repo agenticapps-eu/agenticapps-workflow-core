@@ -72,5 +72,5 @@ EOF
 
 **Rollback:**
 ```bash role=rollback
-sed -i '' '/^## Running the suite$/,$d' NOTES.md
+sed -i.bak '/^## Running the suite$/,$d' NOTES.md && rm -f NOTES.md.bak
 ```

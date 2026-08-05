@@ -69,5 +69,5 @@ grep -qx '## Workflow' CLAUDE.md
 
 **Rollback:**
 ```bash role=rollback
-sed -i '' '/^## Workflow$/d' CLAUDE.md
+sed -i.bak '/^## Workflow$/d' CLAUDE.md && rm -f CLAUDE.md.bak
 ```

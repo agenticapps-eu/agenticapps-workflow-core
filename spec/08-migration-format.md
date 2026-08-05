@@ -646,7 +646,7 @@ EOF
 
 **Rollback:**
 \`\`\`bash role=rollback
-sed -i '/^## Example feature$/,/^$/d' <host-workflow-config>
+sed -i.bak '/^## Example feature$/,/^$/d' <host-workflow-config> && rm -f <host-workflow-config>.bak
 \`\`\`
 ```
 
