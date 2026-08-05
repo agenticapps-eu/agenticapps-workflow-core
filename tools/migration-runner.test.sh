@@ -19,6 +19,23 @@ FIX="$MR/test-fixtures"
 # unparseable-filename.md, whose entire purpose is to lack a numeric prefix;
 # that one fixture is committed exactly as-is rather than synthesized, since
 # synthesizing it would need a temp dir this file otherwise has no use for.
+# PREFLIGHT. `tree_snapshot` below is the primary rollback oracle for group 7
+# and it hashes with `shasum`, whose stderr it discards. On a box without
+# `shasum` — a bare ubuntu:24.04 container has no Perl, so no shasum — every
+# snapshot came back EMPTY, "before" equalled "after" for the wrong reason,
+# and seventeen rollback assertions failed with a message pointing at the
+# fixtures rather than at the missing tool. A suite whose oracle can quietly
+# become vacuous has to say so out loud, so the absence is now fatal here
+# instead of misattributed there.
+for tool in shasum find sort; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "migration-runner.test.sh: required tool '$tool' is not on PATH." >&2
+    echo "  tree_snapshot() hashes with shasum and would otherwise report an" >&2
+    echo "  empty snapshot for every tree, turning every rollback check vacuous." >&2
+    exit 2
+  }
+done
+
 pass=0
 fail=0
 
@@ -1444,6 +1461,77 @@ assert_eq "$?" "0" \
 assert_eq "$(cat "$tmp/RESTORE.md")" "# restored" \
   "L10 backslash: having restored only a prefix — the fenced payload it owed is absent"
 rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== lint-migration.sh: L11 — a sed -i only one of BSD and GNU accepts =="
+
+# THIS RULE EXISTS BECAUSE THE CLASS SHIPPED IN THIS TREE, TWICE. Seven
+# rollback blocks across six fixtures below carried `sed -i ''` (BSD-only) and
+# §08's own worked example carried bare `sed -i` (GNU-only). The first set was
+# green on macOS and red on every Linux; the second was the exact inverse.
+# Neither survived contact with the other implementation, and neither was
+# caught by review, because each reads correct to whoever shares the author's
+# sed. Both directions are pinned here — a rule that rejects a valid migration
+# is as bad as one that misses an invalid one.
+mr_l11_probe() { # $1=apply body to substitute  $2=description  $3=expect: fire|clean
+  local dir out rc
+  dir="$(mktemp -d)"
+  printf '%s\n' "$1" > "$dir/repl.txt"
+  awk -v f="$dir/repl.txt" '
+    /^printf .root = true/ { while ((getline l < f) > 0) print l; close(f); next }
+    { print }
+  ' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0092|" > "$dir/0092-l11-probe.md"
+  out="$(bash "$MR/lint-migration.sh" --threshold 16 "$dir/0092-l11-probe.md" 2>&1)"
+  rc=$?
+  if [ "$3" = "fire" ]; then
+    assert_eq "$rc" "1" "L11: $2 — exits 1"
+    assert_contains "$out" "L11: step 1: role 'apply'" "L11: $2 — names the rule, the step and the role"
+  else
+    assert_eq "$rc" "0" "L11 false-positive guard: $2 — lints clean"
+    assert_eq "$out" "" "L11 false-positive guard: $2 — reports nothing at all"
+  fi
+  rm -rf "$dir"
+}
+
+# ---- MUST FIRE ----------------------------------------------------------
+# Both non-portable spellings share one shape — a standalone `-i` token — so
+# both are caught by one check and reported with one message. The message
+# deliberately does not claim to know WHICH the author meant, because the text
+# cannot tell and the fix is the same either way.
+mr_l11_probe "sed -i '' 's/a/b/' .editorconfig"       'the BSD detached-suffix spelling'      fire
+mr_l11_probe "sed -i 's/a/b/' .editorconfig"          'the GNU bare -i spelling'             fire
+mr_l11_probe "sed --in-place 's/a/b/' .editorconfig"  'the GNU-only --in-place long option'  fire
+mr_l11_probe "printf 'x\n' > .editorconfig; sed -i '' 's/a/b/' .editorconfig" \
+  'a non-portable sed later in a compound line'                                              fire
+
+# ---- MUST NOT FIRE ------------------------------------------------------
+mr_l11_probe "sed -i.bak 's/a/b/' .editorconfig && rm -f .editorconfig.bak" \
+  'the portable attached-suffix form — the one this rule is steering toward'                 clean
+mr_l11_probe "sed 's/a/b/' .editorconfig > .tmp && mv .tmp .editorconfig" \
+  'a sed with no -i at all'                                                                  clean
+# The comment probe carries a real command TOO. Without one the body is pure
+# comment, L8 fires on the emptiness, and the probe goes red for a reason that
+# has nothing to do with L11 — which is exactly what happened when this was
+# first written, and is why the pairing is spelled out rather than assumed.
+mr_l11_probe "# sed -i '' 's/a/b/' file  <- explaining the bug in a comment
+printf 'root = true\n' > .editorconfig" \
+  'a whole-line comment MENTIONING the bad form is prose, not a command'                     clean
+mr_l11_probe "gsed -i 's/a/b/' .editorconfig" \
+  'gsed is GNU by name — the author has already chosen an implementation'                    clean
+
+# A HEREDOC BODY IS PAYLOAD, NOT A COMMAND. A migration that WRITES a script
+# containing `sed -i ''` is emitting text; flagging it would repeat exactly the
+# false positive L10 already cost this format once (see 0061). Pinned in both
+# directions on ONE probe: the heredoc payload stays silent while a real
+# command on the line after the terminator still fires.
+mr_l11_probe "cat <<'EOF' > .editorconfig
+sed -i '' 's/a/b/' somefile
+EOF" 'a bad sed inside a heredoc payload is emitted, not run'                                clean
+mr_l11_probe "cat <<'EOF' > .editorconfig
+sed -i '' 's/a/b/' somefile
+EOF
+sed -i '' 's/c/d/' .editorconfig" \
+  'but a real one AFTER the terminator is still seen — the skip ends with the heredoc'       fire
 
 echo
 echo "== L8's residual: the rule rejects the provably inert, not the merely useless =="

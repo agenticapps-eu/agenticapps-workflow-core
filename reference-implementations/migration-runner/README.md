@@ -11,7 +11,7 @@ Three scripts, composed as a pipeline:
 | Script | Role |
 |---|---|
 | `extract.sh` | pulls role-tagged fenced blocks out of a migration document |
-| `lint-migration.sh` | enforces the executable format (L0–L10 plus the unnumbered whole-document checks, below) |
+| `lint-migration.sh` | enforces the executable format (L0–L11 plus the unnumbered whole-document checks, below) |
 | `run-migration.sh` | lints, then dispatches a migration's steps |
 
 **`extract.sh` is a library plus a CLI. It is called as a subprocess — `bash
@@ -276,9 +276,9 @@ what lets a migration show a contrasting or explanatory snippet next to the
 commands it actually runs (see `0016-conformant.md`'s Step 1, which does
 exactly this).
 
-## The linter — L0 through L10
+## The linter — L0 through L11
 
-`lint-migration.sh` runs eleven *numbered* rules. Ten of them (L1–L10) are
+`lint-migration.sh` runs twelve *numbered* rules. Eleven of them (L1–L11) are
 per-step or per-fence; **L0 is per-document** and is reported without a step
 number, which is a historical inconsistency in the numbering rather than a
 meaningful distinction — every other whole-document check the linter performs
@@ -301,12 +301,13 @@ and the opt-in mechanism" below.
 | **L8** | a tagged fence whose captured body contains no executable statement (nothing left after blank lines, whole-line `#` comments and whole-line `:`/`true` are discarded), for any of the five roles |
 | **L9** | a tagged fence TERMINATED by a line that is itself a fence *opener* — a ``` line carrying a non-empty info string. Its body is truncated there |
 | **L10** | a tagged fence whose captured body leaves a heredoc unterminated |
+| **L11** | a `sed -i` with no *attached* backup suffix, or the GNU-only `--in-place`, anywhere in a tagged fence's body outside a heredoc payload |
 
-Six of the eleven were designed in from the start (L1, L3, L5, L6 as
+Six of the twelve were designed in from the start (L1, L3, L5, L6 as
 structural rules; L0 and L2 as the frontmatter/heading checks that go with
-them). **L4, L7, L8, L9 and L10 were not designed in — each was found by a
-review round, each because a migration that looked fine would have linted clean
-and done nothing:**
+them). **L4, L7, L8, L9, L10 and L11 were not designed in — each was found by
+a review round or a CI failure, each because a migration that looked fine would
+have linted clean and done nothing, or nothing portable:**
 
 - **L4 exists because a misspelled role is indistinguishable from an
   illustration fence.** `role=applyy` (or `role=Apply`, or any value that
@@ -475,6 +476,43 @@ and done nothing:**
 
   The last row is a real residue, not a closed case. The skip list above is
   exactly the list of openers that land in it.
+
+- **L11 exists because `sed -i` means two different things on the two seds,**
+  and a migration that runs "anywhere without Node" has to survive both. The
+  backup suffix is ATTACHED on GNU (`sed -i.bak`) and a SEPARATE argument on
+  BSD (`sed -i ''`). Feed GNU the BSD spelling and it reads `''` as the script
+  and the real script as a filename:
+
+  ```
+  sed: can't read /^## Dash escape$/,$d: No such file or directory
+  ```
+
+  Feed BSD the GNU spelling and it reads the script as the suffix, then
+  consumes the next argument as the script. Neither degrades — both are hard
+  errors. `sed -i.bak … && rm -f <file>.bak` is the one spelling both accept,
+  and the `&& rm -f` keeps a rollback from leaving a `.bak` behind for the
+  next step's tree comparison to trip over.
+
+  **This rule is here because the class shipped in this repository, in both
+  directions at once.** Seven rollback blocks across six of the fixtures used
+  `sed -i ''` — green on the macOS they were written on, red on every Linux,
+  and caught only when CI ran them. §08's own worked example carried the
+  mirror-image bare `sed -i`, which would have failed on every macOS and which
+  CI could not have caught, since CI is Linux. Each reads correct to whoever
+  shares the author's sed, which is why review missed both.
+
+  It scans a tagged fence's body for a standalone `-i` token on a line that
+  invokes `sed`, and for the GNU-only `--in-place`. **Heredoc bodies are
+  skipped**, using the same delimiter tracking L10 uses: a migration that
+  *writes* a script containing `sed -i ''` is emitting payload, not running
+  it, and flagging that would repeat exactly the false positive L10 already
+  cost this format once. Whole-line `#` comments are skipped for the same
+  reason. `gsed -i` is left alone — naming the GNU binary is choosing an
+  implementation on purpose.
+
+  One message covers both bad spellings and does not claim to know which the
+  author meant. It cannot: `sed -i ''` and `sed -i 'script'` are the same
+  shape to a scanner, and the fix is identical either way.
 
 ## Why the runner lints before executing
 

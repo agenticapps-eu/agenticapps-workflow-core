@@ -696,6 +696,111 @@ EOF
     if [ -n "$heredoc" ]; then
       report "L10: step $s: role '$r' opens a heredoc delimited by '$heredoc' that is never terminated in the captured body — running it writes a partial payload and still exits 0"
     fi
+
+    # L11 — a `sed -i` spelled in a form only ONE of BSD and GNU sed accepts.
+    #
+    # `-i` takes its in-place backup suffix ATTACHED on GNU (`-i.bak`) and as
+    # a SEPARATE argument on BSD (`-i ''`). Each spelling is a hard error on
+    # the other implementation, not a warning: GNU reads BSD's `''` as the
+    # script and the real script as a filename ("sed: can't read
+    # /^## Dash escape$/,$d: No such file or directory"); BSD reads GNU's
+    # script as the suffix and then consumes the next argument as the script.
+    # `-i.bak` is the one spelling both accept, and `--in-place` is GNU-only
+    # outright.
+    #
+    # WHY THIS IS A LINTER RULE AND NOT A NOTE IN THE README. The class
+    # shipped, twice, in this very tree: seven rollback blocks across six of
+    # the fixtures below carried `sed -i ''` — green on the macOS they were
+    # written on and red on every Linux — and §08's own worked example carried
+    # the mirror-image bare `sed -i`, red on every macOS. Nobody reviewing
+    # either one noticed, because each reads correct to whoever shares the
+    # author's sed. A format whose selling point is that a migration runs
+    # anywhere without Node cannot leave its single most common in-place edit
+    # to whichever sed the author happened to have on PATH.
+    #
+    # HEREDOC BODIES ARE SKIPPED, DELIBERATELY. A migration that WRITES a
+    # script or a document containing `sed -i` is emitting payload, not
+    # running it, and 0059 exists precisely to emit payload. Flagging that
+    # would repeat exactly the false positive L10 already cost this format
+    # once. The delimiter tracking below is a trimmed copy of L10's rather
+    # than a shared helper: L10 computes only the single unterminated
+    # delimiter it reports, not the per-line in-body map this needs, and
+    # reshaping a scan that load-bearing for a second caller wanting different
+    # output is a worse trade than thirty duplicated lines of awk.
+    while IFS= read -r badsed; do
+      [ -n "$badsed" ] && report "L11: step $s: role '$r': $badsed"
+    done < <(printf '%s\n' "$body" | awk '
+      function quoted(line, upto,   i, c, sq, dq) {
+        sq = 0; dq = 0
+        for (i = 1; i < upto; i++) {
+          c = substr(line, i, 1)
+          if (c == "\\") { i++; continue }
+          if (c == "'"'"'" && dq == 0) sq = 1 - sq
+          else if (c == "\"" && sq == 0) dq = 1 - dq
+        }
+        return (sq || dq)
+      }
+      function in_arith(line, upto,   pre, n, m) {
+        pre = substr(line, 1, upto - 1)
+        n = gsub(/\$\(\(/, "&", pre)
+        m = gsub(/\)\)/, "&", pre)
+        return (n > m)
+      }
+      npend > 0 {
+        cand = $0
+        if (dash[1]) sub(/^\t+/, "", cand)
+        if (cand == delim[1]) {
+          for (k = 1; k < npend; k++) { delim[k] = delim[k+1]; dash[k] = dash[k+1] }
+          npend--
+        }
+        next
+      }
+      {
+        line = $0
+        probe = line; sub(/^[ \t]+/, "", probe); sub(/[ \t]+$/, "", probe)
+        if (substr(probe, 1, 1) == "#") next
+
+        # Checked BEFORE the heredoc openers on this same line are consumed:
+        # one line can both invoke sed and open a heredoc.
+        if (probe ~ /(^|[ \t;&|(])sed[ \t]/) {
+          # ONE message for both non-portable spellings, because the text
+          # cannot tell them apart and does not need to: `sed -i ''` and
+          # `sed -i 'script'` are the same shape — a standalone `-i` token —
+          # and the fix is identical. Naming one of them specifically would
+          # mis-describe the other half the time.
+          if (probe ~ /[ \t]-i([ \t]|$)/) {
+            printf "%s\n", "`sed -i` carries no ATTACHED suffix, so it means two different things on the two seds: BSD takes the NEXT ARGUMENT as the backup suffix, GNU takes it as the SCRIPT. Whichever the author meant, it is a hard error on the other. Use `sed -i.bak ... && rm -f <file>.bak`, the one form both accept: " probe
+          } else if (probe ~ /[ \t]--in-place([ \t=]|$)/) {
+            printf "%s\n", "`sed --in-place` is a GNU-only long option, absent on BSD/macOS sed. Use `sed -i.bak ... && rm -f <file>.bak`: " probe
+          }
+        }
+
+        i = 1
+        while (1) {
+          p = index(substr(line, i), "<<")
+          if (p == 0) break
+          abs = i + p - 1
+          if (substr(line, abs, 3) == "<<<") { i = abs + 3; continue }
+          if (quoted(line, abs) || in_arith(line, abs)) { i = abs + 2; continue }
+          rest = substr(line, abs + 2)
+          d = 0
+          if (substr(rest, 1, 1) == "-") { d = 1; rest = substr(rest, 2) }
+          sub(/^[ \t]+/, "", rest)
+          if (substr(rest, 1, 1) == "\\") rest = substr(rest, 2)
+          q = substr(rest, 1, 1)
+          w = ""
+          if (q == "'"'"'" || q == "\"") {
+            e = index(substr(rest, 2), q)
+            if (e > 0) w = substr(rest, 2, e - 1)
+          } else if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) {
+            w = substr(rest, RSTART, RLENGTH)
+          }
+          if (w == "") { i = abs + 2; continue }
+          npend++; delim[npend] = w; dash[npend] = d
+          i = abs + 2
+        }
+      }
+    ')
   done
 done
 
