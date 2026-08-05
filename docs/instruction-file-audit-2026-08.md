@@ -99,6 +99,46 @@ the three inputs, so nothing broke.
 
 ---
 
+## Two things the fix turned up that change Phase 5c
+
+**1. The trigger skill does not carry the coding discipline, so the embedded §11
+block is not redundant.** Phase 5c's per-project cleanup removes "the embedded
+§11 block in `CLAUDE.md`" on the premise that the trigger skill carries it. It
+does not. Neither `agents-task-viewer/.claude/skills/agentic-apps-workflow/SKILL.md`
+(324 lines) nor the global `~/.claude/skills/agentic-apps-workflow/SKILL.md`
+contains *Think Before Coding*, *Simplicity First*, *Surgical Changes* or
+*Goal-Driven Execution*. That text lives in exactly two places: core's
+`spec/11-coding-discipline.md`, and a copy in each project's instruction files.
+
+Deleting the block today deletes the rules. **The order has to be: fold the
+discipline into the trigger skill first (it is a Phase 2 rewrite anyway), then
+5c can remove the copies.** Until then a project's copy is its only live source
+and 5c must leave it alone. In `agents-task-viewer` the two copies were merged to
+one, which fixes the duplication without losing anything.
+
+**2. A live instruction file was stating a rule the machine does not run.**
+`agents-task-viewer` told every agent that the §18 gate blocks until `REVIEWS.md`
+carries ≥2 other-vendor reviewers. That stopped being true at gate 2.0.0
+(ADR-0027) — reviews are reported, never enforced. This is the strongest case for
+the audit: the rule did not error, it simply competed with the real one.
+
+The remaining six were checked for the same sentence. Two carry it:
+
+| File | Line | What it says | Reality |
+|---|---:|---|---|
+| `callbot/CLAUDE.md` | 499–502 | gate "blocks code edits … until `REVIEWS.md` carries ≥2 other-vendor reviewers. That is the gate working; **go get the review**" | Reviews never block. It instructs the agent to go and get something nothing requires |
+| `callbot/AGENTS.md` | 109–113 | "≥2 **independent** reviewers … **enforced programmatically** by the Codex `PreToolUse` hook and the git `pre-commit` hook" | Same false rule, different wording *and* a false enforcement claim — the two files disagree about the rule they are both wrong about |
+| `fx-signal-agent/CLAUDE.md` | 261 | "…`REVIEWS.md` with at least 2 other-vendor reviewers. That is the gate working" | Same |
+
+`agenticapps-dashboard/CLAUDE.md:142-148` is **already correct** and is the model
+to copy: it states reviews are reported never enforced, cites change-gate 2.0.0,
+and keeps two reviewers as *this repo's target* — "nothing will stop you skipping
+them, which is exactly why skipping them has to be a decision you record rather
+than a step you forget." That is the honest framing; the other two should be
+rewritten to it rather than merely deleted.
+
+---
+
 ## Not in scope, recorded so it is not rediscovered
 
 `reference-implementations/project-hooks/README.md` (831 lines) narrates the
