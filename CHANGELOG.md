@@ -20,18 +20,22 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
-**Spec 1.5.0 → 2.0.0 — major. §08 gains an executable form: role-tagged
-fenced blocks, a filename-keyed threshold, and a runner contract, binding at
-or above each host's declared migration ID.** Below that threshold, §08's
-prior text — prose, agent, or interactive steps, satisfying the same
-quartet — is unchanged and remains fully conformant; the addition binds only
-new migrations a host chooses to write at or above its own threshold. No
-host in the fleet has adopted it yet, and none becomes non-conformant by
-this bump: every existing migration in all four hosts sits below its host's
-declared threshold (`claude-workflow` 0035, `codex-workflow` 0016,
-`opencode-workflow` 0012, `pi-agentic-apps-workflow` 0011 —
-`reference-implementations/migration-runner/THRESHOLDS`), so this is
-backward-compatible for everything that already exists.
+**Spec 1.5.0 → 2.0.0 — major. §08 gains an executable form — role-tagged
+fenced blocks and a filename-keyed threshold, binding at or above each
+host's declared migration ID — plus a non-interactive-failure clause in the
+atomicity contract that binds every migration regardless of threshold.**
+Below the threshold, §08's prior text — prose, agent, or interactive steps,
+satisfying the same quartet — is unchanged and remains fully conformant; the
+role-tagged-fence/threshold/linter bundle binds only new migrations a host
+chooses to write at or above its own threshold. No host in the fleet has
+adopted that bundle yet, and none becomes non-conformant by this bump alone:
+every existing migration in all four hosts sits below its host's declared
+threshold (`claude-workflow` 0035, `codex-workflow` 0016, `opencode-workflow`
+0012, `pi-agentic-apps-workflow` 0011 —
+`reference-implementations/migration-runner/THRESHOLDS`), so the
+threshold-scoped bundle is backward-compatible for everything that already
+exists. The atomicity clause is a separate matter — see "Conformance impact"
+below.
 
 It is a major, not a minor, because **one** clause in the pre-existing text
 binds independent of the threshold and is a genuine tightening: the
@@ -55,6 +59,17 @@ the runner's own diagnostic output," which *loosens* rather than tightens —
 a host already conformant to the stricter old wording trivially satisfies
 the new one. Neither is a basis for treating this as breaking; the
 atomicity clause above is what makes it one.
+
+This tally counts **reworded** clauses only. It does not include the
+no-secrets/no-personal-data rule, which is wholly new — the 1.x text never
+mentioned secrets or personal data at all — and, like the atomicity clause,
+binds every migration regardless of executable-form adoption (see the
+decision recorded under "Considered and decided" in this change's task
+report). Naming it separately here rather than folding it into the tally
+above: a new universally-binding MUST NOT would ordinarily be additive
+(minor) on its own, and does not change this release's major/minor
+determination, which the atomicity clause already settles — but the
+rationale would be silently incomplete without naming it.
 
 ### Added — §08 executable form
 - **The role/heading table and info-string grammar**: `check`,
@@ -110,13 +125,28 @@ atomicity clause above is what makes it one.
   the linter does not and cannot enforce — dry-run executes these blocks, so
   a runner cannot itself guarantee they write nothing.
 
-Conformance impact for host implementers: **none required today.** A host
-citing 1.5.0 (or any prior §08 version) stays conformant with what it cites;
-the executable form binds nothing retroactively. A host that wants to adopt
-it must cite 2.0.0, declare its own threshold, run the format linter on
-every migration at or above that threshold, and wire the linter into CI
-(the Conformance MUST is itself conditioned on having adopted the form — no
-host is non-conformant for lacking a linter it never committed to running).
+Conformance impact for host implementers: **two different things are true at
+once, and they must not be collapsed into one blanket answer.** A host
+citing 1.5.0 (or any prior §08 version) is unaffected by this bump and has
+nothing to check; that citation is unchanged by this release. But a host
+that wants to **cite 2.0.0** has two separate obligations, not one:
+
+- The **executable-form MUSTs** — the role-tagged fence grammar, the
+  filename-keyed threshold, the format linter, and wiring it into CI — bind
+  nothing until that host actually adopts the executable form (has
+  migrations at or above a declared threshold, or opts one in). No host has
+  adopted it yet, so this half is genuinely "none required today."
+- The **atomicity contract's non-interactive-failure clause** (abort in
+  place, report which steps applied, and never auto-rollback, when standard
+  input is not a terminal) is **not** part of the executable-form dispatch
+  mechanics — it is a clause in the three-option failure policy that has
+  always bound every migration, executable-form or not. This is the clause
+  that makes the bump a major (see above). A host that wants to cite 2.0.0
+  **MUST** check whether its existing update-flow tooling already implements
+  this non-interactive behaviour, independent of whether it has ever written
+  a role-tagged fence — a host whose current runner prompts (or silently
+  rolls back) when run unattended is not conformant to 2.0.0 on this point
+  alone, regardless of its executable-form adoption status.
 
 The reference implementation is `reference-implementations/migration-runner/`
 (`extract.sh`, `lint-migration.sh`, `run-migration.sh`, `THRESHOLDS`),
