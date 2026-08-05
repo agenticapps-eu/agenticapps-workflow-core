@@ -1,98 +1,89 @@
-# Session Handoff — 2026-08-05 (second session)
+# Session Handoff — 2026-08-05 (third session)
 
 ## Accomplished
 
-**Everything opened this session is merged. Three PRs, all on `main`.**
+**`installer-prerequisite-consent` implemented, archived, and opened as PR #82.**
+40/40 tasks. It was the only active change; there are none now.
 
-| PR | What | Commit |
-|---|---|---|
-| #79 | §12 0.10.0 → 0.11.0 + conformance harness + 77-assertion suite | `5d74f3e` |
-| #80 | `installer-prerequisite-consent` proposed (Part 2a) | `50f6686` |
-| #81 | Archive fold — 13 requirements into two durable specs | `f7efcaa` |
+- `spec/21-installer-prerequisites.md` — new declarative contract. Spec 1.5.0 → 1.6.0.
+- `tools/installer-prereq-conformance.sh` + `.test.sh` — single-target harness, 75 rows.
+- `tools/install-core-git-hooks.sh` — gained the `git` check it was missing.
+- `.github/workflows/openspec-gate.yml` — runs the suite and scores core's own installer.
+- Folded 9 requirements into `openspec/specs/installer-prerequisite-consent/`.
 
-`openspec/specs/` gained `host-neutral-instruction-files` (7 requirements) and
-`agent-lifecycle-management` (6). `openspec validate --all` 8/8, harness suite
-77/77, `spec-placement.test.sh` clean.
+Verification: 75/75 under bash 3.2/BSD sed **and** bash 5.2/GNU sed/mawk;
+shellcheck clean; §20 suite 42/42; agents-md 77/77; hook installer 16/16;
+`openspec validate --all` 8/8; spec-placement clean; gate `--ci` green.
 
-**One round of plan review on #79 and #80. Six reviewers, six
-REQUEST-CHANGES** — and they were right. Most findings were contradictions the
-changes shipped with, not scope the reviewers wanted added. All addressed
-before merge.
+**The fixtures were not enough.** Three harness defects surfaced only when it
+was pointed at the four real installers and core's own, and all three failed in
+the quiet direction — the harness declining to look while sounding like it had:
 
-The two that mattered:
+- the recognisability screen listed host-shaped directories only, so core's own
+  hook installer (which resolves `git rev-parse --git-path hooks`) read as "not
+  an installer" — core would have shipped a contract it never scored itself against
+- the quote strip took `$(…)` with the surrounding string, so an unguarded
+  `OUT="$(npm install -g pkg)"` read as fully conformant. The consent row, the
+  harness's whole job, defeated by a pair of quotes
+- `~/.agenticapps/bin/` is written through a variable (`AA_BIN`, `AGENTICAPPS_BIN`)
+  by three of the four, so matching the literal found the write in one installer
+  and called the other three INCONCLUSIVE — on the row the ownership boundary exists for
 
-- **#79 had no repair path for stale content.** Adding an agent is a no-op once
-  present, and byte-identical *forbade* a later host rewriting the section — so
-  a repo provisioned from a GSD-citing template would cite GSD forever. The
-  change diagnoses template drift and its own mechanism made drift permanent.
-  Fixed: the section carries a content version and a newer host offers an update.
-- **#80's central claim was false on its own rule.** It said two installers were
-  non-conformant. The delta drew the consent boundary at "outside the target
-  repository", and all four write `~/.agenticapps/bin/` unconditionally
-  (verified: claude:149, codex:211, opencode:329, pi:148) — so it condemned all
-  four and put a prompt in front of `PLAN-lightweight-fleet` step 2's publishing
-  mechanism. Boundary rewritten to **ownership, not location**.
-
-Also fixed on #79: removal contradicted itself three ways; the marker literal
-existed only in prose so no host could implement from the spec; provisioning
-couldn't converge from a half-installed state; the denylist was normative with
-contents deferred; the proposal said duplicates "collapse" while the delta
-forbade it; a report was required to name a host the file records no provenance
-for.
+Each is now pinned by a fixture.
 
 ## Decisions
 
-- **Consent boundary is ownership.** Could this write change software the
-  operator did not install by running this installer? `~/.agenticapps/bin/`
-  cannot — reported, not prompted. `npm i -g` can — acceptance required.
-- **A system runtime is never offered** (Donald: "not thinking of npm"). `npm`,
-  `node`, `git`, host CLIs — detect and instruct only. What may be offered is a
-  package installed *through* a runtime already present. Closed #80 task 1.2.
-- **Multi-agent is permanent** (Donald). Step 4 removed as a gating question
-  from both changes: only *which* hosts is open. Saved to memory.
-- **Links are a frontmatter list carrying paths** (Donald, over a per-agent
-  marker pair). Frontmatter sits outside the markers, making the link exemption
-  structural rather than a special case.
-- **Host *names* warn, host *paths* fail.**
-- **`installer-prerequisite-consent` deliberately NOT archived** — proposal
-  only; folding its delta would assert a capability nothing implements.
+- **A prerequisite installed on the operator's behalf is never removed** (task 1.5,
+  Donald chose "state it: never auto-remove"). The ownership test runs both ways:
+  by removal time other projects may resolve it. Offering to remove was rejected —
+  it prompts about the outcome the operator almost always wants.
+- **Core's own installer was fixed, not excused** (task 5.3). It failed
+  `prereq-detection` on an unchecked `git`. Three lines; without it the failure
+  surfaces as git's own "command not found".
+- **Section 21, and §00's declarative list corrected** — it still listed the
+  retired §15.
 
 ## Files modified
 
-All merged to `main`:
+All on `feat/installer-prerequisite-consent`, PR #82, four commits.
 
-- `spec/12-authoring-conventions.md` — 0.11.0, new subsection
-- `CHANGELOG.md` — the 0.11.0 entry
-- `tools/agents-md-conformance.sh`, `tools/agents-md-conformance.test.sh` — new
+- `spec/21-installer-prerequisites.md` — new
+- `spec/00-overview.md` — 1.6.0, §21 added to the declarative list, §15 note
+- `CHANGELOG.md` — the 1.6.0 entry
+- `tools/installer-prereq-conformance.{sh,test.sh}` — new
+- `tools/install-core-git-hooks.sh` — `git` prerequisite check
+- `tools/conformance-harness-reporting.test.sh` — registers the new harness
 - `.github/workflows/openspec-gate.yml` — two steps
-- `openspec/specs/{host-neutral-instruction-files,agent-lifecycle-management}/` — new
-- `openspec/changes/archive/2026-08-05-host-neutral-agents-md/` — archived
-- `openspec/changes/installer-prerequisite-consent/` — active, proposal only
+- `openspec/specs/installer-prerequisite-consent/` — new, 9 requirements
+- `openspec/changes/archive/2026-08-05-installer-prerequisite-consent/` — archived,
+  carrying `CONFORMANCE-EVIDENCE.md`
 
 ## Next session: start here
 
-**`/opsx:apply` on `installer-prerequisite-consent`** — the only active change.
-Its blocking questions are answered (ownership boundary, opt-in flag name,
-runtimes never offered), so start at task group 2: write
-`spec/NN-installer-prerequisites.md`, assigning the section number first. Task
-1.5 is still open but does not block — what happens to a prerequisite installed
-on the operator's behalf when the workflow is removed.
+**Run the Stage-2 code review on PR #82 in a cleared session** — `/clear`, then
+review the diff. §07 independence means it cannot be a subagent of the session
+that wrote the code, and this session wrote all of it. The highest-value target
+is `tools/installer-prereq-conformance.sh`: it is a static analyser making
+claims about shell reachability, three of its detectors were wrong on first
+contact with real installers, and a fourth wrong detector would look exactly
+like the three did — green fixtures and a quiet INCONCLUSIVE.
+
+After that, the fleet has work waiting: `codex-workflow:333` and
+`opencode-workflow:373` are non-conformant on consent, `pi` on the reporting
+obligation, and all four on the unchecked `git`. Each is that host's own change.
 
 ## Open questions
 
-- **CodeRabbit has reviewed none of these PRs.** All three showed a green check;
-  #81's body reads "Review limit reached — we couldn't start this review", and
-  #79/#80 were PENDING at merge. The state is not the review.
-- **The plan reviews predate the merged text.** Both `REVIEWS.md` record 3/3
-  REQUEST-CHANGES against versions since rewritten in response. That is the
-  honest state of one round plus fixes — the reviewers never saw the corrected
-  specs, including #80's ownership boundary, which their sharpest finding forced.
-- **Concurrent provisioning** is an accepted limit in
-  `host-neutral-instruction-files`.
-- **Nothing verifies a linked file is actually read** — the harness can check a
-  link resolves, not that a runtime dereferences it.
-- **The producer/consumer asymmetry is still unowned.** The section version
-  repairs stale *section* prose; nothing checks a correction applied to
-  consumers reaches the producer template.
+- **Nothing verifies that a PASS on `consent-guard` means the guard dominates
+  the install.** It means a guard was found lexically before it. A script could
+  reach the install through an indirection the harness does not model.
+- **`prereq-detection` reads a fixed list of 16 known tools.** A prerequisite
+  outside that list is invisible to the row, and the harness does not say so.
+- **The plan reviews predate the merged text**, again — `REVIEWS.md` records 3/3
+  REQUEST-CHANGES against pre-rewrite artifacts. All three findings are addressed
+  in what shipped, but the reviewers never saw the corrected specs. Gemini argued
+  for the location rule; `CONFORMANCE-EVIDENCE.md` is why it was not taken.
+- **CodeRabbit reviewed none of #79/#80/#81.** Assume the same for #82 until the
+  body says otherwise; the green check is not the review.
 - **`.planning/skill-observations/*` is still being written** despite the freeze
-  rule. Unchanged across four handoffs.
+  rule. Unchanged across five handoffs.
