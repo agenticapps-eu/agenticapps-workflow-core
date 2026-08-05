@@ -11,7 +11,7 @@ Three scripts, composed as a pipeline:
 | Script | Role |
 |---|---|
 | `extract.sh` | pulls role-tagged fenced blocks out of a migration document |
-| `lint-migration.sh` | enforces the executable format (L0–L8 below) |
+| `lint-migration.sh` | enforces the executable format (L0–L10 plus the unnumbered whole-document checks, below) |
 | `run-migration.sh` | lints, then dispatches a migration's steps |
 
 **`extract.sh` is a library plus a CLI. It is called as a subprocess — `bash
@@ -29,6 +29,187 @@ that was never `local` into a caller that assumed otherwise. Every invocation
 also re-reads `$DOC` fresh from disk — nothing is cached — which is what lets
 `run-migration.sh` notice a document that changed shape mid-run (see
 `0046-apply-dropped-by-step1.md`).
+
+## Your first executable migration
+
+Everything below this section describes the format's *rules*. This section is
+the thing to copy. It exists because the review that authored a migration from
+this README alone produced a document that linted clean and refused to run:
+the README described the five headings, the five roles and the info-string
+grammar, but never once showed the `### Step ` heading those headings live
+under, and never showed a complete document. Once `### Step 1:` was guessed
+from the fixtures, everything worked first time.
+
+The skeleton below is `test-fixtures/0060-first-migration.md`, committed and
+exercised by the suite, so this example cannot rot into being wrong. It is the
+smallest complete migration this format admits.
+
+Save it as `migrations/0060-first-migration.md` — **the filename's leading
+digits are what put it in scope**, never the frontmatter `id`:
+
+````markdown
+---
+id: 0060
+slug: first-migration
+title: Add a repo .editorconfig
+from_version: 3.0.0
+to_version: 3.1.0
+migration_format: executable
+applies_to:
+  - .editorconfig
+---
+
+# Migration 0060 — Add a repo .editorconfig
+
+## Steps
+
+### Step 1: create .editorconfig
+
+**Idempotency check:**
+```bash role=check
+test -f .editorconfig
+```
+
+**Pre-condition:**
+```bash role=precondition
+test -d .
+```
+
+**Apply:**
+```bash role=apply
+printf 'root = true\n' > .editorconfig
+```
+
+**Rollback:**
+```bash role=rollback
+rm -f .editorconfig
+```
+````
+
+The parts that are load-bearing, in the order they bite:
+
+1. **`### Step <N>:` — three hashes.** A step is recognised only by a line
+   starting `### Step ` followed by digits, outside any fence. `## Step 1:`
+   yields a migration with **zero steps**; the linter now rejects that
+   (`steps: ... declares no '### Step ' heading`), but it is still the first
+   thing to get right. Steps must be numbered consecutively from 1.
+2. **Six frontmatter fields.** `id`, `slug`, `title`, `from_version`,
+   `to_version` and `applies_to` are §08 requirements; `migration_format:
+   executable` is what an at-or-above-threshold migration must declare. The
+   linter enforces `migration_format`, the `id`↔filename agreement, and the
+   **presence** of `applies_to` (the write boundary).
+3. **All four required headings, in this order**, each immediately followed by
+   its role-tagged fence: `**Idempotency check:**`, `**Pre-condition:**`,
+   `**Apply:**`, `**Rollback:**`. A fifth, `**Verify:**` with a `role=verify`
+   fence, is optional and may appear at most once — put it between **Apply:**
+   and **Rollback:** (see `0059-heredoc-fence-escape.md`).
+4. **The info string is exact**: `bash`, whitespace, `role=`, a lowercase role
+   name, nothing else. A ` ```bash ` fence with no `role=` is illustration and
+   is never executed.
+5. **Every fence body must actually do something.** A `# TODO:` placeholder,
+   or a bare `:`, is rejected — see L8.
+
+Two commands, both of which take `--host` (there is no default):
+
+```bash
+# Judge the document. Exit 0 = clean; 1 = violations on stderr; 64 = you
+# invoked this wrong; 65 = unresolvable host/threshold; 66 = no such file.
+bash lint-migration.sh --host claude-workflow migrations/0060-first-migration.md
+
+# Preview: runs check and precondition up to the first pending step and
+# prints that step's apply SOURCE. Not a sandbox — see the dry-run warning
+# further down. Drop --dry-run to apply for real.
+bash run-migration.sh --host claude-workflow --dry-run migrations/0060-first-migration.md .
+```
+
+`run-migration.sh` lints first and refuses to execute anything the linter
+rejects, so the first command is a fast check rather than a separate gate.
+
+**Wiring the linter into CI** — which §08's Conformance section requires of an
+adopting host — enumerate migrations as `migrations/[0-9]*.md`, **not**
+`migrations/*.md`:
+
+```bash
+for m in migrations/[0-9]*.md; do
+  bash lint-migration.sh --host claude-workflow "$m" || exit 1
+done
+```
+
+A filename with no leading numeric ID is a MUST-report violation with no
+carve-out (an unreadable ID must never be a quiet route out of scope), and
+`migrations/` is also where every host in the fleet keeps a
+`migrations/README.md`. The broad glob turns that README into a CI failure on
+adoption day, on a file working exactly as intended. The narrower glob is the
+fix; a `README.md` exemption inside the linter is not, because that exemption
+is something a migration could be renamed into.
+
+### Emitting a fenced code block from a migration
+
+**Read this before writing an `apply` block that patches a markdown file.**
+This is the one thing about this format that will surprise you, and the linter
+rejects it rather than letting it through silently (L9/L10 above).
+
+A block's captured body ends at the first line whose first three characters
+are a fence delimiter — **including a line inside a heredoc**. So the obvious
+way to append a documentation section is broken:
+
+````text
+**Apply:**
+```bash role=apply
+cat >> CLAUDE.md <<'EOF'
+
+## Running the suite
+
+```bash                                  <- the apply block ENDS here
+bash tools/migration-runner.test.sh
+```
+EOF
+```
+````
+
+The captured body is only the first three lines. Run, it writes a truncated
+CLAUDE.md and **exits 0** (an unterminated heredoc writes its partial payload
+and succeeds), so the step reports applied — and on the next run the step's own
+idempotency check matches the truncated output, so it reports skipped forever.
+
+**A four-backtick outer fence does not help.** The info-string grammar requires
+the literal `bash` immediately after the delimiter, and a four-backtick opener
+puts a backtick there, so the fence carries no role at all — `extract.sh roles`
+returns nothing for it.
+
+Two escapes work. Both are exercised end-to-end by
+`test-fixtures/0059-heredoc-fence-escape.md`.
+
+**1. `printf` — byte-exact output, fence at column 1.** Preferred when the
+emitted file's bytes matter:
+
+```bash
+{
+  printf '%s\n' ''
+  printf '%s\n' '## Running the suite'
+  printf '%s\n' ''
+  printf '%s\n' '```bash'
+  printf '%s\n' 'bash tools/migration-runner.test.sh'
+  printf '%s\n' '```'
+} >> CLAUDE.md
+```
+
+**2. Indent the nested delimiter inside the heredoc.** Simpler to read, at the
+cost of one leading space in the output — which is below CommonMark's
+three-space limit, so the emitted block still renders as a fenced block:
+
+````text
+```bash role=apply
+cat >> CLAUDE.md <<'EOF'
+
+## Running the suite
+
+ ```bash
+ bash tools/migration-runner.test.sh
+ ```
+EOF
+```
+````
 
 ## The five roles
 
@@ -64,13 +245,17 @@ what lets a migration show a contrasting or explanatory snippet next to the
 commands it actually runs (see `0016-conformant.md`'s Step 1, which does
 exactly this).
 
-## The linter — L0 through L8
+## The linter — L0 through L10
 
-`lint-migration.sh` runs nine *numbered*, per-step-or-per-fence rules. All
-are described in more depth in the script's own header comment; this table
-is the index. It also reports three whole-document violation classes that
-are not part of this numbering at all — those are covered separately, in
-"Whole-document checks and the opt-in mechanism" below.
+`lint-migration.sh` runs eleven *numbered* rules. Ten of them (L1–L10) are
+per-step or per-fence; **L0 is per-document** and is reported without a step
+number, which is a historical inconsistency in the numbering rather than a
+meaningful distinction — every other whole-document check the linter performs
+is deliberately unnumbered, and L0 predates that convention. All are described
+in more depth in the script's own header comment; this table is the index. The
+linter also reports five whole-document violation classes that are not part of
+this numbering at all — those are covered separately, in "Whole-document checks
+and the opt-in mechanism" below.
 
 | Rule | Catches |
 |---|---|
@@ -82,13 +267,15 @@ are not part of this numbering at all — those are covered separately, in
 | **L5** | a `role=` info string that doesn't match the exact grammar above, on *any* fence — not just fences already recognised as tagged |
 | **L6** | steps not numbered consecutively from 1 |
 | **L7** | a fence opened and never closed before end of file |
-| **L8** | a tagged fence whose captured body is empty or whitespace-only, for any of the five roles |
+| **L8** | a tagged fence whose captured body contains no executable statement (nothing left after blank lines, whole-line `#` comments and whole-line `:`/`true` are discarded), for any of the five roles |
+| **L9** | a tagged fence TERMINATED by a line that is itself a fence *opener* — a ``` line carrying a non-empty info string. Its body is truncated there |
+| **L10** | a tagged fence whose captured body leaves a heredoc unterminated |
 
-Six of the nine were designed in from the start (L1, L3, L5, L6 as
+Six of the eleven were designed in from the start (L1, L3, L5, L6 as
 structural rules; L0 and L2 as the frontmatter/heading checks that go with
-them). **L4, L7, and L8 were not designed in — each was found by a review
-round, each because a migration that looked fine would have linted clean and
-done nothing:**
+them). **L4, L7, L8, L9 and L10 were not designed in — each was found by a
+review round, each because a migration that looked fine would have linted clean
+and done nothing:**
 
 - **L4 exists because a misspelled role is indistinguishable from an
   illustration fence.** `role=applyy` (or `role=Apply`, or any value that
@@ -110,17 +297,72 @@ done nothing:**
   confirmed was there. L7 closes that asymmetry by rejecting an unclosed
   fence as its own, distinct violation, before a runner ever gets to be
   surprised by it.
-- **L8 exists because a tagged-but-empty check fence is a silent no-op that
-  reports success.** `bash -c ''` — and a fence containing only blank lines —
-  exits 0. The three-valued `check` contract (below) reads exit 0 as "already
-  applied." So a `role=check` fence with nothing in it makes the runner print
+- **L8 exists because a tagged-but-vacuous check fence is a silent no-op that
+  reports success.** `bash -c ''` — and a fence containing only blank lines,
+  or only `#` comments, or the bare no-op builtin `:` — exits 0. The
+  three-valued `check` contract (below) reads exit 0 as "already applied." So a
+  `role=check` fence with nothing meaningful in it makes the runner print
   `step N: skipped (already applied)` and apply nothing, on a tree where
   nothing was ever applied — at exit 0. This was reproduced against the real
   CLI (`0049-bad-l8-empty-check.md`, `0050-bad-l8-empty-precondition.md`)
-  before L8 was written: the tagged-but-empty fence is not hypothetical, it
-  runs clean today without this rule. L8 checks every role, not just
-  `check` — an empty `precondition` passes just as vacuously, for the same
-  reason.
+  before L8 was written, and reproduced again for the comment and `:` variants
+  (`0053-bad-l8-comment-only-check.md`, `0054-bad-l8-noop-builtin-check.md`)
+  when the final whole-branch review found that L8's original
+  `tr -d '[:space:]'` test was **one character** short of catching a leftover
+  `# TODO:` placeholder. L8 checks every role, not just `check` — a vacuous
+  `precondition` passes just as emptily, and a vacuous `apply`
+  (`0055-bad-l8-comment-only-apply.md`) is attempted and does nothing.
+
+  **A bare `:` or `true` counts as non-executable only as an ENTIRE body.**
+  That is a decision, not an accident: `:` is the shell's explicit no-op, so a
+  fence whose whole body is `:` provably does nothing and exits 0 — the same
+  observable outcome as an empty body, reached deliberately. Nothing
+  legitimate is lost (a `check` that must always report "not applied" writes
+  `false`), and `:` inside a larger body — `while :; do`, `: "${VAR:?}"` — is
+  ordinary shell and is left completely alone.
+- **L9 exists because a fence delimiter emitted from inside a heredoc
+  truncates the block that emitted it.** `extract.sh` ends a block's capture
+  at the first line whose first three characters are a fence delimiter,
+  *including one inside a heredoc body*. §08 already mandated heredoc-awareness
+  for `### Step` headings and was silent on the identical hazard for fences.
+  Reproduced against the real CLI on `0052-bad-l9-heredoc-fence.md`, an
+  in-scope migration whose apply is `cat >> CLAUDE.md <<'EOF'` … containing a
+  nested ```bash fence … `EOF`: lint exit 0 clean, `step 1: applied` at exit 0,
+  CLAUDE.md receiving only the truncated prefix — and then, because the step's
+  own idempotency check matches that truncated output, `step 1: skipped
+  (already applied)` forever after. The migration permanently self-certifies as
+  done. **Every existing guard passed it**: L1 reads the role from the fence's
+  *opening* line, L7 balances (the inner fence closes and the real closer
+  re-opens), L8 sees a non-empty body, the runner's zero-apply pre-flight sees
+  a non-empty body, and `bash -c` on an unterminated heredoc writes the partial
+  payload and exits 0. This is not a hypothetical shape: **6 of the 73
+  migrations in the fleet today already emit a fence delimiter from inside a
+  heredoc**, because that is the normal idiom for patching CLAUDE.md and skill
+  files. L9's test is lexical and exact rather than heuristic — a CommonMark
+  closing fence may not carry an info string, so a tagged fence "closed" by a
+  line that does carry one is definitively truncated. See "Emitting a fenced
+  code block from a migration" below for the two escapes.
+- **L10 exists because L9 cannot see a truncation that happens at a BARE
+  delimiter,** which is indistinguishable from a legitimate closer, and because
+  an ordinary mistyped heredoc terminator produces the same silent partial
+  write with no fence involved at all. It scans a tagged fence's captured body
+  for a heredoc whose terminator never arrives.
+  `0058-bad-l10-mistyped-heredoc.md` is the fixture that proves it is not a
+  restatement of L9: it has no nested fence anywhere, every fence opens and
+  closes normally, its body is non-empty and comment-free — L7, L8 and L9 all
+  pass it, and L10 fires alone.
+
+  `bash -n` looked like the precise, heuristic-free way to do this and was
+  tried first. It does not work on the bash this fleet actually runs: bash 5
+  warns `here-document at line N delimited by end-of-file`, but bash 3.2 —
+  what macOS ships as `/bin/bash` — is completely silent and exits 0. So L10
+  reads the redirection operators itself, and is deliberately conservative in
+  the *skip* direction: it ignores a `<<` inside an odd number of preceding
+  quotes on its line (`echo "a << b"`), one inside a `$((...))` span
+  (`x=$((1<<2))`), and a `<<<` herestring, and only accepts an unquoted
+  delimiter matching `^[A-Za-z_][A-Za-z0-9_]*$`. Each narrowing is a possible
+  missed detection, never a possible false accusation — and L9 covers the
+  tagged-fence truncation case independently of it.
 
 ## Why the runner lints before executing
 
@@ -160,10 +402,17 @@ treats an absent threshold as an empty scope.
 
 | Code | Meaning |
 |---|---|
-| `64` | usage error — the runner itself was invoked wrong (missing `--host`, bad `--on-failure`, an unresolvable `--host`/`--threshold`) |
+| `64` | usage error — the script itself was invoked wrong: a missing `--host`, an **unknown flag**, a flag missing its value, no document at all, an extra positional argument, a bad `--on-failure` value, or (for the runner) an unresolvable `--host`/`--threshold` one layer down. Both scripts use 64 for every one of these, without exception — three of them used to exit `1`, the violation code, through bare `${VAR:?}` expansions, so a caller could not tell "you invoked me wrong" from "this document is malformed" |
 | `65` | every pre-execution refusal — a lint violation, an out-of-scope document, a zero-step document, or a step with no `apply` block. Nothing has executed; the tree is guaranteed untouched |
 | `66` | the named document does not exist or cannot be read |
 | `1` | a failure once execution has begun (a step's `check`/`precondition`/`apply`/`verify`) — earlier steps may already have applied |
+
+`lint-migration.sh` uses the same 64/65/66 vocabulary for itself, with one
+documented difference the runner translates: lint's `65` means "the host or
+threshold VALUE could not be resolved", which is a problem with how the *runner*
+was invoked, so the runner maps it to its own `64`. Lint's own `1` is reserved
+for format violations, exactly as the runner's `1` is reserved for
+post-execution failures.
 
 Refusal (`65`) and post-execution failure (`1`) are deliberately different
 codes for one reason: **a caller cannot otherwise tell "refused, the tree is
@@ -275,17 +524,20 @@ one is free.
 
 ## Whole-document checks and the opt-in mechanism
 
-L0 through L8 are the numbered rules, each attached to one step or one
-fence. The linter also reports three violation classes that are properties
-of the *document as a whole* — its filename, and the relationship between
-its filename and its frontmatter — rather than of any single step, so they
-are not part of that numbering:
+L1 through L10 are the numbered rules attached to one step or one fence (L0 is
+numbered but is per-document — see the note under the rule table above). The
+linter also reports five violation classes that are properties of the
+*document as a whole* — its filename, its frontmatter, and whether it declares
+any steps at all — rather than of any single step, so they are not part of that
+numbering:
 
 | Message prefix | Catches |
 |---|---|
 | `lint: <file>: filename does not begin with a numeric migration ID` | the file's basename has no parseable `<digits>-` prefix at all. **Never a skip** — an ID the linter cannot read is a violation, not a quiet route out of scope |
 | `threshold: <file>: id <N> is at or above threshold <T> but frontmatter does not declare migration_format: executable` | a migration in scope by filename ID that never declared the frontmatter field the format requires there — a spec MUST (§08, "Threshold scope") |
 | `id-mismatch: <file>: frontmatter id '<A>' does not match filename id '<B>'` (or: frontmatter `id` is not numeric) | frontmatter `id:`, where present, disagreeing with the filename that actually decides scope |
+| `steps: <file>: declares no '### Step ' heading` | an in-scope migration with nothing to dispatch. §08 has always required at least one step and the runner has always refused a zero-step document — but §08 also requires an adopting host to run the LINTER in CI, and CI does not run the runner, so before this rule that CI was green on a document that cannot run. `## Step 1:` instead of `### Step 1:` is how it happens |
+| `frontmatter: <file>: no 'applies_to:' field` | the one frontmatter field this format newly makes load-bearing. At or above the threshold `applies_to` is the write boundary an `apply` may not cross; omitted entirely, the permitted write set is undefined and every statement about what the rollback owes the tree is vacuous. **Presence only** — which paths an `apply` actually writes to is unenforceable, see "`applies_to`'s dual meaning" below. The other §08-required fields (`slug`, `title`, `from_version`, `to_version`) are deliberately not checked: none of them changes what a block is permitted to do |
 
 **The ID-from-filename rule was itself a Stage 2 review finding, not part of
 the original design.** The first draft read a migration's ID from
@@ -350,8 +602,12 @@ anticipation of that installer.
 
 `test-fixtures/` holds one document per rule this format enforces, named for
 the violation it demonstrates (`0021-bad-l4-typo-role.md`,
-`0045-unclosed-fence-verify.md`, and so on) plus the conformant baseline,
-`0016-conformant.md`. **Most of these fixtures fail the linter by design** —
+`0045-unclosed-fence-verify.md`, `0052-bad-l9-heredoc-fence.md`, and so on)
+plus three conformant documents: `0016-conformant.md` (the baseline),
+`0059-heredoc-fence-escape.md` (the two documented ways to emit a fenced code
+block, run end to end) and `0060-first-migration.md` (the README's own worked
+example, so that example cannot rot into being wrong).
+**Most of these fixtures fail the linter by design** —
 that is the whole point of a fixture named `bad-*`. Do not lint
 `test-fixtures/` broadly; the suite that exercises them correctly is
 `tools/migration-runner.test.sh`, which asserts each fixture's *expected*

@@ -22,8 +22,9 @@ Each entry below names the conformance impact for host implementers.
 
 **Spec 1.5.0 → 2.0.0 — major. §08 gains an executable form — role-tagged
 fenced blocks and a filename-keyed threshold, binding at or above each
-host's declared migration ID — plus a non-interactive-failure clause in the
-atomicity contract that binds every migration regardless of threshold.**
+host's declared migration ID — plus two clauses in the atomicity contract
+(non-interactive failure behaviour, and rollback ordering/membership) that bind
+every migration regardless of threshold.**
 Below the threshold, §08's prior text — prose, agent, or interactive steps,
 satisfying the same quartet — is unchanged and remains fully conformant; the
 role-tagged-fence/threshold/linter bundle binds only new migrations a host
@@ -34,22 +35,33 @@ threshold (`claude-workflow` 0035, `codex-workflow` 0016, `opencode-workflow`
 0012, `pi-agentic-apps-workflow` 0011 —
 `reference-implementations/migration-runner/THRESHOLDS`), so the
 threshold-scoped bundle is backward-compatible for everything that already
-exists. The atomicity clause is a separate matter — see "Conformance impact"
-below.
+exists. The two universally-binding atomicity clauses are a separate matter —
+see "Conformance impact" below.
 
-It is a major, not a minor, because **one** clause in the pre-existing text
-binds independent of the threshold and is a genuine tightening: the
-atomicity contract now mandates specific non-interactive failure behaviour
-(abort in place, report which steps applied, roll back nothing) that the 1.x
-text left completely unstated. That clause sits in the three-option failure
-policy itself, which has always bound every migration — it is not part of
-the executable-form dispatch mechanics (block exit codes, the fixed
-check/precondition/apply/verify order) that bind only at or above a host's
-threshold. Per this file's own versioning policy, a reworded canonical
-requirement is a major regardless of how narrow its binding population is.
+It is a major, not a minor, because **two** clauses in the pre-existing text
+bind independent of the threshold and are genuine tightenings. Both sit in the
+three-option failure policy itself, which has always bound every migration —
+neither is part of the executable-form dispatch mechanics (block exit codes,
+the fixed check/precondition/apply/verify order) that bind only at or above a
+host's threshold:
 
-Two other clauses were reworded in this pass (three reworded in total,
-counting the atomicity clause above) but do **not** independently justify
+1. **Non-interactive failure behaviour.** The atomicity contract now mandates
+   abort in place, report which steps applied, roll back nothing — which the
+   1.x text left completely unstated.
+2. **Rollback ordering and membership.** A rollback now runs the already-applied
+   steps in reverse document order, includes a step whose `apply` succeeded and
+   whose `verify` then failed, and excludes one whose `apply` itself failed. The
+   1.5.0 text said only "apply rollback patches for steps 1..N-1", with no order
+   and no such distinction. This one was missed by every per-task review and
+   found by the final whole-branch review; it is the third item in the
+   conformance-impact list below.
+
+Per this file's own versioning policy, a reworded canonical requirement is a
+major regardless of how narrow its binding population is; either of these two
+would settle it alone.
+
+Two further clauses were reworded in this pass (four reworded in total,
+counting the two above) but do **not** independently justify
 the major: the dry-run MUST's wording ("prints the source" instead
 of "prints the diff") is scoped to the executable form in the shipped text,
 so a below-threshold migration's dry-run is unaffected and no host is
@@ -57,18 +69,18 @@ obliged to rewrite anything there; and the "recorded as `partial`" clause
 dropped its "in the version-bump record" location in favour of "satisfied by
 the runner's own diagnostic output," which *loosens* rather than tightens —
 a host already conformant to the stricter old wording trivially satisfies
-the new one. Neither is a basis for treating this as breaking; the
-atomicity clause above is what makes it one.
+the new one. Neither is a basis for treating this as breaking; the two
+clauses above are what make it one.
 
 This tally counts **reworded** clauses only. It does not include the
 no-secrets/no-personal-data rule, which is wholly new — the 1.x text never
-mentioned secrets or personal data at all — and, like the atomicity clause,
+mentioned secrets or personal data at all — and, like the two atomicity clauses,
 binds every migration regardless of executable-form adoption (see the
 decision recorded under "Considered and decided" in this change's task
 report). Naming it separately here rather than folding it into the tally
 above: a new universally-binding MUST NOT would ordinarily be additive
 (minor) on its own, and does not change this release's major/minor
-determination, which the atomicity clause already settles — but the
+determination, which the atomicity clauses already settle — but the
 rationale would be silently incomplete without naming it.
 
 ### Added — §08 executable form
@@ -81,12 +93,29 @@ rationale would be silently incomplete without naming it.
   (never `N+1`), recognised only outside fenced code blocks — closes a class
   where a heredoc body containing `### Step 2` could silently truncate a
   step.
-- **Two structural rules found during implementation, not designed up
-  front**: every opened fence MUST be closed before end of file (a fence
-  visible to role-listing but never closed lints clean and fails at
-  runtime), and a tagged fence's body MUST NOT be empty or whitespace-only
-  (a tagged-but-empty `check` is a silent no-op indistinguishable from
-  success).
+- **Four structural rules found during implementation and review, not
+  designed up front**: every opened fence MUST be closed before end of file (a
+  fence visible to role-listing but never closed lints clean and fails at
+  runtime); a tagged fence's body MUST contain at least one executable
+  statement — not merely be non-whitespace — so that a leftover `# TODO:`
+  placeholder or a bare `:` in a `check` fence is rejected rather than read as
+  "already applied"; a tagged fence MUST NOT be truncated by a fenced-code-block
+  delimiter emitted from inside it (a heredoc writing a ` ```bash ` line, which
+  is the fleet's ordinary idiom for patching an instruction file, silently ends
+  the captured body there, writes a partial payload, exits 0, and then
+  self-certifies as applied on every later run); and a tagged fence's body MUST
+  NOT leave a heredoc unterminated.
+- **Two whole-document lint obligations**: the format linter MUST reject an
+  in-scope migration that declares no step (§08 always required at least one,
+  but only the runner enforced it — and the Conformance section below requires
+  an adopting host to run the *linter* in CI, which does not run the runner),
+  and MUST reject one whose frontmatter omits `applies_to` (presence only; it
+  is the write boundary, and a boundary that can be omitted is not one).
+- **A CI wiring note**: the linter is invoked per migration file, and a host
+  SHOULD enumerate migrations as `migrations/[0-9]*.md`. An ID-less filename is
+  a MUST-report violation with no carve-out, and every host in the fleet keeps a
+  `migrations/README.md`, so the broad glob would fail CI on adoption day on a
+  file working as intended.
 - **A filename-keyed threshold**: a migration's ID comes from its filename,
   never frontmatter, so it cannot be evaded by deleting a line; a
   declaration (`migration_format: executable`) can only add a migration to
@@ -129,7 +158,7 @@ Conformance impact for host implementers: **two different things are true at
 once, and they must not be collapsed into one blanket answer.** A host
 citing 1.5.0 (or any prior §08 version) is unaffected by this bump and has
 nothing to check; that citation is unchanged by this release. But a host
-that wants to **cite 2.0.0** has two separate obligations, not one:
+that wants to **cite 2.0.0** has three separate obligations, not one:
 
 - The **executable-form MUSTs** — the role-tagged fence grammar, the
   filename-keyed threshold, the format linter, and wiring it into CI — bind
@@ -147,6 +176,25 @@ that wants to **cite 2.0.0** has two separate obligations, not one:
   a role-tagged fence — a host whose current runner prompts (or silently
   rolls back) when run unattended is not conformant to 2.0.0 on this point
   alone, regardless of its executable-form adoption status.
+- The **rollback ordering and membership clause** is the third universally
+  binding obligation, and it was missing from this list until the final
+  whole-branch review found it. §08's three-option failure policy now mandates
+  that a rollback runs the already-applied steps in **reverse document order**,
+  **including** a step whose `apply` succeeded and whose `verify` then failed,
+  and **excluding** a step whose `apply` itself failed. The 1.5.0 text said
+  only "apply rollback patches for steps 1..N-1 … restore the project to its
+  pre-migration state" — no order, and no verify-failed/apply-failed
+  distinction. A host whose runner rolls back in forward order was conformant
+  to 1.5.0 and is **not** conformant to 2.0.0, and nothing told it so.
+
+  This is stated here rather than scoped down to the executable form in §08,
+  deliberately. The clause sits inside the three-option failure policy, which
+  §08's Atomicity contract explicitly declares binds every migration regardless
+  of threshold; scoping the ordering to the executable form would contradict
+  that declaration in the same document, and would leave prose-form rollback
+  order undefined — which is worse than a stated tightening, because "undefined"
+  is what let a forward-order runner look conformant in the first place. On a
+  destructive sequence the order is the whole point.
 
 The reference implementation is `reference-implementations/migration-runner/`
 (`extract.sh`, `lint-migration.sh`, `run-migration.sh`, `THRESHOLDS`),

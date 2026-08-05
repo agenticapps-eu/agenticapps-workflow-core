@@ -85,21 +85,50 @@ HOST=""
 DOC=""
 WORKDIR=""
 
+# USAGE ERRORS ARE ALWAYS 64. Fix round 4 made this true of every one of them,
+# including the two that used to escape it:
+#
+#   1. NO ARGUMENTS AT ALL exited 1 — the "failed once execution began" code —
+#      via a bare `${DOC:?...}` expansion, contradicting this script's own
+#      exit-code scheme documented below. A caller could not tell "you invoked
+#      me wrong" from "a step's apply failed on a half-migrated tree".
+#   2. AN UNKNOWN FLAG WAS SILENTLY ACCEPTED AS A POSITIONAL by the `*)`
+#      catch-all. Executed: `--dryrun` (a typo for `--dry-run`) became $DOC and
+#      produced `run-migration: --dryrun: no such file` (exit 66) — a
+#      diagnostic that names the flag but attributes it to the filesystem; and
+#      `--on-failure skip` (a space instead of `=`) put `--on-failure` in $DOC
+#      and `skip` in $WORKDIR, so a caller asking for the skip policy silently
+#      got something else entirely. lint-migration.sh has rejected unknown
+#      flags with 64 since it shipped; the runner now matches it, `--` and all.
+#
+# A THIRD POSITIONAL is likewise an error rather than "last one wins" — $DOC
+# and $WORKDIR are the only two, and a silently ignored third argument is how a
+# migration gets run against the wrong tree.
+usage_error() { echo "run-migration: $*" >&2; echo "usage: run-migration.sh --host NAME [--dry-run] [--on-failure=abort|prompt|skip] <doc> [<workdir>]" >&2; exit 64; }
+
+DOC_SET=0
+WORKDIR_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --on-failure=*) ON_FAILURE="${1#*=}"; shift ;;
     --host)
-      if [ $# -lt 2 ]; then
-        echo "run-migration: --host needs a value" >&2
-        exit 64
-      fi
+      [ $# -ge 2 ] || usage_error "--host needs a value"
       HOST="$2"; shift 2
       ;;
-    *) if [ -z "$DOC" ]; then DOC="$1"; else WORKDIR="$1"; fi; shift ;;
+    --*)
+      usage_error "unknown flag '$1'"
+      ;;
+    *)
+      if [ "$DOC_SET" -eq 0 ]; then DOC="$1"; DOC_SET=1
+      elif [ "$WORKDIR_SET" -eq 0 ]; then WORKDIR="$1"; WORKDIR_SET=1
+      else usage_error "unexpected extra argument '$1' (doc '$DOC' and workdir '$WORKDIR' are both already set)"
+      fi
+      shift
+      ;;
   esac
 done
-: "${DOC:?usage: run-migration.sh --host NAME [--dry-run] [--on-failure=P] <doc> [<workdir>]}"
+[ "$DOC_SET" -eq 1 ] || usage_error "no migration document given"
 
 # --host IS REQUIRED. THERE IS DELIBERATELY NO DEFAULT AND NO "NO THRESHOLD"
 # PATH.
@@ -391,6 +420,16 @@ case "$scope_rc" in
     # something different ("bad threshold/host") in its own contract.
     exit 64
     ;;
+  64)
+    # lint-migration.sh's own usage code. Not reachable through this script's
+    # CLI today — --host is verified non-empty above and $DOC is always passed
+    # — but it is a REAL code that script can return, and folding it into the
+    # "exited unexpectedly" catch-all below would report a wrong invocation of
+    # a collaborator as a document refusal. Mapped straight through: a usage
+    # error one layer down is still a usage error here.
+    echo "run-migration: lint-migration.sh rejected its own invocation (usage error)" >&2
+    exit 64
+    ;;
   66)
     echo "run-migration: $DOC: no such file" >&2
     exit 66
@@ -418,6 +457,11 @@ case "$lint_rc" in
     exit "$REFUSAL"
     ;;
   65) exit 64 ;; # bad/unresolvable host or threshold — a usage problem, see above
+  64)
+    # Same mapping as the --scope-only call above, for the same reason.
+    echo "run-migration: lint-migration.sh rejected its own invocation (usage error)" >&2
+    exit 64
+    ;;
   66)
     echo "run-migration: $DOC: no such file" >&2
     exit 66

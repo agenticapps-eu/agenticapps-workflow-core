@@ -293,9 +293,17 @@ echo "== lint-migration.sh: no silent no-op when scope can't be resolved =="
 
 # Neither --threshold nor --host: there is deliberately no path that treats
 # this as "nothing in scope, therefore clean." It must error.
+# FIX ROUND 4, MINOR. This used to exit 1 — the VIOLATION code — through a
+# bare `${THRESHOLD:?...}` expansion, so a CI job that forgot --host got the
+# same status a malformed document produces, plus a raw bash diagnostic. Every
+# usage error in this script is 64 now; 65 stays reserved for a resolvable-but-
+# wrong host/threshold VALUE and 66 for a missing document. RED, before:
+#   lint-migration.sh: line 153: THRESHOLD: lint: --threshold or --host is
+#   required ...   rc=1
 out="$(bash "$MR/lint-migration.sh" "$FIX/0016-conformant.md" 2>&1)"
-assert_eq "$?" "1" "no-scope: omitting both --threshold and --host is an error"
+assert_eq "$?" "64" "no-scope: omitting both --threshold and --host is a usage error (64), not a violation (1)"
 assert_contains "$out" "threshold" "no-scope: error names what could not be resolved"
+assert_not_contains "$out" "line " "no-scope: error is not a raw bash parameter-expansion message"
 
 out="$(bash "$MR/lint-migration.sh" --host nonexistent-host "$FIX/0016-conformant.md" 2>&1)"
 assert_eq "$?" "65" "no-scope: an unknown host is an error, not a default"
@@ -828,14 +836,51 @@ rm -rf "$tmp"; trap - EXIT
 #   rc=0
 # — the purest form of the defect this group exists to close: a document
 # that runs to completion having dispatched nothing, and reports success.
-# Lint alone cannot catch this (every per-step rule iterates zero times over
-# an empty step list, so lint-migration.sh itself exits 0 clean on this
-# fixture) — only the runner's own zero-steps refusal closes this one.
+#
+# THE COMMENT THAT USED TO SIT HERE WAS FALSE AND IS DELETED. It read: "Lint
+# alone cannot catch this (every per-step rule iterates zero times over an
+# empty step list, so lint-migration.sh itself exits 0 clean on this fixture)
+# — only the runner's own zero-steps refusal closes this one." The
+# parenthetical is true and the conclusion does not follow from it: a linter
+# can COUNT `### Step ` headings exactly as L6 already iterates them, without
+# any per-step rule running at all. It was a false absolute of precisely the
+# kind this branch's history exists to warn about, and it shipped inside the
+# test file. lint-migration.sh now reports the zero-steps case itself, which is
+# what matters, because §08's Conformance section requires an adopting host to
+# run the LINTER in CI — CI does not run the runner, so before this rule that
+# CI was green on a document that cannot run.
+#
+# The runner's own refusal is retained and still asserted, below, past a
+# stubbed-clean lint gate: it is the guard that holds when the lint gate is
+# bypassed.
+out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0039-zero-steps.md" 2>&1)"
+assert_eq "$?" "1" "zero-steps: the LINTER now rejects a zero-step document (it used to exit 0 clean)"
+assert_contains "$out" "declares no '### Step ' heading" "zero-steps: the linter names the problem"
+
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0039-zero-steps.md" "$tmp" 2>&1)"
 assert_eq "$?" "65" "the runner refuses a zero-step migration"
-assert_contains "$out" "declares no steps" "the runner names the zero-steps problem"
+assert_contains "$out" "declares no '### Step ' heading" "the runner surfaces the linter's zero-steps diagnostic"
 rm -rf "$tmp"; trap - EXIT
+
+# The runner's OWN zero-steps refusal, past a stubbed-clean lint gate. Adding
+# the lint rule above moved which gate fires first for this fixture through the
+# real CLI; without this, the runner's branch would have been left with zero
+# coverage — the same coverage-regression the 0038 stub below was added for.
+tmp="$(mktemp -d)"; stubdir="$(mktemp -d)"; trap 'rm -rf "$tmp" "$stubdir"' EXIT
+ln -s "$MR/run-migration.sh" "$stubdir/run-migration.sh"
+ln -s "$MR/extract.sh" "$stubdir/extract.sh"
+cat > "$stubdir/lint-migration.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$stubdir/lint-migration.sh"
+out="$(cd "$tmp" && bash "$stubdir/run-migration.sh" --host codex-workflow "$FIX/0039-zero-steps.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" \
+  "past a stubbed-clean lint gate, the runner's OWN zero-steps refusal still fires"
+assert_contains "$out" "declares no steps" "the runner's own zero-steps message is still reachable"
+assert_not_contains "$out" "### Step " "this is the runner speaking, not the (stubbed-out) linter"
+rm -rf "$tmp" "$stubdir"; trap - EXIT
 
 # 0038-zero-apply-step.md: check/precondition/rollback are real and tagged;
 # the apply fence is syntactically valid (```bash role=apply```, satisfying
@@ -859,7 +904,7 @@ tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0038-zero-apply-step.md" "$tmp" 2>&1)"
 assert_eq "$?" "65" "the runner refuses a step whose apply block is empty"
 assert_not_contains "$out" "step 1: applied" "the runner does not report success"
-assert_contains "$out" "L8: step 1: role 'apply' is empty or whitespace-only" \
+assert_contains "$out" "L8: step 1: role 'apply' contains no executable statement" \
   "the runner's lint gate (L8) names the empty apply block"
 assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" \
   "nothing was written by the empty apply block"
@@ -1078,8 +1123,405 @@ assert_contains "$out" "'precondition'" "L8: names the empty role (precondition)
 out="$(bash "$MR/lint-migration.sh" --host codex-workflow "$FIX/0045-unclosed-fence-verify.md" 2>&1)"
 assert_eq "$?" "1" "L8 fix: 0045 still lints dirty (L7 fires)"
 assert_contains "$out" "L7" "L8 fix: L7 still correctly diagnoses the unclosed fence"
-assert_not_contains "$out" "role 'verify' is empty" \
+assert_not_contains "$out" "role 'verify' contains no executable statement" \
   "L8 fix: no longer misreports an extraction FAILURE as an empty body"
+
+echo
+echo "== lint-migration.sh: L8 widened — no executable statement, any role =="
+
+# CRITICAL 2 of the final whole-branch review. L8 used to test emptiness with
+# `tr -d '[:space:]'`, so a body of `# TODO: check whether the allowlist is
+# already hardened` was ONE CHARACTER past it. RED, reproduced against the real
+# CLI on 0053 before the widening:
+#   $ lint-migration.sh --host claude-workflow <doc> ; echo $?
+#   0
+#   $ run-migration.sh --host claude-workflow <doc> wd ; echo $?
+#   step 1: skipped (already applied)
+#   0
+#   $ ls -a wd    # empty — the security-relevant apply was never attempted
+# `bash -c '# ...'` exits 0 and the three-valued check contract reads exit 0 as
+# ALREADY APPLIED. This is strictly worse than the apply-only-a-comment variant
+# an earlier round put on the deferred list as an accepted gap (0055 below):
+# there, the step is attempted and vacuous; here it is never attempted at all.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0053-bad-l8-comment-only-check.md" 2>&1)"
+assert_eq "$?" "1" "L8: a comment-only check fence exits 1"
+assert_contains "$out" "L8: step 1: role 'check' contains no executable statement" \
+  "L8: names the rule and the role for a comment-only check"
+assert_not_contains "$out" "L1" "L8: does NOT also fire L1 — the role IS present, just vacuous"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0053-bad-l8-comment-only-check.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "the runner refuses a comment-only check at the lint gate"
+assert_not_contains "$out" "skipped (already applied)" \
+  "the runner never reaches the silent-no-op skip this fixture used to produce"
+assert_eq "$(ls "$tmp"/settings.json 2>/dev/null; echo none)" "none" \
+  "nothing ran for the comment-only-check migration"
+rm -rf "$tmp"; trap - EXIT
+
+# The `:` variant. A bare no-op builtin as the WHOLE body is counted as
+# non-executable — a decision, recorded in lint-migration.sh's L8 note: `:`
+# provably does nothing and exits 0, which is the same observable outcome as an
+# empty body, reached deliberately. RED before the widening: lint 0,
+# `step 1: skipped (already applied)`, empty workdir.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0054-bad-l8-noop-builtin-check.md" 2>&1)"
+assert_eq "$?" "1" "L8: a check fence whose whole body is ':' exits 1"
+assert_contains "$out" "L8: step 1: role 'check' contains no executable statement" \
+  "L8: names the rule and the role for a bare no-op builtin"
+
+# `:` INSIDE a larger body is ordinary shell and must be left completely alone
+# — the rule strips it only as a whole line. Without this, `while :; do` and
+# `: "${VAR:?}"` would start failing the linter, which is the false-positive
+# direction this decision must not fall into.
+probe="$(mktemp -d)/0061-colon-inside.md"
+sed "s|^:$|while :; do break; done|" "$FIX/0054-bad-l8-noop-builtin-check.md" \
+  | sed "s|^id: 0054|id: 0061|" > "$probe"
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$probe" 2>&1)"
+assert_eq "$?" "0" "L8: ':' inside a larger statement ('while :; do') is untouched — no false positive"
+assert_eq "$out" "" "L8: and reports nothing at all for it"
+rm -rf "$(dirname "$probe")"
+
+# The apply-only-a-comment variant: the previously-deferred gap, closed by the
+# same one-line widening rather than deferred a second time.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0055-bad-l8-comment-only-apply.md" 2>&1)"
+assert_eq "$?" "1" "L8: a comment-only apply fence exits 1"
+assert_contains "$out" "L8: step 1: role 'apply' contains no executable statement" \
+  "L8: names the rule and the role for a comment-only apply"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0055-bad-l8-comment-only-apply.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "the runner refuses a comment-only apply at the lint gate"
+assert_not_contains "$out" "step 1: applied" \
+  "the runner never reports the vacuous success this fixture used to produce"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== lint-migration.sh: L9/L10 — a fence line inside a heredoc truncates a block =="
+
+# CRITICAL 1 of the final whole-branch review, committed verbatim as
+# 0052-bad-l9-heredoc-fence.md. extract.sh's mr_block ends its capture on ANY
+# line whose first three characters are three backticks, INCLUDING one inside a
+# heredoc body. §08 already mandated heredoc-awareness for `### Step` headings
+# and was silent on the identical hazard for fences.
+#
+# RED, reproduced against the real CLI before L9/L10 existed:
+#   $ lint-migration.sh --host claude-workflow 0039-patch-claude-md.md ; echo $?
+#   0
+#   $ run-migration.sh --host claude-workflow 0039-patch-claude-md.md wd
+#   step 1: applied              rc=0
+#   $ cat wd/CLAUDE.md
+#   # CLAUDE.md
+#
+#   ## Running the suite         <- and NOTHING else; the payload is truncated
+#   $ run-migration.sh ... wd
+#   step 1: skipped (already applied)   <- self-certifies as done, forever
+#
+# Every existing guard passed it: L1 reads the role from the OPENING line, L7
+# balances, L8 sees a non-empty body, the runner's zero-apply pre-flight sees a
+# non-empty body, and `bash -c` on an unterminated heredoc writes the partial
+# payload and exits 0. This is not theoretical — 6 of the 73 migrations in the
+# fleet today already emit a three-backtick line from inside a heredoc.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0052-bad-l9-heredoc-fence.md" 2>&1)"
+assert_eq "$?" "1" "L9: a tagged fence truncated by a nested fence line exits 1"
+assert_contains "$out" "L9: step 1: role 'apply' fence opened at line" "L9: names the rule, the step and the role"
+assert_contains "$out" "is terminated by a nested fence line at line" "L9: names the truncation"
+assert_contains "$out" "(info string: bash)" "L9: quotes the nested fence's own info string"
+assert_contains "$out" "L10: step 1: role 'apply' opens a heredoc delimited by 'EOF'" \
+  "L10: independently reports the unterminated heredoc the truncation leaves behind"
+
+# THE TRUNCATION IS REAL, not merely reported — asserted against extract.sh
+# directly so the rule is anchored to an observable rather than to its own
+# message. The captured body stops at the nested fence, so the heredoc
+# terminator never appears in it.
+body="$(bash "$MR/extract.sh" block "$FIX/0052-bad-l9-heredoc-fence.md" 1 apply)"
+assert_eq "$?" "0" "L9: extract.sh still returns a (truncated) body — which is why nothing else caught this"
+assert_contains "$body" "cat >> CLAUDE.md <<'EOF'" "L9: the captured body does open the heredoc"
+assert_not_contains "$body" "bash tools/migration-runner.test.sh" \
+  "L9: and the captured body is genuinely truncated before the payload's own fenced command"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+printf '# CLAUDE.md\n' > "$tmp/CLAUDE.md"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0052-bad-l9-heredoc-fence.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "the runner refuses the truncated-heredoc migration at the lint gate"
+assert_not_contains "$out" "step 1: applied" "the runner does not report the truncated apply as success"
+assert_eq "$(cat "$tmp/CLAUDE.md")" "# CLAUDE.md" \
+  "the truncated payload was never written — CLAUDE.md is byte-identical to before"
+rm -rf "$tmp"; trap - EXIT
+
+# THERE IS NO ESCAPE VIA A FOUR-BACKTICK OUTER FENCE, so L9 does not forbid
+# something the format otherwise permits. A four-backtick opener's info string
+# starts with a backtick and fails the `^bash[ \t]+role=[a-z]+$` grammar, so
+# the fence carries no role at all.
+probe4="$(mktemp -d)/probe4.md"
+printf '### Step 1: x\n\n**Apply:**\n````bash role=apply\necho hi\n````\n' > "$probe4"
+out="$(bash "$MR/extract.sh" roles "$probe4" 1)"
+assert_eq "$?" "0" "four-backtick probe: extract.sh roles runs cleanly"
+assert_eq "$out" "" \
+  "four-backtick probe: a four-backtick fence carries NO role — it is not an escape hatch L9 takes away"
+rm -rf "$(dirname "$probe4")"
+
+# L10 IS NOT A RESTATEMENT OF L9. 0058 has no nested fence anywhere, every
+# fence opens and closes normally, and its apply body is non-empty and
+# comment-free — so L7, L8 and L9 all pass it. Only the heredoc terminator is
+# mistyped, and `bash -c` on that body writes a partial payload and exits 0,
+# which is the same silent-partial-write outcome by a different route.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0058-bad-l10-mistyped-heredoc.md" 2>&1)"
+assert_eq "$?" "1" "L10: a mistyped heredoc terminator exits 1"
+assert_contains "$out" "L10: step 1: role 'apply' opens a heredoc delimited by 'EOF'" "L10: names the rule and the delimiter"
+assert_not_contains "$out" "L9" "L10: fires ALONE here — there is no nested fence for L9 to see"
+assert_not_contains "$out" "L7" "L10: and no unclosed fence for L7 to see"
+assert_not_contains "$out" "L8" "L10: and the body is not empty, so L8 is silent too"
+
+# L10 MUST NOT FIRE ON A WELL-FORMED HEREDOC. 0031's apply block is a heredoc
+# whose body contains the literal line "### Step 2" and whose terminator is
+# present and correct — the exact shape a naive scanner would trip over.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0031-heredoc-step-heading.md" 2>&1)"
+assert_eq "$?" "0" "L10: a correctly terminated heredoc is clean — no false positive"
+assert_eq "$out" "" "L10: and reports nothing at all for it"
+
+# L10'S FALSE-POSITIVE GUARDS, each exercised rather than described. The scan
+# reads shell redirection operators by hand (bash 3.2's own parser is silent on
+# an unterminated heredoc — see lint-migration.sh's L10 note), so every shape
+# that merely LOOKS like `<<` must be proven not to fire. Each probe below
+# substitutes one such line into 0060's apply block, which is otherwise clean.
+# The replacement is passed through a FILE, not `awk -v`: awk rejects a literal
+# newline inside a -v assignment ("awk: newline in string"), and several of the
+# probes below are deliberately multi-line. Caught by these very assertions
+# going red rather than by inspection.
+mr_l10_probe() { # $1=apply body to substitute (may be multi-line)  $2=description
+  local dir out rc
+  dir="$(mktemp -d)"
+  printf '%s\n' "$1" > "$dir/repl.txt"
+  awk -v f="$dir/repl.txt" '
+    /^printf .root = true/ { while ((getline l < f) > 0) print l; close(f); next }
+    { print }
+  ' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0063|" > "$dir/0063-l10-probe.md"
+  out="$(bash "$MR/lint-migration.sh" --threshold 16 "$dir/0063-l10-probe.md" 2>&1)"
+  rc=$?
+  assert_eq "$rc" "0" "L10 false-positive guard: $2 — lints clean"
+  assert_eq "$out" "" "L10 false-positive guard: $2 — reports nothing"
+  rm -rf "$dir"
+}
+mr_l10_probe 'x=$((1<<2)); printf "%s\n" "$x" > .editorconfig'  'a left-shift inside $((...)) is not a heredoc'
+mr_l10_probe 'echo "a << b" > .editorconfig'                    'a << inside double quotes is not a heredoc'
+mr_l10_probe "echo 'a << b' > .editorconfig"                    'a << inside single quotes is not a heredoc'
+mr_l10_probe 'cat <<<"herestring" > .editorconfig'              'a <<< herestring is not a heredoc'
+mr_l10_probe 'cat <<-EOT > .editorconfig
+	root = true
+	EOT'                                                          'a <<- heredoc terminated after leading tabs is fine'
+mr_l10_probe 'cat <<A > .editorconfig; cat <<B >> .editorconfig
+root = true
+A
+more = true
+B'                                                              'two heredocs declared on one line, both terminated in order'
+
+# And the positive control for the same helper: a genuinely unterminated
+# heredoc substituted the same way DOES fire, so the six clean results above
+# are not clean merely because the helper never detects anything.
+probe_dir="$(mktemp -d)"
+printf '%s\n' 'cat <<EOF > .editorconfig' 'root = true' > "$probe_dir/repl.txt"
+awk -v f="$probe_dir/repl.txt" '
+  /^printf .root = true/ { while ((getline l < f) > 0) print l; close(f); next }
+  { print }
+' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0064|" > "$probe_dir/0064-l10-control.md"
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$probe_dir/0064-l10-control.md" 2>&1)"
+assert_eq "$?" "1" "L10 positive control: the same helper's substitution DOES fire on a real unterminated heredoc"
+assert_contains "$out" "L10: step 1: role 'apply' opens a heredoc delimited by 'EOF'" \
+  "L10 positive control: and names it"
+rm -rf "$probe_dir"
+
+echo
+echo "== the two documented escapes for emitting a fence, executed end to end =="
+
+# 0059 is the CONFORMANT counterpart to 0052: the same job — emit a fenced code
+# block into a file — written the two ways the README documents. This exists so
+# that "there is an escape" is an executed fact and not a claim, and so that
+# tightening L9/L10 is provably not a dead end for the fleet's normal idiom.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0059-heredoc-fence-escape.md" 2>&1)"
+assert_eq "$?" "0" "escape: the printf and indented-heredoc forms lint clean"
+assert_eq "$out" "" "escape: with no diagnostics at all"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+printf '# Notes\n' > "$tmp/NOTES.md"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0059-heredoc-fence-escape.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "escape: both steps run to completion"
+assert_contains "$out" "step 1: applied" "escape: the printf form applied"
+assert_contains "$out" "step 2: applied" "escape: the indented-heredoc form applied"
+# BYTE-EXACT, not a substring probe. `assert_contains` shells out to `grep
+# -qF`, which treats a MULTI-LINE needle as a set of alternative single-line
+# patterns — so a multi-line "contains" check here would have passed on any ONE
+# of its lines and silently stopped proving the block was emitted whole. The
+# whole file is compared instead: step 1's printf form reproduces the payload
+# byte-for-byte with the fence at column 1, and step 2's indented-heredoc form
+# costs exactly one leading space (below CommonMark's three-space limit, so the
+# emitted block still renders as a fenced block).
+expected_notes="$(printf '%s\n' \
+  '# Notes' \
+  '' \
+  '## Running the suite' \
+  '' \
+  '```bash' \
+  'bash tools/migration-runner.test.sh' \
+  '```' \
+  '' \
+  '## Indented escape' \
+  '' \
+  ' ```text' \
+  ' payload' \
+  ' ```')"
+assert_eq "$(cat "$tmp/NOTES.md")" "$expected_notes" \
+  "escape: both forms emitted complete, correctly-fenced blocks — the file matches byte for byte"
+
+# Idempotent on a second run, per §08's idempotency contract.
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0059-heredoc-fence-escape.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "escape: a second run exits 0"
+assert_contains "$out" "step 1: skipped (already applied)" "escape: step 1 is skipped on re-run"
+assert_contains "$out" "step 2: skipped (already applied)" "escape: step 2 is skipped on re-run"
+
+# Rollback round trip, in reverse document order, back to the seeded state.
+body="$(bash "$MR/extract.sh" block "$FIX/0059-heredoc-fence-escape.md" 2 rollback)"
+assert_eq "$?" "0" "escape: step 2 rollback extracted"
+( cd "$tmp" && bash -c "$body" ); assert_eq "$?" "0" "escape: step 2 rolled back"
+body="$(bash "$MR/extract.sh" block "$FIX/0059-heredoc-fence-escape.md" 1 rollback)"
+assert_eq "$?" "0" "escape: step 1 rollback extracted"
+( cd "$tmp" && bash -c "$body" ); assert_eq "$?" "0" "escape: step 1 rolled back"
+assert_eq "$(cat "$tmp/NOTES.md")" "# Notes" \
+  "escape: rolling both back in reverse document order restores the seeded file exactly"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== lint-migration.sh: an in-scope migration must declare at least one step =="
+
+# IMPORTANT 3. §08 ("Step structure") has always said "Every migration body
+# MUST contain at least one step" and nothing enforced it at lint time. That
+# mattered because §08's Conformance section requires an adopting host to run
+# the LINTER in CI — so CI was green on a document that cannot run. The review
+# hit this on its first authored migration by typing `## Step 1:` instead of
+# `### Step 1:`, which is what 0056 is. RED, before this rule:
+#   $ lint-migration.sh --host claude-workflow 0056-...md ; echo $?
+#   0
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0056-bad-zero-steps-heading-typo.md" 2>&1)"
+assert_eq "$?" "1" "steps: a heading typed '## Step 1:' yields zero steps and is rejected"
+assert_contains "$out" "declares no '### Step ' heading" "steps: the linter names the problem"
+
+# Reported WITHOUT a step number, like the other whole-document checks — there
+# is no step to attach it to.
+assert_not_contains "$out" "step 1:" "steps: the diagnostic carries no step number"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0056-bad-zero-steps-heading-typo.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "the runner refuses the heading-typo migration"
+assert_eq "$(ls "$tmp"/.editorconfig 2>/dev/null; echo none)" "none" "nothing ran for it"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== lint-migration.sh: applies_to must be present on an in-scope migration =="
+
+# The one frontmatter field this change newly makes load-bearing: at or above
+# the threshold `applies_to` is the WRITE BOUNDARY an apply block may not
+# cross, not merely plan-output metadata. Omitted entirely, the permitted write
+# set is undefined and every statement about what the rollback owes the tree is
+# vacuous. The linter checked no frontmatter field at all before fix round 4 —
+# RED: 0057 is structurally perfect and linted clean at rc 0.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0057-bad-no-applies-to.md" 2>&1)"
+assert_eq "$?" "1" "frontmatter: an in-scope migration with no applies_to is rejected"
+assert_contains "$out" "no 'applies_to:' field" "frontmatter: the linter names the missing field"
+assert_not_contains "$out" "L1" "frontmatter: the document is otherwise structurally perfect"
+
+# ONLY PRESENCE IS CHECKED, and only for `applies_to`. The other §08-required
+# frontmatter fields are deliberately not checked — none of them changes what a
+# block is permitted to do. Proven by construction rather than asserted: 0057
+# with an applies_to line added back lints CLEAN even though it still declares
+# no slug, title, from_version or to_version.
+probe="$(mktemp -d)/0062-applies-only.md"
+awk '{ print } /^migration_format: executable$/ { print "applies_to:"; print "  - .editorconfig" }' \
+  "$FIX/0057-bad-no-applies-to.md" | sed "s|^id: 0057|id: 0062|" > "$probe"
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$probe" 2>&1)"
+assert_eq "$?" "0" "frontmatter: adding applies_to alone makes 0057's shape clean — no other field is checked"
+assert_eq "$out" "" "frontmatter: and nothing else is reported"
+rm -rf "$(dirname "$probe")"
+
+echo
+echo "== the README's worked example, machine-checked =="
+
+# 0060 is reproduced verbatim in the README's "Your first executable migration"
+# section. IMPORTANT 4: the README documented the five headings, the roles and
+# the grammar but never once showed `### Step ` — grep confirmed zero
+# occurrences — and never showed a complete migration, so authoring from it
+# alone produced a document that linted clean and refused to run. Committing
+# the example as a fixture is what keeps the README's example true.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0060-first-migration.md" 2>&1)"
+assert_eq "$?" "0" "README example: lints clean"
+assert_eq "$out" "" "README example: with no diagnostics"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0060-first-migration.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "README example: runs"
+assert_contains "$out" "step 1: applied" "README example: reports the step applied"
+assert_eq "$(cat "$tmp/.editorconfig")" "root = true" "README example: and actually wrote the file"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0060-first-migration.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "README example: a second run exits 0"
+assert_contains "$out" "step 1: skipped (already applied)" "README example: and is idempotent"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== usage errors are 64 everywhere, in both scripts =="
+
+# MINORS from the final whole-branch review. Three usage errors exited 1 — the
+# VIOLATION code — and two unknown-flag shapes were silently accepted as
+# positionals. Each RED state is recorded beside its assertion.
+
+# RED: `run-migration.sh` with no args printed a raw
+# "line 102: DOC: usage: ..." and exited 1.
+out="$(bash "$MR/run-migration.sh" 2>&1)"
+assert_eq "$?" "64" "usage: run-migration.sh with no arguments is 64, not 1"
+assert_contains "$out" "no migration document given" "usage: and says what is missing"
+assert_not_contains "$out" "line " "usage: not a raw bash parameter-expansion message"
+
+# RED: `--dryrun` (a typo for --dry-run) was accepted as $DOC by the `*)`
+# catch-all and produced "run-migration: --dryrun: no such file" (exit 66) — a
+# diagnostic that names the flag but blames the filesystem.
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --dryrun "$FIX/0016-conformant.md" 2>&1)"
+assert_eq "$?" "64" "usage: an unknown runner flag is 64, not a filesystem error"
+assert_contains "$out" "unknown flag '--dryrun'" "usage: and names the flag as a flag"
+
+# RED: `--on-failure skip` (a space instead of '=') put "--on-failure" in $DOC
+# and "skip" in $WORKDIR, so a caller asking for the skip policy silently got
+# something else entirely.
+out="$(bash "$MR/run-migration.sh" --host codex-workflow --on-failure skip "$FIX/0016-conformant.md" 2>&1)"
+assert_eq "$?" "64" "usage: '--on-failure skip' (space, not '=') is rejected rather than silently mis-parsed"
+assert_contains "$out" "unknown flag '--on-failure'" "usage: and names it"
+
+# A third positional is an error rather than "last one wins".
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$(bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0016-conformant.md" "$tmp" extra 2>&1)"
+assert_eq "$?" "64" "usage: a third positional argument is an error, not silently ignored"
+assert_contains "$out" "unexpected extra argument 'extra'" "usage: and names it"
+assert_eq "$(ls "$tmp"/fixture.txt 2>/dev/null; echo none)" "none" "usage: nothing ran"
+rm -rf "$tmp"; trap - EXIT
+
+# RED: the deferred bare `${2:?}` expansions in lint-migration.sh gave rc 1 and
+# a raw bash message for a flag missing its value.
+out="$(bash "$MR/lint-migration.sh" --threshold 2>&1)"
+assert_eq "$?" "64" "usage: lint --threshold with no value is 64, not 1"
+assert_contains "$out" "--threshold needs a value" "usage: and says so cleanly"
+assert_not_contains "$out" "line " "usage: not a raw bash parameter-expansion message"
+
+out="$(bash "$MR/lint-migration.sh" --host 2>&1)"
+assert_eq "$?" "64" "usage: lint --host with no value is 64, not 1"
+assert_contains "$out" "--host needs a value" "usage: and says so cleanly"
+assert_not_contains "$out" "line " "usage: not a raw bash parameter-expansion message"
+
+out="$(bash "$MR/lint-migration.sh" --threshold 16 2>&1)"
+assert_eq "$?" "64" "usage: lint with no document is 64, not 1"
+assert_contains "$out" "no migration document given" "usage: and says what is missing"
+
+# The codes that are NOT 64 must stay where they are: 65 for a resolvable-but-
+# wrong host/threshold VALUE, 66 for a missing document. Re-asserted here
+# because widening 64's remit is exactly how those two get swallowed.
+out="$(bash "$MR/lint-migration.sh" --host nonexistent-host "$FIX/0016-conformant.md" 2>&1)"
+assert_eq "$?" "65" "usage: a bad host VALUE is still 65, not folded into 64"
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0099-does-not-exist.md" 2>&1)"
+assert_eq "$?" "66" "usage: a missing document is still 66, not folded into 64"
 
 echo
 echo "== run-migration.sh: A2 failure policy — non-interactive apply failure =="
@@ -1444,7 +1886,17 @@ echo "== rollback fixtures: the blocks the runner never reaches (group 7) =="
 # interactive branch (A2), and none of those three existing invocations
 # reaches it. So their steps' rollback blocks genuinely have zero prior
 # executions; the "only extract.sh/--dry-run" phrasing was simply wrong.
-ROLLBACK_FIXTURES="0006-belowthreshold-optin-conformant.md 0016-conformant.md 0023-failing-precondition.md 0024-failing-check.md 0029-block-isolation.md 0031-heredoc-step-heading.md 0034-escape-probe.md 0036-failing-apply.md 0040-symlink-escape-probe.md 0043-precondition-127.md 0046-apply-dropped-by-step1.md 0047-skip-continues.md 0051-failing-precondition-after-apply.md"
+ROLLBACK_FIXTURES="0006-belowthreshold-optin-conformant.md 0016-conformant.md 0023-failing-precondition.md 0024-failing-check.md 0029-block-isolation.md 0031-heredoc-step-heading.md 0034-escape-probe.md 0036-failing-apply.md 0040-symlink-escape-probe.md 0043-precondition-127.md 0046-apply-dropped-by-step1.md 0047-skip-continues.md 0051-failing-precondition-after-apply.md 0060-first-migration.md"
+
+# 0059-heredoc-fence-escape.md is lint-clean and in scope but is deliberately
+# NOT in the list above, and the reason is checked rather than asserted: its
+# steps append to a file the workdir does not start with, and its rollbacks
+# (`sed` deleting from an anchor to EOF) leave an EMPTY NOTES.md behind where
+# the pre-apply state had no file at all — so this sweep's snapshot equality
+# would go red on a rollback that is doing exactly what it says. It gets its own
+# seeded round trip instead, in the "two documented escapes" section above,
+# which applies both steps and rolls both back in reverse document order
+# against a NOTES.md that existed beforehand.
 
 # 0039-zero-steps.md is lint-clean and in scope but declares no steps at
 # all — confirmed directly rather than assumed, so it is excluded from the
@@ -1557,6 +2009,7 @@ mr_expected_step_count() {
     0046-apply-dropped-by-step1.md) echo 2 ;;
     0047-skip-continues.md) echo 3 ;;
     0051-failing-precondition-after-apply.md) echo 2 ;;
+    0060-first-migration.md) echo 1 ;;
     *) echo -1 ;; # deliberately unmatchable — a fixture reaching here was added to ROLLBACK_FIXTURES without a case here too
   esac
 }

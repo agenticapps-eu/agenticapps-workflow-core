@@ -162,7 +162,7 @@ jobs:
       - name: Test the migration runner
         # §08's executable form (spec_version 2.0.0) ships a reference
         # extractor/linter/runner at reference-implementations/migration-runner/,
-        # and this is its test suite: 417 assertions driving extract.sh,
+        # and this is its test suite: 531 assertions driving extract.sh,
         # lint-migration.sh, and run-migration.sh against
         # reference-implementations/migration-runner/test-fixtures/ through the
         # real CLI, not a reimplementation of their logic.
@@ -170,8 +170,8 @@ jobs:
         # THIS RUNS THE TEST SUITE, NOT A LINT SWEEP OF THE FIXTURES DIRECTORY.
         # That distinction is load-bearing: most files under test-fixtures/ are
         # named bad-*.md and every one of them EXISTS to fail the linter — each
-        # is a regression guard for one specific rule (L0-L8) or runner
-        # behaviour. Pointing lint-migration.sh at that directory broadly, or
+        # is a regression guard for one specific rule (L0-L10, or one of the
+        # unnumbered whole-document checks) or runner behaviour. Pointing lint-migration.sh at that directory broadly, or
         # asserting every fixture lints clean, would make this gate self-fail
         # on fixtures that are working exactly as designed. The suite already
         # asserts each fixture's *expected* verdict (clean, or a specific

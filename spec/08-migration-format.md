@@ -151,14 +151,19 @@ at runtime reporting a role "missing" that the linter just confirmed was
 present. The format linter MUST reject an unclosed fence as a violation of
 its own, distinctly from a missing role.
 
-**A tagged fence's body MUST NOT be empty or whitespace-only,** for any of
-the five roles. `bash -c ''` (and a fence containing only blank lines) exits
-0, which the three-valued `check` contract in the Atomicity contract below
-reads as "already applied" — so a tagged-but-empty `check` (or
-`precondition`) fence is a silent no-op indistinguishable from success: the
-runner reports the step skipped or the pre-condition satisfied, and applies
-nothing. The format linter MUST reject a tagged fence whose body is empty or
-whitespace-only.
+**A tagged fence's body MUST contain at least one executable statement,** for
+any of the five roles. `bash -c ''` exits 0 — and so does `bash -c` on a body
+of blank lines, on a body of nothing but `#` comments, and on a body that is
+the bare no-op builtin `:` or `true`. The three-valued `check` contract in the
+Atomicity contract below reads exit 0 as "already applied", so a `check` fence
+in any of those states makes the runner report the step skipped and apply
+nothing on a tree where nothing was ever applied; the step is never attempted
+at all. An `apply` fence in the same state is attempted and vacuous. A
+`precondition` passes just as emptily. The format linter MUST reject a tagged
+fence whose body, after blank lines, whole-line comments and whole-line no-op
+builtins are discarded, has nothing left. A leftover `# TODO:` placeholder is
+the ordinary way this happens, and it is one character past a test for
+"empty or whitespace-only".
 
 **Steps are numbered consecutively and bounded by the next step heading.** A
 migration's steps MUST be numbered consecutively from 1; a gap in the
@@ -172,6 +177,53 @@ A `### Step` heading MUST be recognised only **outside** a fenced code
 block. Step bodies are shell, and shell contains heredocs: a migration whose
 `apply` block writes a document containing the literal line `### Step 2`
 MUST NOT have its own step boundary computed from that line.
+
+**The identical hazard applies to the fence delimiters themselves, and MUST
+be rejected rather than tolerated.** A block's captured body ends at its
+fence's closing delimiter, so a fenced-code-block delimiter emitted from
+*inside* a step's own body — a heredoc writing a ` ```bash ` line into a
+markdown file, which is the ordinary way a migration patches an instruction
+file or a skill — truncates the captured body at that line. The truncated
+body still runs and still succeeds: an unterminated heredoc writes its
+partial payload and exits 0, so the runner reports the step applied, and a
+step's idempotency check written against the intended result matches the
+truncated output on the next run — the migration then permanently
+self-certifies as applied. Unlike an absent role or an empty body, nothing
+about this is visible to role-presence, fence-balance, or emptiness checks.
+The format linter MUST reject a tagged fence truncated this way. At minimum
+it MUST reject:
+
+- a tagged fence whose **terminating delimiter line carries a non-empty info
+  string** — a closing fence may not carry one, so such a line is never a
+  legitimate terminator; and
+- a tagged fence whose **captured body leaves a heredoc unterminated**,
+  which is what the truncation leaves behind and which also catches an
+  ordinary mistyped heredoc terminator.
+
+A four-backtick outer fence is **not** an escape: the info-string grammar
+requires the literal `bash` immediately after the delimiter, so a
+four-backtick fence cannot carry a role tag at all. A migration MUST instead
+emit such a line indirectly (`printf '%s\n' '```bash'`) or indent it — up to
+three spaces keeps the emitted block a valid fenced block while putting the
+delimiter off column 1.
+
+**The format linter MUST reject an in-scope migration that declares no step.**
+"Every migration body MUST contain at least one step" is stated above and
+binds every migration; a document with no `### Step` heading has nothing to
+dispatch, and a runner is required to refuse it. Leaving that to the runner
+alone is not sufficient, because the Conformance section below requires an
+adopting host to run the **linter** in CI — so a document that cannot run
+would otherwise leave that CI green. A step heading typed at the wrong level
+(`## Step 1:`) is the ordinary way this happens.
+
+**The format linter MUST reject an in-scope migration whose frontmatter omits
+`applies_to`.** For a migration at or above the threshold, `applies_to` is
+the write boundary described below, not merely impact-awareness metadata; a
+boundary that can be omitted entirely is not a boundary, and every statement
+about what such a migration's rollback owes the working tree is vacuous
+without it. Only the field's **presence** is required to be checked — which
+paths an `apply` block actually writes to remains unenforceable, as stated
+below.
 
 A `migration_format` frontmatter value other than `executable` MUST be
 rejected by the format linter, regardless of whether the migration is at,
@@ -213,6 +265,16 @@ migration ID.
   the threshold unevadable.
 - A file whose name carries no parseable leading numeric ID **MUST** be
   reported as a violation, never silently skipped.
+- The format linter is invoked **per migration file**, and a host wiring it
+  into CI **SHOULD** enumerate migrations as `migrations/[0-9]*.md` rather
+  than `migrations/*.md`. The bullet above makes an ID-less filename a
+  MUST-report violation with no carve-out, and `migrations/` is also the
+  conventional home of a `migrations/README.md` — which every host in the
+  fleet has. Globbing `*.md` therefore turns that README into a CI failure on
+  the day the host adopts the format, on a file working exactly as intended.
+  The narrower glob is the fix; exempting `README.md` inside the linter is
+  not, because "an unreadable ID is never a quiet route out of scope" would
+  then have a named exception that a migration could be renamed into.
 - **MUST** judge (require and enforce the executable form on) every
   migration whose filename ID is at or above the host's declared threshold,
   and **MUST** skip entirely — reporting no violation — every migration

@@ -15,12 +15,23 @@
 #     though the extractor deliberately tolerates it structurally — see
 #     mr_steps's "bound by the next heading, not N+1" comment)
 # L7  every fence a migration opens must be closed before end of file
-# L8  a tagged fence's body must not be empty or whitespace-only, for ANY
-#     role (check, precondition, apply, verify, rollback) — see the header
-#     comment just above the L8 scan for why this is a linter rule and not a
-#     runner one
+# L8  a tagged fence's body must contain at least one executable statement,
+#     for ANY role (check, precondition, apply, verify, rollback) — see the
+#     header comment just above the L8 scan for why this is a linter rule and
+#     not a runner one
+# L9  a tagged fence must not be TERMINATED by a line that is itself a fence
+#     OPENER (a "```" line carrying a non-empty info string). Under this
+#     format's fence state machine such a line closes the tagged fence, so the
+#     captured body stops there — see the L9 scan's own header for the
+#     executed proof
+# L10 a tagged fence's body must not leave a heredoc unterminated — the
+#     semantic half of the same truncation class L9 catches structurally
 #
-# Every rule above is implemented in this script.
+# Every rule above is implemented in this script. Whole-document problems
+# (filename ID, threshold, frontmatter cross-checks, zero steps, a missing
+# `applies_to`) are deliberately NOT numbered — they are properties of the
+# document rather than of a step or a fence. L0 is the one exception, and it
+# is numbered for historical reasons only; see the README's own note.
 #
 # WHY L7 EXISTS. extract.sh's mr_roles prints a role from the fence's
 # OPENING line; mr_block only sets found=1 on the fence's CLOSING line (see
@@ -118,39 +129,57 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# USAGE ERRORS ARE ALWAYS 64, WITHOUT EXCEPTION.
+#
+# Every "you invoked this wrong" outcome exits 64: an unknown flag, a flag
+# missing its value, a second positional document, no document at all, and
+# neither --threshold nor --host. Before fix round 4 three of those exited 1 —
+# the VIOLATION code — via bare `${VAR:?message}` expansions, so a CI job that
+# forgot `--host` (or typed `--threshold` with nothing after it) got a raw bash
+# diagnostic and the same exit status a real format violation produces. A
+# caller cannot then tell "this document is malformed" from "I called the
+# linter wrong", which is precisely the distinction the runner's own exit-code
+# scheme (run-migration.sh's header) exists to preserve one layer up. 65 stays
+# reserved for a resolvable-but-wrong host/threshold VALUE, and 66 for a
+# missing document.
+USAGE=64
+usage_error() { echo "lint: $*" >&2; echo "usage: lint-migration.sh [--scope-only] (--threshold N | --host NAME) <doc>" >&2; exit "$USAGE"; }
+
 THRESHOLD=""
 DOC=""
 SCOPE_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --scope-only) SCOPE_ONLY=1; shift ;;
-    --threshold) THRESHOLD="${2:?--threshold needs a value}"; shift 2 ;;
+    --threshold)
+      [ $# -ge 2 ] || usage_error "--threshold needs a value"
+      THRESHOLD="$2"; shift 2
+      ;;
     --host)
       # Resolve from the declared file rather than making every caller
       # remember a number. THRESHOLDS is core's declaration, one row per host.
-      _h="${2:?--host needs a value}"; shift 2
+      [ $# -ge 2 ] || usage_error "--host needs a value"
+      _h="$2"; shift 2
       THRESHOLD="$(sed 's/#.*//' "$SCRIPT_DIR/THRESHOLDS" | awk -v h="$_h" '$1 == h { print $2; exit }')"
       [ -n "$THRESHOLD" ] || { echo "lint: no threshold declared for host '$_h'" >&2; exit 65; }
       ;;
     --*)
-      echo "lint: unknown flag '$1'" >&2
-      exit 64
+      usage_error "unknown flag '$1'"
       ;;
     *)
       if [ -n "$DOC" ]; then
-        echo "lint: unexpected extra argument '$1' (doc already set to '$DOC')" >&2
-        exit 64
+        usage_error "unexpected extra argument '$1' (doc already set to '$DOC')"
       fi
       DOC="$1"; shift
       ;;
   esac
 done
-: "${DOC:?usage: lint-migration.sh [--scope-only] (--threshold N | --host NAME) <doc>}"
+[ -n "$DOC" ] || usage_error "no migration document given"
 
 # NO "NO THRESHOLD GIVEN" PATH. Omitting both flags is an error, not an
 # empty scope — see the header comment above. A caller who forgot --host
 # must not silently get "nothing in scope, everything passes."
-: "${THRESHOLD:?lint: --threshold or --host is required (no default; see THRESHOLDS) — with neither, every migration would be out of scope and every lint would pass trivially}"
+[ -n "$THRESHOLD" ] || usage_error "--threshold or --host is required (no default; see THRESHOLDS) — with neither, every migration would be out of scope and every lint would pass trivially"
 
 # Validate once, after both possible sources (a literal --threshold, or a row
 # resolved from THRESHOLDS via --host) have landed in the same variable. A
@@ -252,7 +281,68 @@ if [ -n "$fm_id" ]; then
   esac
 fi
 
+# `applies_to` MUST BE PRESENT — the one frontmatter field this format newly
+# makes load-bearing.
+#
+# §08 has always listed `applies_to` as a required field, but below the
+# threshold it is only impact-awareness metadata for plan output, so its
+# absence costs nothing an operator would notice. At or above the threshold it
+# becomes the WRITE BOUNDARY: "a step's apply block MUST NOT modify any file or
+# directory outside the paths its migration's applies_to declares" is the
+# clause that makes the rollback contract bounded rather than aspirational. A
+# boundary that can be omitted entirely is not a boundary — an in-scope
+# migration with no `applies_to` line at all has an *undefined* permitted write
+# set, and every subsequent statement about what its rollback owes the tree is
+# vacuous. Verified absent from this linter by construction in the final
+# whole-branch review (0040-no-frontmatter-fields.md linted clean at exit 0
+# with no `applies_to`, no `slug`, no `title`, no versions).
+#
+# ONLY PRESENCE IS CHECKED, deliberately. Whether the declared paths are the
+# ones the apply block actually writes to is unenforceable here and is stated
+# in §08 as an author obligation — see the "no rule in this format's linter
+# checks which paths an apply block actually writes to" paragraph. Presence is
+# the part that IS checkable, and it is the part whose absence makes the rest
+# meaningless. The other §08-required fields (`slug`, `title`, `from_version`,
+# `to_version`) are deliberately NOT checked here: none of them changes what
+# any block is permitted to do, and inventing four more frontmatter rules in a
+# fix round is how a linter grows checks nobody asked for.
+fm_applies="$(awk '/^applies_to:/ { found = 1; exit } END { print (found ? "yes" : "no") }' "$DOC")"
+if [ "$fm_applies" != "yes" ]; then
+  report "frontmatter: $DOC: no 'applies_to:' field — at or above the threshold this is the write boundary an apply block may not cross, not merely plan-output metadata"
+fi
+
 steps="$(bash "$SCRIPT_DIR/extract.sh" steps "$DOC")"
+
+# AN IN-SCOPE MIGRATION MUST DECLARE AT LEAST ONE STEP.
+#
+# §08 ("Step structure"): "Every migration body MUST contain at least one
+# step." Nothing enforced that at lint time until fix round 4, and the omission
+# was not benign: §08's Conformance section requires an adopting host to run
+# this linter IN CI, so a document that cannot run — because it declares
+# nothing to run — turned that CI job GREEN. run-migration.sh refuses it, but
+# CI is where a host finds out, and CI runs the linter, not the runner.
+#
+# THE COMMENT THIS REPLACES WAS FALSE. tools/migration-runner.test.sh said, of
+# 0039-zero-steps.md: "Lint alone cannot catch this (every per-step rule
+# iterates zero times over an empty step list) — only the runner's own
+# zero-steps refusal closes this one." Every per-step rule does indeed iterate
+# zero times; that is an argument about the per-step rules, not about the
+# linter, which can count `### Step ` headings exactly as L6 already iterates
+# them. Reproduced RED before this rule existed:
+#   $ lint-migration.sh --host claude-workflow 0039-zero-steps.md ; echo $?
+#   0
+# The reviewer hit the same thing on a first authored migration by typing
+# `## Step 1:` instead of `### Step 1:`.
+#
+# NOT NUMBERED: this is a property of the document, like the filename-ID and
+# frontmatter checks above, not of a step (there is no step to attach it to).
+#
+# The runner's own zero-steps refusal STAYS. It is not made redundant by this:
+# it is the guard that still holds on a path where the lint gate is bypassed or
+# stubbed, and the suite exercises exactly that path.
+if [ -z "$steps" ]; then
+  report "steps: $DOC: declares no '### Step ' heading — an in-scope migration with no steps cannot run, and §08 requires at least one"
+fi
 
 # L6 — steps numbered consecutively from 1. The extractor deliberately
 # tolerates a gap structurally (bounding a step at "the next heading", not at
@@ -331,7 +421,43 @@ for s in $steps; do
 $bad
 EOF
 
-  # L8 — a tagged fence must not be empty or whitespace-only, for ANY role.
+  # L8 — a tagged fence's body must contain at least one EXECUTABLE STATEMENT,
+  # for ANY role.
+  #
+  # WIDENED IN FIX ROUND 4, from "empty or whitespace-only". The old test was
+  # `tr -d '[:space:]'`, so a body of
+  #
+  #     # TODO: check whether the allowlist is already hardened
+  #
+  # was one character past it and linted clean. Reproduced RED against the real
+  # CLI before this change, on 0036-silent-noop.md (an otherwise perfectly
+  # well-formed, in-scope migration whose only defect is that placeholder in
+  # its `check` fence):
+  #   $ lint-migration.sh --host claude-workflow 0036-silent-noop.md ; echo $?
+  #   0
+  #   $ run-migration.sh --host claude-workflow 0036-silent-noop.md wd ; echo $?
+  #   step 1: skipped (already applied)
+  #   0
+  #   $ ls -a wd     # empty — the apply never ran
+  # `bash -c '# comment'` exits 0, and the three-valued check contract reads
+  # exit 0 as ALREADY APPLIED. The step is therefore never attempted at all,
+  # which is strictly worse than the apply-only-a-comment variant (attempted,
+  # and vacuous) that an earlier round recorded as an accepted gap. One test
+  # closes all three: check, apply, and precondition alike.
+  #
+  # `:` AND `true` COUNT AS NON-EXECUTABLE when they are the WHOLE body.
+  # This is a decision, not an oversight. `:` is the shell's explicit no-op; a
+  # fence whose entire body is `:` provably does nothing and exits 0 — the same
+  # observable outcome as an empty body, reached deliberately. Reproduced RED
+  # on 0038-colon.md: lint 0, `step 1: skipped (already applied)`, empty
+  # workdir. Nothing legitimate is lost: a `check` that must always report "not
+  # applied" writes `false`, and a step whose `apply` genuinely has nothing to
+  # do is a step that should not exist. `true` is stripped for the identical
+  # reason — leaving it would be a hole of exactly the same class, one
+  # keystroke away. Both are stripped only as a WHOLE LINE (optionally with a
+  # trailing `;`): `:` inside a larger body (`while :; do`, `: "${VAR:?}"`) is
+  # ordinary shell and is left completely alone, because the line then does not
+  # match.
   #
   # WHY THIS IS A LINTER RULE, NOT A RUNNER ONE. Run for real, `bash -c ''`
   # (and `bash -c '<blank line>'`) exits 0 — which the three-valued check
@@ -381,9 +507,121 @@ EOF
     body="$(bash "$SCRIPT_DIR/extract.sh" block "$DOC" "$s" "$r" 2>/dev/null)"
     extract_rc=$?
     [ "$extract_rc" -eq 0 ] || continue
-    stripped="$(printf '%s' "$body" | tr -d '[:space:]')"
-    if [ -z "$stripped" ]; then
-      report "L8: step $s: role '$r' is empty or whitespace-only"
+    # Drop blank lines, full-line `#` comments, and whole-line no-op builtins,
+    # then ask whether anything at all is left. `tr -d '[:space:]'` is retained
+    # on the RESIDUE so a line of nothing but spaces still counts as blank.
+    meaningful="$(printf '%s\n' "$body" | awk '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "" { next }
+      substr(line, 1, 1) == "#" { next }
+      line == ":" || line == ":;" || line == "true" || line == "true;" { next }
+      { print line }
+    ' | tr -d '[:space:]')"
+    if [ -z "$meaningful" ]; then
+      report "L8: step $s: role '$r' contains no executable statement (only blank lines, comments, or no-op builtins)"
+    fi
+
+    # L10 — an UNTERMINATED HEREDOC in a tagged fence's body.
+    #
+    # This is the semantic half of the truncation class L9 catches
+    # structurally, and it is the half that survives when the truncating line
+    # is a BARE "```" (which L9 cannot distinguish from a legitimate closing
+    # fence) or when the author simply mistyped the terminator. In both cases
+    # `bash -c "$body"` writes the partial payload and EXITS 0 — so an apply
+    # "succeeds", and a check written against the intended full payload... does
+    # not match, while a check written against a prefix of it does, which is
+    # how the truncated migration in the review's Critical 1 permanently
+    # self-certified as done.
+    #
+    # THAT IT COVERS GROUND L9 CANNOT WAS CONSTRUCTED, NOT ASSERTED. Two
+    # executed probes:
+    #   - a heredoc truncated by a BARE "```" (no info string, so L9 is
+    #     silent by design — a bare closer is indistinguishable from a
+    #     legitimate one): L10 fires, alongside the L1/L7 fallout of the
+    #     resulting desync.
+    #   - `0058-bad-l10-mistyped-heredoc.md`, a committed fixture with no
+    #     nested fence anywhere and a terminator mistyped `EOFF`: L10 fires
+    #     and NOTHING ELSE DOES — L7, L8 and L9 all pass it.
+    #
+    # WHY THIS IS HAND-ROLLED RATHER THAN DELEGATED TO BASH'S OWN PARSER.
+    # `bash -n` looked like the precise, heuristic-free answer and was tried
+    # first. It does not work on the bash this fleet actually runs: bash 5
+    # warns "here-document at line N delimited by end-of-file", but bash 3.2 —
+    # what macOS ships as /bin/bash, and what every one of these scripts runs
+    # under here — is completely silent and exits 0. Executed:
+    #   $ printf "cat >> X <<'EOF'\n\n## hi\n" > h1.sh
+    #   $ bash -n h1.sh ; echo $?      # -> 0, no stderr at all
+    #   $ bash h1.sh    ; echo $?      # -> 0, and X contains the partial payload
+    # A detector that only fires on some operators' machines is not a detector,
+    # so the scan below reads the operators itself.
+    #
+    # DELIBERATELY CONSERVATIVE — it skips rather than guesses, because a FALSE
+    # POSITIVE here rejects a valid migration. It ignores a `<<` that is inside
+    # an odd number of preceding quotes on its line (`echo "a << b"`), one
+    # inside a `$((...))` span (`x=$((1<<2))`), and a `<<<` herestring; and it
+    # only accepts an unquoted delimiter matching ^[A-Za-z_][A-Za-z0-9_]*$. A
+    # quoted delimiter (`<<'EOF'`, `<<"EOF"`) may be anything non-empty. The
+    # terminator must match exactly at column 1 for `<<`, and after leading
+    # tabs for `<<-`, which is what bash itself requires. Each narrowing is a
+    # possible missed detection, not a possible false accusation, and L9 is
+    # what covers the tagged-fence truncation case independently of this scan.
+    heredoc="$(printf '%s\n' "$body" | awk '
+      function quoted(line, upto,   i, c, sq, dq) {
+        sq = 0; dq = 0
+        for (i = 1; i < upto; i++) {
+          c = substr(line, i, 1)
+          if (c == "\\") { i++; continue }
+          if (c == "'"'"'" && dq == 0) sq = 1 - sq
+          else if (c == "\"" && sq == 0) dq = 1 - dq
+        }
+        return (sq || dq)
+      }
+      function in_arith(line, upto,   pre, n, m) {
+        pre = substr(line, 1, upto - 1)
+        n = gsub(/\$\(\(/, "&", pre)
+        m = gsub(/\)\)/, "&", pre)
+        return (n > m)
+      }
+      # Inside a heredoc body: consume until the pending terminator matches.
+      npend > 0 {
+        cand = $0
+        if (dash[1]) sub(/^\t+/, "", cand)
+        if (cand == delim[1]) {
+          for (k = 1; k < npend; k++) { delim[k] = delim[k+1]; dash[k] = dash[k+1] }
+          npend--
+        }
+        next
+      }
+      {
+        line = $0
+        i = 1
+        while (1) {
+          p = index(substr(line, i), "<<")
+          if (p == 0) break
+          abs = i + p - 1
+          if (substr(line, abs, 3) == "<<<") { i = abs + 3; continue }
+          if (quoted(line, abs) || in_arith(line, abs)) { i = abs + 2; continue }
+          rest = substr(line, abs + 2)
+          d = 0
+          if (substr(rest, 1, 1) == "-") { d = 1; rest = substr(rest, 2) }
+          sub(/^[ \t]+/, "", rest)
+          q = substr(rest, 1, 1)
+          w = ""
+          if (q == "'"'"'" || q == "\"") {
+            e = index(substr(rest, 2), q)
+            if (e > 0) w = substr(rest, 2, e - 1)
+          } else if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) {
+            w = substr(rest, RSTART, RLENGTH)
+          }
+          if (w == "") { i = abs + 2; continue }
+          npend++; delim[npend] = w; dash[npend] = d
+          i = abs + 2
+        }
+      }
+      END { if (npend > 0) print delim[1] }
+    ')"
+    if [ -n "$heredoc" ]; then
+      report "L10: step $s: role '$r' opens a heredoc delimited by '$heredoc' that is never terminated in the captured body — running it writes a partial payload and still exits 0"
     fi
   done
 done
@@ -406,6 +644,107 @@ done < <(awk '
     next
   }
   infence && index($0, "```") == 1 { infence = 0; next }
+  infence { next }
+  index($0, "### Step ") == 1 {
+    rest = substr($0, 10); n = ""
+    for (i = 1; i <= length(rest); i++) {
+      c = substr(rest, i, 1)
+      if (c >= "0" && c <= "9") n = n c; else break
+    }
+    if (n != "") curstep = n + 0
+    next
+  }
+' "$DOC")
+
+# L9 — a TAGGED fence must not be terminated by a line that is itself a fence
+# OPENER, i.e. a "```" line carrying a non-empty info string.
+#
+# THE DEFECT THIS CLOSES. extract.sh's mr_block ends its capture on ANY line
+# whose first three characters are three backticks. A heredoc body containing
+# such a line therefore ends the apply block THERE, silently. §08 already
+# mandates heredoc-awareness for `### Step` headings and was silent on the
+# identical hazard for fences. Reproduced RED against the real CLI on
+# 0039-patch-claude-md.md — an in-scope migration whose apply is
+# `cat >> CLAUDE.md <<'EOF'` … containing a nested ```bash fence … `EOF`:
+#   $ lint-migration.sh --host claude-workflow 0039-patch-claude-md.md ; echo $?
+#   0
+#   $ run-migration.sh --host claude-workflow 0039-patch-claude-md.md wd
+#   step 1: applied            (rc 0)
+#   $ cat wd/CLAUDE.md         # only the truncated prefix
+#   $ run-migration.sh ... wd  # step 1: skipped (already applied)
+# The step's own idempotency check then MATCHES the truncated output, so the
+# migration permanently self-certifies as done. Every existing guard passes it:
+# L1 reads the role from the OPENING line, L7 balances (the inner fence closes
+# and the real closer re-opens), L8 sees a non-empty body, the runner's
+# zero-apply pre-flight sees a non-empty body, and `bash -c` on an unterminated
+# heredoc writes the partial payload and exits 0. This is not theoretical: 6 of
+# the 73 migrations in the fleet today already emit a three-backtick line from
+# inside a heredoc, which is this fleet's normal idiom for patching CLAUDE.md
+# and skill files.
+#
+# WHY THIS FORMULATION, AND NOT "the body's last line opens a fence". The
+# nested fence line is CONSUMED as the closer — it never appears in the
+# captured body at all (0039's body ends at "## Running the suite"), so a rule
+# phrased over the body's last line does not fire on the very case it was
+# proposed for. Verified by extracting 0039's apply block directly. The
+# observable that actually distinguishes truncation is the TERMINATOR: a
+# CommonMark closing fence may not carry an info string, so a "```" line with
+# one is never a legitimate closer, and a tagged fence closed by one is
+# definitively truncated. That makes this lexical, exact, and free of false
+# positives — no shell parsing, no heuristics. L10 above covers the residue
+# this cannot see (a truncating BARE "```", or a mistyped terminator) by
+# detecting the unterminated heredoc such a truncation leaves behind.
+#
+# THERE IS NO ESCAPE VIA A FOUR-BACKTICK OUTER FENCE, so this rule does not
+# forbid something the format otherwise permits. Verified:
+#   $ printf '### Step 1: x\n\n**Apply:**\n````bash role=apply\necho hi\n````\n' > probe4.md
+#   $ extract.sh roles probe4.md 1
+#   (no output)
+# — `substr($0,4)` on a four-backtick opener starts with a backtick, so the
+# info string fails the `^bash[ \t]+role=[a-z]+$` grammar and the fence carries
+# no role at all. The documented escapes are to indent the nested fence or to
+# emit it via `printf '%s\n' '```bash'`; both are in the README.
+#
+# SCOPED TO TAGGED FENCES ON PURPOSE, and the two cases that scoping leaves
+# alone were BOTH constructed and run rather than reasoned about:
+#
+#   - An illustration fence containing an EVEN number of nested fence lines
+#     (``` ```markdown / ```bash / ``` / ``` ```) re-synchronises the state
+#     machine by the time the illustration ends: every tagged fence after it
+#     parses correctly and the document lints clean at rc 0 — verified. Its
+#     content is never executed, so nothing silent happens. Reporting it would
+#     be a false accusation.
+#   - An ODD number desynchronises the rest of the document, and that is loud,
+#     not quiet — verified on the same shape with one fence line removed:
+#       L1: step 1: missing required role 'check'   (and precondition, apply,
+#       rollback)
+#       L7: step 1: fence opened at line 39 ... is never closed
+#     Four L1s and an L7 is not a document anyone ships by accident.
+#
+# Widening this rule to every fence would also reject a legitimate
+# four-backtick illustration block, which nothing else in this format forbids.
+while IFS= read -r line; do
+  [ -n "$line" ] && report "$line"
+done < <(awk '
+  !infence && index($0, "```") == 1 {
+    infence = 1
+    openinfo = substr($0, 4); sub(/[ \t]+$/, "", openinfo)
+    opentagged = (openinfo ~ /^bash[ \t]+role=[a-z]+$/)
+    openrole = openinfo; sub(/^bash[ \t]+role=/, "", openrole)
+    openline = NR
+    openstep = (curstep == "" ? "0" : curstep)
+    next
+  }
+  infence && index($0, "```") == 1 {
+    infence = 0
+    closeinfo = substr($0, 4); sub(/[ \t]+$/, "", closeinfo)
+    if (opentagged && closeinfo != "") {
+      printf "L9: step %s: role %c%s%c fence opened at line %d is terminated by a nested fence line at line %d (info string: %s) — its body is truncated there\n", \
+        openstep, 39, openrole, 39, openline, NR, closeinfo
+    }
+    opentagged = 0
+    next
+  }
   infence { next }
   index($0, "### Step ") == 1 {
     rest = substr($0, 10); n = ""

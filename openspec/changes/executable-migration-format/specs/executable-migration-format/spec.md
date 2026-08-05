@@ -136,22 +136,128 @@ rather than "was examined and happened not to notice."
 - **THEN** the format linter SHALL report a violation naming the step and the line the fence opened on
 - **AND** SHALL exit non-zero, even though every role the step requires appears to be present
 
-### Requirement: A tagged fence's body SHALL NOT be empty or whitespace-only
+### Requirement: A tagged fence's body SHALL contain an executable statement
 
-The format linter SHALL reject a role-tagged fence whose captured body is
-empty or contains only whitespace, for any of the five roles.
+The format linter SHALL reject a role-tagged fence whose captured body
+contains no executable statement, for any of the five roles. A body has no
+executable statement when nothing remains after discarding blank lines,
+whole-line `#` comments, and whole-line no-op builtins (`:`, `true`).
 
-`bash -c ''`, and a fence containing only blank lines, exits 0. The
-three-valued `check` contract reads exit 0 as "already applied," so a
-tagged-but-empty `check` fence makes a runner report a step skipped and apply
-nothing on a tree where nothing was ever applied — the same silent-no-op
-class an un-annotated fence produces, one layer further in: this fence *is*
-tagged, and still does nothing. An empty `precondition` passes just as
-vacuously, for the same reason.
+`bash -c` exits 0 on every one of those: on `''`, on blank lines, on a body of
+nothing but comments, and on a bare `:`. The three-valued `check` contract
+reads exit 0 as "already applied," so a `check` fence in any of those states
+makes a runner report a step skipped and apply nothing on a tree where nothing
+was ever applied — the same silent-no-op class an un-annotated fence produces,
+one layer further in: this fence *is* tagged, and still does nothing. An
+`apply` in the same state is attempted and vacuous; a `precondition` passes
+just as emptily.
+
+The comment case is the one that matters in practice, because it is what a
+leftover placeholder looks like — `# TODO: check whether the allowlist is
+already hardened` — and it is one character past a test for "empty or
+whitespace-only." The `check` variant is strictly worse than the `apply`
+variant: the step is never attempted at all rather than attempted and
+vacuous.
+
+A bare `:` or `true` is counted as non-executable **only as an entire body**.
+Both appear legitimately inside larger bodies (`while :; do`, `: "${VAR:?}"`)
+and SHALL NOT be rejected there.
 
 #### Scenario: A tagged-but-empty check is rejected
 - **WHEN** a step's `check` fence is opened as ` ```bash role=check ` and its body is empty
 - **THEN** the format linter SHALL report a violation naming the step and the role
+- **AND** SHALL exit non-zero
+
+#### Scenario: A check fence containing only a comment is rejected
+- **WHEN** a step's `check` fence contains a single `# TODO:` line and nothing else
+- **THEN** the format linter SHALL report a violation naming the step and the role
+- **AND** SHALL exit non-zero
+- **AND** the runner SHALL NOT report the step as skipped (already applied)
+
+#### Scenario: A fence whose whole body is a no-op builtin is rejected
+- **WHEN** a step's `check` fence contains only the line `:`
+- **THEN** the format linter SHALL report a violation and exit non-zero
+
+#### Scenario: A no-op builtin inside a larger statement is accepted
+- **WHEN** a step's `check` fence contains `while :; do break; done`
+- **THEN** the format linter SHALL NOT report a violation for that fence
+
+### Requirement: A fence delimiter emitted from inside a block SHALL be rejected
+
+A block's captured body ends at its fence's closing delimiter. The format
+linter SHALL therefore reject a role-tagged fence whose body is truncated by a
+fenced-code-block delimiter emitted from within it. At minimum it SHALL reject
+a tagged fence whose terminating delimiter line carries a non-empty info
+string — a closing fence may not carry one, so such a line is never a
+legitimate terminator — and a tagged fence whose captured body leaves a
+heredoc unterminated.
+
+This is the same hazard the `### Step` heading rule already closes, for the
+fence delimiters themselves. A heredoc writing a ` ```bash ` line into a
+markdown file is the ordinary way a migration patches an instruction file or a
+skill. The truncated body still runs and still succeeds — an unterminated
+heredoc writes its partial payload and exits 0 — so the runner reports the
+step applied, and the step's own idempotency check then matches the truncated
+output, which makes the migration permanently self-certify as done. Nothing
+about this is visible to role-presence, fence-balance, or emptiness checks: the
+role is read from the opening line, the fences balance because the inner one
+closes and the real closer re-opens, and the truncated body is not empty.
+
+A four-backtick outer fence is not an escape, because the info-string grammar
+requires the literal `bash` immediately after the delimiter and a four-backtick
+opener does not satisfy it. A migration SHALL instead emit such a line
+indirectly (`printf '%s\n' '```bash'`) or indent it by up to three spaces,
+which keeps the emitted block a valid fenced block while moving the delimiter
+off column 1.
+
+#### Scenario: A heredoc emitting a fence delimiter is rejected
+- **WHEN** a step's `apply` block opens a heredoc whose body contains a line beginning with a fenced-code-block delimiter and an info string
+- **THEN** the format linter SHALL report a violation naming the step, the role, and the truncating line
+- **AND** SHALL exit non-zero
+- **AND** the runner SHALL NOT execute the truncated body
+
+#### Scenario: An unterminated heredoc is rejected even with no fence involved
+- **WHEN** a step's `apply` block opens a heredoc whose terminator never appears in the captured body
+- **THEN** the format linter SHALL report a violation and exit non-zero
+
+#### Scenario: A correctly terminated heredoc is accepted
+- **WHEN** a step's `apply` block opens a heredoc whose body contains the line `### Step 2` and whose terminator is present
+- **THEN** the format linter SHALL NOT report a violation for that fence
+
+### Requirement: An in-scope migration SHALL declare at least one step
+
+The format linter SHALL reject an in-scope migration that declares no `### Step`
+heading.
+
+§08 has always required every migration body to contain at least one step, and
+a runner is separately required to refuse a zero-step document. Leaving the
+check to the runner alone is not sufficient: an adopting host is required to
+run the **linter** in CI, and CI does not run the runner — so a document that
+cannot run would leave that CI green. A step heading typed at the wrong level
+(`## Step 1:` for `### Step 1:`) is the ordinary way a migration ends up with
+no steps, and it produces a document that lints clean and refuses to run.
+
+#### Scenario: A migration with no step heading fails the linter
+- **WHEN** an in-scope migration's only step heading is written `## Step 1:`
+- **THEN** the format linter SHALL report a violation and exit non-zero
+- **AND** the runner SHALL refuse to execute it
+
+### Requirement: An in-scope migration SHALL declare `applies_to`
+
+The format linter SHALL reject an in-scope migration whose frontmatter omits
+`applies_to`. Only the field's presence SHALL be checked; which paths an
+`apply` block actually writes to remains unenforceable and is stated elsewhere
+as an author obligation.
+
+At or above the threshold `applies_to` is the write boundary an `apply` block
+may not cross, not merely plan-output metadata. A boundary that can be omitted
+entirely is not a boundary: with no `applies_to` at all, the permitted write
+set is undefined and every statement about what that migration's rollback owes
+the working tree is vacuous.
+
+#### Scenario: A missing applies_to is a violation
+- **WHEN** an in-scope migration's frontmatter carries no `applies_to` field
+- **THEN** the format linter SHALL report a violation naming the missing field
 - **AND** SHALL exit non-zero
 
 ### Requirement: A runner refuses a migration that would do nothing
@@ -271,6 +377,14 @@ every migration runnable. That reopens the silent-no-op hole one layer down.
 - **WHEN** the linter is invoked with no host and no threshold
 - **THEN** it SHALL exit non-zero reporting that no threshold could be resolved
 - **AND** SHALL NOT report the migration as clean
+
+The linter is invoked per migration file. A host wiring it into CI SHOULD
+enumerate migrations as `migrations/[0-9]*.md` rather than `migrations/*.md`,
+because an ID-less filename is a MUST-report violation with no carve-out and
+`migrations/` is also the conventional home of a `migrations/README.md`. The
+narrower glob is the fix; a `README.md` exemption inside the linter is not,
+since "an unreadable ID is never a quiet route out of scope" would then have a
+named exception a migration could be renamed into.
 
 #### Scenario: An unparseable filename is a violation
 - **WHEN** the linter is invoked against a file whose name carries no leading numeric ID
