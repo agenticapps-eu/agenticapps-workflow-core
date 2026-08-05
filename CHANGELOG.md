@@ -20,6 +20,58 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**`spec/12-authoring-conventions.md` 0.10.0 → 0.11.0 — minor. `AGENTS.md`
+carries one host-neutral workflow section, whatever the agent count.** §12
+gains a "Shared instruction files across hosts" subsection. Each host's setup
+skill appends its own block to `AGENTS.md` without looking to see whether
+another host already has, so a project with two hosts gets two near-duplicate
+copies that then drift. With one host installed the flaw is invisible, which is
+why the fleet was conformant by accident rather than by rule.
+
+**Conformance impact — MUST-level, and hosts writing `AGENTS.md` are
+affected.** A host implementation must now: carry at most one workflow section,
+and exactly one whenever an agent is provisioned; check for the marker before
+appending and not append a second block; keep host-specific detail in its own
+directory (`.codex/`, `.opencode/`, `.pi/`); write no host-specific content into
+the shared file beyond one frontmatter entry `agents: {<id>: <path>}` pointing
+at its own file, outside the markers, with a repository-relative path; delimit
+the section with the exact marker strings the section now states; converge from
+a partial provision instead of reporting a no-op; on removal delete only what it
+provisioned and remove the directory only if it empties; carry a section content
+version and offer an update when the repo's section is older; and treat
+`CLAUDE.md` as out of scope. A duplicate section is reported with line ranges,
+never collapsed — the copies have drifted and the file records no provenance to
+choose between them, so a report is not required to name which host wrote one.
+A host identifier inside the section body is a warning, not a failure, drawn
+from an enumerated denylist, and the per-agent entries are exempt.
+
+**Six of these requirements came from the first plan review** (gemini, codex and
+opencode, all REQUEST-CHANGES) and each fixed a contradiction the section
+shipped with rather than adding scope. The marker literal was named only in the
+design narrative, so a host implementing from the spec alone would have had to
+invent it. Removal both deleted the agent's directory and preserved tool-owned
+state inside it. Provisioning treated a directory without an entry as "already
+present", so a half-provisioned repo could never converge. The denylist was
+normative with its contents deferred, which would have let two hosts ship
+different lists and both claim conformance. And the section had no update path:
+first-writer-wins plus the byte-identical rule meant a repo provisioned from a
+template citing GSD would cite it forever — the same drift this section exists
+to stop, one level up. Concurrent provisioning is recorded as an accepted
+limit.
+
+These are MUSTs where the rest of §12 is SHOULDs. The distinction is the
+failure mode: a host that appends a second block damages a file every *other*
+agent reads, and the damage stays invisible until a second host arrives.
+
+Two findings from the source material are folded into the text rather than
+carried as rationale elsewhere. The marker was never the problem — all three
+live host templates already write the same host-neutral marker
+(`agentic-apps-workflow sections`), so hosts collide *because* the name is
+shared and none looks first; a rename would fix nothing, and the shared name is
+also why a duplicate cannot be merged mechanically. And the host-specific
+surface is four values, not the three previously assumed: the host directory,
+the binding repo, the invocation syntax, and the trigger-skill install root.
+
 **Spec 1.4.0 → 1.5.0 — minor. §18's review clause becomes reported, not
 enforced.** The spec now describes the gate that shipped. Gate 2.0.0 withdrew
 blocking on review state; §18 and §17 were not swept for it, so core's own

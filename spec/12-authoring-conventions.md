@@ -1,7 +1,7 @@
 ---
 id: 12-authoring-conventions
 section_type: declarative-contract
-spec_version: 0.10.0
+spec_version: 0.11.0
 ---
 
 # 12 — Authoring Conventions
@@ -153,6 +153,210 @@ than buried among procedure. `claude-workflow`'s `CLAUDE.md` — §11 plus
 a trigger-skill pointer, with the gate table, routing, ritual tail, and
 session-handoff procedure in `skill/SKILL.md` — is the reference shape.
 
+### Shared instruction files across hosts
+
+The economy requirement above governs what belongs in an always-loaded
+file. This requirement governs a property that only appears once a
+project has more than one agent: `AGENTS.md` is read by *every* agent
+that opens the repo, and each host's setup skill has historically
+appended to it without looking to see whether another host already had.
+
+This applies to the shared instruction file — `AGENTS.md` or a host
+runtime's equivalent shared file. It does **not** apply to `CLAUDE.md`;
+see "The Claude file is out of scope" below.
+
+**One section, whatever the agent count.** A project's shared
+instruction file **MUST** carry at most one AgenticApps workflow
+section, regardless of how many agents are provisioned, and **MUST**
+carry exactly one whenever at least one agent is provisioned. A repo
+with no agents may legitimately carry no section; a repo that lists an
+agent and carries none is broken, because its agents are pointed at a
+workflow the file does not describe. The section **MUST** be
+host-neutral: it describes the workflow, not the agent reading it. A
+second copy is not additional information — it is the same instruction
+stated twice, and the two copies drift.
+
+**The markers are these exact strings:**
+
+```
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- END: agentic-apps-workflow sections -->
+```
+
+The literals are normative. A contract meant to be machine-checkable by
+a host repo without core executing it cannot leave the one string
+detection depends on unstated — a host implementing from this section
+alone would have to invent it, and two hosts inventing separately
+recreates the duplication. This is not a new marker: all three live
+host templates already write exactly it.
+
+**A host checks before it appends.** A host implementation **MUST**
+look for the section marker before writing, and **MUST NOT** append a
+second block when one is present. This — not the marker's name — is the
+requirement that prevents the duplicate state. All hosts already write
+the same host-neutral marker, so two hosts collide precisely because
+the name is shared and neither host looks first. It is also why a
+duplicate cannot be resolved mechanically: with both blocks carrying an
+identical marker, nothing in the file records which host wrote which,
+so the provenance needed to choose between them is absent.
+
+**A duplicate is reported, never collapsed.** A tool that finds more
+than one section **MUST** report every block found, with its line
+range, and **MUST NOT** silently merge or discard any of them. Observed
+duplicates had drifted, so merging means choosing between two variants
+on evidence the file does not contain — and because every host writes
+the same marker, the file records no provenance either, so a report
+**MUST NOT** be required to name which host wrote a given block.
+
+**Removal deletes what it provisioned, and the directory only if it
+empties.** An agent's provisioned state **MUST** be confined to that
+agent's own directory, so removal is bounded to one directory rather
+than a search. Within it, removal **MUST** delete the files the
+workflow provisioned and **MUST** then remove the directory only if it
+is empty, leaving anything else in place and naming it in the report. A
+file it cannot attribute to its own provisioning **MUST** be preserved
+and reported, not deleted. This ordering is what reconciles "removal is
+one directory, not a search" with "tool-owned state is reported, not
+deleted": in the ordinary case nothing else is there and removal is a
+single directory deletion; where an agent's own CLI manages state — a
+`package.json`, a `node_modules` — the directory survives because that
+state is still in it. Defaulting the unattributable case to preserve is
+what makes working without a manifest safe: a stray file left behind is
+reported and recoverable, a wrongly deleted one is not.
+
+**Provisioning converges from a partial state.** An agent is fully
+present when its directory exists, its entry is in the shared file, and
+the section is present. Provisioning **MUST** add whatever is missing
+and **MUST** report a no-op only when all of it was already there.
+Treating the directory's existence as sufficient makes a
+half-provisioned repo permanent — the directory is found, "already
+present" is reported, and the missing entry is never added by any number
+of re-runs.
+
+**Host-specific detail lives in the host's own directory.** Everything
+that genuinely differs between agents **MUST** live in that agent's own
+directory (`.codex/`, `.opencode/`, `.pi/` or equivalent), not in the
+shared file. The measured surface is four values — the host directory,
+the binding repo, the invocation syntax for skills and prompts, and the
+trigger-skill install root. Content beyond roughly that scope crossing
+into a host directory is a signal that something shared has been pushed
+somewhere other agents cannot reach it.
+
+**A link per agent is the only host-specific content in the shared
+file.** A host implementation **MUST NOT** write host-specific content
+into the shared file other than one link per installed agent, pointing
+at that agent's own file. The links **MUST** be carried as a
+frontmatter list keyed by agent identifier, whose value is the path to
+that agent's file:
+
+```yaml
+---
+agents:
+  codex: .codex/AGENTS.md
+  pi: .pi/AGENTS.md
+---
+```
+
+Each value **MUST** be a path. A bare identifier records what is
+installed but not where its instructions are, which leaves an agent
+reading the shared file with no route to its own.
+
+The frontmatter **MUST** sit at the top of the file, **outside** the
+marker-delimited section. The two are disjoint surfaces: the section
+carries host-neutral prose and never changes when an agent is added or
+removed; the frontmatter carries the per-agent entries and changes on
+exactly those operations. Entries placed inside the markers would make
+"the section is byte-identical before and after" unsatisfiable on the
+first second agent, so the two requirements would contradict each other.
+Merging the `agents:` key into pre-existing frontmatter **MUST**
+preserve every other key.
+
+Each value **MUST** be a repository-relative path resolving inside that
+agent's own directory. An absolute path, a `..` traversal, a URL, a
+path resolving outside the repository, or a duplicate agent identifier
+**MUST** be reported as a violation. These paths are consumed by tooling
+that deletes and by agents that read: one that escapes the repository
+turns removal into deletion of something never provisioned, and an
+absolute path embeds the machine's layout — a home directory carries a
+username — into a committed file.
+
+Because the entries share one frontmatter block, adding or removing an
+entry rewrites that block. Another agent's entry being "unchanged"
+therefore means its identifier and path are unchanged, not that its
+bytes were untouched.
+
+**The section carries a content version.** A host provisioning into a
+repo whose section is older than the one it ships **MUST** report that
+the section is out of date and **MUST** update it only with the
+operator's acceptance. Without this, the first host to provision fixes
+the workflow prose permanently: adding an agent is a no-op once present,
+and the byte-identical rule forbids a later host rewriting the section,
+so a repo provisioned from a template citing a since-deleted system goes
+on citing it with no supported operation able to repair it. That is this
+same problem one level up — two drifting copies replaced by one copy
+that can never move.
+
+**The section is written once and outlives the agents.** The
+host-neutral section **MUST** be written when the first agent is
+provisioned and **MUST NOT** be removed when the last agent leaves;
+only the departing agent's entry goes. Removal would be symmetric, and
+symmetry is the wrong goal: a repo that briefly has no agent would lose
+documentation it is about to want back, and re-provisioning would have
+to reconstruct prose that was never any agent's to own.
+
+**The section is delimited and machine-removable.** The section
+**MUST** be enclosed in begin and end markers, and tooling **MUST** be
+able to locate and remove it by those markers alone, without depending
+on heading text, ordering, or any wording inside it. Removing the
+section **MUST** leave every byte outside the markers unchanged.
+Removing two host blocks from a real project was mechanical only
+because those hosts happened to write markers; nothing required it, so
+nothing guaranteed it for the next host.
+
+**A host identifier inside the section is a warning.** A tool checking
+for host neutrality **SHOULD** report a known host identifier found
+inside the section body at warning severity, and **MUST NOT** fail on
+it. The denylist **MUST** contain at least `codex`, `opencode`,
+`claude`, and the binding repo names `codex-workflow`,
+`opencode-workflow`, `claude-workflow`,
+`pi-agentic-apps-workflow`; an implementation **MAY** extend it and
+**MUST NOT** shrink it. Enumerating it is what makes the requirement
+implementable — "known host identifiers" with the list left open lets
+two hosts ship different denylists and both claim conformance, which is
+the drift this subsection exists to prevent appearing inside its own
+check.
+
+The bare identifier `pi` is deliberately excluded: two letters match
+"pipeline", "typing" and most prose containing them, so it would fire on
+ordinary text far more often than on a host reference. The consequence
+is concrete — a section reading "on the Pi host" is not caught.
+
+A host whose identifier is not on the list cannot be detected at all,
+and because the set of hosts is expected to change, that is the normal
+case for any new host rather than an edge case. A denylist is a lower
+bound on detection, and a lower bound must not be the thing that blocks;
+that is the principal reason this check warns. The per-agent entries
+**MUST** be exempt — they are host-specific by design, and a check that
+flagged them would fire on the one thing this requirement permits. A
+check scoped to the section body satisfies the exemption structurally,
+since the frontmatter is outside the markers.
+
+**Stated residual — concurrent provisioning is not addressed.** Two
+hosts provisioning at the same time both read the file, both find no
+section, and both write one; the read-modify-write is not atomic and
+this subsection specifies no locking. It is a narrow window, and the
+result is a duplicate section, which is detected and reported rather
+than silent — so it degrades into the state this subsection already
+handles rather than into corruption. Recorded as a known limit rather
+than papered over.
+
+**The Claude file is out of scope.** `CLAUDE.md` is **NOT** subject to
+any requirement in this subsection, and the absence of markers in it
+**MUST NOT** be reported as a violation. Claude is its only reader, so
+there is no second agent to coordinate with and nothing to
+deduplicate. A marker convention there would carry cost against no
+corresponding failure mode.
+
 ## Illustrative example (non-normative)
 
 The following before/after is illustrative; it is not a normative
@@ -202,8 +406,32 @@ arises) that the diagram cannot encode.
 
 ## Conformance
 
-A host implementation claiming conformance with spec version 0.10.0:
+A host implementation claiming conformance with spec version 0.11.0:
 
+- **MUST** carry at most one workflow section in the shared instruction
+  file, check for the marker before appending, keep host-specific
+  detail in the host's own directory, and write no host-specific
+  content into the shared file beyond its own frontmatter agent entry
+  (see "Shared instruction files across hosts"). These are MUST-level:
+  a host that appends a second block is non-conformant against this
+  section, not merely below its SHOULDs.
+- **MUST** delimit the section with the exact marker strings given
+  above, so it can be located and removed without reading its prose,
+  leaving every byte outside the markers unchanged.
+- **MUST** carry exactly one section whenever an agent is provisioned,
+  keep the agent frontmatter outside the markers, and reject an entry
+  path that is absolute, traverses upward, or resolves outside the
+  repository.
+- **MUST** converge from a partial provision rather than reporting a
+  no-op, and on removal delete only what it provisioned, removing the
+  directory only if it empties.
+- **MUST** carry a section content version and offer — not apply — an
+  update when the repo's section is older than the one it ships.
+- **MUST NOT** apply any requirement in that subsection to `CLAUDE.md`,
+  or report its lack of markers as a violation.
+- **SHOULD** report a known host identifier inside the section body at
+  warning severity, using at least the enumerated denylist, exempting
+  the per-agent entries, and MUST NOT fail on it.
 - **MUST** satisfy the "Branchy workflows" SHOULD-level convention in
   every host SKILL.md, AGENTS.md, or contract spec file it newly
   authors at or after 0.4.0 adoption. Existing files MAY be converted
@@ -227,6 +455,14 @@ A host that ships a new branchy workflow as prose-only at or after
 0.10.0, is non-conformant against this section's SHOULDs, but is not
 non-conformant against the overall spec — SHOULD-level requirements
 move the host above the minimum bar but do not break conformance.
+
+The shared-instruction-file requirements added at 0.11.0 are the
+exception, and are stated as MUSTs deliberately. Their failure mode is
+not a host falling below a quality bar on its own surface: a host that
+appends a second block damages a file every *other* agent reads, and
+the damage is invisible until a second host arrives. A SHOULD would
+leave the one rule whose violation is another host's problem
+unenforceable.
 
 ## References
 
