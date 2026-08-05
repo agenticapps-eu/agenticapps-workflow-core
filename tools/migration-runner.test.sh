@@ -1218,8 +1218,23 @@ echo "== lint-migration.sh: L9/L10 — a fence line inside a heredoc truncates a
 # Every existing guard passed it: L1 reads the role from the OPENING line, L7
 # balances, L8 sees a non-empty body, the runner's zero-apply pre-flight sees a
 # non-empty body, and `bash -c` on an unterminated heredoc writes the partial
-# payload and exits 0. This is not theoretical — 6 of the 73 migrations in the
-# fleet today already emit a three-backtick line from inside a heredoc.
+# payload and exits 0.
+#
+# WHAT THE FLEET ACTUALLY LOOKS LIKE, MEASURED. An earlier version of this
+# comment said "6 of the 73 migrations in the fleet today already emit a
+# three-backtick line from inside a heredoc". That number was relayed from a
+# review and never measured; it is wrong. Counted directly across all four
+# hosts' migrations/ directories — 73 numbered migrations (claude-workflow 34,
+# codex-workflow 16, opencode-workflow 12, pi-agentic-apps-workflow 11):
+#   - 7 use a heredoc at all inside a fenced body;
+#   - 0 emit a three-backtick line from inside a heredoc;
+#   - 0 emit a three-backtick line into a file by any means. (Three documents
+#     contain a three-backtick sequence inside a fenced body, but each is a
+#     regex or a prose comment — `/^```/ { fence = !fence }` and the like —
+#     never emitted output.)
+# L9 and L10 are justified by the constructed vulnerability below, which is
+# real, executed, and committed as a fixture. They are not justified by the
+# idiom being common, because on today's fleet it is not.
 out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0052-bad-l9-heredoc-fence.md" 2>&1)"
 assert_eq "$?" "1" "L9: a tagged fence truncated by a nested fence line exits 1"
 assert_contains "$out" "L9: step 1: role 'apply' fence opened at line" "L9: names the rule, the step and the role"
@@ -1294,8 +1309,8 @@ mr_l10_probe() { # $1=apply body to substitute (may be multi-line)  $2=descripti
   awk -v f="$dir/repl.txt" '
     /^printf .root = true/ { while ((getline l < f) > 0) print l; close(f); next }
     { print }
-  ' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0063|" > "$dir/0063-l10-probe.md"
-  out="$(bash "$MR/lint-migration.sh" --threshold 16 "$dir/0063-l10-probe.md" 2>&1)"
+  ' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0090|" > "$dir/0090-l10-probe.md"
+  out="$(bash "$MR/lint-migration.sh" --threshold 16 "$dir/0090-l10-probe.md" 2>&1)"
   rc=$?
   assert_eq "$rc" "0" "L10 false-positive guard: $2 — lints clean"
   assert_eq "$out" "" "L10 false-positive guard: $2 — reports nothing"
@@ -1322,38 +1337,198 @@ printf '%s\n' 'cat <<EOF > .editorconfig' 'root = true' > "$probe_dir/repl.txt"
 awk -v f="$probe_dir/repl.txt" '
   /^printf .root = true/ { while ((getline l < f) > 0) print l; close(f); next }
   { print }
-' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0064|" > "$probe_dir/0064-l10-control.md"
-out="$(bash "$MR/lint-migration.sh" --threshold 16 "$probe_dir/0064-l10-control.md" 2>&1)"
+' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0091|" > "$probe_dir/0091-l10-control.md"
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$probe_dir/0091-l10-control.md" 2>&1)"
 assert_eq "$?" "1" "L10 positive control: the same helper's substitution DOES fire on a real unterminated heredoc"
 assert_contains "$out" "L10: step 1: role 'apply' opens a heredoc delimited by 'EOF'" \
   "L10 positive control: and names it"
 rm -rf "$probe_dir"
 
 echo
-echo "== the two documented escapes for emitting a fence, executed end to end =="
+echo "== L10: the two holes the scoped re-review found, both directions asserted =="
+
+# A RULE THAT REJECTS A VALID MIGRATION IS AS BAD AS ONE THAT MISSES AN INVALID
+# ONE, so both directions are pinned here rather than only the detection.
+
+# ---- DIRECTION 1: 0061 MUST BE ACCEPTED ----------------------------------
+#
+# L10 did not skip whole-line comments, so it read a heredoc opener out of
+# PROSE. The worst case was a migration following this runner's own README:
+# emit the payload with `printf` instead of a heredoc, and say why in a
+# comment. RED against the real CLI before the fix:
+#   $ lint-migration.sh --threshold 16 0061-l10-comment-mentions-heredoc.md
+#   L10: step 1: role 'apply' opens a heredoc delimited by 'EOF' that is never
+#   terminated in the captured body — running it writes a partial payload and
+#   still exits 0
+#   $ echo $?
+#   1
+# Every substantive clause of that message was false: no heredoc is opened, nothing is unterminated, and no partial payload is written. Only the trailing "and still exits 0" is true, and it is true of the CORRECT behaviour — the body exits 0 having written the payload WHOLE. L8's scan in the same loop had
+# discarded full-line `#` comments since it was written; L10 now agrees.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0061-l10-comment-mentions-heredoc.md" 2>&1)"
+assert_eq "$?" "0" "L10 comment: a migration whose comment MENTIONS <<EOF lints clean"
+assert_eq "$out" "" "L10 comment: with no diagnostics at all — no false accusation"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+printf '# CLAUDE.md\n' > "$tmp/CLAUDE.md"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0061-l10-comment-mentions-heredoc.md" "$tmp" 2>&1)"
+assert_eq "$?" "0" "L10 comment: and it RUNS — the body was always valid bash"
+assert_contains "$out" "step 1: applied" "L10 comment: the step applied"
+assert_eq "$(cat "$tmp/CLAUDE.md")" "$(printf '%s\n' '# CLAUDE.md' '' '## Workflow')" \
+  "L10 comment: the payload was written WHOLE — nothing was ever truncated"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0061-l10-comment-mentions-heredoc.md" "$tmp" 2>&1)"
+assert_contains "$out" "step 1: skipped (already applied)" "L10 comment: and it is idempotent"
+rm -rf "$tmp"; trap - EXIT
+
+# The comment skip must NOT reach a heredoc PAYLOAD line that begins with `#` —
+# emitting a markdown heading is the ordinary reason a migration has one. The
+# heredoc-body branch runs before the comment skip, which is what keeps them
+# apart; 0031's payload is exactly that shape.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0031-heredoc-step-heading.md" 2>&1)"
+assert_eq "$?" "0" "L10 comment: a heredoc PAYLOAD line starting with # is still payload, not a comment"
+
+# ---- DIRECTION 2: 0062 AND 0063 MUST BE REJECTED -------------------------
+#
+# CRITICAL 1, REACHABLE AGAIN. bash 3.2 treats `<<\EOF` exactly like `<<'EOF'`,
+# but L10's delimiter parser accepted only `<<WORD`, `<<'W'` and `<<"W"`. And
+# L9 stays silent because the truncating line is a BARE ``` — which is what an
+# ordinary markdown fenced block is opened with. So NEITHER rule fired. RED,
+# against the real CLI, before the backslash fix:
+#   $ lint-migration.sh --threshold 16 0062-l10-backslash-bare-fence.md ; echo $?
+#   0
+#   $ run-migration.sh --host codex-workflow 0062-...md wd
+#   step 1: applied            (rc 0)
+#   $ cat wd/NOTES.md
+#   # Notes
+#   ## Running the suite       <- and NOTHING else
+#   $ run-migration.sh --host codex-workflow 0062-...md wd
+#   step 1: skipped (already applied)
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0062-l10-backslash-bare-fence.md" 2>&1)"
+assert_eq "$?" "1" "L10 backslash: a <<\\EOF heredoc truncated by a BARE fence exits 1"
+assert_contains "$out" "L10: step 1: role 'apply' opens a heredoc delimited by 'EOF'" \
+  "L10 backslash: names the rule, the step, the role and the delimiter"
+assert_not_contains "$out" "L9" \
+  "L10 backslash: and L9 is silent here — the truncating line is BARE, which is why L10 has to carry this case"
+
+# THE TRUNCATION IS REAL, not merely reported — anchored to extract.sh rather
+# than to L10's own message, exactly as 0052's assertions are.
+body="$(bash "$MR/extract.sh" block "$FIX/0062-l10-backslash-bare-fence.md" 1 apply)"
+assert_eq "$?" "0" "L10 backslash: extract.sh still returns a (truncated) body"
+assert_contains "$body" 'cat >> NOTES.md <<\EOF' "L10 backslash: the captured body does open the heredoc"
+assert_not_contains "$body" "bash tools/migration-runner.test.sh" \
+  "L10 backslash: and is genuinely truncated before the payload's own fenced command"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+printf '# Notes\n' > "$tmp/NOTES.md"
+out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0062-l10-backslash-bare-fence.md" "$tmp" 2>&1)"
+assert_eq "$?" "65" "L10 backslash: the runner refuses it at the lint gate"
+assert_not_contains "$out" "step 1: applied" "L10 backslash: and never reports the truncated apply as success"
+assert_eq "$(cat "$tmp/NOTES.md")" "# Notes" \
+  "L10 backslash: the truncated payload was never written — NOTES.md is byte-identical to before"
+rm -rf "$tmp"; trap - EXIT
+
+# THE SAME HOLE IN A ROLLBACK is a different consequence, not a smaller one:
+# the truncated body exits 0, so do_rollback records the rollback as having
+# SUCCEEDED and the operator is told the tree was restored by a block that
+# wrote a prefix of what it owed.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0063-l10-backslash-bare-rollback.md" 2>&1)"
+assert_eq "$?" "1" "L10 backslash: the same shape in a ROLLBACK block exits 1"
+assert_contains "$out" "L10: step 1: role 'rollback' opens a heredoc delimited by 'EOF'" \
+  "L10 backslash: and names the rollback role specifically"
+
+body="$(bash "$MR/extract.sh" block "$FIX/0063-l10-backslash-bare-rollback.md" 1 rollback)"
+assert_eq "$?" "0" "L10 backslash: the truncated rollback body extracts"
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+( cd "$tmp" && printf 'replaced\n' > NOTES.md && bash -c "$body" )
+assert_eq "$?" "0" \
+  "L10 backslash: the truncated rollback EXITS 0 — which is why the runner would report it as succeeded"
+assert_eq "$(cat "$tmp/RESTORE.md")" "# restored" \
+  "L10 backslash: having restored only a prefix — the fenced payload it owed is absent"
+rm -rf "$tmp"; trap - EXIT
+
+echo
+echo "== L8's residual: the rule rejects the provably inert, not the merely useless =="
+
+# STATED HONESTLY RATHER THAN CLOSED. L8 rejects a body with nothing left after
+# blank lines, whole-line `#` comments and the whole-line no-op builtins `:`
+# and `true` are discarded. That is a WHOLE-LINE LEXICAL test, and the bodies
+# below all get past it while accomplishing nothing on an untouched tree. They
+# are pinned here as ACCEPTED so that the limit is machine-checked and cannot
+# be quietly re-described as closed.
+#
+# THIS IS NOT A BUG LIST TO BURN DOWN. "Does this shell do anything?" is not
+# decidable by inspection, and widening the rule to chase these would start
+# rejecting real migrations — which is the failure mode 0061 above exists to
+# prevent. lint-migration.sh's L8 comment previously said stripping `true`
+# closed a hole that was otherwise "one keystroke away"; `true; true` is that
+# keystroke, and it is right here.
+mr_l8_residual() { # $1=check body  $2=description
+  local dir out rc
+  dir="$(mktemp -d)"
+  printf '%s\n' "$1" > "$dir/repl.txt"
+  awk -v f="$dir/repl.txt" '
+    /^test -f \.editorconfig$/ { while ((getline l < f) > 0) print l; close(f); next }
+    { print }
+  ' "$FIX/0060-first-migration.md" | sed "s|^id: 0060|id: 0092|" > "$dir/0092-l8-residual.md"
+  out="$(bash "$MR/lint-migration.sh" --threshold 16 "$dir/0092-l8-residual.md" 2>&1)"
+  rc=$?
+  assert_eq "$rc" "0" "L8 residual (ACCEPTED, documented limit): $2"
+  assert_eq "$out" "" "L8 residual: $2 — and L8 says nothing about it"
+  rm -rf "$dir"
+}
+mr_l8_residual 'true; true'   'two no-ops on one line are not a whole-line no-op'
+mr_l8_residual ':;:'          'two colons on one line likewise'
+mr_l8_residual '( : )'        'a no-op in a subshell likewise'
+mr_l8_residual 'exit 0'       'an explicit exit 0 is a real statement that does nothing'
+mr_l8_residual 'echo "checking whether the allowlist is hardened"' \
+                              'an echo that only NARRATES the check is a real statement'
+
+# The residual is a LIMIT, not an absence of a rule: the shapes L8 does reject
+# are still rejected. 0053/0054 are the committed guards for that, asserted
+# above; this is the boundary between them, stated in one place.
+out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0054-bad-l8-noop-builtin-check.md" 2>&1)"
+assert_eq "$?" "1" "L8 residual: a WHOLE-LINE no-op builtin is still rejected — the rule did not go away"
+
+echo
+echo "== the three documented escapes for emitting a fence, executed end to end =="
 
 # 0059 is the CONFORMANT counterpart to 0052: the same job — emit a fenced code
-# block into a file — written the two ways the README documents. This exists so
-# that "there is an escape" is an executed fact and not a claim, and so that
-# tightening L9/L10 is provably not a dead end for the fleet's normal idiom.
+# block into a file — written the three ways the README documents. This exists
+# so that "there is an escape" is an executed fact and not a claim, and so that
+# tightening L9/L10 is provably not a dead end for a migration that needs to
+# patch an instruction file.
+#
+# STEP 3 (`<<-` with a TAB-indented payload) WAS ADDED AFTER THE README ALREADY
+# SAID "TWO ESCAPES WORK". It is strictly better than step 2's indent escape on
+# both axes that matter — the emitted fence lands at column 1 (byte-exact,
+# where step 2 costs one leading space forever) and the migration's own source
+# keeps the nested fence off column 1, which is what the fence state machine
+# tests. It was found by trying it rather than by reasoning about it, which is
+# also how the README came to be wrong about the count.
 out="$(bash "$MR/lint-migration.sh" --threshold 16 "$FIX/0059-heredoc-fence-escape.md" 2>&1)"
-assert_eq "$?" "0" "escape: the printf and indented-heredoc forms lint clean"
+assert_eq "$?" "0" "escape: the printf, indented-heredoc and tab-stripped-heredoc forms lint clean"
 assert_eq "$out" "" "escape: with no diagnostics at all"
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 printf '# Notes\n' > "$tmp/NOTES.md"
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0059-heredoc-fence-escape.md" "$tmp" 2>&1)"
-assert_eq "$?" "0" "escape: both steps run to completion"
+assert_eq "$?" "0" "escape: all three steps run to completion"
 assert_contains "$out" "step 1: applied" "escape: the printf form applied"
 assert_contains "$out" "step 2: applied" "escape: the indented-heredoc form applied"
+assert_contains "$out" "step 3: applied" "escape: the tab-stripped-heredoc form applied"
 # BYTE-EXACT, not a substring probe. `assert_contains` shells out to `grep
 # -qF`, which treats a MULTI-LINE needle as a set of alternative single-line
 # patterns — so a multi-line "contains" check here would have passed on any ONE
 # of its lines and silently stopped proving the block was emitted whole. The
 # whole file is compared instead: step 1's printf form reproduces the payload
-# byte-for-byte with the fence at column 1, and step 2's indented-heredoc form
+# byte-for-byte with the fence at column 1, step 2's indented-heredoc form
 # costs exactly one leading space (below CommonMark's three-space limit, so the
-# emitted block still renders as a fenced block).
+# emitted block still renders as a fenced block), and step 3's `<<-` form
+# reproduces it byte-for-byte with the fence at column 1 like step 1 does.
+#
+# THIS ASSERTION IS ALSO THE GUARD ON STEP 3'S TABS. `<<-` strips leading TABS
+# only; spaces survive verbatim. If anything ever converts 0059's tabs to
+# spaces, step 3 stops being an escape and becomes 0052's defect, and the
+# ' ```text'-style leading whitespace shows up here as an inequality.
 expected_notes="$(printf '%s\n' \
   '# Notes' \
   '' \
@@ -1367,17 +1542,27 @@ expected_notes="$(printf '%s\n' \
   '' \
   ' ```text' \
   ' payload' \
-  ' ```')"
+  ' ```' \
+  '' \
+  '## Dash escape' \
+  '' \
+  '```text' \
+  'payload' \
+  '```')"
 assert_eq "$(cat "$tmp/NOTES.md")" "$expected_notes" \
-  "escape: both forms emitted complete, correctly-fenced blocks — the file matches byte for byte"
+  "escape: all three forms emitted complete, correctly-fenced blocks — the file matches byte for byte"
 
 # Idempotent on a second run, per §08's idempotency contract.
 out="$(cd "$tmp" && bash "$MR/run-migration.sh" --host codex-workflow "$FIX/0059-heredoc-fence-escape.md" "$tmp" 2>&1)"
 assert_eq "$?" "0" "escape: a second run exits 0"
 assert_contains "$out" "step 1: skipped (already applied)" "escape: step 1 is skipped on re-run"
 assert_contains "$out" "step 2: skipped (already applied)" "escape: step 2 is skipped on re-run"
+assert_contains "$out" "step 3: skipped (already applied)" "escape: step 3 is skipped on re-run"
 
 # Rollback round trip, in reverse document order, back to the seeded state.
+body="$(bash "$MR/extract.sh" block "$FIX/0059-heredoc-fence-escape.md" 3 rollback)"
+assert_eq "$?" "0" "escape: step 3 rollback extracted"
+( cd "$tmp" && bash -c "$body" ); assert_eq "$?" "0" "escape: step 3 rolled back"
 body="$(bash "$MR/extract.sh" block "$FIX/0059-heredoc-fence-escape.md" 2 rollback)"
 assert_eq "$?" "0" "escape: step 2 rollback extracted"
 ( cd "$tmp" && bash -c "$body" ); assert_eq "$?" "0" "escape: step 2 rolled back"

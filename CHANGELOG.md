@@ -100,11 +100,28 @@ rationale would be silently incomplete without naming it.
   statement — not merely be non-whitespace — so that a leftover `# TODO:`
   placeholder or a bare `:` in a `check` fence is rejected rather than read as
   "already applied"; a tagged fence MUST NOT be truncated by a fenced-code-block
-  delimiter emitted from inside it (a heredoc writing a ` ```bash ` line, which
-  is the fleet's ordinary idiom for patching an instruction file, silently ends
-  the captured body there, writes a partial payload, exits 0, and then
-  self-certifies as applied on every later run); and a tagged fence's body MUST
-  NOT leave a heredoc unterminated.
+  delimiter emitted from inside it (a heredoc writing a ` ```bash ` line
+  silently ends the captured body there, writes a partial payload, exits 0, and
+  then self-certifies as applied on every later run); and a tagged fence's body
+  MUST NOT leave a heredoc unterminated. The heredoc rule recognises a
+  delimiter quoted with `'`, `"` or a **leading backslash** (`<<\EOF`) — the
+  shell treats all three alike, and omitting the third left the whole class
+  reachable whenever the truncating line was a bare delimiter, which is what an
+  ordinary markdown fenced block opens with. It skips whole-line `#` comments,
+  because without that it read a heredoc opener out of prose and rejected a
+  valid migration.
+- **Two bounds stated in §08 rather than closed.** The executable-statement
+  rule is whole-line and lexical: it rejects a body provably inert by
+  inspection, and does not detect one that executes and accomplishes nothing
+  (`true; true`, `exit 0`, an `echo` that only narrates the check). And the
+  truncation pair does not reach a bare-delimiter truncation whose heredoc
+  opener the scan cannot parse. Both are documented as limits, with the
+  accepted shapes pinned as ACCEPTED in the suite, so a green lint is not
+  mistaken for a semantic guarantee it cannot make.
+- **A third documented escape for emitting a fence delimiter**: `<<-` with a
+  tab-indented payload, alongside `printf` and the three-space indent. It is
+  byte-exact like `printf` and heredoc-shaped like the indent form, and is
+  tabs-only, since `<<-` strips tabs and nothing else.
 - **Two whole-document lint obligations**: the format linter MUST reject an
   in-scope migration that declares no step (§08 always required at least one,
   but only the runner enforced it — and the Conformance section below requires

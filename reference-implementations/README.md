@@ -11,7 +11,7 @@ Host repos that adopt (or will adopt) the AgenticApps workflow spec — and, as 
 | [`run-plan-review/`](run-plan-review/) | [§18](../spec/18-retargeted-change-gate.md) (review production) | `tools/run-plan-review-conformance.sh` |
 | [`reviewer-cli/`](reviewer-cli/) | [§18](../spec/18-retargeted-change-gate.md) (vendor dispatch) | `tools/reviewer-cli-conformance.sh` — 14/14 |
 | [`shared-install/`](shared-install/) | the shared-path install contract | `tools/shared-install-conformance.sh` — 12/12 |
-| [`migration-runner/`](migration-runner/) | [§08](../spec/08-migration-format.md) executable form (2.0.0) — reference implementation only, not yet installed via the shared-install path (see `migration-runner/README.md`) | `tools/migration-runner.test.sh` — 417/417 |
+| [`migration-runner/`](migration-runner/) | [§08](../spec/08-migration-format.md) executable form (2.0.0) — reference implementation only, not yet installed via the shared-install path (see `migration-runner/README.md`) | `tools/migration-runner.test.sh` — 567/567 |
 
 The gate **consumes** review evidence; `run-plan-review` **produces** it, calling
 `reviewer-cli` once per vendor for dispatch. All three install to the shared

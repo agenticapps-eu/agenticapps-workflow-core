@@ -163,6 +163,24 @@ A bare `:` or `true` is counted as non-executable **only as an entire body**.
 Both appear legitimately inside larger bodies (`while :; do`, `: "${VAR:?}"`)
 and SHALL NOT be rejected there.
 
+**The requirement is bounded, and the bound is part of it.** The test is
+whole-line and lexical: it rejects a body that is provably inert by
+inspection. It SHALL NOT be read as detecting a body that executes and
+accomplishes nothing. `true; true`, `:;:`, `( : )`, `exit 0` and
+`echo "checking whether the allowlist is hardened"` all satisfy this
+requirement while changing nothing, and as a `check` each exits 0 — which the
+three-valued contract reads as "already applied". A conforming implementation
+is NOT required to reject those, and SHOULD NOT be widened to try: whether a
+shell body accomplishes anything is not decidable from its text, and an
+implementation that guesses rejects valid migrations, which is the more
+expensive error of the two. Confirming that a step's blocks do what the step
+claims remains an author and reviewer obligation.
+
+#### Scenario: A body that executes but accomplishes nothing is accepted
+- **WHEN** a step's `check` fence contains `true; true`
+- **THEN** the format linter SHALL NOT report a violation for that fence
+- **AND** the limit SHALL be documented rather than treated as a defect to close
+
 #### Scenario: A tagged-but-empty check is rejected
 - **WHEN** a step's `check` fence is opened as ` ```bash role=check ` and its body is empty
 - **THEN** the format linter SHALL report a violation naming the step and the role
@@ -203,12 +221,27 @@ about this is visible to role-presence, fence-balance, or emptiness checks: the
 role is read from the opening line, the fences balance because the inner one
 closes and the real closer re-opens, and the truncated body is not empty.
 
+The heredoc half of this requirement SHALL recognise a delimiter quoted with
+`'`, `"` or a leading backslash (`<<\EOF`), which the shell treats
+identically. Recognising only the first two leaves the requirement's own
+worst case reachable: when the truncating line is a **bare** delimiter, the
+info-string half is silent by construction, so an unrecognised heredoc opener
+means neither half fires.
+
 A four-backtick outer fence is not an escape, because the info-string grammar
 requires the literal `bash` immediately after the delimiter and a four-backtick
-opener does not satisfy it. A migration SHALL instead emit such a line
-indirectly (`printf '%s\n' '```bash'`) or indent it by up to three spaces,
-which keeps the emitted block a valid fenced block while moving the delimiter
-off column 1.
+opener does not satisfy it. A migration SHALL instead use one of three forms:
+emit the line indirectly (`printf '%s\n' '```bash'`); indent it by up to three
+spaces, which keeps the emitted block a valid fenced block while moving the
+delimiter off column 1 at the cost of a leading space in the output; or use a
+tab-stripping heredoc (`<<-`) with a tab-indented payload, which moves the
+delimiter off column 1 in the source and restores it to column 1 in the
+emitted file. The third form depends on the indentation being tabs, since
+`<<-` strips tabs only.
+
+#### Scenario: A backslash-quoted heredoc delimiter is recognised
+- **WHEN** a step's `apply` block opens `<<\EOF` and the captured body is truncated by a bare fence delimiter before the terminator
+- **THEN** the format linter SHALL report the unterminated heredoc and exit non-zero
 
 #### Scenario: A heredoc emitting a fence delimiter is rejected
 - **WHEN** a step's `apply` block opens a heredoc whose body contains a line beginning with a fenced-code-block delimiter and an info string
@@ -223,6 +256,18 @@ off column 1.
 #### Scenario: A correctly terminated heredoc is accepted
 - **WHEN** a step's `apply` block opens a heredoc whose body contains the line `### Step 2` and whose terminator is present
 - **THEN** the format linter SHALL NOT report a violation for that fence
+
+#### Scenario: A comment that merely mentions a heredoc operator is accepted
+- **WHEN** a step's `apply` block contains a whole-line `#` comment mentioning `<<EOF` and opens no heredoc
+- **THEN** the format linter SHALL NOT report a violation for that fence
+- **AND** the runner SHALL apply the step
+
+A whole-line `#` comment is prose, not a redirection operator. This scenario
+exists because the linter did reject exactly this — a migration avoiding the
+truncation hazard the way this specification recommends, and saying so in a
+comment. A heredoc-detection rule narrow enough to miss a real opener is a
+missed detection; one wide enough to read an opener out of a comment is a
+false accusation, and the two are not interchangeable costs.
 
 ### Requirement: An in-scope migration SHALL declare at least one step
 

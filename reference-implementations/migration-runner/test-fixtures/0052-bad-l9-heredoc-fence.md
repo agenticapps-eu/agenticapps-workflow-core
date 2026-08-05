@@ -12,9 +12,16 @@ applies_to:
 # Migration 0052 — the nested-fence truncation (L9 / L10 regression fixture)
 
 THIS FIXTURE IS EXPECTED TO FAIL THE LINTER. It is the review's Critical 1,
-committed verbatim as it was authored by hand against the README alone — the
-fleet's normal idiom for patching CLAUDE.md, which happens to emit a fenced
-code block from inside a heredoc.
+committed verbatim as it was authored by hand against the README alone: a
+migration patching CLAUDE.md that happens to emit a fenced code block from
+inside a heredoc.
+
+NOT because that shape is common — it is not. Measured across all four hosts'
+`migrations/` directories, of 73 numbered migrations 7 use a heredoc at all
+and 0 emit a three-backtick line from inside one. An earlier version of this
+header called it "the fleet's normal idiom", which was a relayed figure nobody
+had checked. What makes this fixture load-bearing is that the defect below is
+CONSTRUCTED AND EXECUTED, not that anyone has shipped it yet.
 
 Before L9/L10 existed this document linted CLEAN (rc 0), ran to `step 1:
 applied` (rc 0), wrote only the truncated prefix to CLAUDE.md, and — because

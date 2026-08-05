@@ -165,6 +165,20 @@ builtins are discarded, has nothing left. A leftover `# TODO:` placeholder is
 the ordinary way this happens, and it is one character past a test for
 "empty or whitespace-only".
 
+**The scope of that requirement is bounded, and the bound is normative.** The
+test above is whole-line and lexical: it rejects a body that is *provably
+inert by inspection*. It does not, and is not required to, detect a body that
+*executes and accomplishes nothing*. `true; true`, `:;:`, `( : )`, `exit 0`
+and `echo "checking whether the allowlist is hardened"` all satisfy this rule
+while doing nothing to the tree — and as a `check`, each exits 0, which the
+Atomicity contract below reads as "already applied". A conforming linter MUST
+NOT be assumed to have caught those; "does this shell accomplish anything?" is
+not decidable from the text, and a linter that guesses at it rejects valid
+migrations, which is the more expensive error. **Confirming that a step's
+blocks do what the step claims remains an author and reviewer obligation.**
+This bound is stated so that an adopting host does not mistake a green lint
+for a semantic guarantee it was never able to make.
+
 **Steps are numbered consecutively and bounded by the next step heading.** A
 migration's steps MUST be numbered consecutively from 1; a gap in the
 numbering MUST be rejected by the format linter as a violation. Independently
@@ -203,9 +217,17 @@ it MUST reject:
 A four-backtick outer fence is **not** an escape: the info-string grammar
 requires the literal `bash` immediately after the delimiter, so a
 four-backtick fence cannot carry a role tag at all. A migration MUST instead
-emit such a line indirectly (`printf '%s\n' '```bash'`) or indent it — up to
-three spaces keeps the emitted block a valid fenced block while putting the
-delimiter off column 1.
+use one of three forms, each of which keeps the delimiter off column 1 in the
+migration's own source:
+
+1. emit the line indirectly (`printf '%s\n' '```bash'`);
+2. indent it — up to three spaces keeps the emitted block a valid fenced block,
+   at the cost of that leading space appearing in the emitted file; or
+3. use a tab-stripping heredoc (`<<-`) with a tab-indented payload, which puts
+   the delimiter off column 1 in the source and back at column 1 in the
+   emitted file. This form depends on the indentation being **tabs**: `<<-`
+   strips tabs and nothing else, so converting them to spaces reintroduces the
+   defect silently.
 
 **The format linter MUST reject an in-scope migration that declares no step.**
 "Every migration body MUST contain at least one step" is stated above and

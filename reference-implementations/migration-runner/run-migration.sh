@@ -476,11 +476,20 @@ steps="$(bash "$EXTRACT" steps "$DOC")"
 
 # ABORT ON ZERO STEPS.
 #
-# An in-scope migration that declares no `### Step ` heading at all lints
-# clean — every per-step rule iterates zero times over an empty step list —
-# and would otherwise run to completion having dispatched nothing. The
-# linter cannot catch this; only the runner can, because only the runner
-# knows what "ran to completion" is about to mean.
+# An in-scope migration that declares no `### Step ` heading at all would
+# otherwise run to completion here having dispatched nothing.
+#
+# THE LINTER CATCHES THIS TOO, and this guard is not the only thing standing
+# between the fleet and a zero-step migration. A previous version of this
+# comment said "the linter cannot catch this; only the runner can" — that was
+# word-for-word the claim deleted from tools/migration-runner.test.sh, and
+# lint-migration.sh's own zero-steps rule quotes it as false. Both halves were
+# wrong: the argument that every per-step rule iterates zero times is an
+# argument about the per-step rules, not about the linter, which counts
+# `### Step ` headings directly.
+#
+# THIS GUARD STILL STAYS. It is what holds on a path where the lint gate is
+# bypassed or stubbed, and the suite exercises exactly that path.
 if [ -z "$steps" ]; then
   echo "refusing to run: $DOC declares no steps" >&2
   exit "$REFUSAL"

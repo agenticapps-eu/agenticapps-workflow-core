@@ -177,8 +177,9 @@ the literal `bash` immediately after the delimiter, and a four-backtick opener
 puts a backtick there, so the fence carries no role at all — `extract.sh roles`
 returns nothing for it.
 
-Two escapes work. Both are exercised end-to-end by
-`test-fixtures/0059-heredoc-fence-escape.md`.
+Three escapes work. All three are exercised end-to-end by
+`test-fixtures/0059-heredoc-fence-escape.md`, which asserts the emitted file
+byte-for-byte.
 
 **1. `printf` — byte-exact output, fence at column 1.** Preferred when the
 emitted file's bytes matter:
@@ -210,6 +211,36 @@ cat >> CLAUDE.md <<'EOF'
 EOF
 ```
 ````
+
+**3. `<<-` with a TAB-indented payload — byte-exact output, fence at column
+1.** This is escape 2's readability with escape 1's output. `<<-` strips
+leading *tabs* from every heredoc body line before the shell sees them, so the
+nested delimiter sits off column 1 in the migration's source — where the fence
+state machine, which tests "first three characters of the line", does not see
+it — and back at column 1 in the emitted file. Every indented line below
+begins with a literal TAB, including the terminator:
+
+````text
+```bash role=apply
+cat >> CLAUDE.md <<-'EOF'
+→
+→## Running the suite
+→
+→```bash
+→bash tools/migration-runner.test.sh
+→```
+→EOF
+```
+````
+
+`→` marks a literal tab above. **This escape is tabs-only.** `<<-` strips tabs
+and nothing else, so an editor, a formatter, or a copy-paste that turns those
+tabs into spaces silently converts the block back into the broken form at the
+top of this section. 0059's byte-exact assertion is what catches that; if you
+use this escape, keep it covered by one.
+
+This third escape was added after this README had already said, for a while,
+that "two escapes work". It was found by trying it, not by reasoning about it.
 
 ## The five roles
 
@@ -320,6 +351,36 @@ and done nothing:**
   legitimate is lost (a `check` that must always report "not applied" writes
   `false`), and `:` inside a larger body — `while :; do`, `: "${VAR:?}"` — is
   ordinary shell and is left completely alone.
+
+  **What L8 does not do — know this before you rely on it.** L8's test is
+  whole-line and lexical. It rejects a body that is *provably inert by
+  inspection*; it does not detect a body that *executes and accomplishes
+  nothing*. All of these lint clean today, and as a `check` each exits 0 —
+  which the three-valued contract reads as "already applied", so the runner
+  prints `step N: skipped (already applied)` on an untouched tree:
+
+  ```bash
+  true; true
+  :;:
+  ( : )
+  exit 0
+  echo "checking whether the allowlist is hardened"
+  ```
+
+  On the apply side, `echo "TODO: write the file"` reports `step 1: applied`
+  having written nothing. Note that `true; true` is one keystroke from the
+  whole-line `true` that L8 *does* reject — an earlier version of this
+  documentation claimed stripping `true` closed that hole; it narrowed it.
+
+  **This is a stated limit, not a to-do.** "Does this shell accomplish
+  anything?" is not answerable by inspecting the text, and a widening that
+  tries trades a caught no-op for a risk of rejecting real migrations — a
+  trade this format has already lost once, when L10 rejected a valid
+  README-following migration (see L10 below). The five shapes above are pinned
+  as ACCEPTED in `tools/migration-runner.test.sh` so that the boundary is
+  machine-checked and cannot be quietly re-described as closed. If a step's
+  correctness depends on its `check` really checking something, that remains
+  the author's obligation and the reviewer's, not the linter's.
 - **L9 exists because a fence delimiter emitted from inside a heredoc
   truncates the block that emitted it.** `extract.sh` ends a block's capture
   at the first line whose first three characters are a fence delimiter,
@@ -335,13 +396,31 @@ and done nothing:**
   *opening* line, L7 balances (the inner fence closes and the real closer
   re-opens), L8 sees a non-empty body, the runner's zero-apply pre-flight sees
   a non-empty body, and `bash -c` on an unterminated heredoc writes the partial
-  payload and exits 0. This is not a hypothetical shape: **6 of the 73
-  migrations in the fleet today already emit a fence delimiter from inside a
-  heredoc**, because that is the normal idiom for patching CLAUDE.md and skill
-  files. L9's test is lexical and exact rather than heuristic — a CommonMark
-  closing fence may not carry an info string, so a tagged fence "closed" by a
-  line that does carry one is definitively truncated. See "Emitting a fenced
-  code block from a migration" below for the two escapes.
+  payload and exits 0. L9's test is lexical and exact rather than heuristic — a
+  CommonMark closing fence may not carry an info string, so a tagged fence
+  "closed" by a line that does carry one is definitively truncated. See
+  "Emitting a fenced code block from a migration" below for the escapes.
+
+  **This rule rests on the constructed defect above, not on the idiom being
+  common — because it is not.** An earlier version of this bullet said "6 of
+  the 73 migrations in the fleet today already emit a fence delimiter from
+  inside a heredoc, because that is the normal idiom for patching CLAUDE.md and
+  skill files." That figure was relayed from a review and never measured, and
+  it is wrong. Measured across all four hosts' `migrations/` directories — 73
+  numbered migrations (claude-workflow 34, codex-workflow 16, opencode-workflow
+  12, pi-agentic-apps-workflow 11):
+
+  | measured | count |
+  |---|---|
+  | numbered migrations in the fleet | 73 |
+  | using a heredoc at all inside a fenced body | 7 |
+  | emitting a three-backtick line from inside a heredoc | 0 |
+  | emitting a three-backtick line into a file by any means | 0 |
+
+  Running L10's own scan over all 482 fenced bodies in those 73 documents fires
+  0 times. So adopting this format costs the current fleet nothing, and L9 is
+  justified by `0052-bad-l9-heredoc-fence.md` — executed, committed, and
+  self-certifying — rather than by a prevalence claim nobody had checked.
 - **L10 exists because L9 cannot see a truncation that happens at a BARE
   delimiter,** which is indistinguishable from a legitimate closer, and because
   an ordinary mistyped heredoc terminator produces the same silent partial
@@ -359,10 +438,43 @@ and done nothing:**
   reads the redirection operators itself, and is deliberately conservative in
   the *skip* direction: it ignores a `<<` inside an odd number of preceding
   quotes on its line (`echo "a << b"`), one inside a `$((...))` span
-  (`x=$((1<<2))`), and a `<<<` herestring, and only accepts an unquoted
-  delimiter matching `^[A-Za-z_][A-Za-z0-9_]*$`. Each narrowing is a possible
-  missed detection, never a possible false accusation — and L9 covers the
-  tagged-fence truncation case independently of it.
+  (`x=$((1<<2))`), and a `<<<` herestring; it skips whole-line `#` comments
+  entirely; and it accepts an unquoted delimiter matching
+  `^[A-Za-z_][A-Za-z0-9_]*$` or a delimiter quoted with `'`, `"` or a leading
+  backslash.
+
+  **Two claims that used to sit here were disproved by construction, and both
+  are corrected rather than softened.**
+
+  *"Each narrowing is a possible missed detection, never a possible false
+  accusation."* False. The missing comment skip made L10 read a heredoc opener
+  out of prose and reject a valid migration — the worst case being one that
+  followed this very README, emitting its payload with `printf` and saying so
+  in a comment mentioning `<<EOF`. `0061-l10-comment-mentions-heredoc.md` is
+  that migration, committed as an ACCEPT fixture; before the fix it linted
+  dirty with an L10 message whose every substantive clause was false: no heredoc
+  is opened, nothing is unterminated, and no partial payload is written.
+
+  *"L9 covers the tagged-fence truncation case independently of it."* False.
+  `0062-l10-backslash-bare-fence.md` truncates a `<<\EOF` heredoc with a BARE
+  fence line and fired **neither** rule: L9 is silent because a bare
+  terminator is indistinguishable from a legitimate closer, and L10 did not
+  parse `<<\EOF` as an opener at all. Lint exited 0, the runner reported
+  `step 1: applied`, the payload was truncated, and the second run reported
+  `skipped (already applied)` — the review's Critical 1 verbatim, against the
+  linter that was supposed to have closed it.
+
+  What the pair covers, as tested:
+
+  | truncating line | body | fires |
+  |---|---|---|
+  | carries an info string (` ```bash `) | anything | **L9** |
+  | bare (` ``` `) | opens a heredoc L10 can parse | **L10** |
+  | none — terminator merely mistyped | opens a heredoc L10 can parse | **L10** |
+  | bare | opens a heredoc L10 does **not** parse | *neither* |
+
+  The last row is a real residue, not a closed case. The skip list above is
+  exactly the list of openers that land in it.
 
 ## Why the runner lints before executing
 

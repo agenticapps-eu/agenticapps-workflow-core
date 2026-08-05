@@ -453,11 +453,34 @@ EOF
   # workdir. Nothing legitimate is lost: a `check` that must always report "not
   # applied" writes `false`, and a step whose `apply` genuinely has nothing to
   # do is a step that should not exist. `true` is stripped for the identical
-  # reason — leaving it would be a hole of exactly the same class, one
-  # keystroke away. Both are stripped only as a WHOLE LINE (optionally with a
-  # trailing `;`): `:` inside a larger body (`while :; do`, `: "${VAR:?}"`) is
-  # ordinary shell and is left completely alone, because the line then does not
-  # match.
+  # reason. Both are stripped only as a WHOLE LINE (optionally with a trailing
+  # `;`): `:` inside a larger body (`while :; do`, `: "${VAR:?}"`) is ordinary
+  # shell and is left completely alone, because the line then does not match.
+  #
+  # WHAT THIS RULE DOES NOT DO — STATED, NOT CLOSED. An earlier version of this
+  # comment said stripping `true` closed a hole that would otherwise be "one
+  # keystroke away". That overclaimed: the keystroke is `true; true`, and it
+  # lints clean right now. The test here is WHOLE-LINE and LEXICAL, so every
+  # one of these gets past it and still does nothing on an untouched tree —
+  # each executed against the real CLI, not reasoned about:
+  #     true; true            :;:            ( : )            exit 0
+  #     echo "checking whether the allowlist is hardened"
+  # As a `check`, each exits 0, which the three-valued contract reads as
+  # ALREADY APPLIED — `step 1: skipped (already applied)` on a tree where
+  # nothing was applied. As an `apply`, `echo "TODO: write the file"` reports
+  # `step 1: applied` having written nothing.
+  #
+  # THE RULE IS NOT WIDENED TO CHASE THESE, deliberately. "Does this shell
+  # accomplish anything?" is not answerable by inspecting the text, and a
+  # widening that tries trades a caught no-op for a risk of rejecting real
+  # migrations — a trade this format has already lost once: L10 rejected a valid,
+  # README-following migration for exactly that kind of over-reach, and
+  # 0061-l10-comment-mentions-heredoc.md is the committed guard against it.
+  # What L8 promises is bounded and honest: it rejects a body that is provably
+  # inert by inspection. It does not detect a body that executes and
+  # accomplishes nothing. §08 and the README state the same limit in the same
+  # terms, and the accepted shapes above are pinned as ACCEPTED in
+  # tools/migration-runner.test.sh so the limit stays machine-checked.
   #
   # WHY THIS IS A LINTER RULE, NOT A RUNNER ONE. Run for real, `bash -c ''`
   # (and `bash -c '<blank line>'`) exits 0 — which the three-valued check
@@ -524,24 +547,34 @@ EOF
     # L10 — an UNTERMINATED HEREDOC in a tagged fence's body.
     #
     # This is the semantic half of the truncation class L9 catches
-    # structurally, and it is the half that survives when the truncating line
-    # is a BARE "```" (which L9 cannot distinguish from a legitimate closing
-    # fence) or when the author simply mistyped the terminator. In both cases
-    # `bash -c "$body"` writes the partial payload and EXITS 0 — so an apply
-    # "succeeds", and a check written against the intended full payload... does
-    # not match, while a check written against a prefix of it does, which is
-    # how the truncated migration in the review's Critical 1 permanently
-    # self-certified as done.
+    # structurally, and it is the half that reaches cases L9 does not: a
+    # truncating line that is a BARE "```" (which L9 cannot distinguish from a
+    # legitimate closing fence), and an author who simply mistyped the
+    # terminator. In both cases `bash -c "$body"` writes the partial payload
+    # and EXITS 0 — so an apply "succeeds", and a check written against the
+    # intended full payload does not match, while a check written against a
+    # prefix of it does, which is how the truncated migration in the review's
+    # Critical 1 permanently self-certified as done.
     #
-    # THAT IT COVERS GROUND L9 CANNOT WAS CONSTRUCTED, NOT ASSERTED. Two
-    # executed probes:
-    #   - a heredoc truncated by a BARE "```" (no info string, so L9 is
-    #     silent by design — a bare closer is indistinguishable from a
-    #     legitimate one): L10 fires, alongside the L1/L7 fallout of the
-    #     resulting desync.
-    #   - `0058-bad-l10-mistyped-heredoc.md`, a committed fixture with no
-    #     nested fence anywhere and a terminator mistyped `EOFF`: L10 fires
-    #     and NOTHING ELSE DOES — L7, L8 and L9 all pass it.
+    # WHAT THE PAIR ACTUALLY COVERS, RE-STATED AFTER THE BACKSLASH FIX BELOW.
+    # An earlier version of this comment said L9 "covers the tagged-fence
+    # truncation case independently of this scan". It does not, and the
+    # counter-example was constructed: 0062-l10-backslash-bare-fence.md
+    # truncates a `<<\EOF` heredoc with a BARE "```" and, before that fix, fired
+    # NEITHER rule (lint rc 0, `step 1: applied`, truncated payload, second run
+    # `skipped (already applied)`). The honest division of labour, as tested:
+    #   - the truncating line carries an INFO STRING (```bash, ```markdown):
+    #     L9 fires, from the terminator alone, whatever the body contains.
+    #     0052-bad-l9-heredoc-fence.md.
+    #   - the truncating line is BARE and the body opened a heredoc this scan
+    #     can parse: L10 fires. 0062-l10-backslash-bare-fence.md,
+    #     0063-l10-backslash-bare-rollback.md.
+    #   - no nested fence at all, terminator mistyped `EOFF`: L10 fires and
+    #     nothing else does — L7, L8 and L9 all pass it.
+    #     0058-bad-l10-mistyped-heredoc.md.
+    # A BARE truncating line inside a body whose heredoc opener this scan does
+    # NOT parse is covered by neither, and the narrowings listed below are the
+    # list of such openers. That residue is a real one; it is not claimed away.
     #
     # WHY THIS IS HAND-ROLLED RATHER THAN DELEGATED TO BASH'S OWN PARSER.
     # `bash -n` looked like the precise, heuristic-free answer and was tried
@@ -560,11 +593,40 @@ EOF
     # an odd number of preceding quotes on its line (`echo "a << b"`), one
     # inside a `$((...))` span (`x=$((1<<2))`), and a `<<<` herestring; and it
     # only accepts an unquoted delimiter matching ^[A-Za-z_][A-Za-z0-9_]*$. A
-    # quoted delimiter (`<<'EOF'`, `<<"EOF"`) may be anything non-empty. The
-    # terminator must match exactly at column 1 for `<<`, and after leading
-    # tabs for `<<-`, which is what bash itself requires. Each narrowing is a
-    # possible missed detection, not a possible false accusation, and L9 is
-    # what covers the tagged-fence truncation case independently of this scan.
+    # quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<\EOF`) may be anything
+    # non-empty. The terminator must match exactly at column 1 for `<<`, and
+    # after leading tabs for `<<-`, which is what bash itself requires.
+    #
+    # COMMENT LINES. A whole-line `#` comment is skipped before any of that.
+    # THE NARROWINGS ARE NOT ALL MISSED-DETECTION-ONLY — an earlier version of
+    # this comment said "each narrowing is a possible missed detection, not a
+    # possible false accusation", and the comment-line gap disproved it: this
+    # scan read a heredoc opener out of PROSE and rejected a valid migration.
+    # The worst case was a migration following this runner's own README, whose
+    # apply was
+    #     # Emitted with printf, not <<EOF: a fence delimiter inside a heredoc
+    #     # would truncate this block (see the runner README, L9/L10).
+    #     { printf ... ; } >> CLAUDE.md
+    # — valid bash that does its work. Reproduced RED on
+    # 0061-l10-comment-mentions-heredoc.md:
+    #   $ lint-migration.sh --host claude-workflow 0061-...md ; echo $?
+    #   L10: step 1: role 'apply' opens a heredoc delimited by 'EOF' that is
+    #   never terminated ... running it writes a partial payload
+    #   1
+    # Every substantive clause of that message was false: no heredoc is opened, nothing is unterminated, and no partial payload is written. Only the trailing "and still exits 0" is true, and it is true of the CORRECT behaviour — the body exits 0 having written the payload WHOLE. `# do not use << here` fired the
+    # same way, naming the delimiter `here`. L8's scan in this same loop
+    # already discarded full-line `#` comments; L10 now agrees with it. The
+    # heredoc-BODY branch runs first, so a PAYLOAD line beginning with `#` (a
+    # markdown heading being emitted, say) is unaffected — 0059's own payload
+    # is exactly that shape and still lints clean.
+    #
+    # BACKSLASH-QUOTED DELIMITER. `<<\EOF` is bash's third heredoc quoting
+    # form and bash 3.2 treats it identically to `<<'EOF'`; this scan accepted
+    # only `<<WORD`, `<<'W'` and `<<"W"`, so it parsed no delimiter and skipped
+    # the opener entirely. Combined with a BARE truncating "```" that leaves L9
+    # silent by design, that reopened the review's Critical 1 verbatim against
+    # this very linter — see the "WHAT THE PAIR ACTUALLY COVERS" note above for
+    # the executed transcript.
     heredoc="$(printf '%s\n' "$body" | awk '
       function quoted(line, upto,   i, c, sq, dq) {
         sq = 0; dq = 0
@@ -594,6 +656,10 @@ EOF
       }
       {
         line = $0
+        # A whole-line shell comment is prose, not an operator. See the
+        # COMMENT LINES header note above for the reproduction.
+        probe = line; sub(/^[ \t]+/, "", probe)
+        if (substr(probe, 1, 1) == "#") next
         i = 1
         while (1) {
           p = index(substr(line, i), "<<")
@@ -605,6 +671,13 @@ EOF
           d = 0
           if (substr(rest, 1, 1) == "-") { d = 1; rest = substr(rest, 2) }
           sub(/^[ \t]+/, "", rest)
+          # A backslash-quoted delimiter is the third heredoc quoting form
+          # bash accepts, equivalent to the single-quoted one. Strip the
+          # backslash and let the unquoted-word branch below read the word.
+          # See the BACKSLASH-QUOTED DELIMITER header note above.
+          # (No apostrophes in this comment: it sits inside a single-quoted
+          # awk program, where one would end the program mid-file.)
+          if (substr(rest, 1, 1) == "\\") rest = substr(rest, 2)
           q = substr(rest, 1, 1)
           w = ""
           if (q == "'"'"'" || q == "\"") {
@@ -677,10 +750,27 @@ done < <(awk '
 # L1 reads the role from the OPENING line, L7 balances (the inner fence closes
 # and the real closer re-opens), L8 sees a non-empty body, the runner's
 # zero-apply pre-flight sees a non-empty body, and `bash -c` on an unterminated
-# heredoc writes the partial payload and exits 0. This is not theoretical: 6 of
-# the 73 migrations in the fleet today already emit a three-backtick line from
-# inside a heredoc, which is this fleet's normal idiom for patching CLAUDE.md
-# and skill files.
+# heredoc writes the partial payload and exits 0.
+#
+# THE PREVALENCE ARGUMENT THAT USED TO SIT HERE WAS FABRICATED. This comment
+# said "6 of the 73 migrations in the fleet today already emit a three-backtick
+# line from inside a heredoc, which is this fleet's normal idiom for patching
+# CLAUDE.md and skill files." The number was relayed from a review and never
+# measured. Measured directly across all four hosts' migrations/ directories —
+# 73 numbered migrations (claude-workflow 34, codex-workflow 16,
+# opencode-workflow 12, pi-agentic-apps-workflow 11):
+#   - 7 use a heredoc at all inside a fenced body;
+#   - 0 emit a three-backtick line from inside a heredoc;
+#   - 0 emit a three-backtick line into a file by any means.
+# Running this file's own L10 scan over all 482 fenced bodies in those 73
+# documents fires 0 times.
+#
+# THAT DOES NOT WEAKEN L9. Its justification is the constructed vulnerability
+# above, which is executed and committed as
+# 0052-bad-l9-heredoc-fence.md. A rule that closes a demonstrated
+# silent-self-certifying write does not need the defect to be popular first —
+# and quoting a number nobody measured is how a rule acquires a justification
+# that evaporates when someone checks it.
 #
 # WHY THIS FORMULATION, AND NOT "the body's last line opens a fence". The
 # nested fence line is CONSUMED as the closer — it never appears in the
@@ -690,10 +780,18 @@ done < <(awk '
 # observable that actually distinguishes truncation is the TERMINATOR: a
 # CommonMark closing fence may not carry an info string, so a "```" line with
 # one is never a legitimate closer, and a tagged fence closed by one is
-# definitively truncated. That makes this lexical, exact, and free of false
-# positives — no shell parsing, no heuristics. L10 above covers the residue
-# this cannot see (a truncating BARE "```", or a mistyped terminator) by
-# detecting the unterminated heredoc such a truncation leaves behind.
+# definitively truncated. That makes this lexical and exact — no shell parsing,
+# no heuristics.
+#
+# WHAT L10 ADDS, AND WHERE THE PAIR STILL DOES NOT REACH. L10 sees a truncating
+# BARE "```" (and an ordinary mistyped terminator) by detecting the
+# unterminated heredoc such a truncation leaves behind — but only for a heredoc
+# opener its scan can parse. An earlier version of this paragraph said the two
+# rules covered the case "independently" of each other, which was disproved by
+# construction: 0062-l10-backslash-bare-fence.md truncates a `<<\EOF` heredoc
+# with a bare fence and, before the backslash fix, fired neither rule. See the
+# "WHAT THE PAIR ACTUALLY COVERS" note above L10's scan for the tested
+# division of labour and the residue that remains outside both.
 #
 # THERE IS NO ESCAPE VIA A FOUR-BACKTICK OUTER FENCE, so this rule does not
 # forbid something the format otherwise permits. Verified:
