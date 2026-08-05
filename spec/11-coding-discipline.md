@@ -6,13 +6,23 @@ spec_version: 0.4.0
 
 # 11 — Coding Discipline
 
-**Section type**: canonical prose. Host implementations MUST reproduce
-the block below verbatim in their primary project-instruction file
-(CLAUDE.md, AGENTS.md, or whichever filename the host runtime treats
-as canonical project-level guidance). Substitution is permitted only
-inside `{{...}}` placeholders; alteration of any surrounding prose is
-non-conformant. The block is short by design — the entire purpose is
-that the model reads it every session.
+**Section type**: canonical prose. The block below MUST be reproduced
+verbatim in **the trigger skill** (`skills/agentic-apps-workflow/`).
+Substitution is permitted only inside `{{...}}` placeholders;
+alteration of any surrounding prose is non-conformant.
+
+> **Changed 2026-08-05.** This section previously required the block in
+> *every project's* primary instruction file. That produced one copy per
+> project — ~80 lines each across the fleet, loaded into context every
+> session, drifting independently and impossible to correct in one place.
+> One copy in the trigger skill reaches every host, because the skill is
+> host-neutral and symlinked rather than vendored.
+>
+> The obligation the old wording protected — that the model actually reads
+> it — is preserved by *when* the skill fires: on any code-touching turn,
+> which is the scope the block itself claims in its closing paragraph. A
+> project MAY still restate it, but MUST NOT be required to, and a project
+> that omits it is conformant.
 
 **Provenance**: distilled from public discussion of recurring failure
 modes in coding-agent output (Karpathy, 2025-2026), as gathered in the
@@ -107,21 +117,18 @@ session-level discipline the model brings to every diff.
 
 ## Conformance
 
-A host implementation claiming conformance with spec version 0.4.0:
+- The **trigger skill** MUST reproduce the canonical block above
+  verbatim. Substitution is permitted only inside `{{...}}`
+  placeholders; alteration of any surrounding prose, including the rule
+  numbers and the anti-pattern bullets, is non-conformant.
+- There is exactly **one** copy. A project MUST NOT be required to carry
+  one, and a project that carries none is conformant.
+- A project **MAY** restate the block, or add anti-pattern bullets for
+  failure modes peculiar to that codebase. Additions layer on top; they
+  neither satisfy nor alter the canonical bullets. A restatement that has
+  drifted from the canonical block is a defect in the project, not a
+  second authority.
 
-- **MUST** reproduce the canonical block above verbatim in its primary
-  project-instruction file. Substitution is permitted only inside
-  `{{...}}` placeholders; alteration of any surrounding prose, including
-  the rule numbers and the anti-pattern bullets, is non-conformant.
-- **SHOULD** place the block where the model reads it early in every
-  session (near the top of the file, not buried below long appendices),
-  for the reason given in §12's advisory on long contexts.
-- **MAY** add host-specific anti-pattern bullets to any of the four
-  rules to cover failure modes peculiar to the host runtime. Additions
-  do not satisfy or alter the canonical bullets; they layer on top.
-
-Hosts that already ship coding-discipline prose under a different
-heading (e.g. "Engineering principles," "Coding rules") MUST reconcile
-that prose with the canonical block — either replacing the existing
-prose with the canonical block or documenting the divergence as a spec
-delta per §09.
+Projects that ship coding-discipline prose under a different heading
+(e.g. "Engineering principles," "Coding rules") SHOULD delete it in
+favour of the skill's copy, rather than reconcile two texts.

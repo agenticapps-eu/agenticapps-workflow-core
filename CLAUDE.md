@@ -21,6 +21,7 @@ does not belong in this repo.
 
 | Path | What |
 |---|---|
+| `skills/` | the host-neutral skills we own. **No host name may appear inside.** Symlinked into each host, never copied |
 | `spec/` | the numbered spec sections — agent behaviour and the rules hosts bind |
 | `adrs/` | decision records; immutable once merged |
 | `reference-implementations/` | the authoritative gate, reviewer-cli, run-plan-review and project hooks |
