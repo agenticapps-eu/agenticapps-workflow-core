@@ -70,6 +70,7 @@ agents:
 Unrelated prose that must survive removal.
 
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 
 ## Development Workflow
 
@@ -94,6 +95,9 @@ expect_row PASS "every byte outside the markers unchanged" "removal purity confi
 expect_row PASS "no known host identifier in the section" "neutrality rule does not fire on neutral prose"
 expect_row PASS "no host-specific paths in the section"   "host-path rule does not fire on a valid file"
 expect_row PASS "carry a path, not a bare identifier"     "link entries accepted when they carry paths"
+expect_row PASS "repository-relative and does not escape" "safe entry paths accepted"
+expect_row PASS "no duplicate agent identifiers"          "distinct identifiers accepted"
+expect_row PASS "carries a content version"               "section version detected"
 if grep -q "^  WARN" "$OUT"; then
   no "a conformant file produced a warning"
 else
@@ -110,11 +114,13 @@ agents:
   opencode: .opencode/AGENTS.md
 ---
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 ## Development Workflow
 Route medium tasks through discuss, plan, then execute-plan.
 <!-- END: agentic-apps-workflow sections -->
 
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 ## Development Workflow
 Route medium tasks through discuss, plan, then execute-phase.
 <!-- END: agentic-apps-workflow sections -->
@@ -150,6 +156,7 @@ agents:
   codex: .codex/AGENTS.md
 ---
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 ## Development Workflow
 This project uses the AgenticApps workflow on the codex host.
 <!-- END: agentic-apps-workflow sections -->
@@ -165,6 +172,7 @@ agents:
   codex: .codex/AGENTS.md
 ---
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 ## Development Workflow
 The version stamp lives at .codex/workflow-version.txt.
 <!-- END: agentic-apps-workflow sections -->
@@ -193,6 +201,7 @@ agents:
   pi: pi
 ---
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 ## Development Workflow
 Propose, validate, review, apply, verify, archive.
 <!-- END: agentic-apps-workflow sections -->
@@ -200,6 +209,81 @@ EOF
 run_harness "$FX/bare.md"; rc=$?
 expect_exit 1 "$rc" "bare identifiers fail the run"
 expect_row FAIL "inventory, not links" "bare identifiers reported as inventory"
+
+echo "═══ E2. Entry paths must not escape the repository"
+# These values feed tooling that DELETES. A path escaping the repo turns
+# removal into deletion of something never provisioned; an absolute path bakes
+# a username into a committed file.
+cat > "$FX/unsafe.md" <<'EOF'
+---
+agents:
+  codex: /etc/passwd
+  pi: ../../elsewhere/AGENTS.md
+  opencode: https://example.invalid/AGENTS.md
+---
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
+Propose, validate, review, apply, verify, archive.
+<!-- END: agentic-apps-workflow sections -->
+EOF
+run_harness "$FX/unsafe.md"; rc=$?
+expect_exit 1 "$rc" "unsafe entry paths fail the run"
+expect_row FAIL "absolute path in agent entry"     "absolute path rejected"
+expect_row FAIL "upward traversal in agent entry"  "parent traversal rejected"
+expect_row FAIL "URL in agent entry"               "URL rejected"
+
+cat > "$FX/dupid.md" <<'EOF'
+---
+agents:
+  codex: .codex/AGENTS.md
+  codex: .codex/OTHER.md
+---
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
+Propose, validate, review, apply, verify, archive.
+<!-- END: agentic-apps-workflow sections -->
+EOF
+run_harness "$FX/dupid.md"; rc=$?
+expect_exit 1 "$rc" "a duplicate agent identifier fails the run"
+expect_row FAIL "duplicate agent identifier" "duplicate identifier reported, not deduplicated"
+
+echo "═══ E3. 'At most one' and 'exactly one' bind different states"
+# A never-provisioned repo legitimately has no section. Failing it would fail
+# every repo that has not yet installed an agent.
+cat > "$FX/noagents.md" <<'EOF'
+# Project
+
+Prose only. No agents provisioned yet.
+EOF
+run_harness "$FX/noagents.md"; rc=$?
+expect_exit 0 "$rc" "no section and no agents is conformant"
+expect_row PASS "no agents listed" "zero sections accepted when nothing is provisioned"
+
+cat > "$FX/agents-nosection.md" <<'EOF'
+---
+agents:
+  codex: .codex/AGENTS.md
+---
+
+# Project
+EOF
+run_harness "$FX/agents-nosection.md"; rc=$?
+expect_exit 1 "$rc" "agents listed with no section fails"
+expect_row FAIL "agents are listed" "zero sections rejected when an agent is provisioned"
+
+echo "═══ E4. A section with no content version has no repair path"
+cat > "$FX/noversion.md" <<'EOF'
+---
+agents:
+  codex: .codex/AGENTS.md
+---
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+Propose, validate, review, apply, verify, archive.
+<!-- END: agentic-apps-workflow sections -->
+EOF
+run_harness "$FX/noversion.md"; rc=$?
+expect_exit 1 "$rc" "a section with no content version fails"
+expect_row FAIL "carries no content version" "unversioned section reported — stale prose could never be repaired"
 
 echo "═══ F. CLAUDE.md is never scored by any row"
 mk_good "$FX/CLAUDE.md"
@@ -264,6 +348,7 @@ fi
 SECTION_FIXTURE="$FX/section.txt"
 cat > "$SECTION_FIXTURE" <<'EOF'
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 
 ## Development Workflow
 
@@ -279,24 +364,36 @@ cat > "$FX/host-add.sh" <<AWKEOF
 #!/usr/bin/env bash
 set -uo pipefail
 repo="\$1"; agent="\$2"; dir="\$repo/.\$agent"; f="\$repo/AGENTS.md"
-if [ -d "\$dir" ]; then echo "agent \$agent is already present — no-op"; exit 0; fi
+# Convergence, not a directory check. An agent is fully present only when its
+# directory, its entry AND the section are all there; short-circuiting on the
+# directory alone makes a half-provisioned repo permanent.
+have_dir=0;   [ -d "\$dir" ] && have_dir=1
+have_entry=0; grep -qE "^[[:space:]]*\$agent[[:space:]]*:" "\$f" 2>/dev/null && have_entry=1
+have_sec=0;   grep -q 'BEGIN: agentic-apps-workflow sections' "\$f" 2>/dev/null && have_sec=1
+if [ "\$have_dir" = 1 ] && [ "\$have_entry" = 1 ] && [ "\$have_sec" = 1 ]; then
+  echo "agent \$agent is already present — no-op"; exit 0
+fi
+[ "\$have_dir" = 1 ] && echo "reconciling \$agent: directory present, completing the rest"
 mkdir -p "\$dir"
 printf '# %s — host binding\n' "\$agent" > "\$dir/AGENTS.md"
 [ -f "\$f" ] || : > "\$f"
 if ! grep -q 'BEGIN: agentic-apps-workflow sections' "\$f"; then
   printf '\n' >> "\$f"; cat "$SECTION_FIXTURE" >> "\$f"
 fi
-tmp="\$(mktemp)"
-if [ "\$(sed -n '1p' "\$f")" = "---" ]; then
-  if grep -q '^agents:' "\$f"; then
-    awk -v a="\$agent" '/^agents:/{print; printf "  %s: .%s/AGENTS.md\n", a, a; next} {print}' "\$f" > "\$tmp"
+if [ "\$have_entry" = 0 ]; then
+  tmp="\$(mktemp)"
+  if [ "\$(sed -n '1p' "\$f")" = "---" ]; then
+    if grep -q '^agents:' "\$f"; then
+      awk -v a="\$agent" '/^agents:/{print; printf "  %s: .%s/AGENTS.md\n", a, a; next} {print}' "\$f" > "\$tmp"
+    else
+      # Merge into pre-existing frontmatter, preserving every other key.
+      awk -v a="\$agent" 'NR==1{print; printf "agents:\n  %s: .%s/AGENTS.md\n", a, a; next} {print}' "\$f" > "\$tmp"
+    fi
   else
-    awk -v a="\$agent" 'NR==1{print; printf "agents:\n  %s: .%s/AGENTS.md\n", a, a; next} {print}' "\$f" > "\$tmp"
+    { printf -- '---\nagents:\n  %s: .%s/AGENTS.md\n---\n' "\$agent" "\$agent"; cat "\$f"; } > "\$tmp"
   fi
-else
-  { printf -- '---\nagents:\n  %s: .%s/AGENTS.md\n---\n' "\$agent" "\$agent"; cat "\$f"; } > "\$tmp"
+  mv "\$tmp" "\$f"
 fi
-mv "\$tmp" "\$f"
 echo "provisioned \$agent"
 AWKEOF
 
@@ -366,6 +463,10 @@ expect_row PASS "5.5 partial presence removed what was there"           "5.5 par
 expect_row PASS "5.5 partial presence reported which expected"          "5.5 missing artifacts reported"
 expect_row PASS "5.6 tool-owned state was left in place"                "5.6 tool-owned state preserved"
 expect_row PASS "5.6 tool-owned state was reported"                     "5.6 tool-owned state reported"
+expect_row PASS "5.6 the directory survived"                            "5.6 directory survives when not empty"
+expect_row PASS "5.10 provisioning converged a directory-without-entry" "5.10 partial provision converges"
+expect_row PASS "5.10 a partial provision was not reported as already"  "5.10 partial state is not called present"
+expect_row PASS "5.11 provisioning converged an entry-without-directory" "5.11 mirror partial state converges"
 if grep -q "INCONCLUSIVE  5\." "$OUT"; then
   no "lifecycle rows stayed inconclusive with a host supplied"
 else

@@ -91,10 +91,17 @@ opencode-workflow global section'
 # ordinary text far more often than on a host reference. The binding repo name
 # is used instead. That is a real gap — a section saying "on the Pi host" is
 # not caught — and it is the concrete form of this check's stated partiality.
+# This list is the spec's enumerated minimum. It MAY be extended and MUST NOT
+# be shrunk — an implementation that shrinks it can claim conformance while
+# detecting less, which is the drift this check exists to catch appearing inside
+# the check.
 HOST_NAMES='codex
 opencode
-pi-agentic-apps-workflow
-claude'
+claude
+codex-workflow
+opencode-workflow
+claude-workflow
+pi-agentic-apps-workflow'
 
 # Host directories are STRUCTURAL, unlike host names. A bare name may appear in
 # neutral prose by coincidence; a path cannot. So names warn and paths fail.
@@ -111,11 +118,23 @@ n_end=$(end_lines | grep -c . || true)
 echo "═══ $LABEL"
 echo "  ── A. One section, whatever the agent count ──"
 
+# Does the file list any agents? "At most one" and "exactly one" bind different
+# states: a repo with no agents may legitimately carry no section, but one that
+# lists an agent and carries none points its agents at a workflow the file does
+# not describe. Scoring zero sections as a flat failure would fail every
+# never-provisioned repo.
+has_agents=0
+grep -q '^agents:' "$TARGET" 2>/dev/null && has_agents=1
+
 # 4.2
 if [ "$n_begin" -eq 1 ] && [ "$n_end" -eq 1 ]; then
   ok "exactly one workflow section"
 elif [ "$n_begin" -eq 0 ] && [ "$n_end" -eq 0 ]; then
-  no "no workflow section found — nothing marks the workflow content"
+  if [ "$has_agents" -eq 1 ]; then
+    no "no workflow section, but agents are listed — they point at a workflow this file does not describe"
+  else
+    ok "no workflow section and no agents listed — 'at most one' is satisfied"
+  fi
 else
   no "expected one begin/end marker pair, found $n_begin begin and $n_end end"
 fi
@@ -293,8 +312,51 @@ if grep -q '^agents:' "$FX/frontmatter.md" 2>/dev/null; then
   else
     no "$bare of $n_entries agent entries are inventory, not links — nothing reaches those agents' instructions"
   fi
+
+  # Path safety. These values are consumed by tooling that DELETES and by agents
+  # that read. A path escaping the repo turns removal into deletion of something
+  # never provisioned; an absolute path additionally bakes the machine's layout
+  # — a home directory carries a username — into a committed file.
+  unsafe=0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    val="$(echo "$line" | sed 's/^[[:space:]]*[^:]*:[[:space:]]*//; s/^[[:space:]]*//; s/[[:space:]]*$//')"
+    case "$val" in
+      /*)        no "absolute path in agent entry: $val"; unsafe=$((unsafe+1)) ;;
+      ~*)        no "home-relative path in agent entry: $val"; unsafe=$((unsafe+1)) ;;
+      *://*)     no "URL in agent entry: $val"; unsafe=$((unsafe+1)) ;;
+      ../*|*/../*|*/..) no "upward traversal in agent entry: $val"; unsafe=$((unsafe+1)) ;;
+    esac
+  done < "$FX/entries.txt"
+  [ "$unsafe" -eq 0 ] && ok "every agent entry path is repository-relative and does not escape the repo"
+
+  # A duplicate identifier is reported, never deduplicated — the two entries may
+  # name different paths, and choosing between them is exactly as unmechanical
+  # as choosing between two drifted sections.
+  dupes="$(sed 's/^[[:space:]]*//; s/[[:space:]]*:.*//' "$FX/entries.txt" | grep -v '^$' | LC_ALL=C sort | uniq -d)"
+  if [ -z "$dupes" ]; then
+    ok "no duplicate agent identifiers"
+  else
+    no "duplicate agent identifier(s): $(echo "$dupes" | tr '\n' ' ')— not deduplicated, they may name different paths"
+  fi
 else
   inc "agent link entries — no 'agents:' frontmatter key present"
+  inc "agent entry path safety — no 'agents:' frontmatter key present"
+  inc "duplicate agent identifiers — no 'agents:' frontmatter key present"
+fi
+
+# The section content version. Without it, first-writer-wins makes the section's
+# prose permanent: adding an agent is a no-op once present and the
+# byte-identical rule forbids a later host rewriting it, so a repo provisioned
+# from a template citing a since-deleted system cites it forever.
+if [ "$n_begin" -eq 1 ] && [ "$n_end" -eq 1 ]; then
+  if grep -qE 'section-version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+' "$FX/body.md" 2>/dev/null; then
+    ok "the section carries a content version, so staleness is detectable"
+  else
+    no "the section carries no content version — stale prose has no supported repair path"
+  fi
+else
+  inc "section content version — needs exactly one well-formed marker pair"
 fi
 
 echo "  ── E. Agent lifecycle ──"
@@ -504,6 +566,36 @@ else
     no "5.5 partial presence removed silently, reporting nothing about what was missing"
   fi
 
+  # 5.10 — convergence from a partial provision. The directory exists but the
+  # entry does not; provisioning must ADD the entry, not report "already
+  # present". Treating the directory as sufficient makes this state permanent —
+  # no number of re-runs ever adds the missing entry.
+  newrepo
+  mkdir -p "$R/.$A1"
+  printf '# %s\n' "$A1" > "$R/.$A1/AGENTS.md"
+  run_add "$R" "$A1"; conv_rc=$?
+  if entry_of "$R" "$A1" >/dev/null 2>&1; then
+    ok "5.10 provisioning converged a directory-without-entry state"
+  else
+    no "5.10 provisioning left a directory-without-entry state unconverged (exit $conv_rc)"
+  fi
+  if grep -qi -e 'already present' "$FX/out.log" 2>/dev/null; then
+    no "5.10 a partial provision was reported as already present"
+  else
+    ok "5.10 a partial provision was not reported as already present"
+  fi
+
+  # 5.11 — the entry exists but the directory does not: the mirror state.
+  newrepo
+  run_add "$R" "$A1"
+  rm -rf "$R/.$A1"
+  run_add "$R" "$A1"
+  if [ -d "$R/.$A1" ]; then
+    ok "5.11 provisioning converged an entry-without-directory state"
+  else
+    no "5.11 provisioning left an entry-without-directory state unconverged"
+  fi
+
   # 5.6 — tool-owned state is reported, not deleted. The workflow did not
   # install it and does not know what depends on it.
   newrepo
@@ -521,6 +613,14 @@ else
     ok "5.6 tool-owned state was reported"
   else
     no "5.6 tool-owned state was left silently, with nothing reported"
+  fi
+  # The directory must SURVIVE here — it is not empty. This is the other half of
+  # the reconciliation: "removal is one directory" holds only when nothing else
+  # is in it, and asserting the directory is gone would contradict 5.6 above.
+  if [ -d "$R/.$A1" ]; then
+    ok "5.6 the directory survived because tool-owned state remained in it"
+  else
+    no "5.6 the directory was removed despite still holding tool-owned state"
   fi
 fi
 

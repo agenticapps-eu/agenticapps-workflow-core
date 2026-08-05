@@ -5,6 +5,17 @@
 Provisioning an agent into a repo SHALL be safely re-runnable. Running it twice
 in a row SHALL produce one actual provision and one no-op.
 
+Idempotence is defined against the *complete* provisioned state, not against
+the agent's directory alone. An agent is fully present when its directory
+exists, its entry is in the shared instruction file, and the host-neutral
+section is present. Provisioning SHALL bring a repo to that state from any
+starting point, and SHALL report a no-op only when it was already there.
+
+Treating the directory's existence as sufficient makes a half-provisioned repo
+permanent: the directory is found, "already present" is reported, and the
+missing entry is never added by any number of re-runs. That is the state both
+vestigial hosts in `factiv/cparx` were actually in.
+
 #### Scenario: Agent not yet present
 
 - **WHEN** an agent is provisioned into a repo that does not have it
@@ -13,16 +24,40 @@ in a row SHALL produce one actual provision and one no-op.
 - **AND** the host-neutral workflow section SHALL be added if and only if the
   file does not already carry it
 
-#### Scenario: Agent already present
+#### Scenario: Agent fully present
 
-- **WHEN** the same agent is provisioned again
+- **WHEN** the same agent is provisioned again and every part of its
+  provisioned state is present
 - **THEN** the operation SHALL report that the agent is already present
 - **AND** SHALL leave every file byte-identical
 
+#### Scenario: Agent partially present
+
+- **WHEN** an agent is provisioned into a repo where some but not all of its
+  provisioned state exists — for example its directory is present but its entry
+  is missing from the shared instruction file, or the reverse
+- **THEN** the operation SHALL add only the missing parts
+- **AND** SHALL report what it reconciled
+- **AND** SHALL NOT report the agent as already present, since it was not
+
 ### Requirement: Removing an agent is supported and bounded
 
-Removing an agent from a repo SHALL be a supported operation. It SHALL delete
-that agent's own directory and SHALL NOT touch any other agent's files.
+Removing an agent from a repo SHALL be a supported operation, bounded to that
+agent's own directory and its entry in the shared instruction file. It SHALL
+NOT touch any other agent's files.
+
+Within that directory, removal SHALL delete the files the workflow provisioned,
+and SHALL then remove the directory itself **only if it is empty**. Anything
+remaining SHALL be left in place and named in the report, together with the
+reason it was kept.
+
+This ordering is the whole reconciliation between "removal is the deletion of
+one directory rather than a search" and "tool-owned state is reported, not
+deleted". The two read as contradictory unless the directory's removal is
+stated as conditional on being empty: in the ordinary case nothing else is
+there and removal *is* a single directory deletion, and in the case that
+motivated the tool-owned-state rule the directory survives because something
+the workflow did not install is still in it.
 
 Taking an agent back out was previously unsupported. Doing it by hand in
 `factiv/cparx` required locating tracked files, untracked files, and a section
@@ -122,7 +157,12 @@ was never the agent's to own.
 ### Requirement: An agent's own directory is the unit of removal
 
 Each agent's provisioned state SHALL be confined to that agent's own directory,
-so that removal is the deletion of one directory rather than a search.
+so that removal is bounded to one directory rather than being a search of the
+repository.
+
+Containment is what this requirement buys, and it is weaker than "removal is
+one `rm -rf`" — the directory survives when tool-owned state is in it. The
+guarantee is that removal never has to look anywhere else.
 
 Anything an agent needs that cannot live there is a shared concern and belongs
 in the host-neutral section instead.
@@ -130,8 +170,10 @@ in the host-neutral section instead.
 #### Scenario: Removal completeness is checkable
 
 - **WHEN** an agent has been removed
-- **THEN** no file outside the shared instruction file SHALL still be
-  attributable to that agent
+- **THEN** no **workflow-provisioned** file SHALL still be attributable to that
+  agent
+- **AND** any file remaining in that agent's directory SHALL be state the
+  workflow did not install, and SHALL be named in the removal report
 
 #### Scenario: Tool-owned state is not workflow state
 
@@ -140,3 +182,42 @@ in the host-neutral section instead.
   `node_modules` the tool manages itself
 - **THEN** removal SHALL remove the workflow-provisioned files
 - **AND** SHALL report, rather than silently delete, state it did not install
+- **AND** the directory SHALL remain, because it is not empty
+
+#### Scenario: Nothing but workflow files remain
+
+- **WHEN** removal deletes the workflow-provisioned files and the agent's
+  directory is then empty
+- **THEN** the directory SHALL be removed
+
+### Requirement: Workflow-provisioned files are identifiable without a manifest
+
+An implementation SHALL be able to determine which files in an agent's
+directory it provisioned, and SHALL treat every file it cannot so attribute as
+tool-owned state to be preserved and reported.
+
+Removal has to distinguish what it installed from what the agent's own CLI
+manages, and this design rejects a per-host manifest — it is new state that can
+itself drift from disk, and a manifest disagreeing with the directory is harder
+to reason about than a directory that is merely incomplete. The obligation is
+therefore on the implementation to know its own output, by a fixed set of
+provisioned paths or an equivalent rule it can state.
+
+Defaulting the unknown case to *preserve* rather than *delete* is what makes
+the absence of a manifest safe: an implementation that has lost track of a file
+it installed leaves a stray file behind, which is reported and recoverable,
+rather than deleting a file it did not install, which is not.
+
+#### Scenario: A file cannot be attributed to the workflow
+
+- **WHEN** removal encounters a file in the agent's directory that it cannot
+  attribute to its own provisioning
+- **THEN** it SHALL preserve the file
+- **AND** SHALL report it as state of unknown origin that was kept
+
+#### Scenario: The provisioned set is stated
+
+- **WHEN** an implementation claims conformance with this capability
+- **THEN** it SHALL document which paths within an agent's directory it
+  provisions
+- **AND** that set SHALL be what removal deletes

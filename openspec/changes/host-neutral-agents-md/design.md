@@ -210,18 +210,28 @@ per-agent link is the only host-specific content permitted in `AGENTS.md`; and
 the host-neutral section is not removed when the last agent leaves.
 
 The link's shape, which task 2.5 held open, has also been answered and moved
-into Decisions above: a frontmatter list whose entries carry paths.
+into Decisions above: a frontmatter list whose entries carry paths. The
+denylist, which the first plan review found was normative-but-unowned, is now
+enumerated in the spec with an explicit rule for hosts not on it.
 
 Remaining, and genuinely open:
 
-- **The host-identifier denylist has no source.** It needs a list of known host
-  identifiers and a rule for what happens when a new host appears that is not
-  on it — which is the case where the warning is most useful and least likely
-  to fire.
+- **Concurrent provisioning is unaddressed.** Two hosts installing at the same
+  time both read `AGENTS.md`, both find no section, and both write one. The
+  read-modify-write is not atomic and this design specifies no locking. It is a
+  narrow window on a single-operator fleet, and the duplicate is detected and
+  reported by the harness afterwards rather than being silent — so it degrades
+  to the state this change already handles rather than to corruption. Stated as
+  an accepted limitation, not solved.
+- **Nothing verifies that a linked file is actually read.** Moving invocation
+  detail out of the shared file assumes each agent loads its own linked file. If
+  a host does not, that detail becomes invisible rather than relocated, and the
+  harness cannot tell the difference — it can check the link resolves, not that
+  the runtime dereferences it.
 - **The producer/consumer asymmetry this change surfaced is unowned.** Reading
   the three live templates side by side found the gate's "≥ 2 external
   reviewers, enforced" claim still in `pi-agentic-apps-workflow`'s template —
   false since gate 2.0.0, and corrected in all seven projects' shims on
-  2026-08-02 without the template that seeds new projects being touched. This
-  change fixes the duplication that let it hide; nothing yet checks that a
-  correction applied to consumers reaches the producer.
+  2026-08-02 without the template that seeds new projects being touched. The
+  section version added above lets a stale *section* be repaired; nothing yet
+  checks that a correction applied to consumers reaches the producer.

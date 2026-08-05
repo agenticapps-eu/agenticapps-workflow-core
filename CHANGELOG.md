@@ -29,16 +29,35 @@ copies that then drift. With one host installed the flaw is invisible, which is
 why the fleet was conformant by accident rather than by rule.
 
 **Conformance impact — MUST-level, and hosts writing `AGENTS.md` are
-affected.** A host implementation must now: carry at most one workflow section;
-check for the marker before appending and not append a second block; keep
-host-specific detail in its own directory (`.codex/`, `.opencode/`, `.pi/`);
-write no host-specific content into the shared file beyond one frontmatter
-entry `agents: {<id>: <path>}` pointing at its own file; delimit the section so
-it can be located and removed by markers alone; and treat `CLAUDE.md` as out of
-scope. A duplicate section is reported with line ranges, never collapsed — the
-copies have drifted and the file records no provenance to choose between them.
-A host identifier inside the section body is a warning, not a failure, and the
-per-agent entries are exempt from that check.
+affected.** A host implementation must now: carry at most one workflow section,
+and exactly one whenever an agent is provisioned; check for the marker before
+appending and not append a second block; keep host-specific detail in its own
+directory (`.codex/`, `.opencode/`, `.pi/`); write no host-specific content into
+the shared file beyond one frontmatter entry `agents: {<id>: <path>}` pointing
+at its own file, outside the markers, with a repository-relative path; delimit
+the section with the exact marker strings the section now states; converge from
+a partial provision instead of reporting a no-op; on removal delete only what it
+provisioned and remove the directory only if it empties; carry a section content
+version and offer an update when the repo's section is older; and treat
+`CLAUDE.md` as out of scope. A duplicate section is reported with line ranges,
+never collapsed — the copies have drifted and the file records no provenance to
+choose between them, so a report is not required to name which host wrote one.
+A host identifier inside the section body is a warning, not a failure, drawn
+from an enumerated denylist, and the per-agent entries are exempt.
+
+**Six of these requirements came from the first plan review** (gemini, codex and
+opencode, all REQUEST-CHANGES) and each fixed a contradiction the section
+shipped with rather than adding scope. The marker literal was named only in the
+design narrative, so a host implementing from the spec alone would have had to
+invent it. Removal both deleted the agent's directory and preserved tool-owned
+state inside it. Provisioning treated a directory without an entry as "already
+present", so a half-provisioned repo could never converge. The denylist was
+normative with its contents deferred, which would have let two hosts ship
+different lists and both claim conformance. And the section had no update path:
+first-writer-wins plus the byte-identical rule meant a repo provisioned from a
+template citing GSD would cite it forever — the same drift this section exists
+to stop, one level up. Concurrent provisioning is recorded as an accepted
+limit.
 
 These are MUSTs where the rest of §12 is SHOULDs. The distinction is the
 failure mode: a host that appends a second block damages a file every *other*

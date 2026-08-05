@@ -46,11 +46,19 @@ guarantees that, and nothing re-runs.
 - **The host-neutral section is written when the first agent arrives and is
   never removed**, so a repo that briefly has no agent keeps the workflow
   documentation it is about to want back.
+- **The section carries a content version**, so a repo provisioned from a stale
+  template can be repaired. Without it, first-writer-wins makes the first
+  host's prose permanent — a repo set up from a template citing GSD would go on
+  citing GSD with no supported operation able to fix it, which is this same
+  problem one level up.
 - **BREAKING** for any project with more than one host block today: the
-  duplicate blocks collapse to one. cparx is the only known instance and has
-  already been cleaned up by hand (cparx PR #125), so the migration's real
-  fleet scope is zero — but the format has to define the collapse rather than
-  assume nobody hits it.
+  duplicate blocks are **reported, with their line ranges, and resolved by
+  hand**. They are not collapsed automatically. The copies have drifted and
+  every host writes an identical marker, so the file records no provenance to
+  choose between them; a tool that picked would ship one drifted copy with the
+  authority of having been fixed. cparx is the only known instance and was
+  already cleaned up by hand (cparx PR #125), so the real fleet scope is zero —
+  but the format has to define the outcome rather than assume nobody hits it.
 
 Explicitly **not** in scope:
 
