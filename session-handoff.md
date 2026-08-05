@@ -60,16 +60,39 @@ Core branch `chore/retire-normalize-claude-md`, 4 commits, unpushed. ATV branch
 `chore/one-instruction-file`, 1 commit, unpushed. All 9 core test suites pass;
 `openspec validate --all` green; the gate exits 0 on its own.
 
+## Also done, after Donald's mid-session answers
+
+He said `.planning` can go, then that `agenticapps-roadmap` is being retired
+anyway, then "mark the repos to be retired as such".
+
+- **Archived on GitHub:** `claude-workflow`, `codex-workflow`,
+  `opencode-workflow`, `pi-agentic-apps-workflow`, `agenticapps-roadmap`. That is
+  collapse-brief §5a done by settings toggle, no commits spent tidying them.
+- **`.planning/` removed from all seven fleet repos and core.** Safe: its
+  `config.json` is declarative only — its own `_note` says "Orchestrator code
+  does not read this block" — and no hook, gate or bin script reads it.
+- **The false §18 rule corrected** in `callbot` (both files) and
+  `fx-signal-agent`, using `agenticapps-dashboard`'s already-correct wording.
+- **`~/.codex/AGENTS.md` deleted** — its single line pointed at GitNexus.
+- Dangling `.planning` references removed from four instruction files; cparx's
+  six broken "auto-synced" blocks deleted.
+
+**Mistake to know about:** three of those repos were not on `main`, so the
+`.planning` commit landed on in-progress branches — `retire-v1-surfaces`
+(dashboard), `chore/remove-vestigial-host-installs` (cparx) and the AGE-495
+branch (fbc-platform). Donald is actively working in dashboard (he committed 13
+seconds after mine), so history was **not** rewritten. Drop those commits if the
+PRs should stay clean.
+
 ## Next session: start here
 
-**Two blocking questions are waiting for Donald (below). Do not start audit item
-4 — the remaining six projects — until the `.planning` one is answered, because
-two of those projects are the roadmap product's data source.** If both are
-answered, the order is: fold the coding discipline into the trigger skill (it is
-the Phase 2 rewrite anyway), then fix `callbot` and `fx-signal-agent`'s false §18
-rule, then the rest of item 4 alongside Phase 5c per project. Audit item 5
-(trim `~/.claude/CLAUDE.md`, delete the one-line dead `~/.codex/AGENTS.md`) is
-unblocked and small.
+Fold the coding discipline into the trigger skill — open question 1, and the
+Phase 2 rewrite needs it anyway. Only then can §5c remove the embedded §11
+blocks. After that: symlink `AGENTS.md` in `callbot`, `cparx`,
+`agenticapps-dashboard`, `fbc-platform` and `fx-signal-agent` (§5c's "one project
+first" week applies — `agents-task-viewer` is that project), read
+`fx-signal-agent`'s nested `tokentelemetry/frontend/AGENTS.md`, and trim
+`~/.claude/CLAUDE.md` to preferences.
 
 ## Open questions
 
@@ -79,13 +102,9 @@ unblocked and small.
    Before Coding*, *Simplicity First*, *Surgical Changes* or *Goal-Driven
    Execution*. That text lives only in core's `spec/11` and in each project's
    instruction files. Fold it into the skill first.
-2. **"`.planning` dirs can be removed" collides with a live product.**
-   `agenticapps-roadmap` ships `scripts/sync-gsd-linear.ts` (`pnpm sync:gsd`,
-   with a test), which walks sibling repos' `.planning/` trees and upserts to
-   Linear. `sync.config.json` names three inputs: `claude-workflow` (being
-   archived), `cparx` (698 tracked `.planning` files) and `fx-signal-agent`. Its
-   own `CLAUDE.md` says "Do not delete it." Is that product still wanted? Core's
-   `.planning` was removed safely — core is not one of the three inputs.
+2. ~~`.planning` vs the roadmap product~~ — **resolved.** Roadmap is retired
+   and archived, so its `.planning`-reading feature goes with it. All
+   `.planning/` dirs removed.
 3. The collapse brief's tier-3 list names four skills, but the diagram's
    conditional-gate node names **security · db-sentinel · design · qa**. So `cso`
    and `qa` look like survivors too. Unresolved; it shapes the Phase 2 payload.
