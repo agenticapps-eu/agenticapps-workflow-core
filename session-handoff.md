@@ -69,7 +69,7 @@ found in what it could already see.
 
 ## The fleet adoption (fifth session, same day)
 
-**§21 is adopted in all four hosts. Six PRs, all CI-green, none merged.**
+**§21 is adopted in all four hosts. Six PRs, all CI-green.**
 
 | repo | PR | before | after |
 |---|---|---|---|
@@ -77,7 +77,7 @@ found in what it could already see.
 | `codex-workflow` | #35 | 2 passed, 4 failed | 6 passed, 0 failed |
 | `opencode-workflow` | #24 | 2 passed, 4 failed | 6 passed, 0 failed |
 | `pi-agentic-apps-workflow` | #20 | 1 passed, 2 failed | 3 passed, 0 failed |
-| core | #83 | — | the four-of-four correction above |
+| core | #83 | — | the git row is four of four, not three |
 | core | #84 | — | two harness fixes, below |
 
 codex and opencode were the two the section was written about. Both now offer
