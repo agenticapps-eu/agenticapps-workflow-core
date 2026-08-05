@@ -139,6 +139,37 @@ rewritten to it rather than merely deleted.
 
 ---
 
+## State at the end of the session
+
+Done:
+
+- `normalize-claude-md` retired; `provisioning-check.sh` and its suite deleted.
+- `~/.codex/AGENTS.md` deleted — its only line pointed at GitNexus. Codex now
+  has no global file, which is the same position as opencode, pi and omp, and is
+  the correct one: the rule belongs in the skill.
+- Core has a `CLAUDE.md` with `AGENTS.md` symlinked to it.
+- `agents-task-viewer` merged to one file, `CLAUDE.md` symlinked to `AGENTS.md`.
+- The false §18 rule corrected in `callbot` (both files) and `fx-signal-agent`.
+- `.planning/` removed from all seven fleet repos and core. Nothing executable
+  read `.planning/config.json` — its own `_note` says "Orchestrator code does
+  not read this block" — and the references to it in four instruction files were
+  removed with it. `agenticapps-roadmap` was archived rather than edited, so its
+  `.planning`-reading feature is retired with the repo.
+- The four host repos and `agenticapps-roadmap` archived on GitHub.
+
+Not done, and deliberately:
+
+- **Split brain remains in `callbot`, `cparx` and `agenticapps-dashboard`.** Each
+  still has two regular files. They should be symlinked as core and
+  `agents-task-viewer` now are, but §5c's "one project first, live with it for a
+  week" applies, and `agents-task-viewer` is that project.
+- **`agenticapps-roadmap`, `fbc-platform` and `fx-signal-agent` still have no
+  `AGENTS.md`.** Roadmap no longer matters. The other two need the symlink.
+- `fx-signal-agent`'s nested `tokentelemetry/frontend/AGENTS.md` was not read.
+- `~/.claude/CLAUDE.md` not yet trimmed to preferences (item 5).
+
+---
+
 ## Not in scope, recorded so it is not rediscovered
 
 `reference-implementations/project-hooks/README.md` (831 lines) narrates the
