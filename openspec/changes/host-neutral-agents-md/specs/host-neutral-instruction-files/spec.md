@@ -21,8 +21,9 @@ information — it is the same instruction stated twice, and the two copies drif
 - **WHEN** a second agent is provisioned into a repo that already has the
   workflow section
 - **THEN** `AGENTS.md` still contains exactly one workflow section
-- **AND** its content is byte-identical to what it was before the second agent
-  was added
+- **AND** the section's content is byte-identical to what it was before the
+  second agent was added
+- **AND** the only addition to the file is that agent's link
 
 #### Scenario: A duplicate section is present from a prior install
 
@@ -33,29 +34,63 @@ information — it is the same instruction stated twice, and the two copies drif
 - **AND** the report SHALL NOT silently collapse them, because the copies may
   have drifted and choosing between them is not mechanical
 
-### Requirement: Host-specific detail lives in the host's own directory
+### Requirement: A link is the only host-specific content in the shared file
 
-Content that differs between agents SHALL live in that agent's own directory
-(`.codex/`, `.opencode/`, `.pi/` or equivalent), not in the shared instruction
-file.
+The only host-specific content an installer SHALL write into the shared
+instruction file is one link per installed agent, pointing at that agent's own
+file in that agent's own directory. Everything else that differs between agents
+SHALL live in that agent's directory (`.codex/`, `.opencode/`, `.pi/` or
+equivalent).
 
 The measured host-specific surface is small — the binding repo name, the host
 config path, and the skill or prompt invocation syntax. Everything else in the
-observed duplicate blocks was identical after host names were normalised out.
+observed duplicate blocks was identical once host names were normalised out. A
+link is enough to reach all of it, and is the smallest thing that can be added
+and removed per agent without touching prose any other agent reads.
 
 #### Scenario: Invocation syntax differs between agents
 
 - **WHEN** two agents invoke the same workflow step with different syntax
   (for example `/gsd-discuss-phase` versus `/prompts:gsd-discuss-phase`)
 - **THEN** the shared instruction file SHALL name the step host-neutrally
-- **AND** each agent's own directory SHALL carry that agent's invocation form
+- **AND** each agent's own file, reached through its link, SHALL carry that
+  agent's invocation form
 
-#### Scenario: A host attempts to write host-specific content to the shared file
+#### Scenario: A host writes host-specific content beyond its link
 
 - **WHEN** a host's provisioning writes host-specific content into the shared
-  instruction file
+  instruction file other than its own link
 - **THEN** the condition SHALL be reported as a violation identifying the host
   and the content
+
+#### Scenario: A host writes its link
+
+- **WHEN** a host's provisioning adds its link to the shared instruction file
+- **THEN** this SHALL NOT be reported as a violation
+
+### Requirement: A host identifier inside the workflow section is a warning
+
+A host identifier appearing inside the host-neutral workflow section SHALL be
+reported at warning severity, not as a failure. The per-agent links SHALL be
+exempt from this check.
+
+The check is a denylist of known host identifiers and cannot recognise novel
+phrasing, so it will both miss cases and occasionally fire on prose that merely
+mentions a host in passing. Failing on it would make a partial heuristic
+blocking. Exempting the links is not a refinement but a correctness
+requirement: the links are host-specific by design, and a check that flagged
+them would fire on the one thing this capability explicitly permits.
+
+#### Scenario: A host name appears in the section body
+
+- **WHEN** a known host identifier is found inside the workflow section
+- **THEN** a warning SHALL be reported naming the identifier and its location
+- **AND** the check SHALL NOT fail
+
+#### Scenario: A host name appears in a link
+
+- **WHEN** a known host identifier appears within a per-agent link
+- **THEN** no warning SHALL be reported for it
 
 ### Requirement: The shared instruction file is delimited and machine-removable
 

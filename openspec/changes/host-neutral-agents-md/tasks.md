@@ -1,8 +1,8 @@
-## 1. Settle the three open questions before writing anything
+## 1. Decisions taken — carry these, do not re-litigate
 
-- [ ] 1.1 Decide whether a host identifier found inside the host-neutral section fails or warns, and record the reasoning in design.md
-- [ ] 1.2 Decide whether the contract requires workflow files and tool-owned state to be separated inside a host directory, or whether reporting unrecognised state is sufficient
-- [ ] 1.3 Decide whether the last agent leaving removes the shared section or leaves it in place; the specs currently say remove, so update them if that flips
+- [x] 1.1 A host identifier inside the host-neutral section WARNS, it does not fail. The per-agent links are exempt, since they are host-specific by design
+- [x] 1.2 A link per installed agent is the ONLY host-specific content permitted in `AGENTS.md`. The subdirectory-separation question was redirected rather than answered, so the existing decision stands: tool-owned state is reported, not deleted
+- [x] 1.3 The host-neutral section is NOT removed when the last agent leaves. Only the departing agent's link goes
 
 ## 2. Fix the source material before codifying it
 
@@ -10,15 +10,19 @@
 - [ ] 2.2 Remove the GSD references — both blocks cite a system deleted fleet-wide on 2026-07-28, so neither copy can be the basis for a new canonical text
 - [ ] 2.3 Resolve the drifted step names (`gsd-execute-plan` versus `gsd-execute-phase`) against what the workflow actually does today, not against either copy
 - [ ] 2.4 List the values that are genuinely host-specific and confirm the count against the four identified (binding repo, config path, skill invocation, prompt invocation)
+- [ ] 2.5 Settle the link's shape — markdown link under a fixed heading, marker-delimited link block, or frontmatter list — choosing on how cheaply exactly one entry can be added and removed without reflowing its neighbours
+- [ ] 2.6 Draft the per-host file that each link points at, using the four values from 2.4 as its whole content
 
 ## 3. Spec §12 — the single-section and host-directory requirements
 
 - [ ] 3.1 Add the single-section requirement to `spec/12-authoring-conventions.md`, including that it holds regardless of agent count
 - [ ] 3.2 Add the requirement that host-specific detail lives in the host's own directory, naming the four-value surface as the expected scope
-- [ ] 3.3 Add the marker requirement: the section is locatable and removable by markers alone, with no dependence on heading text or ordering
-- [ ] 3.4 State explicitly that `CLAUDE.md` is out of scope and that its lack of markers is not a violation
-- [ ] 3.5 Choose the host-neutral marker name and record the legacy names it must recognise for detection
-- [ ] 3.6 Bump the §12 `spec_version` and add the `CHANGELOG.md` entry
+- [ ] 3.3 Add the requirement that a per-agent link is the only host-specific content permitted in the shared file, in the shape settled by 2.5
+- [ ] 3.4 State that the host-neutral section is written at first-agent and never removed
+- [ ] 3.5 Add the marker requirement: the section is locatable and removable by markers alone, with no dependence on heading text or ordering
+- [ ] 3.6 State explicitly that `CLAUDE.md` is out of scope and that its lack of markers is not a violation
+- [ ] 3.7 Choose the host-neutral marker name and record the legacy names it must recognise for detection
+- [ ] 3.8 Bump the §12 `spec_version` and add the `CHANGELOG.md` entry
 
 ## 4. Conformance harness
 
@@ -27,18 +31,22 @@
 - [ ] 4.3 Score duplicate detection against the legacy marker names, reporting every block found with its line range and never collapsing them
 - [ ] 4.4 Score marker-only locatability: the section is found without reading any heading text
 - [ ] 4.5 Score that removing the section leaves every byte outside the markers unchanged
-- [ ] 4.6 Score the host-identifier check inside the section, at the severity decided in 1.1
-- [ ] 4.7 Confirm `CLAUDE.md` is never scored by any row
+- [ ] 4.6 Score the host-identifier check inside the section at WARNING severity, and assert it does not fail the run
+- [ ] 4.7 Assert the per-agent links are exempt from 4.6 — a link containing a host name must produce no warning, or the check fires on the one thing the spec permits
+- [ ] 4.8 Score that a per-agent link is the only host-specific content in the file, and that any other host-specific content is a violation
+- [ ] 4.9 Confirm `CLAUDE.md` is never scored by any row
 
 ## 5. Agent lifecycle rows
 
 - [ ] 5.1 Score add-idempotency: provisioning twice produces one provision and one no-op, with all files byte-identical after the second
-- [ ] 5.2 Score that adding a second agent leaves the shared file byte-identical
-- [ ] 5.3 Score that removing one of several agents deletes only that agent's directory and leaves the shared file in place
+- [ ] 5.2 Score that adding a second agent adds ONLY its link — the host-neutral section byte-identical, the first agent's link untouched
+- [ ] 5.3 Score that removing one of several agents deletes only that agent's directory and only that agent's link, leaving the section and every other link unchanged
 - [ ] 5.4 Score removal of an absent agent: reports not-present, changes nothing
 - [ ] 5.5 Score partial presence using the two real cparx shapes — a config with no skills, and a directory never committed — asserting removal reports what was missing rather than failing
 - [ ] 5.6 Score that tool-owned state (`package.json`, `node_modules`) is reported and left in place, not deleted
-- [ ] 5.7 Score both boundaries: first agent adds the section, last agent removes it per the 1.3 decision
+- [ ] 5.7 Score the first-agent boundary: the section and the agent's link are both added
+- [ ] 5.8 Score the last-agent boundary: the link is removed and the host-neutral section SURVIVES, per 1.3
+- [ ] 5.9 Score re-adding an agent to a repo that has the section but no agents: only the link is added, section byte-identical
 
 ## 6. Tests and verification
 

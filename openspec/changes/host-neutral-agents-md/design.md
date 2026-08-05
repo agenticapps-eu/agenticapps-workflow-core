@@ -71,11 +71,41 @@ CLI manages for itself. Removal must not take those: the workflow did not
 install them and does not know what depends on them. This is the same rule the
 cparx cleanup followed by hand.
 
-**The shared file is touched only at the first-agent and last-agent
-boundaries.** This is what makes "add a second agent" a no-op on the shared
-file, which is precisely the behaviour whose absence produced the cparx state.
-It also makes the common case — adding or removing an agent when others remain
-— provably non-destructive: byte-identical before and after.
+**A link per agent is the only host-specific thing in the shared file.**
+Donald's rule, and it replaced a weaker one this design originally carried:
+that the shared file is touched only at the first-agent and last-agent
+boundaries. That was wrong in an interesting way — it protected the file by
+making agents invisible in it, which meant nothing in `AGENTS.md` recorded
+which agents were actually installed, and removal had no per-agent handle to
+pull. One link per agent restores the handle while keeping every line of prose
+host-neutral. Adding an agent adds its link; removing it removes its link; no
+other agent's link moves. *Alternative considered:* an agent manifest in a
+separate file, leaving `AGENTS.md` entirely host-neutral. Rejected for the same
+reason as the per-host manifest above — it is new state that can drift from
+disk, and an agent reading `AGENTS.md` would have no pointer to its own
+instructions.
+
+**The host-neutral section survives the last agent leaving.** Removing it would
+be symmetric with adding it, and symmetry is the wrong goal: a repo that
+briefly has no agent would lose documentation it is about to want back, and
+re-adding an agent would have to reconstruct prose that was never any agent's
+to own. Only the departing link goes.
+
+**A host identifier inside the section warns rather than fails, and links are
+exempt.** The check is a denylist and cannot recognise novel phrasing, so it
+will both miss cases and occasionally fire on prose that merely mentions a host
+— making a partial heuristic blocking is the wrong trade. The link exemption is
+not a refinement but a correctness condition: links are host-specific by
+design, and a check that flagged them would fire on the one thing the
+capability explicitly permits.
+
+**Tool-owned state is reported, and no subdirectory separation is required.**
+The open question asked whether a host directory must separate
+workflow-provisioned files from state the agent's own CLI manages. Donald
+redirected to the `AGENTS.md` rule above rather than answering it, so the
+weaker existing decision stands unchanged: removal reports state it did not
+install and leaves it alone. Recorded here so the question is visibly not
+adopted rather than silently dropped.
 
 **One marker name, host-neutral, with the legacy names recognised for
 detection only.** Today's markers are host-scoped
@@ -132,12 +162,19 @@ in a downstream repo depends on this change until that repo adopts it.
 
 ## Open Questions
 
-- Should the harness fail or warn on a host identifier found inside the
-  host-neutral section? Failing risks false positives on prose that merely
-  mentions a host; warning risks the rule being ignored.
-- `.opencode/` in cparx held both workflow files and opencode-CLI state in one
-  directory. Should the contract require a subdirectory separating the two, or
-  is reporting the unrecognised state sufficient?
-- Does the last-agent-leaves case remove the section, or leave it? Removing is
-  symmetric; leaving it means a repo that briefly has no agent does not lose
-  documentation it will want back. The spec currently says remove.
+All three questions this design opened were answered by Donald and have moved
+into Decisions above: the host-identifier check warns rather than fails; a
+per-agent link is the only host-specific content permitted in `AGENTS.md`; and
+the host-neutral section is not removed when the last agent leaves.
+
+Remaining, and genuinely open:
+
+- **The link's shape is unspecified.** A markdown link under a fixed heading, a
+  marker-delimited link block, and a frontmatter list are all workable, and
+  they differ in how cheaply a tool can add and remove exactly one entry
+  without reflowing its neighbours. Task 2.5 settles this before the spec text
+  is written.
+- **The host-identifier denylist has no source.** It needs a list of known host
+  identifiers and a rule for what happens when a new host appears that is not
+  on it — which is the case where the warning is most useful and least likely
+  to fire.

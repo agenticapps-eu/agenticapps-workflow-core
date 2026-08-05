@@ -35,11 +35,17 @@ guarantees that, and nothing re-runs.
 - **Host-specific detail moves into the host's own directory** (`.codex/`,
   `.opencode/`, `.pi/`) — the binding repo, config path and invocation syntax
   that are the only things that actually differ.
+- **The one host-specific thing left in `AGENTS.md` is a link per installed
+  agent**, pointing at that agent's own file. Nothing else host-specific is
+  written there.
 - **A second host installing into a repo that already has the section adds no
-  second copy.** This is the behaviour whose absence produced the cparx state.
+  second copy** — it adds its link and nothing more. This is the behaviour
+  whose absence produced the cparx state.
 - **Adding and removing an agent both become supported, re-runnable
-  operations.** Removing an agent deletes its host directory; `AGENTS.md` is
-  touched only when the first agent arrives or the last one leaves.
+  operations.** Removing an agent deletes its host directory and its link.
+- **The host-neutral section is written when the first agent arrives and is
+  never removed**, so a repo that briefly has no agent keeps the workflow
+  documentation it is about to want back.
 - **BREAKING** for any project with more than one host block today: the
   duplicate blocks collapse to one. cparx is the only known instance and has
   already been cleaned up by hand (cparx PR #125), so the migration's real
