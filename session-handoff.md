@@ -91,7 +91,7 @@ implementation had drifted from it, not the other way round.
 branch, and the working tree is verified green. Then the fleet work the third
 session queued is still waiting: `codex-workflow:333` and
 `opencode-workflow:373` non-conformant on consent, `pi` on the reporting
-obligation, and three of four on the unchecked `git`. Each is that host's own
+obligation, and all four on the unchecked `git`. Each is that host's own
 change.
 
 Worth knowing before that work starts: the consent row is now much harder to
