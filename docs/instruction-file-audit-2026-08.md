@@ -170,6 +170,27 @@ Not done, and deliberately:
 
 ---
 
+## The split brain is not only in instruction files
+
+**Two installed skills claim to be the trigger skill.** Both declare `name:
+agentic-apps-workflow` at `version: 3.2.0`, and they are not the same file:
+
+| Path | Lines | What it is |
+|---|---:|---|
+| `~/.claude/skills/agenticapps-workflow/skill/SKILL.md` | 402 | a real directory; the path `~/.claude/CLAUDE.md` names |
+| `~/.claude/skills/agentic-apps-workflow` | 331 | a **symlink into `claude-workflow/skill`** — archived 2026-08-05 |
+
+Same declared name, same declared version, different content, and which one
+loads depends on loader ordering. The registered one — the name projects
+reference — resolves into a host repo that is now archived.
+
+This is the split-brain finding one level up: the skill that instruction files
+point at *as the single home for behaviour* is itself two files. It is also why
+Phase 2's instruction to **rewrite the trigger skill against the diagram rather
+than pick a winner** is the right call. Not resolved here.
+
+---
+
 ## Not in scope, recorded so it is not rediscovered
 
 `reference-implementations/project-hooks/README.md` (831 lines) narrates the
