@@ -77,13 +77,18 @@ legacy bindings, wire claude/codex/opencode, `--check`. The budget was already a
 risk before round two; with a provisioner and a project-shim path added it was
 not credible, and the spec forbids meeting the budget by dropping a promised mode.
 
-Two of those have since changed and the paragraph above is kept as the round-two
+Two of those have since changed, and the paragraph above is kept as the round-two
 record rather than rewritten into a claim it never made: **the wiring is gone**
 (the section below replaces the six that specified it), and **`--project` is
 superseded rather than deferred** — `one-enforcement-floor` drops it, because a
-machine-wide git floor leaves no per-repository hook for it to install. Read
-every later `--project` mention in this document as "the mode that was going to
-exist", not as work now queued.
+machine-wide git floor leaves no per-repository hook for it to install.
+`proposal.md` holds the normative statement of that status.
+
+Round six ended this paragraph with an instruction to the reader — read every
+later mention as the mode that was going to exist — and two reviewers rejected
+it, correctly. Telling a reader to discount later sections does not stop those
+sections asserting a dependency, and the sections asserting one have since been
+reconciled instead.
 
 ## Goals / Non-Goals
 
@@ -99,9 +104,11 @@ exist", not as work now queued.
 
 - Rewriting the gate, `run-plan-review` or `reviewer-cli`. That is Phase 4, and
   this installer publishes them exactly as they stand today.
-- Binding a consuming project. `--project` is its own change, for the reasons in
-  the section above: it needs a project-shim installer and an instruction-file
-  provisioner that does not exist yet.
+- Binding a consuming project. It needs a project-shim installer and an
+  instruction-file provisioner core does not have, which is why `--project` left
+  this change at round two — and it is now superseded rather than queued, so no
+  change is pending to supply either. `proposal.md` carries the normative
+  statement of that status.
 - Deleting `tools/`. Phase 5b.
 - Wiring pi's or omp's hook. pi can block a tool call from an extension
   (`docs/extensions.md`: the event after `tool_execution_start` "**Can block**"),
@@ -153,11 +160,18 @@ way)". The first draft classified it as skipped work, which would have driven a
 non-zero exit on a machine that is in the desired state. It is reported as
 satisfied.
 
-*Note, not a goal:* `install-project-hooks.sh` rewrites the manifest in full from
-the declared set, so the stale `normalize-claude-md.sh` row left behind by that
-artifact's retirement disappears on the first run. The file itself stays in
-`~/.agenticapps/bin/`. Removing software this installer did not install is not
-this change's business.
+*Note, not a goal:* the stale `normalize-claude-md.sh` row left behind by that
+artifact's retirement **survives**, and the file stays in `~/.agenticapps/bin/`.
+Removing software this installer did not install is not this change's business.
+
+> This note said the opposite until round seven: that
+> `install-project-hooks.sh` "rewrites the manifest in full from the declared
+> set, so the stale row disappears on the first run". That is false.
+> `install-project-hooks.sh:216` builds a `KEEP` array carrying every row outside
+> the declared set, by design. Round three established this and corrected the
+> Impact section; the claim survived here, in a document whose stated failure
+> mode is stale artifacts. opencode found it by reading the script rather than
+> the prose. The real run confirmed it: the row is still in `manifest.tsv`.
 
 ### The executables are published from where they already live
 
@@ -209,9 +223,9 @@ script:
 directory, so nothing in it can be replayed.
 
 **`setup-agenticapps-workflow` is different, and the split opens a window.** Its
-job — bootstrapping a fresh project — is what `--project` will do, and `--project`
-is now a later change. Removing the binding therefore removes a capability before
-its replacement exists.
+job — bootstrapping a fresh project — is what `--project` was going to do, and
+`--project` is superseded. Removing the binding therefore removes a capability
+whose replacement is not coming, rather than one that is merely late.
 
 It is removed anyway, and the window is stated rather than avoided. The
 alternative is to leave a binding into an archived checkout in place, which fails
@@ -512,8 +526,8 @@ themselves are never written to.
 None blocking. pi's and omp's skill directories are resolved above and closed
 the host table.
 
-Deferred with the mode that needed them, to `--project`'s own change: a project
-shim installer, and a canonical instruction-file provisioner. The provisioner is
+Dropped with the mode that needed them, and not rehomed: a project shim
+installer, and a canonical instruction-file provisioner. The provisioner is
 the larger of the two and its size is genuinely unknown — a section template, a
 version source, frontmatter placement, byte preservation outside the markers, and
 consent to update an existing section. That is the reason it is not a task in
@@ -584,3 +598,62 @@ Rejected:
 - **"The bare run is not a working install."** It publishes the artifacts and
   installs core's own hook. That is the stated postcondition, and it is what a
   machine with no host installed can have.
+
+## Round seven: three reviewers, and the one that read the script
+
+Run because round six amended normative text — the preservation `SHALL` and the
+consent exception — that no reviewer had seen. **gemini APPROVE, codex
+REQUEST-CHANGES, opencode REQUEST-CHANGES.** opencode counted this time because
+the timeout knob is `REVIEW_TIMEOUT`, not `REVIEWER_TIMEOUT`; six rounds of its
+opinion were lost to that.
+
+opencode is the reason to have run it. It checked claims against the repository
+instead of reading the prose, and found that the Decisions section still said
+`install-project-hooks.sh` "rewrites the manifest in full … so the stale row
+disappears on the first run" — false since round three, corrected in the Impact
+section then, and still standing here in a document whose declared failure mode
+is stale artifacts. The real run had already proved it false. Fixed.
+
+Fixed in this round:
+
+- **The false manifest claim**, above.
+- **`--project` was "deferred", "superseded" and a Phase 5b precondition in three
+  different places.** Round six annotated it — "read every later mention as the
+  mode that was going to exist" — and both reviewers rejected the annotation as
+  a substitute for reconciling. They were right; a sentence telling the reader to
+  discount later sections does not stop those sections asserting a dependency.
+  `proposal.md` now carries the normative statement and the precondition claim is
+  gone.
+- **Wiring-era text inside normative requirements.** Idempotency forbade
+  duplicating "a configuration block" and required semantic duplicate detection
+  because "a configuration file rewritten by a serialiser does not come back
+  byte-identical"; preservation covered "a binding or a host configuration file".
+  The installer writes no configuration. Testable `SHALL`s naming objects that
+  stopped existing when the wiring left. Struck.
+- **Round six's own scenario conflict.** "A binding is replaced → the previous
+  content is preserved at a path the run reports" contradicted the symlink
+  exception added in the same round. The scenario is now scoped to a directory or
+  a regular file. Caught by codex, and it was introduced by the fix for codex.
+- **The host identifier set is enumerated**, `codex-` and `opencode-`, with the
+  three consequences of that choice stated. "A leading host identifier" was the
+  load-bearing rule for eighteen unconsented rebinds and it resolved to whatever
+  the implementation coded.
+- **pi reads a fifth directory.** `~/.pi/agent/skills` is loaded by pi and is
+  neither bound nor swept, so a legacy binding placed there survives the sweep
+  and the negative test. Measured before accepting: 25 entries, all relative
+  symlinks into `~/.agents/skills`, none archived. Stated in the requirement.
+
+Deferred, and named so the deferral is not silence:
+
+- **`--check` does not report core's pre-commit hook**, which is the bare-run
+  postcondition, and its exit status for absent, stale, modified or unreadable
+  artifacts is undefined — as is the status when a symlink cannot be created.
+  These are check-mode reporting distinctions, the first deferrable item in the
+  declared order, and they now join the two already recorded in `CODE-REVIEW.md`.
+  Four gaps in one mode is the argument for doing them as one change rather than
+  four amendments.
+
+Carried forward unchanged, with the reasons already given: ownership by
+repository-name substring, the enumerated-tables objection, and the PII and
+control-character rules that belong to `screen-review-egress`. The budget-clause
+objection is rejected for the second time, for the reason in round six.

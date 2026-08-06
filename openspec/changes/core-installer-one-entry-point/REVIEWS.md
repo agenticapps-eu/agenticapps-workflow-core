@@ -7,43 +7,53 @@
 # Review record
 
 - requested: gemini codex claude opencode
-- counted:   gemini (APPROVE) codex (REQUEST-CHANGES)
+- counted:   gemini (APPROVE) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
 - excluded:  claude (declared implementing host)
-- failed:
-  - opencode: timed out at 180s
+- failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-08-06T18:12:49Z · timeout 180s_
+_generated 2026-08-06T18:29:49Z · timeout 600s_
 
 VERDICT: APPROVE
-
-This is an exceptionally thorough and well-reasoned specification. It demonstrates a clear-eyed view of the problem, documents its own history through multiple review rounds, and makes pragmatic, well-defended decisions. The points below are minor observations on accepted risks rather than requests for change.
-
-*   The decision to remove host-hook wiring is a major simplification that correctly identifies the git and CI hooks as the true enforcement floor. It removes a significant amount of complexity and risk for a feature that was providing redundant and incomplete coverage.
-*   The currency check for executables based on byte-content instead of version markers is the correct, robust solution. It closes the "hand-edited file" loophole that version-only checks cannot see.
-*   The legacy-binding sweep is a necessary, practical solution to a messy problem. Its core assumption — that a host-prefixed skill like `codex-foo` is replaced by a neutral skill named `foo` — is a heuristic. The specification correctly identifies this as a name transformation, not a capability comparison. This risk is acceptable because the action is scoped only to bindings that are about to break anyway, and every rebind or removal action is explicitly reported to the operator.
-*   The "capability window" opened by deferring `--project` and removing `setup-agenticapps-workflow` is a clear, user-facing trade-off. The document correctly identifies this and accepts it, which is the right call, but it does place a hard sequencing constraint on a follow-up change before the legacy repositories can be removed.
+*   The equivalence derivation for rebinding legacy skills is a name-based heuristic, not a guaranteed capability match. The specification correctly identifies and accepts this risk, noting that the bindings in question are already aimed at unmaintained checkouts and would otherwise be removed entirely.
+*   Recognizing legacy checkouts by substring match in a symlink's target path carries a small, accepted risk of false positives on paths that were not installed by this workflow.
+*   The spec correctly identifies and accepts a temporary "capability window" by removing the `setup-agenticapps-workflow` binding before its successor mode is implemented, prioritizing the removal of dependencies on archived code.
 
 ## Reviewer: codex
-_generated 2026-08-06T18:15:34Z · timeout 180s_
+_generated 2026-08-06T18:31:15Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
 
-- [HIGH] The spec simultaneously requires acceptance before replacing any directory and mandates automatic removal of the legacy copied `agenticapps-workflow` directory. Define an explicit, safely proven ownership exception or require consent.
-- [HIGH] Archived-checkout ownership is inferred from repository-name substrings. An unrelated path containing `codex-workflow`, for example, could be removed without consent. Require canonical path-boundary and repository-identity verification.
-- [HIGH] Automatic equivalence discovery trusts any searched directory containing a matching `SKILL.md`, allowing an unrelated or malicious skill to be propagated across hosts. Restrict candidates to authoritative locations or use a reviewed mapping.
-- [HIGH] Recoverability is not covered for the archived-binding sweep. The requirement says every replaced or removed binding is preserved, but tasks lack that scenario and the recorded run preserved only one directory while changing 26 symlinks.
-- [MEDIUM] `--check` is underspecified: it lacks health exit semantics and scenarios for the project-hook set and manifest, every individual skill, wrong/dangling links, and correct bytes with lost executable permission.
-- [MEDIUM] The line-budget escape clause contradicts normative `SHALL` requirements: it permits collapsing check states and per-name reporting that earlier requirements explicitly mandate. Deferral must require a spec amendment.
-- [MEDIUM] The claimed bare “working install” only publishes binaries and installs core’s own hook; it neither binds a host nor enables a consuming project. Define the usable postcondition or narrow the claim.
-- [MEDIUM] The normative delta does not enumerate authoritative host-directory/detection mappings, artifact-marker mappings, archived checkout identities, or complete CLI combination/error behavior. “Known” and “declared” permit silent omissions.
-- [MEDIUM] The live-checkout symlink model makes any checked-out PR branch active prompt code for all hosts, yet this appears only in a security review rather than the capability. Require a trusted/pinned worktree or an explicit warning and consent.
-- [MEDIUM] Saved diagnostic evidence exposes usernames and filesystem topology, and reported symlink targets can contain control characters. Add redaction/escaping rules; the committed evidence already contains `/Users/donald`.
-- [LOW] The artifacts remain internally stale: `design.md` still says `--project` must precede checkout deletion and that checks report host-hook wiring, while the proposal/tasks say `--project` is superseded and host wiring does not exist. Reconcile and re-review before archive.
+- `--project` status is contradictory: it is variously “deferred,” “superseded,” and a Phase 5b prerequisite. The change cannot establish sequencing or deletion safety until one position is normative.
+- Bare-run scope is ambiguous: the legacy sweep SHALL inspect every known host directory, which can mutate unrequested hosts, conflicting with hosts being optional and auto-detection refusing absent hosts.
+- The delta omits authoritative artifact/marker/destination, host-directory/detection, and legacy-name/outcome tables. It can technically pass while installing the wrong payload or migration mapping.
+- Destructive ownership is unsafe: repository-name substring matching and legacy-name directories are treated as proof of ownership, allowing unrelated content to be removed without consent. Dangling-link “resolution” is also undefined.
+- Derived rebinding lacks specified search directories, precedence, and duplicate handling. It can redirect live prompt code to an arbitrary same-named skill without establishing equivalence.
+- Preservation requirements conflict: the general replacement scenario requires a preserved path and restore command, while symlink handling permits only reporting the old target. Backup location security and directory permissions are unspecified.
+- The budget clause permits collapsing check distinctions and per-name sweep reporting that other SHALLs and scenarios explicitly mandate. Those requirements cannot simultaneously be deferrable and required.
+- `--check` does not explicitly report the core pre-commit hook—the key bare-install postcondition—and its exit status for absent, stale, modified, or unreadable required artifacts is undefined.
+- The required saved check output and reported absolute targets expose usernames and filesystem layout. The spec needs a destination, restrictive permissions, and redaction/egress rules rather than deferring the PII concern.
+
+## Reviewer: opencode
+_generated 2026-08-06T18:33:13Z · timeout 600s_
+
+I'll verify a few load-bearing claims against the actual repository before ruling, since the document makes contradictory statements about at least one of them.
+VERDICT: REQUEST-CHANGES
+
+- **Verified factual contradiction — `manifest.tsv` behaviour.** Decisions ("Note, not a goal") claims `install-project-hooks.sh` "rewrites the manifest in full from the declared set, so the stale `normalize-claude-md.sh` row … disappears on the first run." The Impact section says the opposite. I checked the script: it builds a `KEEP` array that carries rows for artifacts outside the declared set ("Rows for artifacts this run does not touch are carried through"), so Impact is right and Decisions is wrong. The stale row does **not** disappear. This document repeatedly cites stale artifacts as its canonical failure mode and then ships one. Delete or correct the Decisions note.
+- **Second unresolved internal contradiction — Phase 5b sequencing.** Decisions says "nothing now has to land before the checkouts are deleted" because `one-enforcement-floor` supersedes `--project`. The Impact section still says the capability window "makes the `--project` follow-up a precondition for deleting those checkouts in Phase 5b", and "What this change deliberately does not do" / Non-Goals / Open Questions still describe `--project` as queued work getting "its own proposal and its own review". The blanket "read every later mention as the mode that was going to exist" sentence does not fix sections that actively assert a dependency and future work. Reconcile, don't annotate.
+- **Stale wiring-era text in normative requirements.** (a) Idempotency: "SHALL NOT duplicate … a configuration block. Duplicate detection SHALL be semantic rather than textual. A configuration file rewritten by a serialiser…" — the installer writes no host configuration; there is no serialiser and no configuration block. (b) Preservation: "a binding or a host configuration file" and "Host configuration files are exempt: their loaders match exact names" — same. These are testable SHALLs referencing objects that no longer exist; either scope them to symlinks/hooks or strike them.
+- **Equivalence derivation is underdetermined.** "A leading host identifier removed and a trailing `-audit` removed" never defines the identifier set. Is `opencode-ts-declare-first` → `ts-declare-first`? What happens to a genuinely neutral skill whose name begins with `codex-`? Mid-name identifiers (`update-opencode-…`) silently fall through to removal. The derivation is the load-bearing rule for 18 unconsented rebinds; the spec must enumerate the prefixes.
+- **Sweep scope vs. pi's two directories.** pi reads both `~/.pi/agent/skills` and `~/.agents/skills`. The installer never *writes* the former, but the negative test walks "every known host skill directory". If that set includes `~/.pi/agent/skills`, the sweep must act there too; if not, a legacy binding pi loads survives both sweep and test. Unstated either way.
+- **Recognition-by-substring defeats the acceptance matrix.** The binding-state requirement promises "symlink anywhere else → acceptance required", but recognition is a repo-name substring in the resolved target, and manifest/archived-resolving entries are acted on *without* acceptance. A foreign symlink under any directory named e.g. `codex-workflow` is replaced unconsented — the acceptance table never gets a say. Round six accepted this as bounded, but the acceptance-matrix requirement should state the precedence explicitly rather than implying a protection the recognition rule overrides.
+- **Symlink-failure exit status unspecified.** "A symlink cannot be created" says report-and-continue but not the exit code. Under "A requested step that was skipped exits non-zero" this is a skipped requested step — the scenario should say so, or name the exception.
+- **Minor:** the check-mode "reports which version it holds" applies to artifacts but not symlink bindings (no version exists); "A published artifact is not executable" is an invariant phrased as a scenario with no discriminating WHEN; the 7-line budget headroom (210/217) against a mandatory set that includes every acceptance/preservation rule means any implementation defect fix forces a spec amendment — by design, but worth acknowledging as schedule risk, not just arithmetic.
+
+The architecture itself (orchestrate-don't-reimplement, byte-wise currency, scoped recoverability, named manifest plus manifest-independent sweep) is sound and the exit-3-as-satisfied reading of the shared-artifact contract checks out against the source. The blockers are internal consistency defects, not design defects.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:3c1461e59a6fd288932f7abe39aa52997c74ad1edf09e788865ed774699bc33e
+digest: sha256:02896c83432f47878869d1d9f9ae47ea34b21c85aa81269f18097a64534b3c95
 producer-version: 1.2.0
-tasks-digest: sha256:ce89bf86abb7a81db6e008c57a795ed64e73431a9c60a204c981d34b295be765
+tasks-digest: sha256:65a10c2eb4a1a957eb487e816b52d451466c1d7c0b3e49c99c2f2535281c7e64
 -->

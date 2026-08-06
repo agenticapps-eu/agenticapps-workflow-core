@@ -191,7 +191,19 @@ to prevent.
 The manifest's own completeness SHALL NOT be established by reading the manifest.
 The installer SHALL enumerate every known host skill directory and SHALL act on
 every entry resolving into an unmaintained checkout, whether or not the manifest
-names it. A check that consults the manifest to decide what to check cannot
+names it.
+
+**"Known" means the four directories this installer binds, and one host reads a
+fifth.** pi loads `~/.pi/agent/skills` as well as `~/.agents/skills`. The
+installer neither binds nor sweeps the former, so a binding into an unmaintained
+checkout placed there survives both the sweep and the negative test that exists
+to catch exactly that. The bound scope is stated rather than left implied, and it
+was measured before it was accepted: that directory holds 25 entries on this
+machine, all of them relative symlinks into `~/.agents/skills`, none resolving
+into an unmaintained checkout and none workflow-named. The gap is real and
+currently empty. Widening the sweep to a directory the installer does not write
+is a change of its own, because acting where you do not install is a different
+promise. A check that consults the manifest to decide what to check cannot
 detect the omission that matters, which is a name the manifest does not carry.
 
 For an entry the manifest does not name, the installer SHALL rebind it to the
@@ -203,7 +215,21 @@ outcomes SHALL be reported by name, together with the target replaced.
 
 **The equivalence derivation SHALL be specified here rather than left to the
 implementation.** The host-neutral candidate for a name is that name with a
-leading host identifier removed and a trailing `-audit` removed. A candidate
+leading host identifier removed and a trailing `-audit` removed.
+
+**The host identifiers SHALL be enumerated, not described.** They are exactly
+`codex-` and `opencode-`: the two archived host installers that vendored
+host-prefixed copies. `claude-`, `pi-` and `omp-` are deliberately absent —
+nothing ever installed under them — and the set SHALL NOT be widened by
+inference from the host list. Three consequences follow and are accepted rather
+than discovered later: a genuinely neutral skill whose own name begins `codex-`
+would be mis-derived; an identifier appearing mid-name, as in
+`update-opencode-agenticapps-workflow`, is not stripped and the entry falls
+through to removal, which is the right outcome for that name and is not
+guaranteed to be for every such name; and a host that starts vendoring under a
+new prefix needs this list amended before its bindings can be swept. "A leading
+host identifier" without this list is the load-bearing rule for eighteen
+unconsented rebinds, resolved by whatever the implementation happened to code. A candidate
 counts as installed only if a skill of exactly that name exists in a searched
 skills directory **and is not itself a binding into an unmaintained checkout** —
 one host's dead link is no better a target than another's, and rebinding to it
@@ -430,13 +456,16 @@ would create in a normal run.
 ### Requirement: Installing twice leaves the same machine as installing once
 
 The installer SHALL be idempotent. A second run with the same arguments SHALL
-produce the same machine state as the first and SHALL NOT duplicate a symlink, a
-hook entry, or a configuration block.
+produce the same machine state as the first and SHALL NOT duplicate a symlink or
+a hook entry.
 
-Duplicate detection SHALL be semantic rather than textual. A configuration file
-rewritten by a serialiser does not come back byte-identical, so a textual test
-would either add a second copy of an entry that is already present or report a
-change that did not happen.
+> This requirement also forbade duplicating "a configuration block" and required
+> semantic rather than textual duplicate detection, because a configuration file
+> rewritten by a serialiser does not come back byte-identical. **The installer
+> writes no configuration file**, so there is no serialiser and no block: those
+> were testable `SHALL`s naming objects that stopped existing when the wiring was
+> removed. Struck at round seven rather than left as text a conformance run could
+> be written against.
 
 #### Scenario: The installer runs twice
 
@@ -447,9 +476,13 @@ change that did not happen.
 
 ### Requirement: What the installer replaces with its own hands is recoverable
 
-Before replacing or removing a binding or a host configuration file, the
-installer SHALL preserve what it is about to destroy at a reported path, and
-SHALL state how to restore it. Preserved copies SHALL NOT overwrite one another,
+Before replacing or removing a binding whose content is not recoverable from the
+report — a directory or a regular file — the installer SHALL preserve what it is
+about to destroy at a reported path, and SHALL state how to restore it. A symlink
+binding is the stated exception and is covered below. Host configuration files
+were named here too and are struck at round seven: the installer writes none, so
+the clause described an act that can no longer occur, which is dead text read as
+a live guarantee. Preserved copies SHALL NOT overwrite one another,
 SHALL carry the permissions of what they preserve, and a preservation that fails
 SHALL abort that step rather than proceed unprotected.
 
@@ -491,9 +524,10 @@ nothing else is running does not protect the case it exists for. For published
 artifacts the protection is the arbitration itself: refusal to downgrade, and an
 explicit opt-in with a stated reason for an operator who means it.
 
-#### Scenario: A binding is replaced
+#### Scenario: A binding whose content the report cannot carry is replaced
 
-- **WHEN** the installer replaces an existing binding or host configuration file
+- **WHEN** the installer replaces an existing binding that is a directory or a
+  regular file
 - **THEN** the previous content is preserved at a path the run reports
 - **AND** the summary states the command that restores it
 

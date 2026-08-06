@@ -49,8 +49,13 @@ Linear issue: AGE-503.
 ## What this change deliberately does not do
 
 `--project` — binding a consuming project — was in the first two drafts and is
-**deferred to its own change**. Two rounds of review established that it is not
-one flag on this installer:
+**superseded, not deferred**. This is the normative statement of its status and
+every other mention in this bundle resolves to it. It was deferred at round two,
+for the reasons below; `one-enforcement-floor` then dropped it outright, because
+a git floor bound machine-wide leaves no per-repository hook for it to install.
+Nothing is queued under the name `--project` and nothing waits on it.
+
+Two rounds of review established that it was never one flag on this installer:
 
 - `install-core-git-hooks.sh` cannot bind a project. The hook it writes resolves
   `<repo>/reference-implementations/…`, which is ADR-0028's self-hosting
@@ -64,11 +69,13 @@ one flag on this installer:
   *checks* all of that and writes none of it. There is no template, no version
   source, and no frontmatter-preserving writer to delegate to.
 
-So `--project` is a project-shim installer plus a provisioner core does not yet
-have. Attaching it here would mean building both inside a change whose
+So `--project` was a project-shim installer plus a provisioner core does not
+have. Attaching it here would have meant building both inside a change whose
 specification caps the installer at 200 executable lines and forbids meeting
-that cap by dropping a promised mode. It gets its own proposal and its own
-review.
+that cap by dropping a promised mode. That reasoning got it deferred; the
+machine-wide floor then removed the per-repository hook it existed to install,
+and it was dropped rather than scheduled. No proposal and no review are pending
+for it.
 
 ## Capabilities
 
@@ -115,15 +122,19 @@ that would have written an instruction file is deferred.
   every row outside the declared set first, deliberately. Removing it needs
   explicit pruning that is not this change's to do, and the retired file stays
   in `~/.agenticapps/bin/`: this change removes no software it did not install.
-- Deferred to a follow-up change: `--project`, and with it any core-side
-  instruction-file provisioner.
-- **A capability window opens with that deferral.** This change removes the
-  `setup-agenticapps-workflow` binding, whose replacement is `--project`. Until
-  the follow-up lands, bootstrapping a fresh project means invoking the archived
-  checkout's skill directly or doing it by hand. The window is accepted rather
-  than avoided: the alternative is leaving a binding into an archived checkout,
-  which is the condition this change exists to end. It makes the `--project`
-  follow-up a precondition for deleting those checkouts in Phase 5b.
+- Superseded, not queued: `--project`, and with it any core-side
+  instruction-file provisioner. See the normative statement above.
+- **A capability window opens, and nothing is scheduled to close it.** This
+  change removes the `setup-agenticapps-workflow` binding, whose replacement was
+  going to be `--project`. Bootstrapping a fresh project now means invoking the
+  archived checkout's skill directly or doing it by hand. The window is accepted
+  rather than avoided: the alternative is leaving a binding into an archived
+  checkout, which is the condition this change exists to end.
+- **This is a cost, not a sequencing constraint.** An earlier version of this
+  bullet made the `--project` follow-up a precondition for deleting the archived
+  checkouts in Phase 5b. With `--project` superseded there is no follow-up to
+  wait for, so Phase 5b is gated on nothing here — it just has to accept that
+  deleting the checkouts closes the manual workaround too.
 
 ## Scope narrowed after round three
 
