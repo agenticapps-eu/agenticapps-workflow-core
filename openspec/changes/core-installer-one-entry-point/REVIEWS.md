@@ -7,35 +7,36 @@
 # Review record
 
 - requested: gemini codex
-- counted:   gemini (APPROVE) codex (REQUEST-CHANGES)
+- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES)
 - excluded:  (none) (declared implementing host)
 - failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-08-06T09:46:29Z · timeout 420s_
+_generated 2026-08-06T17:13:01Z · timeout 420s_
 
-VERDICT: APPROVE
-*   **Heuristic for un-manifested legacy bindings is potentially fragile.** The proposal to "Strip the host prefix and any `-audit` suffix, and if a skill of that name is installed, rebind to it" assumes a highly consistent naming scheme. An un-manifested legacy skill with an unexpected name (e.g., `codex-internal-cso-pilot`) would not match `cso` and be removed instead of rebound, leading to capability loss. The sweep should probably report these ambiguous cases for operator review rather than acting automatically.
-*   **Assumes host skill directories exist.** The specification does not state what happens if a detected host is present, but its skill directory (e.g., `~/.claude/skills`) has not yet been created. To be robust, the installer should create the target directory if it's missing.
-*   **The `--check` currency report omits a plausible state.** The spec correctly requires byte-for-byte comparison, but does not define an outcome for when a published artifact has been replaced with a symlink (e.g., by a developer for local testing). This should be detected and reported as a distinct state, as its intent and remedy are different from a hand-edited file.
+VERDICT: REQUEST-CHANGES
+- **Internal Contradiction on Scope:** The specification is self-contradictory. The `Decisions` section describes a detailed implementation involving per-host configuration, adapters (`hosts/`), plugins, and a `jq` dependency. However, the "Scope narrowed after round three" section and the final `ADDED Requirements` section explicitly state all host-specific wiring has been removed. The document must be reconciled to describe only the final, agreed-upon design.
+- **Undefined Legacy Binding Logic:** The `Requirements` section mandates that legacy bindings not on the manifest are rebound to a "host-neutral equivalent" or removed. However, it fails to specify the actual heuristic for determining the equivalent. This logic (stripping host prefixes and `-audit` suffixes) is only defined in the now-obsolete `Decisions` section and must be moved into the formal `Requirements`.
+- **Inaccurate Budget Calculation:** The line budget was adjusted from 250 to 228 after removing host wiring, but the calculation only accounts for removing `wire_opencode` (10 lines) and one opt-in (12 lines). Removing the wiring for all hosts, the adapters, the JSON merge logic, and the plugin installation is a far more significant reduction. The budget calculation appears inconsistent with the described scope reduction.
+- **Stale "What this change deliberately does not do" section:** The section on deferring `--project` is now partly redundant. It argues for deferral because `install-core-git-hooks.sh` can't bind a project and no instruction-file provisioner exists. The subsequent scope change that removes *all* hook wiring makes the first point moot for this installer, as it no longer installs any hooks other than core's own. The reasoning should be updated to reflect the final scope.
 
 ## Reviewer: codex
-_generated 2026-08-06T09:49:33Z · timeout 420s_
+_generated 2026-08-06T17:15:53Z · timeout 420s_
 
 VERDICT: REQUEST-CHANGES
 
-- The normative delta never enumerates the actual host/directory/wiring table, payload artifacts and marker keys, legacy mappings, or archived checkout identities. “Known,” “declared,” and “manifest” are self-referential, allowing omissions while remaining conformant.
-- Archived-binding recognition by repository-name substring is unsafe ownership inference. An unrelated symlink whose path contains `codex-workflow`, for example, may be removed without acceptance. Require canonical checkout roots or explicit ownership evidence.
-- Deriving “equivalence” by stripping host prefixes and `-audit` is semantically invalid: `codex-impeccable-audit → impeccable` can rebind to a different capability. Use an explicit reviewed mapping or metadata.
-- Backups named beside bindings remain inside host skill-discovery directories. They can load as duplicate stale skills and still resolve into archived checkouts, contradicting the requirement that none survive. Store backups outside discovery roots.
-- The claimed stale-manifest cleanup is false: `install-project-hooks.sh` deliberately carries forward rows for artifacts outside the current declared set. Either add explicit pruning or remove that promised side effect.
-- `--check` lacks defined failure exit semantics and currentness criteria for host wiring. A stale OpenCode plugin, malformed matcher, duplicate entry, or configured-but-inactive hook can still be reported merely as “wired.”
-- The budget deferral clause contradicts earlier SHALL requirements: check distinctions and confirmed host wiring are simultaneously mandatory and deferrable. Deferral conditions and exit behavior must be made consistent.
-- Add fail-before-writing scenarios for unknown hosts, missing `--host` values, and conflicting modes. Also redact `$HOME` and escape control characters in saved diagnostic paths to reduce PII and terminal-log injection risk.
+- The bundle is stale and contradictory: `design.md` still specifies host wiring, `jq`, `hosts/`, and the old budget; `tasks.md` still tests 250 lines and explicitly says `REVIEWS.md` covers removed scope. Reconcile all artifacts and re-review.
+- The normative delta omits authoritative host directories, detection evidence, artifact/marker mappings, archived checkout identities, legacy mappings, and consent flag names. Terms such as “known,” “declared,” and “manifest” are self-referential and permit silent omissions.
+- Ownership detection by repository-name substring is unsafe. An unrelated target containing `codex-workflow` could be destroyed without consent.
+- Deriving equivalents by stripping host prefixes and `-audit` is not semantically sound; it can rebind to a different capability or remove one incorrectly. Require an explicit reviewed mapping; ambiguous entries need consent.
+- Argument and migration scope are undefined: unknown hosts, missing `--host` values, mixed `auto`/named hosts, and whether a bare run sweeps every host directory need fail-before-write scenarios.
+- The stale-manifest cleanup claim is false: `install-project-hooks.sh` preserves rows outside the declared set, so the retired row will not disappear.
+- `--check` lacks exit semantics and scenarios for foreign, dangling, or wrong-checkout binding targets. Automation cannot reliably distinguish a healthy install from a degraded one.
+- Reported paths and restore commands need control-character escaping, shell-safe quoting, and a PII policy; they currently incorporate potentially hostile paths and are intended to be saved to logs.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:47ccd05654da3ad08398f3e5fc3983ddd7d2358ee950fef87b2d9b7ea6066784
+digest: sha256:43042626771dbe91c17de22f025b880b676bb0bbdbe98b27479da40debca1011
 producer-version: 1.2.0
-tasks-digest: sha256:d84ded171daff262e0e327ce1035a18dfd29f7656bd4d0ce629e49eac2837a75
+tasks-digest: sha256:6d2577178e2582c739dc681256cfc203be3996ae7b821de29d43c5a19c5ce425
 -->

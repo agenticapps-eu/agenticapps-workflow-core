@@ -21,21 +21,22 @@ nothing else.
 
 ### Requirement: The installer is short enough to be read before it is trusted
 
-The installer SHALL NOT exceed 228 executable lines, counting neither comments
+The installer SHALL NOT exceed 217 executable lines, counting neither comments
 nor blank lines.
 
 > **This change spends, it does not save.** The host wiring was already removed
 > by `core-installer-one-entry-point`, which is where the budget came back from
-> 250 to 228 and where the implementation landed at 210. This change adds: the
+> 250 to 217 and where the implementation landed at 210. This change adds: the
 > published hook, the global binding, the foreign-binding refusal, and four new
-> `--check` reports. That is growth, and 18 lines of headroom is not obviously
+> `--check` reports. That is growth, and 7 lines of headroom is plainly not
 > enough for it.
 >
-> The budget is therefore **not pre-raised here**. If the mandatory behaviour
-> does not fit, the escape clause applies as written — itemise the overage,
-> name the behaviour responsible, and raise the number in this document. What
-> is not permitted is arriving at 240 and discovering the ceiling had already
-> been moved to accommodate it.
+> The budget is therefore **not pre-raised here**, and saying in advance that it
+> will not fit is the point rather than an admission. If the mandatory behaviour
+> does not fit, the escape clause applies as written — itemise the overage, name
+> the behaviour responsible, and raise the number in this document. What is not
+> permitted is arriving at 240 and discovering the ceiling had already been
+> moved to accommodate it.
 
 Mandatory: every mode named in this specification, publishing, skill binding,
 the global floor binding, the foreign-binding refusal, the legacy manifest, and
@@ -51,7 +52,7 @@ and why.
 #### Scenario: The budget is measured
 
 - **WHEN** the installer's executable lines are counted
-- **THEN** the count is at most 228, or the budget has been raised in this
+- **THEN** the count is at most 217, or the budget has been raised in this
   document with the overage itemised
 
 #### Scenario: The growth is accounted for

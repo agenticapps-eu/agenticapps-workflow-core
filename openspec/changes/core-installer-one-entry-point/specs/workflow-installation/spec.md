@@ -177,12 +177,52 @@ cannot act on a report of a binding they did not create and do not recognise,
 and the binding breaks the moment the checkout is deleted either way. Both
 outcomes SHALL be reported by name, together with the target replaced.
 
+**The equivalence derivation SHALL be specified here rather than left to the
+implementation.** The host-neutral candidate for a name is that name with a
+leading host identifier removed and a trailing `-audit` removed. A candidate
+counts as installed only if a skill of exactly that name exists in a searched
+skills directory **and is not itself a binding into an unmaintained checkout** —
+one host's dead link is no better a target than another's, and rebinding to it
+leaves a machine that looks converted while still resolving into a checkout
+about to be deleted. If no such candidate exists, the entry SHALL be removed;
+the derivation SHALL NOT be widened, retried, or fuzzy-matched to find one.
+
+**What this derivation does not guarantee, stated plainly.** It is a name
+transformation, not a capability comparison: `codex-impeccable-audit` derives
+`impeccable`, and nothing mechanically establishes that the installed
+`impeccable` does what the vendored audit copy did. Three reviewer rounds across
+two vendors raised this, and the objection is correct on its own terms. It is
+accepted rather than solved, on three bounds — the sweep only touches bindings
+resolving into the four named unmaintained checkouts, so nothing independently
+installed is in scope; every rebind is reported by name with both the previous
+and the new target, so the guess is visible rather than silent; and the
+alternative outcome for an entry with no derivable equivalent is removal, so the
+derivation can only ever redirect a binding that was already about to break.
+
+A reviewed explicit mapping would be stronger and is the right answer if a
+mis-rebind is ever observed. It is not adopted now because the manifest already
+owns every case needing judgement, and a table of 18 host-prefixed copies whose
+own repositories are being deleted would be maintained exactly once.
+
 #### Scenario: A legacy binding is present
 
 - **WHEN** a host holds a binding under a legacy name the manifest lists
 - **THEN** the installer replaces it with the current binding, or removes it
   when nothing current replaces it
 - **AND** it reports which of the two it did, by name
+
+#### Scenario: A derived candidate is itself an unmaintained binding
+
+- **WHEN** the derived host-neutral name exists but is itself a binding
+  resolving into an unmaintained checkout
+- **THEN** it is not treated as an installed equivalent
+- **AND** the entry is removed rather than rebound to it
+
+#### Scenario: No equivalent can be derived
+
+- **WHEN** the derivation yields a name that is not installed
+- **THEN** the entry is removed and reported by name
+- **AND** no wider or approximate match is attempted
 
 #### Scenario: A binding the manifest does not name resolves into an unmaintained checkout
 
@@ -439,31 +479,33 @@ explicit opt-in with a stated reason for an operator who means it.
 
 ### Requirement: The installer is short enough to be read before it is trusted
 
-The installer SHALL NOT exceed 228 executable lines, counting neither comments
+The installer SHALL NOT exceed 217 executable lines, counting neither comments
 nor blank lines. An operator is being asked to let it write into their home
 directory, and the honest basis for that trust is reading it.
 
-> **The number was 200, then 250, and it is now 228 — and every move is
-> itemised, which is the whole point of having one.**
+> **200, then 250, now 217 — and the arithmetic is shown because a reviewer
+> caught it being wrong.**
 >
-> It was raised to 250 after the second review round, for 57 lines of behaviour
-> the 200 predated: currency judged by content rather than by version marker
-> (13), the archived-binding scan that must not consult the legacy manifest
-> (14), `wire_opencode`, which the first draft created and never installed (10),
-> the preserved-copy collision, permission and failure rules (8), and the second
-> opt-in, separated from the first because one grants an editor config edit and
-> the other grants deleting a directory (12).
+> The raise to 250 bought 57 lines the 200 predated: currency judged by content
+> rather than by version marker (13), the archived-binding scan that must not
+> consult the legacy manifest (14), `wire_opencode` (10), the preserved-copy
+> collision, permission and failure rules (8), and the second opt-in (12).
 >
-> Two of those five were host wiring. Removing it takes back `wire_opencode`
-> (10) and the second opt-in (12), so the raise gives back 22 and the budget
-> returns to 228. It is **not** left at 250: a ceiling that stays where the
-> removed behaviour put it is a ceiling that quietly funds the next thing nobody
-> argued for. The implementation measures 210, so the headroom is 18, and it is
-> stated here rather than discovered later.
+> A first attempt at the reduction reversed only the two wiring items in that
+> list — `wire_opencode` and the second opt-in, 22 lines — and set the budget to
+> 228. A round-four reviewer objected that removing *all* wiring is a far larger
+> reduction than 22, and was right: the measured removal was **40** lines. The
+> other 18 were wiring that predated the raise and sat inside the original 200.
 >
-> The budget worked as designed in both directions. It did not prevent the
-> growth — it made the growth itemisable. It takes no credit for the shrink; it
-> just declines to keep the room the shrink freed.
+> So the ceiling comes down by both: 200 minus the 18 lines of wiring in that
+> baseline, plus the 35 non-wiring lines of the raise, is **217**. The
+> implementation measures 210, leaving 7 lines.
+>
+> That is tight, and deliberately so. A ceiling left where removed behaviour put
+> it quietly funds the next thing nobody argued for. The successor change adds
+> the global floor binding and expects to need a raise — its own requirement
+> says the overage must be itemised rather than pre-approved, which is this
+> clause working as designed rather than being worked around.
 
 A budget with no stated order of sacrifice is a suggestion, because the choice of
 what to drop then falls to whoever is writing the last line and is furthest from
@@ -490,7 +532,7 @@ by amending this specification rather than silently in the implementation.
 #### Scenario: The budget is measured
 
 - **WHEN** the installer's executable lines are counted
-- **THEN** the count is at most 228
+- **THEN** the count is at most 217
 
 #### Scenario: The budget cannot be met
 

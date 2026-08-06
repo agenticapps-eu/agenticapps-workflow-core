@@ -8,9 +8,9 @@ this change modifies do not exist in `openspec/specs/` until then.
 - [ ] 0.1 `core-installer-one-entry-point` is archived and `workflow-installation`
       exists in `openspec/specs/`
 - [ ] 0.2 Record the installer's executable line count before any edit. The
-      predecessor left it at 210 against a 228 budget, so this change has 18
-      lines of headroom and is expected to need more — the requirement demands
-      the growth be itemised, not permitted
+      predecessor left it at 210 against a 217 budget, so this change has 7
+      lines of headroom and will almost certainly need a raise — the requirement
+      demands the growth be itemised, not pre-approved
 - [ ] 0.3 Record which repositories carry a `.git/hooks/pre-commit` and the byte
       size of each, as the before-state evidence for the divergence claim
 

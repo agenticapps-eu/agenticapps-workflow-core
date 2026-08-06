@@ -256,54 +256,64 @@ of them. A directory-level link would delete the other 96. Per-entry links also
 buy per-entry consent and per-entry recovery, which an all-or-nothing link
 cannot.
 
-### `jq` is Tier 2, and a skipped wiring exits non-zero
+### The installer writes no host configuration
 
-`~/.claude/settings.json` on this machine already carries hooks from four other
-tools. Hand-rolling a JSON merge in bash against a file other software writes to
-is how you corrupt someone's editor config. So wiring uses `jq`, and `jq` is
-Tier 2 — Tier 1 is `git` and `bash` by requirement.
+**This section replaces six that specified host wiring.** They described `jq` as
+a Tier 2 dependency for merging into `~/.claude/settings.json`, a `wire_<host>`
+function per host, an `--accept-host-config` opt-in, a derived opencode plugin,
+a carried-forward codex adapter, and a `hosts/` directory as the one place a
+host name was allowed. All of it is gone, and the reasoning is recorded rather
+than deleted because the alternatives it rejected are still the alternatives.
 
-The first draft then exited 0 when `jq` was missing. That violates
-`installer-prerequisite-consent`, which says in terms that an installer *"SHALL
-exit non-zero when a step it was asked to perform was skipped."* Both reviewers
-caught it from opposite directions — gemini as a usability objection to
-hand-pasting JSON, codex as a spec contradiction — and gemini's own second
-option is the resolution: **refuse to wire that host, say so, wire the others,
-exit non-zero.** The block is still printed, because an operator who wants to
-finish the job by hand should not have to reconstruct it.
+Three measurements decided it:
 
-Note the distinction the spec draws: an *unrequested* absence is not a skip.
-Wiring pi, which has no confirmed hook surface, exits zero — the operator asked
-for what exists and got it.
+- **The host hook did not enforce what it appeared to.** `gate_check` returns
+  satisfied when no change is open, so it never blocked code-without-a-spec. It
+  blocked edits while an *open* change failed to validate — and `pre-commit` and
+  CI catch that same condition.
+- **The gate's own `pre-commit` argues against it in its header**: a `PreToolUse`
+  hook "is loaded at session start and cannot gate the session that installed
+  it, and it does not exist at all for a human with an editor."
+- **It was the entire host-specific surface**: 27 executable lines here, 293 in
+  `hosts/`, one consent flag, and `jq` — which was Tier 2 for the JSON merge and
+  nothing else.
 
-When `jq` is present the write is: render to a temp file, confirm it parses,
-preserve the original at a reported path, then move. A failed `jq` leaves the
-original untouched because it was never opened for writing. And modifying a
-host's configuration at all requires acceptance, defaulting to no — that file
-belongs to the host, not to this workflow.
+*Alternative rejected: keep it for claude only.* Two thirds of the wiring cost
+for most of the benefit, on the grounds that claude has the most session time.
+It reintroduces per-host divergence for one host's convenience and makes the
+enforcement story depend on which agent you happen to open. A design whose value
+rests on one host being dominant breaks when the mix changes, and the mix has
+changed twice.
 
-The non-interactive opt-in is `--accept-host-config`, and `INSTALL_ACCEPT_HOST_CONFIG=1`
-is its environment equivalent for CI. Round two was right that "a named opt-in"
-with no name is not a specification: without one, every non-interactive run
-either prompts into a closed stdin or silently assumes consent, and both are the
-failure this rule exists to prevent. Absent the flag, a non-interactive run
-prints the block it would have written and does not write it.
+*Alternative rejected: keep it and set `OPENSPEC_GATE_STRICT=1`,* which makes it
+block when no change is open and therefore genuinely load-bearing. This is the
+strongest case for keeping it. It fails because `pre-commit` can enforce the
+same rule through the same `gate_check` call: strict mode is a reason to raise
+the floor, not to keep the ceiling.
 
-Note the asymmetry with `jq` reserialisation, because a test depends on it: `jq`
-reformats the whole document, so **byte** preservation of other tools' hook
-entries is not achievable and asserting it would fail a correct implementation.
-What must hold is that every pre-existing entry survives **semantically** — same
-entries, same values — and that the *backup* is byte-for-byte the original.
+*Alternative rejected: ship the wiring, then delete it in the successor.* This
+was the original plan, with the real run performed without the opt-in so nothing
+was actually wired. It ships a release whose installer edits configuration files
+the next release un-edits, and leaves 320 lines in `main` that are known-dead on
+arrival. The red-flag list names sunk-cost reasoning about deleting code
+directly.
 
-*Alternative rejected:* python3 for the merge. It is a second scripting language
-in a file whose budget is 200 lines and whose reviewer is asked to read all of
-them.
+**What the deleted artifacts knew, which Phase 5b still needs.** The archived
+codex adapter at
+`codex-workflow/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh`
+exists because codex cannot invoke the gate directly — `apply_patch` carries
+paths inside the patch body and codex expects a permission-decision response.
+The installed opencode plugin states at line 93 that a change *"must pass
+'openspec validate --all' AND carry REVIEWS.md with >=2"*, which the gate
+stopped enforcing at 2.0.0. Neither is carried forward, and neither is now a
+blocker for deleting those checkouts. Recorded because "we deleted it and it
+turned out to know something" is the failure this paragraph exists to prevent.
 
-### Null wiring is the absence of a function, not a branch
-
-Each host with confirmed wiring gets a `wire_<host>` function. Hosts without one
-get their skills bound and nothing else. There is no `if host is pi or omp` test
-anywhere. Adding pi later is adding `wire_pi`.
+**Null wiring is no longer a concept.** There is no `wire_<host>` function and
+therefore no branch distinguishing a host that has one from a host that does
+not. Every host is bound the same way. `install_hosts` has no per-host test
+anywhere, and that is a property to defend: the moment one exists, the second
+is cheap.
 
 ### pi and omp share one host-neutral directory, and it identifies neither
 
@@ -316,45 +326,6 @@ But that directory cannot be used to *detect* either host: it is shared, and it
 already holds a `.skill-lock.json` from an unrelated tool. Detection tests for
 the host executable. The shared binding is reported once, as shared, naming both
 hosts — not as evidence that either is installed.
-
-### The opencode plugin is derived, not lifted
-
-The installed copy at `~/.config/opencode/plugin/openspec-change-gate.ts` tells
-the operator, at line 93, that a change *"must pass 'openspec validate --all'
-AND carry REVIEWS.md with >=2"*. The gate stopped enforcing that at 2.0.0;
-`CLAUDE.md` and `change-gate-enforcement` both say so. Lifting it byte-for-byte
-would install a message that sends operators to fetch reviews for an edit that
-was never blocked for that reason.
-
-So `hosts/opencode/openspec-change-gate.ts` is written against current gate
-behaviour and reviewed as executable code, not as an asset. The same rule
-generalises into the spec: wiring never asserts a rule the gate does not enforce.
-
-And it is **installed**, by a `wire_opencode` that is a peer of `wire_claude` and
-`wire_codex` — same acceptance, same preserve-before-replace, same idempotence,
-same failure handling. The first draft created the plugin and tested its
-behaviour but never wired it, which would have shipped a file nobody installs.
-Opencode's plugin is a file rather than a JSON edit, so `wire_opencode` does not
-need `jq`; it still needs acceptance, because the plugin directory belongs to
-opencode.
-
-### codex needs an adapter, and one exists to start from
-
-codex cannot invoke the gate directly: `apply_patch` carries paths inside the
-patch body, and codex expects a permission-decision response. The adapter that
-handles this lives at
-`codex-workflow/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh`
-in the archived repo, and core has no equivalent — so replacing codex's skill
-binding without carrying it forward would break a hook that works today.
-
-It comes into `hosts/codex/` and is reviewed as code under the same rule as the
-opencode plugin, against real allow and block payloads.
-
-### `hosts/` is where host names are allowed
-
-`CLAUDE.md` forbids a host name inside `skills/`. It does not forbid host
-adapters existing — it cannot, because three hosts have irreducibly different
-wiring. `hosts/` makes that boundary explicit rather than implicit.
 
 ### `--check` judges currency by bytes, not by version marker
 
@@ -417,9 +388,10 @@ that step rather than proceeding unprotected.
 
 ## Risks / Trade-offs
 
-**Corrupting a shared `settings.json`** → acceptance first, then render to temp,
-parse-check, preserve, move. `jq` never writes the original. On any failure the
-block is printed, the step counts as skipped, and the run exits non-zero.
+**Corrupting a shared `settings.json`** → the installer no longer opens one.
+This risk was mitigated by a render-to-temp, parse-check, preserve-then-move
+sequence; it is now retired outright, which is the strongest form of mitigation
+available and the reason it is listed rather than dropped.
 
 **Replacing a binding someone wanted** → every replacement is reported by path
 and names what it found. Acceptance is required for anything that might not be
@@ -439,13 +411,14 @@ The regular-file row exists because the first draft named that state and then
 defined no outcome for it. A regular file where a skill directory belongs is
 someone's note or someone's half-migration, and neither should vanish silently.
 
-**Two opt-ins, not one.** Writing the binding tests made it obvious that
-`--accept-host-config` cannot also authorise replacing a binding target: one
-grants "edit the JSON your editor reads", the other grants "delete a directory
-that may hold work". An operator granting the first has not considered the
-second, and a single flag would collect both on one keystroke. So the
-unrecognised-target consent is `--replace-unrecognised`, separate and separately
-named, each with the `INSTALL_*` environment equivalent the spec requires.
+**One opt-in, and it used to be two.** Writing the binding tests made it
+obvious that a config-edit consent cannot also authorise replacing a binding
+target: one grants "edit the JSON your editor reads", the other grants "delete a
+directory that may hold work", and a single flag collects both on one keystroke.
+The first of those is gone with the wiring; `--replace-unrecognised` remains,
+with the `INSTALL_*` environment equivalent the spec requires. The retired flag
+is now an unknown-argument error rather than a silent no-op, so a script still
+passing it fails loudly.
 
 **Recognition is by repo name in the resolved target, not by absolute path.** A
 binding is this workflow's own if its resolved target contains one of the
@@ -480,23 +453,29 @@ moment of writing the code:
    dropped to fit. `--host auto` is a normative scenario, not a nice-to-have,
    and the first draft was wrong to offer it as the thing that goes.
 2. **Deferrable, in this order** — the `modified`/`unreadable` distinction in
-   `--check` (collapsing to "not current"); then per-host wiring for the third
-   host, which leaves that host bound and unwired, a state the spec already
-   defines as conformant.
+   `--check` (collapsing to "not current"); then the archived-binding sweep's
+   per-name reporting, which may collapse to a count.
+
+The deferrable list used to end in per-host wiring, which was the cheapest thing
+this budget could sacrifice. It no longer exists, so the list is shorter and the
+budget has less give — a reason to watch it, not a reason to raise it.
 
 Anything deferred is reported to the operator with what caused it. If the
-mandatory set alone exceeds 200 lines, that is reported as an overage and the
+mandatory set alone exceeds the budget, that is reported as an overage and the
 budget is raised in the spec by amendment — never silently in the script.
 
-**The archived checkouts must survive until this lands** → the codex adapter and
-the opencode plugin are both sourced from them. Deleting them first loses the
-adapter.
+**The archived checkouts must survive until this lands** → this was true while
+the codex adapter and opencode plugin were carried forward from them. Neither is
+now, so this risk is retired and Phase 5b loses a blocker. What those artifacts
+knew is recorded above rather than in a file nobody installs.
 
 ## Migration Plan
 
-1. Land `install.sh`, `hosts/`, and the tests. Nothing on the machine changes.
+1. Land `install.sh` and the tests. Nothing on the machine changes.
 2. Run `./install.sh --check` and record the before state.
-3. Run `./install.sh --host auto`. Legacy bindings are replaced or removed.
+3. Run `./install.sh --host auto --replace-unrecognised`. Legacy bindings are
+   replaced or removed. No configuration opt-in is passed because there is none
+   to pass, which is what makes this safe to run beside live sessions.
 4. Re-run `--check`; confirm every previously-bound host is still bound and no
    binding resolves into an archived checkout.
 5. Confirm a fleet project's shim still resolves

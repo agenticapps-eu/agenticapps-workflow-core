@@ -109,11 +109,12 @@ that would have written an instruction file is deferred.
   those checkouts be deleted.
 - No change to `~/.agenticapps/bin/` contents, paths or permissions, so the six
   fleet projects that shim to it keep working untouched.
-- One observable side effect of publishing through the attesting installer: it
-  rewrites `manifest.tsv` in full from the declared set, so the stale
-  `normalize-claude-md.sh` row left by that artifact's retirement disappears.
-  The retired file itself stays in `~/.agenticapps/bin/`; this change does not
-  remove software it did not install.
+- Publishing through the attesting installer rewrites `manifest.tsv` in full,
+  but the stale `normalize-claude-md.sh` row **does not disappear** — an earlier
+  draft of this proposal claimed it would. `install-project-hooks.sh` re-emits
+  every row outside the declared set first, deliberately. Removing it needs
+  explicit pruning that is not this change's to do, and the retired file stays
+  in `~/.agenticapps/bin/`: this change removes no software it did not install.
 - Deferred to a follow-up change: `--project`, and with it any core-side
   instruction-file provisioner.
 - **A capability window opens with that deferral.** This change removes the

@@ -12,7 +12,7 @@ it can be trusted until it exists.
 - [x] 1.4 RED: `git` missing fails the run, names `git`, publishes nothing
 - [x] 1.5 RED: an optional dependency absent, with nothing requesting it,
       completes and exits 0, printing the install command but not running it
-- [x] 1.6 RED: the budget — `install.sh` is at most 250 executable lines (raised from 200 by spec amendment; see the requirement)
+- [x] 1.6 RED: the budget — `install.sh` is at most 217 executable lines (200 raised to 250, then reduced to 217 when the wiring left; the arithmetic is in the requirement because round four caught a first attempt at it being wrong)
 - [x] 1.7 RED: `--help` names every mode and names the host-config opt-in flag
 
 ## 2. RED cases for delegation
