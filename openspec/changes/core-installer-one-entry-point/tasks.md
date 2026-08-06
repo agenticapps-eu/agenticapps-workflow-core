@@ -170,7 +170,12 @@ unspecified. Each is a case.
       as bounded and **reported as deferrals**, including both check-mode
       reporting gaps. The suite also enforced the old 250-line budget while the
       spec says 217 — corrected
-- [ ] 8.9 `cso`
+- [x] 8.9 `cso`. **Done** — `SECURITY-REVIEW.md`. Two findings from nine
+      candidates: the bindings resolve into a live working tree, so a branch
+      checkout is live prompt code for five hosts (HIGH, recorded as a property
+      to write down rather than a design to change), and the workflows pin
+      actions to tags rather than SHAs (MEDIUM). No secrets, no `eval`, no
+      network fetch, every filesystem operation quoted
 
 ## 9. Hand off what was deferred
 

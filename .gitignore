@@ -1,1 +1,4 @@
 .DS_Store
+
+# gstack security reports stay local
+.gstack/
