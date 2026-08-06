@@ -1,106 +1,116 @@
-# Session Handoff — 2026-08-05 (sixth session)
+# Session Handoff — 2026-08-06 (seventh session)
 
-**Next action: Phase 3, the installer.** Everything it needs is in this file.
+**Next action: decide between re-running the plan reviewers and doing the real
+`--host auto` run.** Both are described at the bottom. Nothing is blocked.
 
-Donald's standing requirement, his words — the acceptance test for Phase 3, not
-the phase checklist:
+Phase 3 is built, committed (`a0a0264`, branch `feat/one-skills-payload`) and
+green. It has not been run for real on this machine.
 
-> "much leaner workflow within repos, less token consumed, nothing agent
-> specific, installer easy peasy"
+## Accomplished
 
-His fifth-session verdict is on the unmerged branch
-`docs/handoff-donalds-verdict` (`cc71fd3`). Read it before proposing anything.
+- **Scope split, on Donald's decision.** `core-installer-one-entry-point` is now
+  the host side only. `--project` is deferred to its own change: two review
+  rounds established it is a project-shim installer *plus* an instruction-file
+  provisioner core does not have. `install-core-git-hooks.sh` is core-only by
+  design (ADR-0028, it resolves `<repo>/reference-implementations/…`), and
+  nothing in this repo writes the canonical instruction-file markers —
+  `tools/agents-md-conformance.sh` checks them and writes nothing. Both verified,
+  not taken on the reviewers' word.
+- **All four planning artifacts revised** to the split scope, and every accepted
+  round-two finding applied.
+- **`install.sh` written** — 249 executable lines, four modes.
+- **`tools/install.test.sh`** — 57 cases, all green. Per-case temp `HOME` and git
+  repo, plus a canary over the real home.
+- **`hosts/codex/openspec-change-gate-adapter.sh`** and
+  **`hosts/opencode/openspec-change-gate.ts`** — carried forward and corrected.
+- **`docs/evidence/install-check-before.md`** — the before state (task 8.3).
+- Memory written: `workflow-runs-on-one-machine`.
 
-## Open PRs — all pushed, none merged
+## Decisions
 
-| Repo | PR | Net |
-|---|---|---|
-| core | [#87](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/87) retire `normalize-claude-md` + the uncalled checker + core's first `CLAUDE.md` + the audit | +379 / −10,801 |
-| core | [#88](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/88) **Phase 2**, branched from #87 | +424 / −27 |
-| agents-task-viewer | [#19](https://github.com/agenticapps-eu/agents-task-viewer/pull/19) | +139 / −25,847 |
-| callbot | [#101](https://github.com/agenticapps-eu/callbot/pull/101) | +45 / −473 |
-| cparx | [#126](https://github.com/agenticapps-eu/cparx/pull/126) | +38 / −181,650 |
-| fx-signal-agent | [#121](https://github.com/agenticapps-eu/fx-signal-agent/pull/121) | +10 / −187 |
-| fbc-platform | [#119](https://github.com/agenticapps-eu/fbc-platform/pull/119) | +1 / −179 |
+- **`--project` deferred** — it is not one flag; see above. It also opens a
+  capability window: this change removes the `setup-agenticapps-workflow`
+  binding whose replacement is `--project`. Accepted deliberately; the
+  alternative is keeping a binding into an archived checkout, which is the exact
+  condition the change exists to end. **Consequence: `--project` must land before
+  the archived checkouts are deleted in Phase 5b** — alongside the codex adapter
+  and opencode plugin, which were also sourced from them.
+- **Line budget 200 → 250, by spec amendment**, with the accounting recorded in
+  the requirement: round two added 57 lines of behaviour the 200 predates
+  (byte-wise currency 13, the archived sweep 14, `wire_opencode` 10,
+  preserved-copy rules 8, the second opt-in 12). Without them it measures ~189.
+  The budget worked — it forced the accounting instead of letting the file grow.
+- **Two opt-ins, not one** — `--accept-host-config` and `--replace-unrecognised`.
+  One grants "edit the JSON your editor reads", the other "delete a directory
+  that may hold work". A single flag collects both on one keystroke.
+- **Discovery now acts, not just detects.** The design originally said the
+  manifest acts and discovery detects, because discovery "cannot decide between
+  replace and remove". `--check` on the real machine found **26 archived
+  bindings; the hand-written manifest named 8.** The 18 missed are host-prefixed
+  copies of upstream skills (`codex-cso`, `opencode-qa`, …) — the vendoring the
+  workflow itself forbids. The objection is answered by *the presence of a
+  host-neutral equivalent*: strip the host prefix and any `-audit` suffix, rebind
+  if such a skill is installed, remove if not. The named manifest shrank to one
+  entry: `agenticapps-workflow`, a copied **directory** a symlink sweep cannot
+  see (and the second of the two files that both claimed to be the trigger skill).
+- **Removal is scoped to what this workflow installed.** `is_archived` matches
+  only the four workflow repos, so an independently installed binding is
+  invisible to the sweep. Proof on this machine: `observability` sits in
+  `~/.codex/skills` beside twelve workflow bindings and is untouched. There is a
+  test for this because nothing else enforces it.
+- **A directory-level symlink was rejected** (Donald's suggestion, and a good
+  one). `~/.claude/skills` holds 98 entries and core owns 2; linking the
+  directory would delete the other 96. Per-entry links also buy per-entry consent
+  and recovery.
+- Both carried-forward host artefacts claimed the gate requires "REVIEWS.md >= 2
+  reviewers" — untrue since gate 2.0.0, and the opencode one said it in the
+  message thrown at a **blocked operator**. Both corrected; a test greps for the
+  claim in executable text (comments may quote it to correct it).
 
-Current branch: `feat/one-skills-payload`. Core is green — `openspec validate
---all` passes, all test suites pass, the gate exits 0 unaided.
+## Files modified
 
-## Done
+- `install.sh` — new, 249 executable lines
+- `hosts/codex/openspec-change-gate-adapter.sh`, `hosts/opencode/openspec-change-gate.ts` — new
+- `tools/install.test.sh` — new, 57 cases
+- `docs/evidence/install-check-before.md` — new
+- `openspec/changes/core-installer-one-entry-point/{proposal,design,tasks}.md` and
+  `specs/workflow-installation/spec.md` — all revised
 
-- **Phase 1** — verified already done (all four hosts pin `ef030d0`, every
-  sha256 still matches core's tree). Skipped, not deferred.
-- **§5a** — archived `claude-workflow`, `codex-workflow`, `opencode-workflow`,
-  `pi-agentic-apps-workflow`, `agenticapps-roadmap` by settings toggle.
-- **Audit items 1–5** — `normalize-claude-md` retired; `provisioning-check.sh` +
-  suite deleted (1,202 lines, no caller); the false "gate blocks on reviews"
-  rule corrected in callbot ×2 and fx-signal-agent; one instruction file per
-  repo in six repos; `.planning/` gone everywhere; `~/.codex/AGENTS.md` deleted;
-  record in `docs/instruction-file-audit-2026-08.md`.
-- **Phase 2** — `skills/agentic-apps-workflow` (235) + `skills/openspec-change-review`
-  (150) replace ~5,000 lines across 5 + 3 + ~12 copies. `spec/11` amended: the
-  discipline block now lives in the skill once, and **a project carrying none is
-  conformant** — that is what unlocks the token reduction.
+## Next session: start here
 
-## Phase 3 — the installer. Host facts already measured, do not rediscover
-
-```
-./install.sh                          # payload + git pre-commit. No host needed.
-./install.sh --host claude --host pi  # ...plus shim wiring
-./install.sh --host auto              # detect and wire what is found
-./install.sh --project <path>         # pre-commit hook + a few lines in AGENTS.md
-./install.sh --check                  # the doctor table
-```
-
-| host | skill dir | hook wiring | status |
-|---|---|---|---|
-| claude | `~/.claude/skills` | `~/.claude/settings.json` | **confirmed** |
-| codex | `~/.codex/skills` | `~/.codex/hooks.json` — `{"hooks":{"<Event>":[{"hooks":[{"command":"…"}]}]}}` | **confirmed** |
-| opencode | `~/.config/opencode/`**`skills`** (plural — `skill/` also exists and is NOT the one) | `~/.config/opencode/plugin/openspec-change-gate.ts` | **confirmed** |
-| pi | unknown — no `~/.pi/skills`, no `~/.pi/pi.json` | unknown | **write skill dir only, wiring `null`** |
-| omp | unknown — `~/.omp` holds only `agent/`, `logs/`, `run/` | unknown | **write skill dir only, wiring `null`** |
-
-`null` wiring is a conformant state: that host runs on the git/CI floor.
-
-Binding rules for this phase: **symlink `skills/*`, never copy** — a copy is the
-drift this whole change removes. Publish `bin/*` to `~/.agenticapps/bin/`
-(mode 0755) — **do not change that path**, six fleet projects shim to it and
-must keep working untouched. Tier 1 is only `git` and `bash`; nothing else may
-hard-fail. Tier 2 (OpenSpec, Superpowers, Linear MCP, upstream skills) is
-checked, reported, and the install command **printed, never run**. Cap: 200
-executable lines. If it cannot be met, stop and report which and why.
-
-## Then
-
-Phase 4 — rewrite the three scripts to budget: gate 775→120, run-plan-review
-757→120, reviewer-cli 206→80. Rewrite against the diagram; do not port down.
-Phase 5b — delete the remaining 7,765 lines in `tools/` (conformance harnesses,
-the prereq analyser, drift-report; none on the diagram, nothing depends on them
-now the host repos are archived). Phase 5c — strip each project to `openspec/`,
-a pre-commit hook, and a pointer; §11 is now safe to remove because the skill
-carries it. Phase 6 — trim the spec, ~21 sections to ~7.
+Read `openspec/changes/core-installer-one-entry-point/tasks.md` — 65 of 69 done.
+Then pick one of two: **(a)** re-run the plan reviewers, because `REVIEWS.md`
+describes artifacts that have changed substantially since it was written (a spec
+amendment and the sweep redesign) and its `reviewed_artifacts_sha` matches
+nothing on disk; or **(b)** do the real run — tasks 8.4–8.6. That is
+`./install.sh --host auto --accept-host-config --replace-unrecognised`, which
+rebinds 13 bindings, removes 7, and edits `~/.claude/settings.json` and
+`~/.codex/hooks.json`. Everything it replaces is preserved at
+`<path>.pre-install.<n>` and the run prints the restore command. (a) is the
+smaller risk and the workflow's own discipline; (b) is what unblocks Phase 5b.
+Remaining after that: 8.7 code review on the diff, 8.8 `cso`, 9.1 open the
+`--project` follow-up change.
 
 ## Open questions
 
-1. **22 workflow-skill symlinks still point into the archived host repos** —
-   Claude 3, Codex 8, opencode 11, pi 0 (no skills dir at all). Phase 3 is what
-   replaces them. Until it lands, deleting those checkouts breaks four agents.
-2. **Two installed skills both claim `name: agentic-apps-workflow` v3.2.0** and
-   differ: `~/.claude/skills/agenticapps-workflow/skill/SKILL.md` (402, real dir)
-   vs `~/.claude/skills/agentic-apps-workflow` (331, symlink into the archived
-   `claude-workflow`). Phase 3 should replace both with a symlink into
-   `core/skills/`.
-3. **A `gitnexus` binary survives** at
-   `~/.local/state/fnm_multishells/…/bin/gitnexus` — a leftover global npm
-   package. Its opencode plugin (`gitnexus-freshness.ts`, fired on every tool
-   call) was removed this session; a copy is in the session scratchpad. The
-   binary was left alone deliberately: do not uninstall software the workflow
-   does not own without asking. `npm rm -g gitnexus` is the fix if Donald wants it.
-4. `agenticapps-dashboard` and `agenticapps-roadmap` are both **to be retired**.
-   Dashboard is the last split brain (231/110) — do not spend commits tidying
-   it. Two of my commits sit on its `retire-v1-surfaces` branch because it was
-   not on `main` when I committed; history was not rewritten because Donald was
-   working in it. cparx and fbc-platform had the same problem and **were** lifted
-   onto clean branches with the originals restored byte-for-byte.
-5. Core has **no** `migrations/` — §5b's "73 migration documents" has no target
-   here; those 645 files are in the archived host repos.
+1. **`codex-design-critique` and `codex-spec-review` get removed, not rebound** —
+   no host-neutral equivalent is installed. Their content survives in the
+   archived checkout until Phase 5b. If either should keep working on codex it
+   needs an explicit alias or a move into `core/skills/`. **No mapping was
+   guessed**: binding `design-critique` to `design-review` because the names
+   rhyme is how a skill silently does the wrong thing.
+2. **`.planning/` is back** — untracked, holding `skill-observations/*.jsonl`,
+   written per session by something. The global CLAUDE.md says the directory was
+   deleted fleet-wide on 2026-08-05, so either a hook needs updating or the rule
+   does. Left uncommitted; `.gitignore` untouched.
+3. **`~/.agenticapps/manifest.tsv` still carries a `normalize-claude-md.sh` row**
+   for an artifact retired in PR #87. The attesting installer rewrites the
+   manifest in full, so the first real run drops the row; the file itself stays
+   in `~/.agenticapps/bin/`. This change removes no software it did not install.
+4. **Phase 5b cannot be a wholesale `tools/` delete.** Its 7,765-line figure is
+   the current total of `tools/*.sh`, which includes `install-core-git-hooks.sh`
+   (238 lines) — a delegation target of this change — and now `install.test.sh`.
+5. **PRs #87 and #88 are still open and unmerged**, as are the five fleet PRs
+   listed in the previous handoff. This work sits on top of them.
+6. The gate prints a non-blocking `NOTE` that it cannot verify this change's
+   `REVIEWS.md` (trailer-absent). Expected; resolved by (a) above.
