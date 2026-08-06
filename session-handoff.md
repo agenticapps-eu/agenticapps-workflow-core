@@ -1,10 +1,12 @@
 # Session Handoff — 2026-08-06 (ninth session)
 
-**The real run happened and it is verified.** Every task in
-`core-installer-one-entry-point` is closed. The one thing left is the archive,
-gated on round seven's verdict — see the bottom.
+**The real run happened, it is verified, and the change is archived.**
+`openspec/specs/workflow-installation/spec.md` is durable current truth — 13
+requirements, 634 lines. `one-enforcement-floor` is the only active change and
+it is unblocked.
 
-Branch `feat/one-skills-payload`, four commits this session, all green.
+Branch `feat/one-skills-payload`, six commits this session, all green. Nothing
+pushed.
 
 ## Accomplished
 
@@ -61,27 +63,49 @@ Branch `feat/one-skills-payload`, four commits this session, all green.
 - `docs/evidence/install-run-after.md` — new
 - `.gitignore` — `.gstack/` (security reports stay local)
 
+## Round seven, and where the reviewing stopped
+
+Run because round six amended normative text no reviewer had read. gemini
+APPROVE, codex REQUEST-CHANGES, **opencode REQUEST-CHANGES — and opencode
+counted for the first time**, because the timeout knob is `REVIEW_TIMEOUT`, not
+`REVIEWER_TIMEOUT`. Six rounds of its opinion went to that typo.
+
+opencode read the script instead of the prose and found that Decisions still
+claimed `install-project-hooks.sh` rewrites the manifest in full so the stale
+`normalize-claude-md.sh` row disappears — **disproved at round three, corrected
+in the Impact section then, and left standing here**, in a document whose
+declared failure mode is stale artifacts, after a real run that had already
+falsified it. Also fixed: `--project` asserted as deferred, superseded and a
+Phase 5b precondition in three places; wiring-era `SHALL`s about configuration
+blocks and serialisers; round six's own scenario conflict; the host prefix set
+enumerated (`codex-`, `opencode-`); and pi's fifth directory recorded.
+
+Donald called it there rather than running round eight. The reasoning was that
+the code had not changed since round five — rounds six and seven were spec and
+prose coherence only — and every outstanding item is a dispositioned
+carry-forward. Specs are current truth and get amended after archive.
+
 ## Next session: start here
 
-**Read the round-seven verdicts first** — they were still running when this was
-written, in `REVIEWS.md`. Round seven exists because round six amended normative
-text (the preservation `SHALL`, the consent exception) that no reviewer had
-read, and codex had asked for a re-review before archive. Donald chose to run it.
+`one-enforcement-floor` has **no plan review at all** (its task 8.2) and no
+code, which is when a plan review is cheapest. That is the first action:
+`run-plan-review.sh one-enforcement-floor --implementing-host claude`, with
+`REVIEW_TIMEOUT=600` so opencode counts.
 
-If it is clean, **archive** — `/opsx:archive core-installer-one-entry-point` —
-which unblocks `one-enforcement-floor`. If it finds something, fix it the way
-rounds five and six were fixed: verify against the code first, then act.
-
-After the archive, `one-enforcement-floor` still has no plan review (its task
-8.2), and it has no code, which is when a plan review is cheapest.
+Consider first, though, whether the check-mode follow-up should be proposed
+before it: four reporting gaps have accumulated in one mode (open question 1),
+and four deferrals in one place is the argument for one change rather than four
+amendments.
 
 ## Open questions
 
-1. **Two check-mode gaps, both now reported rather than silent** — `--check`
-   calls a host bound on the strength of one of two skills, and it reports a
-   binding into an archived checkout as plain `bound`. The spec makes check-mode
-   reporting the first deferrable item, so deferring is legitimate; they should
-   be done together.
+1. **Four check-mode gaps, all reported rather than silent.** `--check` calls a
+   host bound on the strength of one of two skills; reports a binding into an
+   archived checkout as plain `bound`; never reports core's pre-commit hook,
+   which is the bare-run postcondition; and has no defined exit status for an
+   absent, stale, modified or unreadable artifact. Check-mode reporting is the
+   first deferrable item in the declared order, so every one of these is a
+   legitimate deferral — but four in one mode is a change asking to be written.
 2. **`is_archived` matches link text, not the resolved target**, and ownership is
    a repository-name substring. Both want a portable `realpath`; they are the
    same dependency and should land together.
@@ -101,3 +125,12 @@ After the archive, `one-enforcement-floor` still has no plan review (its task
    deleted, because they are notes and that is Donald's call.
 8. **PRs #87 and #88 remain open**, as do the five fleet PRs. This work sits on
    top of them and nothing has been pushed this session.
+9. **pi reads a fifth directory.** `~/.pi/agent/skills` is loaded by pi and is
+   neither bound nor swept by the installer, so a binding into an unmaintained
+   checkout placed there survives both the sweep and the negative test written to
+   catch exactly that. Measured before it was accepted: 25 entries, all relative
+   symlinks into `~/.agents/skills`, none archived. Real gap, currently empty.
+10. **`REVIEWER_TIMEOUT` does not reach `run-plan-review.sh`.** It reads
+   `REVIEW_TIMEOUT`. Worth reconciling the two names in `reviewer-cli.sh` and
+   `run-plan-review.sh`, because the failure mode is silent: a reviewer times out
+   and is simply not counted.
