@@ -138,18 +138,29 @@ unspecified. Each is a case.
 - [x] 8.2 Whole suite green; `openspec validate --all` green; the gate exits 0
 - [x] 8.3 Record the before state: `./install.sh --check` on the real machine,
       **saved to a file**, not printed and scrolled past
-- [ ] 8.4 Run `./install.sh --host auto --replace-unrecognised` for real;
+- [x] 8.4 Run `./install.sh --host auto --replace-unrecognised` for real;
       confirm legacy bindings are gone and every previously-bound host is still
       bound. No configuration opt-in is passed because there is no longer one to
-      pass, which is what makes this run safe to do beside live sessions
-- [ ] 8.5 Confirm a fleet project's shim still resolves
-      `~/.agenticapps/bin/openspec-change-gate.sh` unchanged
-- [ ] 8.6 Confirm `manifest.tsv` afterwards carries the declared set. The
+      pass, which is what makes this run safe to do beside live sessions.
+      **Done** — 15 rebindings, 11 removals, one legacy copy removed; the 26
+      archived bindings `design.md:231` measured are now 0, all five hosts
+      resolve into core, and nothing points into `claude-workflow`,
+      `codex-workflow` or `opencode-workflow`. `docs/evidence/install-run-after.md`
+- [x] 8.5 Confirm a fleet project's shim still resolves
+      `~/.agenticapps/bin/openspec-change-gate.sh` unchanged. **Done** —
+      `tools/check-shims.sh ~/Sourcecode` reports every declared hook in all
+      seven fleet repositories bound with the authority's bytes, and the
+      published gate is byte-identical to the reference implementation
+- [x] 8.6 Confirm `manifest.tsv` afterwards carries the declared set. The
       retired `normalize-claude-md.sh` row **survives**: `install-project-hooks.sh`
       carries forward every row outside the declared set by design, so removing
-      it needs explicit pruning and is not this change's to do
-- [ ] 8.7 Confirm no host configuration file was created or modified by the
-      real run — the machine-level check that matches test 4.1
+      it needs explicit pruning and is not this change's to do. **Done** —
+      `database-sentinel.sh` at the reference hash is the whole of `ARTIFACTS`,
+      and the `normalize-claude-md.sh` row survived as predicted
+- [x] 8.7 Confirm no host configuration file was created or modified by the
+      real run — the machine-level check that matches test 4.1. **Done** — every
+      host config file predates the run, and nothing outside the skill
+      directories was written in the run's window
 - [ ] 8.8 Code review on the diff — the independent read that follows
       implementation, distinct from the plan review already in `REVIEWS.md`
 - [ ] 8.9 `cso`
