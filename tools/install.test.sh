@@ -431,14 +431,14 @@ echo "install.sh — task 1.6: the budget"
 # Executable lines: neither comments nor blanks. Heredoc bodies count, because
 # an operator reading the file to decide whether to trust it reads those too.
 if [ ! -f "$INSTALL" ]; then
-  bad "install.sh is at most 250 executable lines" "install.sh does not exist yet"
+  bad "install.sh is at most 217 executable lines" "install.sh does not exist yet"
 else
   n="$(grep -cvE '^[[:space:]]*(#|$)' "$INSTALL")"
-  if [ "$n" -le 250 ]; then
-    ok "install.sh is at most 250 executable lines ($n)"
+  if [ "$n" -le 217 ]; then
+    ok "install.sh is at most 217 executable lines ($n)"
   else
-    bad "install.sh is at most 250 executable lines" \
-        "counted $n, budget is 250, overage $((n - 250))" \
+    bad "install.sh is at most 217 executable lines" \
+        "counted $n, budget is 217, overage $((n - 217))" \
         "the spec fixes what may be deferred and in what order — do not drop a mode"
   fi
 fi
@@ -1289,6 +1289,64 @@ else
   else
     bad "$CASE_NAME" "the restore command ran and did not restore: $restore"
   fi
+fi
+finish_case
+
+echo
+echo "install.sh — task 8.8: what the round-five code review found"
+
+new_case "a bare --host is a usage error, not a shell error"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
+stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+# `set -u` is on. Before the guard, a trailing `--host` expanded an unset $2 and
+# aborted with the shell's own message and the shell's own status — the one bad
+# argument in the parser that did not get the usage error every other one gets.
+run_install --host
+if ! require_ran; then :
+elif [ "$RUN_RC" -ne 64 ]; then
+  bad "$CASE_NAME" "expected the usage status 64, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
+elif ! printf '%s' "$RUN_OUT" | grep -q 'host name'; then
+  bad "$CASE_NAME" "exited 64 without saying what was missing" "$(printf '%s' "$RUN_OUT" | head -3)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+bind_case "a vendored binding is not rebound to something that is not a skill"
+# `[ -e ]` was the whole test for a candidate, so an empty directory or a stray
+# file named `cso` satisfied the search and the binding was rebound to a
+# non-skill — reported as a rebind, indistinguishable from a real one. Carrying
+# a SKILL.md is the test now. Removal is the correct outcome here.
+mkdir -p "$CASE_HOME/.agents/skills/cso"
+mkdir -p "$CASE_HOME/.codex/skills"
+ln -s "$(archived_skill codex-workflow cso)" "$CASE_HOME/.codex/skills/codex-cso"
+run_install --host codex
+after="$(readlink "$CASE_HOME/.codex/skills/codex-cso" 2>/dev/null)"
+if ! require_ran; then :
+elif [ -n "$after" ]; then
+  bad "$CASE_NAME" "rebound to a candidate carrying no SKILL.md: $after"
+elif ! printf '%s' "$RUN_OUT" | grep -q 'no host-neutral equivalent'; then
+  bad "$CASE_NAME" "the binding went without the run saying why" "$(printf '%s' "$RUN_OUT" | head -4)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+bind_case "the printed restore command quotes the paths it names"
+# Task 6.4 proves the command runs; it runs under paths with no spaces in them.
+# A home directory with a space turned the advertised command into two wrong
+# ones, and an operator finds that out at the moment they need it to work.
+mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"
+printf 'work that must survive\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
+run_install --host claude --replace-unrecognised
+if ! require_ran; then :
+elif ! printf '%s' "$RUN_OUT" | grep -q 'restore: *rm -rf "'; then
+  bad "$CASE_NAME" "the restore command names its paths unquoted" \
+                   "$(printf '%s' "$RUN_OUT" | grep restore | head -2)"
+else
+  ok "$CASE_NAME"
 fi
 finish_case
 

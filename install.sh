@@ -88,7 +88,10 @@ preserve() {
   b="$b.pre-install.$n"
   cp -Rp "$p" "$b" 2>/dev/null || return 1
   say "  preserved $p -> $b"
-  say "  restore:  rm -rf $p; mv $b $p"
+  # Quoted, because the restore command IS the recoverability guarantee. A home
+  # directory with a space in it turned the advertised command into two wrong
+  # ones, and an operator only finds that out at the moment they need it.
+  say "  restore:  rm -rf \"$p\"; mv \"$b\" \"$p\""
 }
 
 is_archived() {
@@ -135,7 +138,7 @@ apply_legacy() {
   local dir="$1" name
   for name in $LEGACY_DIRS; do
     [ -d "$dir/$name" ] && [ ! -L "$dir/$name" ] || continue
-    preserve "$dir/$name" && rm -rf "$dir/$name" && say "  removed legacy skill $name (a copy, not a link)"
+    preserve "$dir/$name" && rm -rf "${dir:?}/${name:?}" && say "  removed legacy skill $name (a copy, not a link)"
   done
 }
 
@@ -145,6 +148,12 @@ apply_legacy() {
 # than tabulated: strip the host prefix, strip an `-audit` suffix, and look for a
 # host-neutral skill of that name. `~/.agents/skills` is preferred because it is
 # the shared store the other hosts already symlink into.
+#
+# A candidate has to BE a skill, not merely exist: an empty directory or a stray
+# file named `cso` would otherwise satisfy the search and a vendored binding
+# would be rebound to a non-skill. Carrying a `SKILL.md` is the test. Every
+# target the real run chose already satisfied it, so this narrows the search
+# without changing any decision it made.
 neutral_of() {
   local n="${1#codex-}" d
   n="${n#opencode-}"; n="${n%-audit}"
@@ -153,7 +162,7 @@ neutral_of() {
   # would leave the machine looking converted while still resolving into a
   # checkout that is about to be deleted.
   for d in "$ROOT/skills" "$HOME/.agents/skills" "$HOME/.claude/skills"; do
-    [ -e "$d/$n" ] && [ "$d/$n" != "$2" ] && ! { [ -L "$d/$n" ] && is_archived "$(readlink "$d/$n")"; } && { printf '%s' "$d/$n"; return 0; }
+    [ -e "$d/$n/SKILL.md" ] && [ "$d/$n" != "$2" ] && ! { [ -L "$d/$n" ] && is_archived "$(readlink "$d/$n")"; } && { printf '%s' "$d/$n"; return 0; }
   done
   return 1
 }
@@ -167,12 +176,22 @@ neutral_of() {
 sweep_vendored() {
   local dir="$1" p name old n
   for p in "$dir"/*; do
+    # SC2015's "C may run when A is true" is the intent here, not a bug: the
+    # `continue` is meant to fire for any of the three failing — not a symlink,
+    # unreadable, or not archived. All three mean the same thing: not ours.
+    # shellcheck disable=SC2015
     [ -L "$p" ] && old="$(readlink "$p")" && is_archived "$old" || continue
     name="$(basename "$p")"
     if n="$(neutral_of "$name" "$p")"; then
-      rm -f "$p" && ln -s "$n" "$p" && say "  rebound $name (was $old) -> $n"
+      # The link is removed before the new one is created, so a failed `ln`
+      # leaves the binding as nothing at all. Saying so is the whole point: a
+      # run that destroyed a binding and reported success is the failure mode
+      # this installer exists to avoid.
+      if rm -f "$p" && ln -s "$n" "$p"; then say "  rebound $name (was $old) -> $n"
+      else skip "could not rebind $name — it was $old and is now unbound"; fi
     else
-      rm -f "$p" && say "  removed $name (was $old) — no host-neutral equivalent is installed"
+      if rm -f "$p"; then say "  removed $name (was $old) — no host-neutral equivalent is installed"
+      else skip "could not remove $name (was $old)"; fi
     fi
   done
 }
@@ -289,7 +308,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --help | -h) usage; exit 0 ;;
     --check) MODE=check; shift ;;
-    --host) REQUESTED="$REQUESTED $2"; shift 2 ;;
+    # `set -u` is on, so a bare trailing `--host` would abort on an unset $2
+    # with a shell error instead of the usage error every other bad argument gets.
+    --host) [ $# -ge 2 ] || { say "--host needs a host name"; usage; exit 64; }; REQUESTED="$REQUESTED $2"; shift 2 ;;
     --replace-unrecognised) REPLACE_UNRECOGNISED=1; shift ;;
     *) say "unknown argument: $1"; usage; exit 64 ;;
   esac

@@ -161,8 +161,15 @@ unspecified. Each is a case.
       real run — the machine-level check that matches test 4.1. **Done** — every
       host config file predates the run, and nothing outside the skill
       directories was written in the run's window
-- [ ] 8.8 Code review on the diff — the independent read that follows
-      implementation, distinct from the plan review already in `REVIEWS.md`
+- [x] 8.8 Code review on the diff — the independent read that follows
+      implementation, distinct from the plan review already in `REVIEWS.md`.
+      **Done** — gemini and codex, both REQUEST-CHANGES, in `CODE-REVIEW.md`.
+      Four findings verified and fixed with proven negative tests (silent `ln`
+      failure on rebind, a candidate accepted without a `SKILL.md`, an unquoted
+      restore command, a bare `--host` aborting under `set -u`); three accepted
+      as bounded and **reported as deferrals**, including both check-mode
+      reporting gaps. The suite also enforced the old 250-line budget while the
+      spec says 217 — corrected
 - [ ] 8.9 `cso`
 
 ## 9. Hand off what was deferred
