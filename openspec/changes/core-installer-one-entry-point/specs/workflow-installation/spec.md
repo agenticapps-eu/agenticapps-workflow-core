@@ -446,6 +446,17 @@ SHALL abort that step rather than proceed unprotected.
 A rollback plan that names no artifact is not a rollback plan. The version log
 records that a downgrade happened; it does not hold the bytes needed to undo one.
 
+A preserved copy taken from a host's skill directory SHALL be written outside
+every host's skill directory. A preserved skill is still a skill: at least one
+host loader discovers a `SKILL.md` nested below the directory it scans, so a
+backup left in place re-registers under the name it was preserved from. The
+installer would then delete one copy of a duplicated skill and create another
+beside it — passing its own archived-binding scan, because the survivor is a
+copy rather than a symlink, and reinstating the duplicate-trigger-skill
+condition this change exists to end. Host configuration files are exempt: their
+loaders match exact names, so an adjacent copy is inert and is the more obvious
+restore.
+
 This guarantee does **not** extend to published artifacts, and SHALL NOT be
 claimed for them. Publishing happens inside a delegated installer that holds a
 lock across its own read-compare-write, so a copy taken before delegating can be
@@ -459,6 +470,14 @@ explicit opt-in with a stated reason for an operator who means it.
 - **WHEN** the installer replaces an existing binding or host configuration file
 - **THEN** the previous content is preserved at a path the run reports
 - **AND** the summary states the command that restores it
+
+#### Scenario: A skill binding is preserved
+
+- **WHEN** the installer preserves something it is removing from a host's skill
+  directory
+- **THEN** the preserved copy is written outside every host's skill directory
+- **AND** no file or directory matching the preserved-copy naming remains in the
+  skill directory the original was taken from
 
 #### Scenario: A second run replaces the same target
 

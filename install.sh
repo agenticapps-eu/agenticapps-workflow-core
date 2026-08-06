@@ -74,10 +74,19 @@ usage() {
 # are NOT covered: their installer holds a lock across its own read-compare-
 # write, so a copy taken before delegating can be superseded before that lock
 # is acquired. Their protection is the arbitration itself.
+#
+# A preserved skill is still a skill. Codex's loader deep-scans nested
+# SKILL.md, so `agenticapps-workflow.pre-install.1` left where it stood would
+# re-register the duplicate this run just removed — the run would delete one
+# copy of the trigger skill and create another beside it. Backups taken from a
+# skills directory therefore mirror out under ~/.agenticapps, which no host
+# reads. Host configuration files stay backed up in place: their loaders match
+# exact names, and an adjacent copy is the obvious restore.
 preserve() {
-  local p="$1" n=1 b
-  while [ -e "$p.pre-install.$n" ]; do n=$((n + 1)); done
-  b="$p.pre-install.$n"
+  local p="$1" n=1 b="$1"
+  case "$p" in "$HOME"/*skills/*) b="$HOME/.agenticapps/pre-install/${p#"$HOME"/}"; mkdir -p "${b%/*}" 2>/dev/null ;; esac
+  while [ -e "$b.pre-install.$n" ]; do n=$((n + 1)); done
+  b="$b.pre-install.$n"
   cp -Rp "$p" "$b" 2>/dev/null || return 1
   say "  preserved $p -> $b"
   say "  restore:  rm -rf $p; mv $b $p"

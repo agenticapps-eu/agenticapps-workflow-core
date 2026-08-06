@@ -104,9 +104,17 @@ Remaining after that: 8.7 code review on the diff, 8.8 `cso`, 9.1 open the
    deleted fleet-wide on 2026-08-05, so either a hook needs updating or the rule
    does. Left uncommitted; `.gitignore` untouched.
 3. **`~/.agenticapps/manifest.tsv` still carries a `normalize-claude-md.sh` row**
-   for an artifact retired in PR #87. The attesting installer rewrites the
-   manifest in full, so the first real run drops the row; the file itself stays
-   in `~/.agenticapps/bin/`. This change removes no software it did not install.
+   for an artifact retired in PR #87. **The claim that the first real run drops
+   it was wrong** — corrected 2026-08-06 after round three (codex, confirmed by
+   reading the code, not taken on the reviewer's word).
+   `install-project-hooks.sh:216` builds a `KEEP` list from every manifest row
+   whose artifact is *not* in the run's declared set and re-emits those rows
+   first in the full rewrite, with a comment saying it is deliberate: "Dropping
+   them would make every partial run look like a fresh install of a smaller
+   set." `normalize-claude-md.sh` is not in the declared set, so its row
+   survives every run. Removing it needs explicit pruning, which is a change to
+   the attesting installer and therefore its own decision — this change removes
+   no software it did not install, and that rule is why the row is still there.
 4. **Phase 5b cannot be a wholesale `tools/` delete.** Its 7,765-line figure is
    the current total of `tools/*.sh`, which includes `install-core-git-hooks.sh`
    (238 lines) — a delegation target of this change — and now `install.test.sh`.

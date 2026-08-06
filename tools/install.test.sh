@@ -1440,13 +1440,47 @@ run_install --host claude --replace-unrecognised --accept-host-config
 rm -rf "$CLAUDE_SKILLS/agentic-apps-workflow"
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"; printf 'second\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
 run_install --host claude --replace-unrecognised --accept-host-config
-kept="$(grep -rl 'first' "$CLAUDE_SKILLS"/*pre-install* 2>/dev/null | head -1)"
-n_backups="$(ls -d "$CLAUDE_SKILLS"/*pre-install* 2>/dev/null | wc -l | tr -d ' ')"
+VAULT="$CASE_HOME/.agenticapps/pre-install/.claude/skills"
+kept="$(grep -rl 'first' "$VAULT"/*pre-install* 2>/dev/null | head -1)"
+n_backups="$(ls -d "$VAULT"/*pre-install* 2>/dev/null | wc -l | tr -d ' ')"
 if ! require_ran; then :
 elif [ "$n_backups" -lt 2 ]; then
   bad "$CASE_NAME" "expected two preserved copies, found $n_backups"
 elif [ -z "$kept" ]; then
   bad "$CASE_NAME" "the first preserved copy was overwritten by the second"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
+echo "install.sh — task 6.1b: a preserved skill leaves the directory the host scans"
+# Round-three review finding (codex, HIGH). A preserved skill is still a skill:
+# a loader that deep-scans nested SKILL.md re-registers the backup under the
+# name it was preserved from, so the run deletes one copy of the trigger skill
+# and creates another beside it. The archived-binding scan cannot catch it —
+# the survivor is a copy, not a symlink.
+new_case "a backup of a removed skill is written outside the skill directory"
+new_core
+mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
+stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+mkdir -p "$CLAUDE_SKILLS/agenticapps-workflow/skill"
+printf 'name: agentic-apps-workflow\n' > "$CLAUDE_SKILLS/agenticapps-workflow/skill/SKILL.md"
+run_install --host claude --replace-unrecognised --accept-host-config
+left="$(ls -d "$CLAUDE_SKILLS"/*pre-install* 2>/dev/null | head -1)"
+nested="$(find "$CLAUDE_SKILLS" -name SKILL.md -path '*pre-install*' 2>/dev/null | head -1)"
+b="$(ls -d "$CASE_HOME/.agenticapps/pre-install/.claude/skills"/*pre-install* 2>/dev/null | head -1)"
+if ! require_ran; then :
+elif [ -n "$left" ]; then
+  bad "$CASE_NAME" "a preserved copy was left in the directory the host scans" "$left"
+elif [ -n "$nested" ]; then
+  bad "$CASE_NAME" "a preserved SKILL.md is still discoverable under the skill directory" "$nested"
+elif [ -z "$b" ]; then
+  bad "$CASE_NAME" "nothing was preserved outside the skill directory"
+elif [ ! -f "$b/skill/SKILL.md" ]; then
+  bad "$CASE_NAME" "the preserved copy does not hold what was removed: $b"
 else
   ok "$CASE_NAME"
 fi
@@ -1462,7 +1496,7 @@ stub_helper reference-implementations/shared-install/install-project-hooks.sh   
 stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
 printf 'notes\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"; chmod 640 "$CLAUDE_SKILLS/agentic-apps-workflow"
 run_install --host claude --replace-unrecognised --accept-host-config
-b="$(ls -d "$CLAUDE_SKILLS"/*pre-install* 2>/dev/null | head -1)"
+b="$(ls -d "$CASE_HOME/.agenticapps/pre-install/.claude/skills"/*pre-install* 2>/dev/null | head -1)"
 if ! require_ran; then :
 elif [ -z "$b" ]; then
   bad "$CASE_NAME" "nothing was preserved"
