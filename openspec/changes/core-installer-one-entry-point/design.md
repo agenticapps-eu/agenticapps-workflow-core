@@ -71,11 +71,19 @@ to delegate to do not cover it:
   for the mandated marker across shell sources returns the conformance *test*,
   the authoring-conventions spec, and the capability spec. No writer.
 
-That is a scope discovery, not a defect to patch. So `--project` is deferred to
-its own change and this one is the host side: publish, bind skills, replace
+That is a scope discovery, not a defect to patch. So `--project` was deferred to
+its own change and this one became the host side: publish, bind skills, replace
 legacy bindings, wire claude/codex/opencode, `--check`. The budget was already at
 risk before round two; with a provisioner and a project-shim path added it was
 not credible, and the spec forbids meeting the budget by dropping a promised mode.
+
+Two of those have since changed and the paragraph above is kept as the round-two
+record rather than rewritten into a claim it never made: **the wiring is gone**
+(the section below replaces the six that specified it), and **`--project` is
+superseded rather than deferred** — `one-enforcement-floor` drops it, because a
+machine-wide git floor leaves no per-repository hook for it to install. Read
+every later `--project` mention in this document as "the mode that was going to
+exist", not as work now queued.
 
 ## Goals / Non-Goals
 
@@ -190,7 +198,7 @@ script:
 |---|---|---|
 | `agentic-apps-workflow` | → `agentic-apps-workflow` | the trigger skill; core now ships it |
 | `agenticapps-workflow` | → `agentic-apps-workflow` | the hyphenless duplicate; two names, one skill |
-| `setup-agenticapps-workflow` | remove | `install.sh --project` is its successor, and that is a later change |
+| `setup-agenticapps-workflow` | remove | its successor was going to be `install.sh --project`; `--project` is now superseded rather than deferred, so nothing replaces it and the capability window below is what that costs |
 | `update-agenticapps-workflow` | remove | migration replay; core has no `migrations/` |
 | `setup-codex-agenticapps-workflow` | remove | host-prefixed variant of the above |
 | `update-codex-agenticapps-workflow` | remove | host-prefixed variant of the above |
@@ -212,10 +220,19 @@ end. During the window, bootstrapping a new project means invoking the archived
 checkout's skill directly — it still exists on disk, since Phase 5b is what
 deletes it — or doing it by hand.
 
-The consequence is a sequencing constraint worth naming: **the `--project`
-follow-up must land before the archived checkouts are deleted.** That was already
-true for the codex adapter and the opencode plugin, both sourced from those
-checkouts. This adds a third reason.
+The consequence was a sequencing constraint: the `--project` follow-up had to
+land before the archived checkouts were deleted, alongside the codex adapter and
+the opencode plugin, both sourced from those checkouts.
+
+**That constraint is gone, and this paragraph used to say otherwise.** Dropping
+the host wiring took the adapter and the plugin with it, and `one-enforcement-floor`
+supersedes `--project` outright rather than deferring it: with the git floor
+bound machine-wide there is no per-repository hook left for it to install. So
+nothing now has to land before the checkouts are deleted. What remains is the
+capability window — no installed successor to `setup-agenticapps-workflow` —
+and a window is a cost to accept, not a sequence to obey. A reviewer read the
+stale version of this paragraph and accepted the constraint as fact, which is
+what a stale artifact buys you.
 
 **The test cannot be the manifest read back.** Round two was right that checking
 "every name in the manifest" against that same manifest proves nothing about the
@@ -510,3 +527,60 @@ an API this session has read one page of.
 Noted, out of scope: `~/.config/opencode/opencode.json` still registers the
 removed `gitnexus` MCP server. Recorded here so it is not lost; it is the third
 open question in the session handoff.
+
+## Round six: the re-review after the scope narrowed, and what was done
+
+`REVIEWS.md` described an installer that wired three hosts. Re-run against the
+narrowed bundle: **gemini APPROVE, codex REQUEST-CHANGES** (opencode timed out at
+180s and is not counted; the `REVIEWER_TIMEOUT` raise does not reach this script,
+which reads `REVIEW_TIMEOUT`).
+
+Four findings were verified and fixed in the artifacts:
+
+- **The preservation requirement and the sweep contradicted each other.** The
+  requirement reads "before replacing or removing a binding … preserve what it is
+  about to destroy"; the real run changed 26 symlink bindings and wrote one
+  preserved directory. Nothing said why that was not a violation. It now does: a
+  symlink has no content beyond its target, copying one into an about-to-be-
+  deleted checkout preserves nothing, and the reported previous target restores
+  it exactly. Copying is for directories and regular files.
+- **Consent required for every directory, removal mandated for one directory.**
+  The legacy exception was in the code and not in the specification. Now named,
+  and bounded by the manifest.
+- **The live-checkout property was in a security review rather than the
+  capability.** Correct: it is a property of binding by symlink, so it belongs
+  with that requirement. Moved there, with the pinned-worktree instruction for a
+  machine that reviews branches it also runs.
+- **`design.md` was still internally stale**, saying `--project` must land before
+  the archived checkouts are deleted and describing this change as wiring three
+  hosts. gemini's APPROVE repeated the sequencing constraint back as fact, which
+  is exactly what a stale artifact costs. Reconciled.
+
+Accepted as bounded, not actioned:
+
+- **Ownership by repository-name substring** (raised in rounds 4 and 6). A path
+  containing `codex-workflow` that this workflow never installed would be swept.
+  Real; the answer is canonical path-boundary checking, which needs a portable
+  `realpath` — the same dependency as the resolved-target finding in
+  `CODE-REVIEW.md`, and they should be done together or not at all.
+- **Equivalence candidates come from three searched directories.** Round five
+  narrowed this from "any path that exists" to "carries a `SKILL.md`". Codex
+  wants authoritative locations or a reviewed mapping; that is round three's
+  objection, settled on stated bounds, and the answer remains an explicit mapping
+  if a mis-rebind is ever observed.
+- **`--check` underspecified.** Two known gaps, both reported in `CODE-REVIEW.md`
+  rather than left silent. Check-mode reporting is the first deferrable item.
+- **Evidence carries `/Users/donald` and unescaped paths.** Deferred to
+  `screen-review-egress`, where the PII policy lives. Third time it has been
+  raised and the third time it has gone to the same place.
+
+Rejected:
+
+- **"The budget escape clause contradicts the normative SHALLs."** It does not.
+  Fixing the order of sacrifice in advance *is* the amendment, made before the
+  pressure rather than under it. Requiring a spec change at the moment of
+  deferral hands the choice to whoever is writing the last line, which is the
+  failure the clause exists to prevent.
+- **"The bare run is not a working install."** It publishes the artifacts and
+  installs core's own hook. That is the stated postcondition, and it is what a
+  machine with no host installed can have.

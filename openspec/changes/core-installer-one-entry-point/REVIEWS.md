@@ -6,37 +6,44 @@
 
 # Review record
 
-- requested: gemini codex
-- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES)
-- excluded:  (none) (declared implementing host)
-- failed:    (none)
+- requested: gemini codex claude opencode
+- counted:   gemini (APPROVE) codex (REQUEST-CHANGES)
+- excluded:  claude (declared implementing host)
+- failed:
+  - opencode: timed out at 180s
 
 ## Reviewer: gemini
-_generated 2026-08-06T17:13:01Z · timeout 420s_
+_generated 2026-08-06T18:12:49Z · timeout 180s_
 
-VERDICT: REQUEST-CHANGES
-- **Internal Contradiction on Scope:** The specification is self-contradictory. The `Decisions` section describes a detailed implementation involving per-host configuration, adapters (`hosts/`), plugins, and a `jq` dependency. However, the "Scope narrowed after round three" section and the final `ADDED Requirements` section explicitly state all host-specific wiring has been removed. The document must be reconciled to describe only the final, agreed-upon design.
-- **Undefined Legacy Binding Logic:** The `Requirements` section mandates that legacy bindings not on the manifest are rebound to a "host-neutral equivalent" or removed. However, it fails to specify the actual heuristic for determining the equivalent. This logic (stripping host prefixes and `-audit` suffixes) is only defined in the now-obsolete `Decisions` section and must be moved into the formal `Requirements`.
-- **Inaccurate Budget Calculation:** The line budget was adjusted from 250 to 228 after removing host wiring, but the calculation only accounts for removing `wire_opencode` (10 lines) and one opt-in (12 lines). Removing the wiring for all hosts, the adapters, the JSON merge logic, and the plugin installation is a far more significant reduction. The budget calculation appears inconsistent with the described scope reduction.
-- **Stale "What this change deliberately does not do" section:** The section on deferring `--project` is now partly redundant. It argues for deferral because `install-core-git-hooks.sh` can't bind a project and no instruction-file provisioner exists. The subsequent scope change that removes *all* hook wiring makes the first point moot for this installer, as it no longer installs any hooks other than core's own. The reasoning should be updated to reflect the final scope.
+VERDICT: APPROVE
+
+This is an exceptionally thorough and well-reasoned specification. It demonstrates a clear-eyed view of the problem, documents its own history through multiple review rounds, and makes pragmatic, well-defended decisions. The points below are minor observations on accepted risks rather than requests for change.
+
+*   The decision to remove host-hook wiring is a major simplification that correctly identifies the git and CI hooks as the true enforcement floor. It removes a significant amount of complexity and risk for a feature that was providing redundant and incomplete coverage.
+*   The currency check for executables based on byte-content instead of version markers is the correct, robust solution. It closes the "hand-edited file" loophole that version-only checks cannot see.
+*   The legacy-binding sweep is a necessary, practical solution to a messy problem. Its core assumption — that a host-prefixed skill like `codex-foo` is replaced by a neutral skill named `foo` — is a heuristic. The specification correctly identifies this as a name transformation, not a capability comparison. This risk is acceptable because the action is scoped only to bindings that are about to break anyway, and every rebind or removal action is explicitly reported to the operator.
+*   The "capability window" opened by deferring `--project` and removing `setup-agenticapps-workflow` is a clear, user-facing trade-off. The document correctly identifies this and accepts it, which is the right call, but it does place a hard sequencing constraint on a follow-up change before the legacy repositories can be removed.
 
 ## Reviewer: codex
-_generated 2026-08-06T17:15:53Z · timeout 420s_
+_generated 2026-08-06T18:15:34Z · timeout 180s_
 
 VERDICT: REQUEST-CHANGES
 
-- The bundle is stale and contradictory: `design.md` still specifies host wiring, `jq`, `hosts/`, and the old budget; `tasks.md` still tests 250 lines and explicitly says `REVIEWS.md` covers removed scope. Reconcile all artifacts and re-review.
-- The normative delta omits authoritative host directories, detection evidence, artifact/marker mappings, archived checkout identities, legacy mappings, and consent flag names. Terms such as “known,” “declared,” and “manifest” are self-referential and permit silent omissions.
-- Ownership detection by repository-name substring is unsafe. An unrelated target containing `codex-workflow` could be destroyed without consent.
-- Deriving equivalents by stripping host prefixes and `-audit` is not semantically sound; it can rebind to a different capability or remove one incorrectly. Require an explicit reviewed mapping; ambiguous entries need consent.
-- Argument and migration scope are undefined: unknown hosts, missing `--host` values, mixed `auto`/named hosts, and whether a bare run sweeps every host directory need fail-before-write scenarios.
-- The stale-manifest cleanup claim is false: `install-project-hooks.sh` preserves rows outside the declared set, so the retired row will not disappear.
-- `--check` lacks exit semantics and scenarios for foreign, dangling, or wrong-checkout binding targets. Automation cannot reliably distinguish a healthy install from a degraded one.
-- Reported paths and restore commands need control-character escaping, shell-safe quoting, and a PII policy; they currently incorporate potentially hostile paths and are intended to be saved to logs.
+- [HIGH] The spec simultaneously requires acceptance before replacing any directory and mandates automatic removal of the legacy copied `agenticapps-workflow` directory. Define an explicit, safely proven ownership exception or require consent.
+- [HIGH] Archived-checkout ownership is inferred from repository-name substrings. An unrelated path containing `codex-workflow`, for example, could be removed without consent. Require canonical path-boundary and repository-identity verification.
+- [HIGH] Automatic equivalence discovery trusts any searched directory containing a matching `SKILL.md`, allowing an unrelated or malicious skill to be propagated across hosts. Restrict candidates to authoritative locations or use a reviewed mapping.
+- [HIGH] Recoverability is not covered for the archived-binding sweep. The requirement says every replaced or removed binding is preserved, but tasks lack that scenario and the recorded run preserved only one directory while changing 26 symlinks.
+- [MEDIUM] `--check` is underspecified: it lacks health exit semantics and scenarios for the project-hook set and manifest, every individual skill, wrong/dangling links, and correct bytes with lost executable permission.
+- [MEDIUM] The line-budget escape clause contradicts normative `SHALL` requirements: it permits collapsing check states and per-name reporting that earlier requirements explicitly mandate. Deferral must require a spec amendment.
+- [MEDIUM] The claimed bare “working install” only publishes binaries and installs core’s own hook; it neither binds a host nor enables a consuming project. Define the usable postcondition or narrow the claim.
+- [MEDIUM] The normative delta does not enumerate authoritative host-directory/detection mappings, artifact-marker mappings, archived checkout identities, or complete CLI combination/error behavior. “Known” and “declared” permit silent omissions.
+- [MEDIUM] The live-checkout symlink model makes any checked-out PR branch active prompt code for all hosts, yet this appears only in a security review rather than the capability. Require a trusted/pinned worktree or an explicit warning and consent.
+- [MEDIUM] Saved diagnostic evidence exposes usernames and filesystem topology, and reported symlink targets can contain control characters. Add redaction/escaping rules; the committed evidence already contains `/Users/donald`.
+- [LOW] The artifacts remain internally stale: `design.md` still says `--project` must precede checkout deletion and that checks report host-hook wiring, while the proposal/tasks say `--project` is superseded and host wiring does not exist. Reconcile and re-review before archive.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:43042626771dbe91c17de22f025b880b676bb0bbdbe98b27479da40debca1011
+digest: sha256:3c1461e59a6fd288932f7abe39aa52997c74ad1edf09e788865ed774699bc33e
 producer-version: 1.2.0
-tasks-digest: sha256:6d2577178e2582c739dc681256cfc203be3996ae7b821de29d43c5a19c5ce425
+tasks-digest: sha256:ce89bf86abb7a81db6e008c57a795ed64e73431a9c60a204c981d34b295be765
 -->

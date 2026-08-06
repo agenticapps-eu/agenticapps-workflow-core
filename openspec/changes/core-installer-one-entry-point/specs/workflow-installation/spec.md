@@ -79,6 +79,19 @@ A copy is the drift this capability exists to remove: a copied skill is a second
 version that no update reaches, and the machine then holds two files claiming to
 be the same skill.
 
+**What follows from that, stated here because it belongs to the capability and
+not to a security appendix: a checkout of this repository is live prompt code
+for every bound host.** The symlink resolves through the working tree, so
+whatever is checked out at load time is what the agents execute as their
+instructions — which is the property that makes editing core reach every host
+at once, and the same property that makes `gh pr checkout` of a branch touching
+`skills/` arm every host on the machine with unreviewed instructions, before the
+review, including the agent performing it. A branch carrying a skill change is
+therefore reviewed by reading the diff. A machine that must do both SHALL bind
+to a worktree pinned to the reviewed branch rather than to the one it reviews
+from. This is a consequence to be stated and lived with, not a reason to copy;
+copying trades it for the drift above, which is worse and permanent.
+
 #### Scenario: A skill is bound into a host
 
 - **WHEN** the installer binds a host whose skill directory is known
@@ -109,6 +122,17 @@ legacy manifest names is this workflow's own binding and is replaced outright. A
 symlink pointing anywhere else may belong to unrelated software, and a directory
 or a regular file may hold someone's work — none of those may be replaced on the
 installer's own judgement.
+
+**One directory is recognised, and the exception SHALL be named here rather than
+left in the code.** A directory occupying a name the legacy manifest lists is
+this workflow's own copied skill, installed under a name only this workflow ever
+used, and it is removed without acceptance for the same reason a symlink into an
+unmaintained checkout is. Without this sentence the specification requires
+acceptance for every directory and mandates the removal of that one, which is a
+contradiction a reader has to resolve by guessing. The exception is bounded by
+the manifest: a directory whose name the manifest does not list is someone's
+work and needs acceptance, and widening the exception by inference is
+prohibited. Removal under it is still preserved and reported like any other.
 
 #### Scenario: A symlink into an unmaintained checkout occupies the target
 
@@ -443,6 +467,22 @@ condition this change exists to end. Host configuration files are exempt: their
 loaders match exact names, so an adjacent copy is inert and is the more obvious
 restore.
 
+**For a symlink binding the preservation is the reported target, and the
+specification SHALL say so rather than leave the reader to infer it.** A symlink
+has no content beyond the path it names, so copying it produces a second link
+into the same checkout — and in the archived-binding sweep that checkout is the
+one about to be deleted. The copy is dead on arrival. What restores a symlink is
+its previous target, which the sweep SHALL report for every entry it rebinds or
+removes, and which is sufficient to recreate it exactly. Copying is therefore
+required for a directory or a regular file, where bytes would otherwise be lost,
+and reporting is the whole of it for a symlink.
+
+This was not stated, and the gap was real rather than cosmetic: the requirement
+read as "every replaced or removed binding is preserved", the real run changed
+26 symlink bindings and wrote one preserved directory, and nothing in the
+specification explained why that was not a violation. A reviewer reading only
+the requirement was right to call it one.
+
 This guarantee does **not** extend to published artifacts, and SHALL NOT be
 claimed for them. Publishing happens inside a delegated installer that holds a
 lock across its own read-compare-write, so a copy taken before delegating can be
@@ -464,6 +504,14 @@ explicit opt-in with a stated reason for an operator who means it.
 - **THEN** the preserved copy is written outside every host's skill directory
 - **AND** no file or directory matching the preserved-copy naming remains in the
   skill directory the original was taken from
+
+#### Scenario: A symlink binding is rebound or removed by the sweep
+
+- **WHEN** the installer rebinds or removes a symlink binding into an
+  unmaintained checkout
+- **THEN** the previous target is reported by name alongside the outcome
+- **AND** no copy of the link is written, because a copy would resolve into the
+  same checkout and restoring from the reported target is exact
 
 #### Scenario: A second run replaces the same target
 

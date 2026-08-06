@@ -184,5 +184,12 @@ unspecified. Each is a case.
       floor bound machine-wide there is no per-repository hook left for it to
       install, and what remained — the instruction-file provisioner — depends on
       a question that change deliberately leaves open
-- [ ] 9.2 Re-run the plan reviewers. `REVIEWS.md` describes a scope that no
+- [x] 9.2 Re-run the plan reviewers. **Done** — gemini APPROVE, codex
+      REQUEST-CHANGES (opencode timed out at 180s, not counted). Four findings
+      verified and fixed in the artifacts, four accepted as bounded, two
+      rejected; the dispositions are the last section of `design.md`. The
+      largest: the preservation requirement and the archived-binding sweep
+      contradicted each other, and nothing said why 26 changed symlinks and one
+      preserved directory was not a violation. `REVIEWS.md` describes a scope
+      that no
       longer exists: it reviewed an installer that wired three hosts
