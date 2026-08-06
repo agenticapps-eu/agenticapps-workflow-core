@@ -8,7 +8,7 @@ it can be trusted until it exists.
       suite fails if `install.sh` writes outside them
 - [x] 1.2 RED: a bare run publishes the payload and installs core's pre-commit
       hook, with no host present
-- [x] 1.3 RED: the run exits 0 when no host is installed, and says none was wired
+- [x] 1.3 RED: the run exits 0 when no host is installed, and says none was bound
 - [x] 1.4 RED: `git` missing fails the run, names `git`, publishes nothing
 - [x] 1.5 RED: an optional dependency absent, with nothing requesting it,
       completes and exits 0, printing the install command but not running it
@@ -60,39 +60,24 @@ draft named states it defined no outcome for.
 - [x] 3.10 RED: replaced bindings are preserved at a reported path and the
       restore command is stated
 
-## 4. RED cases for wiring — every host, every destructive path
+## 4. RED cases for writing no host configuration
 
-- [x] 4.1 RED: claude wiring succeeds — the `PreToolUse` entry is present and
-      every pre-existing hook from other tools survives **semantically** (same
-      entries, same values). Byte equality is asserted of the *backup*, not of
-      the rewritten file, because `jq` reserialises the whole document
-- [x] 4.2 RED: codex wiring succeeds against the nested matcher shape, and the
-      adapter returns a valid permission decision for a real allow payload and
-      for a real block payload
-- [x] 4.3 RED: opencode plugin behaviour — allows an unreviewed but validating
-      change, blocks a validation-red change, and handles a missing and an
-      unusable gate
-- [x] 4.4 RED: **`wire_opencode` installs it** — the plugin lands at the plugin
-      path, with acceptance, preserving any existing file first
-- [x] 4.5 RED: `wire_opencode` failure paths — declined acceptance leaves the
-      directory untouched and counts skipped; an unwritable plugin directory
-      reports and does not partially write
-- [x] 4.6 RED: wiring is not duplicated on a second run, for all three hosts
-      (semantic match, not textual)
-- [x] 4.7 RED: malformed existing JSON is reported and the original left
-      unchanged
-- [x] 4.8 RED: a render that does not parse leaves the original byte-for-byte
-      unchanged, and the step counts as skipped
-- [x] 4.9 RED: declined acceptance leaves the file unmodified, reports the skip,
-      and exits non-zero
-- [x] 4.10 RED: non-interactive without the named opt-in reports the change it
-      would make and does not make it; with the opt-in flag, and with its
-      environment equivalent, it proceeds
-- [x] 4.11 RED: `jq` absent — skills still bind, the block is printed, the step is
-      named as skipped, and the run exits **non-zero**
-- [x] 4.12 RED: a host with no `wire_` function gets skills, no hook config, is
-      reported installed-without-wiring, and exits **zero**
-- [x] 4.13 RED: no wiring text asserts that reviews are required
+Group 4 was thirteen wiring cases. Host wiring left this change after round
+three, and the cases went with it — replaced by the ones that prove it is gone,
+which assert the FILES rather than the absence of the functions. A test that only
+checked the functions were deleted would pass against an installer that wrote the
+same files by another route.
+
+- [x] 4.1 RED: binding a host creates no host configuration file and modifies no
+      existing one, while the skills still bind — the negative test the whole
+      narrowing rests on
+- [x] 4.2 RED: the removed opt-in exits 64 with the argument named, rather than
+      being accepted, ignored, or treated as a no-op
+- [x] 4.3 RED: `install.sh` references no host configuration artifact, and
+      `hosts/` does not exist
+- [x] 4.4 RED: a full run with `jq` hidden completes and mentions `jq` nowhere —
+      it was Tier 2 for the JSON merge alone, so its absence must now be
+      invisible rather than politely reported
 - [x] 4.14 RED: auto-detection ignores a directory whose host is not installed,
       and reports the shared `~/.agents/skills` binding once, naming both hosts
 
@@ -139,12 +124,8 @@ unspecified. Each is a case.
 - [x] 7.5 Install core's own hook through `install-core-git-hooks.sh`
 - [x] 7.6 `bind_skills`: the target-state table from the design, plus the legacy
       manifest as written data
-- [x] 7.7 `hosts/codex/` — carry the adapter from the archived repo and review it
-      as code
-- [x] 7.8 `hosts/opencode/openspec-change-gate.ts` — write against current gate
-      2.0.0 behaviour; do not lift the installed copy
-- [x] 7.9 `wire_claude`, `wire_codex`, `wire_opencode`: acceptance, then render,
-      parse-check, preserve, move
+- [x] 7.7 `install_hosts`: one path for every host, with no per-host branch —
+      the moment one exists the second is cheap
 - [x] 7.10 `--host auto`: detect by host executable
 - [x] 7.11 `--check`: version and content-wise currency per artifact
 - [x] 7.12 Green through every RED case in groups 1–6
@@ -157,19 +138,28 @@ unspecified. Each is a case.
 - [x] 8.2 Whole suite green; `openspec validate --all` green; the gate exits 0
 - [x] 8.3 Record the before state: `./install.sh --check` on the real machine,
       **saved to a file**, not printed and scrolled past
-- [ ] 8.4 Run `./install.sh --host auto` for real; confirm legacy bindings are
-      gone and every previously-bound host is still bound
+- [ ] 8.4 Run `./install.sh --host auto --replace-unrecognised` for real;
+      confirm legacy bindings are gone and every previously-bound host is still
+      bound. No configuration opt-in is passed because there is no longer one to
+      pass, which is what makes this run safe to do beside live sessions
 - [ ] 8.5 Confirm a fleet project's shim still resolves
       `~/.agenticapps/bin/openspec-change-gate.sh` unchanged
-- [ ] 8.6 Confirm `manifest.tsv` afterwards carries the declared set, and note
-      that the retired `normalize-claude-md.sh` row is gone while the file itself
-      remains — this change removes no software it did not install
-- [ ] 8.7 Code review on the diff — the independent read that follows
+- [ ] 8.6 Confirm `manifest.tsv` afterwards carries the declared set. The
+      retired `normalize-claude-md.sh` row **survives**: `install-project-hooks.sh`
+      carries forward every row outside the declared set by design, so removing
+      it needs explicit pruning and is not this change's to do
+- [ ] 8.7 Confirm no host configuration file was created or modified by the
+      real run — the machine-level check that matches test 4.1
+- [ ] 8.8 Code review on the diff — the independent read that follows
       implementation, distinct from the plan review already in `REVIEWS.md`
-- [ ] 8.8 `cso`
+- [ ] 8.9 `cso`
 
 ## 9. Hand off what was deferred
 
-- [ ] 9.1 Open the follow-up change for `--project`: the project-shim installer
-      and the canonical instruction-file provisioner. `tools/agents-md-conformance.sh`
-      is its acceptance test and already exists; the writer it checks does not
+- [x] 9.1 The `--project` follow-up is **superseded, not opened**. Its successor
+      is `one-enforcement-floor`, which drops `--project` outright: with the git
+      floor bound machine-wide there is no per-repository hook left for it to
+      install, and what remained — the instruction-file provisioner — depends on
+      a question that change deliberately leaves open
+- [ ] 9.2 Re-run the plan reviewers. `REVIEWS.md` describes a scope that no
+      longer exists: it reviewed an installer that wired three hosts

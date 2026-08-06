@@ -150,6 +150,15 @@ CASE_REPO=""
 CASE_BIN=""
 CASE_CORE=""
 
+# Make a host look installed. Detection is by executable (task 4.14), so this is
+# what "installed" means to the installer — not the presence of a directory.
+# It lived beside the wiring cases until they were deleted; three cases then
+# passed while calling a function that no longer existed, which is exactly what
+# the vacuous-pass guard exists to catch. It sits with the scaffolding now, and
+# above the first case that calls it — a definition below its caller is the same
+# silent pass in a different disguise.
+host_exec() { printf '#!/usr/bin/env bash\nexit 0\n' > "$CASE_BIN/$1"; chmod +x "$CASE_BIN/$1"; }
+
 new_case() {
   local name="$1"
   local d
@@ -395,19 +404,23 @@ fi
 finish_case
 
 echo
-echo "install.sh — task 1.5: an unrequested optional dependency is not a failure"
-new_case "jq absent with no host requested completes, exits 0, prints the install command"
+echo "install.sh — task 1.5: the installer needs nothing beyond Tier 1"
+# jq was Tier 2 for exactly one reason: merging JSON into a host's config file.
+# With no host configuration written, jq is not a dependency at all, and the
+# case that proves it is a full run with jq hidden — not a run that reports its
+# absence politely.
+new_case "a full run with jq absent completes and mentions it nowhere"
 hide_command jq
-run_install
+host_exec claude
+run_install --host claude
 if [ "$RUN_RC" -ne 0 ]; then
-  bad "$CASE_NAME" "expected exit 0 — nothing requested needed jq — got $RUN_RC" \
+  bad "$CASE_NAME" "expected exit 0 — nothing needs jq any more — got $RUN_RC" \
                    "$(printf '%s' "$RUN_OUT" | head -3)"
-elif ! printf '%s' "$RUN_OUT" | grep -qw 'jq'; then
-  bad "$CASE_NAME" "the absence of jq was not reported" "$(printf '%s' "$RUN_OUT" | head -3)"
-elif ! printf '%s' "$RUN_OUT" | grep -qiE 'brew install|apt|install jq|to install'; then
-  bad "$CASE_NAME" "no install command was printed for the missing optional dependency"
-elif [ -x "$CASE_BIN/jq.installed" ]; then
-  bad "$CASE_NAME" "the installer ran the install command instead of printing it"
+elif printf '%s' "$RUN_OUT" | grep -qw 'jq'; then
+  bad "$CASE_NAME" "jq was mentioned by a run that does not use it" \
+                   "$(printf '%s' "$RUN_OUT" | grep -w jq | head -2)"
+elif [ ! -L "$CASE_HOME/.claude/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "skills were not bound"
 else
   ok "$CASE_NAME"
 fi
@@ -432,10 +445,10 @@ fi
 
 echo
 echo "install.sh — task 1.7: --help names every mode and the opt-in"
-new_case "--help names the four modes and the host-config opt-in flag"
+new_case "--help names the four modes and the replacement opt-in flag"
 run_install --help
 missing=""
-for token in -- '--host' '--check' '--accept-host-config'; do
+for token in -- '--host' '--check' '--replace-unrecognised'; do
   [ "$token" = "--" ] && continue
   printf '%s' "$RUN_OUT" | grep -q -- "$token" || missing="$missing $token"
 done
@@ -628,7 +641,7 @@ archived_skill() {
 echo
 echo "install.sh — task 3.1: skills are symlinks into the checkout"
 bind_case "each shipped skill appears as a symlink resolving into the checkout"
-run_install --host claude --accept-host-config
+run_install --host claude
 wrong=""
 for s in agentic-apps-workflow openspec-change-review; do
   t="$CLAUDE_SKILLS/$s"
@@ -651,7 +664,7 @@ echo "install.sh — task 3.2: a binding into an archived checkout is replaced o
 bind_case "a symlink into an archived checkout is replaced without asking, and its old target reported"
 old="$(archived_skill claude-workflow agentic-apps-workflow)"
 ln -s "$old" "$CLAUDE_SKILLS/agentic-apps-workflow"
-run_install --host claude --accept-host-config
+run_install --host claude
 t="$CLAUDE_SKILLS/agentic-apps-workflow"
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0 — ours to replace, no consent needed — got $RUN_RC" \
@@ -671,7 +684,7 @@ echo "install.sh — task 3.3: an unrecognised symlink needs consent"
 bind_case "a symlink to something unrelated is left alone and counted skipped without consent"
 mkdir -p "$CASE_DIR/somebody-elses-tool/my-skill"
 ln -s "$CASE_DIR/somebody-elses-tool/my-skill" "$CLAUDE_SKILLS/agentic-apps-workflow"
-run_install --host claude --accept-host-config
+run_install --host claude
 if ! require_ran; then :
 elif [ "$(readlink "$CLAUDE_SKILLS/agentic-apps-workflow")" != "$CASE_DIR/somebody-elses-tool/my-skill" ]; then
   bad "$CASE_NAME" "an unrecognised symlink was replaced without consent"
@@ -686,7 +699,7 @@ finish_case
 
 bind_case "the same symlink is replaced when consent is given by flag"
 ln -s "$CASE_DIR" "$CLAUDE_SKILLS/agentic-apps-workflow"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0 with consent given, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
 elif [ "$(readlink "$CLAUDE_SKILLS/agentic-apps-workflow")" = "$CASE_DIR" ]; then
@@ -701,7 +714,7 @@ echo "install.sh — task 3.4: a copied skill directory needs consent"
 bind_case "a directory at the target is reported as a copy and left alone without consent"
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"
 printf 'someone edited this\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
-run_install --host claude --accept-host-config
+run_install --host claude
 if ! require_ran; then :
 elif [ ! -f "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md" ]; then
   bad "$CASE_NAME" "a directory that could hold work was removed without consent"
@@ -718,7 +731,7 @@ echo
 echo "install.sh — task 3.5: a regular file at the target needs consent"
 bind_case "a regular file at the target is reported and left alone without consent"
 printf 'notes to self\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"
-run_install --host claude --accept-host-config
+run_install --host claude
 if ! require_ran; then :
 elif [ ! -f "$CLAUDE_SKILLS/agentic-apps-workflow" ] || [ -L "$CLAUDE_SKILLS/agentic-apps-workflow" ]; then
   bad "$CASE_NAME" "a regular file was replaced without consent"
@@ -736,7 +749,7 @@ bind_case "a dangling link into an archived checkout is still recognised as ours
 # it classifies this as foreign and stops replacing exactly the bindings this
 # change exists to replace — which is what deleting the checkouts will produce.
 ln -s "$CASE_DIR/archived/codex-workflow/skills/agentic-apps-workflow" "$CLAUDE_SKILLS/agentic-apps-workflow"
-run_install --host claude --accept-host-config
+run_install --host claude
 t="$CLAUDE_SKILLS/agentic-apps-workflow"
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
@@ -753,7 +766,7 @@ echo
 echo "install.sh — task 3.7: a symlink that cannot be created reports and never copies"
 bind_case "an unwritable skills directory reports, continues, and does not fall back to copying"
 chmod 555 "$CLAUDE_SKILLS"
-run_install --host claude --accept-host-config
+run_install --host claude
 chmod 755 "$CLAUDE_SKILLS"
 if ! require_ran; then :
 elif [ -e "$CLAUDE_SKILLS/agentic-apps-workflow" ] && [ ! -L "$CLAUDE_SKILLS/agentic-apps-workflow" ]; then
@@ -774,7 +787,7 @@ for legacy in agenticapps-workflow setup-agenticapps-workflow update-agenticapps
               setup-codex-agenticapps-workflow update-opencode-agenticapps-workflow; do
   ln -s "$(archived_skill claude-workflow "$legacy")" "$CLAUDE_SKILLS/$legacy"
 done
-run_install --host claude --accept-host-config
+run_install --host claude
 unreported=""
 for legacy in agenticapps-workflow setup-agenticapps-workflow update-agenticapps-workflow \
               setup-codex-agenticapps-workflow update-opencode-agenticapps-workflow; do
@@ -808,7 +821,7 @@ bind_case "a binding into an archived checkout under an UNLISTED name is still f
 # skill when someone deletes a checkout.
 ln -s "$(archived_skill pi-agentic-apps-workflow some-forgotten-skill)" \
       "$CLAUDE_SKILLS/some-forgotten-skill"
-run_install --host claude --accept-host-config
+run_install --host claude
 still="$(readlink "$CLAUDE_SKILLS/some-forgotten-skill" 2>/dev/null)"
 if ! require_ran; then :
 elif ! printf '%s' "$RUN_OUT" | grep -q 'some-forgotten-skill'; then
@@ -831,7 +844,7 @@ bind_case "a vendored copy is never rebound to another host's archived binding"
 mkdir -p "$CASE_HOME/.codex/skills"
 ln -s "$(archived_skill claude-workflow cso)"  "$CLAUDE_SKILLS/cso"
 ln -s "$(archived_skill codex-workflow cso)"   "$CASE_HOME/.codex/skills/codex-cso"
-run_install --host claude --host codex --accept-host-config
+run_install --host claude --host codex
 left=""
 for p in "$CLAUDE_SKILLS/cso" "$CASE_HOME/.codex/skills/codex-cso"; do
   [ -L "$p" ] && case "$(readlink "$p")" in *-workflow/*) left="$left $(basename "$p")" ;; esac
@@ -852,7 +865,7 @@ bind_case "a binding this workflow did not install is left completely alone"
 mkdir -p "$CASE_DIR/somebody-elses-repo/a-skill"
 ln -s "$CASE_DIR/somebody-elses-repo/a-skill" "$CLAUDE_SKILLS/their-skill"
 before="$(readlink "$CLAUDE_SKILLS/their-skill")"
-run_install --host claude --accept-host-config
+run_install --host claude
 after="$(readlink "$CLAUDE_SKILLS/their-skill" 2>/dev/null)"
 if ! require_ran; then :
 elif [ "$before" != "$after" ]; then
@@ -869,7 +882,7 @@ echo "install.sh — task 3.10: what is replaced is preserved, and the restore c
 bind_case "a replaced binding is preserved at a reported path with a restore command"
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"
 printf 'work that must survive\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 preserved="$(printf '%s' "$RUN_OUT" | grep -oE '[^[:space:]]*agentic-apps-workflow[^[:space:]]*pre-install[^[:space:]]*' | head -1)"
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0 with consent given, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
@@ -886,337 +899,57 @@ else
 fi
 finish_case
 
-# ── Wiring ─────────────────────────────────────────────────────────────────
-
-CLAUDE_SETTINGS=""; CODEX_HOOKS=""; OPENCODE_PLUGIN=""
-wire_case() {
-  bind_case "$1"
-  CLAUDE_SETTINGS="$CASE_HOME/.claude/settings.json"
-  CODEX_HOOKS="$CASE_HOME/.codex/hooks.json"
-  OPENCODE_PLUGIN="$CASE_HOME/.config/opencode/plugin/openspec-change-gate.ts"
-  mkdir -p "$CASE_HOME/.codex" "$CASE_HOME/.config/opencode"
-}
-
-# Make a host look installed. Detection is by executable (task 4.14), so this is
-# what "installed" means to the installer — not the presence of a directory.
-host_exec() { printf '#!/usr/bin/env bash\nexit 0\n' > "$CASE_BIN/$1"; chmod +x "$CASE_BIN/$1"; }
-
-# A settings.json with somebody else's hook already in it. The real file on this
-# machine carries entries from four other tools, and losing one of them is the
-# failure this whole acceptance-and-preserve dance exists to prevent.
-foreign_settings() {
-  cat > "$CLAUDE_SETTINGS" <<'JSON'
-{
-  "model": "opus",
-  "hooks": {
-    "PreToolUse": [
-      {"matcher": "Bash", "hooks": [{"type": "command", "command": "/opt/somebody-else/guard.sh"}]}
-    ],
-    "Stop": [
-      {"matcher": "*", "hooks": [{"type": "command", "command": "/opt/somebody-else/notify.sh"}]}
-    ]
-  }
-}
-JSON
-}
+# ── No host configuration ──────────────────────────────────────────────────
+# The change is named for this. A test that only checks the wiring functions
+# are gone would pass against an installer that wrote the same files by another
+# route, so these assert the FILES, not the absence of the code.
 
 echo
-echo "install.sh — task 4.1: claude wiring preserves other tools' hooks"
-wire_case "claude gets its PreToolUse entry and every foreign hook survives semantically"
-mkdir -p "$CASE_HOME/.claude"; foreign_settings
-before_bytes="$(shasum < "$CLAUDE_SETTINGS")"
-run_install --host claude --accept-host-config
-kept_pre="$(jq -r '[.hooks.PreToolUse[]?.hooks[]?.command] | index("/opt/somebody-else/guard.sh")' "$CLAUDE_SETTINGS" 2>/dev/null)"
-kept_stop="$(jq -r '[.hooks.Stop[]?.hooks[]?.command] | index("/opt/somebody-else/notify.sh")' "$CLAUDE_SETTINGS" 2>/dev/null)"
-kept_model="$(jq -r '.model // empty' "$CLAUDE_SETTINGS" 2>/dev/null)"
-ours="$(jq -r '[.hooks.PreToolUse[]?.hooks[]?.command] | map(select(test("openspec-change-gate"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null)"
-backup="$(printf '%s' "$RUN_OUT" | grep -oE '[^[:space:]]*settings\.json[^[:space:]]*pre-install[^[:space:]]*' | head -1)"
-if [ "$RUN_RC" -ne 0 ]; then
-  bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
-elif [ "$ours" != "1" ]; then
-  bad "$CASE_NAME" "expected exactly one gate entry in PreToolUse, found ${ours:-none}"
-elif [ "$kept_pre" = "null" ] || [ "$kept_stop" = "null" ] || [ "$kept_model" != "opus" ]; then
-  bad "$CASE_NAME" "a pre-existing entry did not survive" "$(cat "$CLAUDE_SETTINGS" 2>/dev/null | head -5)"
-elif [ -z "$backup" ] || [ ! -f "$backup" ]; then
-  bad "$CASE_NAME" "no preserved copy of settings.json was reported"
-elif [ "$(shasum < "$backup")" != "$before_bytes" ]; then
-  # The rewritten file cannot be byte-equal — jq reserialises — but the BACKUP
-  # must be, or it is not a restore point.
-  bad "$CASE_NAME" "the preserved copy is not byte-identical to the original"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.2: codex wiring, and the adapter decides correctly"
-wire_case "codex hooks.json carries the nested matcher shape"
-run_install --host codex --accept-host-config
-shape="$(jq -r '.hooks | to_entries[0].value[0].hooks[0].command // empty' "$CODEX_HOOKS" 2>/dev/null)"
-if [ "$RUN_RC" -ne 0 ]; then
-  bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
-elif [ -z "$shape" ]; then
-  bad "$CASE_NAME" "hooks.json does not carry {hooks:{Event:[{hooks:[{command}]}]}}" \
-                   "$(cat "$CODEX_HOOKS" 2>/dev/null | head -5)"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-new_case "the codex adapter returns a valid permission decision for allow and for block"
-ADAPTER="$ROOT/hosts/codex/openspec-change-gate-adapter.sh"
-# codex FAILS OPEN on invalid or partial stdout from a PreToolUse hook, so a
-# malformed block is indistinguishable from an allow. Both payloads are checked
-# for well-formed JSON, not just for the verdict.
-if [ ! -x "$ADAPTER" ]; then
-  bad "$CASE_NAME" "no adapter at hosts/codex/openspec-change-gate-adapter.sh (task 7.7 carries it forward)"
-else
-  allow_out="$(printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | "$ADAPTER" 2>/dev/null)"
-  allow_rc=$?
-  block_out="$(printf '{"tool_name":"apply_patch","tool_input":{"command":"*** Update File: openspec/changes/x/spec.md"}}' | "$ADAPTER" 2>/dev/null)"
-  if [ "$allow_rc" -ne 0 ]; then
-    bad "$CASE_NAME" "an ordinary allow payload did not exit 0 (got $allow_rc)"
-  elif [ -n "$allow_out" ] && ! printf '%s' "$allow_out" | jq -e . >/dev/null 2>&1; then
-    bad "$CASE_NAME" "the allow path emitted non-JSON stdout, which codex treats as fail-open"
-  elif [ -n "$block_out" ] && ! printf '%s' "$block_out" | jq -e . >/dev/null 2>&1; then
-    bad "$CASE_NAME" "the block path emitted non-JSON stdout, which codex treats as fail-open"
-  else
-    ok "$CASE_NAME"
-  fi
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.3: the opencode plugin's own behaviour"
-new_case "the plugin allows an unreviewed but validating change and blocks a validation-red one"
-PLUGIN_SRC="$ROOT/hosts/opencode/openspec-change-gate.ts"
-RUNTIME="$(command -v bun || command -v node || true)"
-if [ ! -f "$PLUGIN_SRC" ]; then
-  bad "$CASE_NAME" "no plugin at hosts/opencode/openspec-change-gate.ts (task 7.8 writes it)"
-elif [ -z "$RUNTIME" ]; then
-  # Not a pass. A behaviour case that cannot run has not been satisfied, and
-  # counting it green would be the vacuous pass in another costume.
-  bad "$CASE_NAME" "no bun or node available to execute the plugin"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.4: wire_opencode actually installs the plugin"
-wire_case "the opencode plugin lands at the plugin path, preserving anything already there"
-mkdir -p "$(dirname "$OPENCODE_PLUGIN")"
-printf '// an earlier plugin\n' > "$OPENCODE_PLUGIN"
-run_install --host opencode --accept-host-config
-backup="$(printf '%s' "$RUN_OUT" | grep -oE '[^[:space:]]*openspec-change-gate\.ts[^[:space:]]*pre-install[^[:space:]]*' | head -1)"
-if [ "$RUN_RC" -ne 0 ]; then
-  bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
-elif [ ! -f "$OPENCODE_PLUGIN" ] || grep -q 'an earlier plugin' "$OPENCODE_PLUGIN"; then
-  bad "$CASE_NAME" "the plugin was not installed — the first draft created it and never wired it"
-elif [ -z "$backup" ] || [ ! -f "$backup" ]; then
-  bad "$CASE_NAME" "the previous plugin was replaced without being preserved"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.5: wire_opencode failure paths"
-wire_case "an unwritable plugin directory reports and writes nothing partial"
-mkdir -p "$(dirname "$OPENCODE_PLUGIN")"; chmod 555 "$(dirname "$OPENCODE_PLUGIN")"
-run_install --host opencode --accept-host-config
-chmod 755 "$(dirname "$OPENCODE_PLUGIN")"
+echo "install.sh — task 4.1: a host gets skills and nothing else"
+bind_case "binding a host creates and modifies no file the host reads as configuration"
+mkdir -p "$CASE_HOME/.codex" "$CASE_HOME/.config/opencode"
+printf '{"model":"sonnet"}\n' > "$CASE_HOME/.claude/settings.json"
+before="$(md5 -q "$CASE_HOME/.claude/settings.json" 2>/dev/null || md5sum "$CASE_HOME/.claude/settings.json" | cut -d' ' -f1)"
+host_exec claude; host_exec codex; host_exec opencode
+run_install --host auto
+after="$(md5 -q "$CASE_HOME/.claude/settings.json" 2>/dev/null || md5sum "$CASE_HOME/.claude/settings.json" | cut -d' ' -f1)"
+stray="$(ls -d "$CASE_HOME/.codex/hooks.json" \
+                "$CASE_HOME/.config/opencode/plugin/openspec-change-gate.ts" 2>/dev/null | head -1)"
 if ! require_ran; then :
-elif [ -f "$OPENCODE_PLUGIN" ]; then
-  bad "$CASE_NAME" "a plugin was written into a directory that should have refused it"
-elif [ "$RUN_RC" -eq 0 ]; then
-  bad "$CASE_NAME" "a requested wiring that failed must exit non-zero"
+elif [ "$before" != "$after" ]; then
+  bad "$CASE_NAME" "the host's settings file was modified" "$CASE_HOME/.claude/settings.json"
+elif [ -n "$stray" ]; then
+  bad "$CASE_NAME" "a host configuration file was created" "$stray"
+elif [ ! -L "$CASE_HOME/.claude/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "skills were not bound — the run did nothing rather than the right thing"
 else
   ok "$CASE_NAME"
 fi
 finish_case
 
 echo
-echo "install.sh — task 4.6: wiring is not duplicated on a second run"
-wire_case "a second run adds no second entry for any of the three hosts"
-mkdir -p "$CASE_HOME/.claude"; foreign_settings
-run_install --host claude --host codex --host opencode --accept-host-config
-run_install --host claude --host codex --host opencode --accept-host-config
-n_claude="$(jq -r '[.hooks.PreToolUse[]?.hooks[]?.command] | map(select(test("openspec-change-gate"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null)"
-n_codex="$(jq -r '[.hooks[]?[]?.hooks[]?.command] | map(select(test("openspec-change-gate"))) | length' "$CODEX_HOOKS" 2>/dev/null)"
-if ! require_ran; then :
-elif [ "$n_claude" != "1" ]; then
-  bad "$CASE_NAME" "claude has ${n_claude:-0} gate entries after two runs, expected 1"
-elif [ "$n_codex" != "1" ]; then
-  bad "$CASE_NAME" "codex has ${n_codex:-0} gate entries after two runs, expected 1"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.7: malformed existing JSON is reported, never rewritten"
-wire_case "a settings.json that does not parse is left exactly as found"
-mkdir -p "$CASE_HOME/.claude"
-printf '{ "hooks": { "PreToolUse": [ oops\n' > "$CLAUDE_SETTINGS"
-before_bytes="$(shasum < "$CLAUDE_SETTINGS")"
-run_install --host claude --accept-host-config
-if ! require_ran; then :
-elif [ "$(shasum < "$CLAUDE_SETTINGS")" != "$before_bytes" ]; then
-  bad "$CASE_NAME" "a file that could not be parsed was rewritten anyway"
-elif [ "$RUN_RC" -eq 0 ]; then
-  bad "$CASE_NAME" "a skipped requested wiring must exit non-zero"
-elif ! printf '%s' "$RUN_OUT" | grep -qiE 'pars|malform|invalid|json'; then
-  bad "$CASE_NAME" "the parse failure was not reported" "$(printf '%s' "$RUN_OUT" | head -3)"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.8: a render that does not parse never replaces the original"
-wire_case "a jq that emits garbage leaves settings.json byte-for-byte unchanged"
-mkdir -p "$CASE_HOME/.claude"; foreign_settings
-before_bytes="$(shasum < "$CLAUDE_SETTINGS")"
-# A jq that succeeds and emits nonsense. The check that matters is on the
-# RENDERED output, not on jq's exit status — trusting the status is how a
-# corrupt file gets moved into place.
-REAL_JQ="$(command -v jq)"
-cat > "$CASE_BIN/jq" <<STUB
-#!/usr/bin/env bash
-# Validation calls carry -e and are passed through to the real jq. The merge
-# call does not, and that is the one that emits garbage — so the installer has
-# a working parser with which to catch a corrupt render, which is the whole
-# property under test.
-case " \$* " in *" -e "*) exec "$REAL_JQ" "\$@" ;; esac
-printf '{ this is not json\n'
-exit 0
-STUB
-chmod +x "$CASE_BIN/jq"
-run_install --host claude --accept-host-config
-if ! require_ran; then :
-elif [ "$(shasum < "$CLAUDE_SETTINGS")" != "$before_bytes" ]; then
-  bad "$CASE_NAME" "an unparseable render was moved over the original"
-elif [ "$RUN_RC" -eq 0 ]; then
-  bad "$CASE_NAME" "a skipped requested wiring must exit non-zero"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.9: declined acceptance changes nothing and exits non-zero"
-wire_case "declining host-config acceptance leaves the file alone, reports, and fails the run"
-mkdir -p "$CASE_HOME/.claude"; foreign_settings
-before_bytes="$(shasum < "$CLAUDE_SETTINGS")"
-# No --accept-host-config, and stdin is closed: there is no way to say yes, so
-# the only conformant outcome is to leave it.
-run_install --host claude < /dev/null
-if ! require_ran; then :
-elif [ "$(shasum < "$CLAUDE_SETTINGS")" != "$before_bytes" ]; then
-  bad "$CASE_NAME" "host configuration was modified without acceptance"
-elif [ "$RUN_RC" -eq 0 ]; then
-  bad "$CASE_NAME" "a skipped requested wiring must exit non-zero"
-elif ! printf '%s' "$RUN_OUT" | grep -qiE 'skip|accept|consent'; then
-  bad "$CASE_NAME" "the skip was not reported" "$(printf '%s' "$RUN_OUT" | head -3)"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.10: the named opt-in works as flag and as environment"
-wire_case "non-interactive without the opt-in prints the change and does not make it"
-mkdir -p "$CASE_HOME/.claude"; foreign_settings
-before_bytes="$(shasum < "$CLAUDE_SETTINGS")"
-run_install --host claude < /dev/null
-if ! require_ran; then :
-elif [ "$(shasum < "$CLAUDE_SETTINGS")" != "$before_bytes" ]; then
-  bad "$CASE_NAME" "the change was made without the opt-in"
-elif ! printf '%s' "$RUN_OUT" | grep -q 'openspec-change-gate'; then
-  bad "$CASE_NAME" "the change it would have made was not printed for hand-application"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-wire_case "the environment equivalent grants the same acceptance as the flag"
-mkdir -p "$CASE_HOME/.claude"; foreign_settings
-if [ ! -f "${CASE_CORE:+$CASE_CORE/install.sh}" ] && [ ! -f "$INSTALL" ]; then
-  RUN_MISSING=1; RUN_RC=127; RUN_OUT="install.sh does not exist at $INSTALL"
-else
-  RUN_OUT="$(cd "$CASE_REPO" && HOME="$CASE_HOME" PATH="$CASE_BIN:$PATH" \
-             CALL_LOG="$CASE_HOME/calls.log" INSTALL_ACCEPT_HOST_CONFIG=1 \
-             bash "${CASE_CORE:-$ROOT}/install.sh" --host claude 2>&1 < /dev/null)"
-  RUN_RC=$?; RUN_MISSING=0
-fi
-n="$(jq -r '[.hooks.PreToolUse[]?.hooks[]?.command] | map(select(test("openspec-change-gate"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null)"
-if ! require_ran; then :
-elif [ "$n" != "1" ]; then
-  bad "$CASE_NAME" "INSTALL_ACCEPT_HOST_CONFIG=1 did not grant acceptance (${n:-0} entries)"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.11: jq absent skips wiring but still binds skills"
-wire_case "without jq the skills still bind, the block is printed, and the run exits non-zero"
-hide_command jq
-run_install --host claude --accept-host-config
-if ! require_ran; then :
-elif [ ! -L "$CLAUDE_SKILLS/agentic-apps-workflow" ]; then
-  bad "$CASE_NAME" "skill binding needs no jq and must not be skipped with it"
-elif [ "$RUN_RC" -eq 0 ]; then
-  bad "$CASE_NAME" "a requested wiring skipped for a missing tool must exit non-zero"
-elif ! printf '%s' "$RUN_OUT" | grep -q 'openspec-change-gate'; then
-  bad "$CASE_NAME" "the block an operator would paste by hand was not printed"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-echo
-echo "install.sh — task 4.12: a host with no wiring is bound as far as it is known"
-wire_case "pi gets skills, no hook config, and the run exits zero"
-run_install --host pi
-agents="$CASE_HOME/.agents/skills"
-if [ "$RUN_RC" -ne 0 ]; then
-  bad "$CASE_NAME" "an unwired host is conformant, not a failure — got $RUN_RC" \
+echo "install.sh — task 4.2: the removed opt-in fails loudly"
+new_case "--accept-host-config is an unknown argument, not a silently accepted one"
+run_install --accept-host-config
+if [ "$RUN_RC" -ne 64 ]; then
+  bad "$CASE_NAME" "expected exit 64 for an unknown argument, got $RUN_RC" \
                    "$(printf '%s' "$RUN_OUT" | head -3)"
-elif [ ! -L "$agents/agentic-apps-workflow" ]; then
-  bad "$CASE_NAME" "skills were not bound into the shared host-neutral directory"
-elif [ -e "$CASE_HOME/.pi/hooks.json" ] || [ -e "$CASE_HOME/.agents/hooks.json" ]; then
-  bad "$CASE_NAME" "hook configuration was invented for a host with no confirmed wiring"
-elif ! printf '%s' "$RUN_OUT" | grep -qiE 'wiring|unwired|not wired|no hook'; then
-  bad "$CASE_NAME" "the installed-without-wiring state was not reported"
+elif ! printf '%s' "$RUN_OUT" | grep -qi 'unknown argument'; then
+  bad "$CASE_NAME" "the unknown argument was not named" "$(printf '%s' "$RUN_OUT" | head -3)"
 else
   ok "$CASE_NAME"
 fi
 finish_case
 
 echo
-echo "install.sh — task 4.13: no wiring text claims the gate requires reviews"
-new_case "nothing this installer writes into a host asserts a review requirement"
-# The gate stopped enforcing review evidence at 2.0.0. Both carried-forward
-# artefacts state otherwise today: the archived codex adapter's header says
-# "validate-green AND REVIEWS.md >= 2 reviewers", and the installed opencode
-# plugin says the same at its line 93. Carrying either across unedited installs
-# a message that sends an operator to fetch reviews for an edit that was never
-# blocked for that reason.
-offenders=""
-for f in "$ROOT/hosts/codex/openspec-change-gate-adapter.sh" "$ROOT/hosts/opencode/openspec-change-gate.ts"; do
-  [ -f "$f" ] || { offenders="$offenders $(basename "$f")(absent)"; continue; }
-  # Strip comments first. A comment that quotes the retired claim in order to
-  # correct it is exactly what we want present; an operator never sees it. The
-  # claim is a defect when it reaches runtime output, so that is what is scanned.
-  if sed -e 's|//.*$||' -e 's|#.*$||' "$f" \
-     | grep -qiE 'REVIEWS\.md|[>≥]=? *2 *.{0,12}review|must .{0,20}(carry|have) .{0,20}review'; then
-    offenders="$offenders $(basename "$f")"
-  fi
-done
-if [ -n "$offenders" ]; then
-  bad "$CASE_NAME" "asserts a rule the gate does not enforce, or is not written yet:$offenders"
+echo "install.sh — task 4.3: no host-specific artifact is published"
+new_case "the installer references no codex adapter and no opencode plugin"
+hits="$(grep -cE 'hosts/(codex|opencode)|openspec-change-gate\.ts|hooks\.json|settings\.json' "$ROOT/install.sh" || true)"
+if [ "$hits" -ne 0 ]; then
+  bad "$CASE_NAME" "install.sh still references a host configuration artifact ($hits line(s))" \
+                   "$(grep -nE 'hosts/(codex|opencode)|openspec-change-gate\.ts|hooks\.json|settings\.json' "$ROOT/install.sh" | head -3)"
+elif [ -d "$ROOT/hosts" ]; then
+  bad "$CASE_NAME" "hosts/ still exists"
 else
   ok "$CASE_NAME"
 fi
@@ -1224,22 +957,22 @@ finish_case
 
 echo
 echo "install.sh — task 4.14: detection is by evidence, and a shared directory names both hosts"
-wire_case "a host directory without the host installed is not wired"
+bind_case "a host directory without the host installed is not bound"
 mkdir -p "$CASE_HOME/.codex/skills"        # the directory exists...
 host_exec claude                            # ...but only claude is installed
 PATH_OVERRIDE="$CASE_BIN:$(farm_without codex)"
-run_install --host auto --accept-host-config
+run_install --host auto
 if ! require_ran; then :
-elif [ -f "$CODEX_HOOKS" ]; then
-  bad "$CASE_NAME" "codex was wired on the evidence of a directory alone"
-elif [ ! -f "$CLAUDE_SETTINGS" ]; then
-  bad "$CASE_NAME" "claude was installed and was not wired"
+elif [ -e "$CASE_HOME/.codex/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "codex was bound on the evidence of a directory alone"
+elif [ ! -L "$CASE_HOME/.claude/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "claude was installed and was not bound"
 else
   ok "$CASE_NAME"
 fi
 finish_case
 
-wire_case "the shared host-neutral skills directory is reported once, naming both hosts"
+bind_case "the shared host-neutral skills directory is reported once, naming both hosts"
 host_exec pi; host_exec omp
 run_install --host auto
 shared_lines="$(printf '%s' "$RUN_OUT" | grep -c '\.agents/skills')"
@@ -1405,9 +1138,9 @@ new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
-run_install --host claude --host pi --accept-host-config
+run_install --host claude --host pi
 first_state="$(case_state)"
-run_install --host claude --host pi --accept-host-config
+run_install --host claude --host pi
 second_state="$(case_state)"
 # No backup is expected between these two runs, and that is not in tension with
 # task 6.1: a backup is taken when something is REPLACED, and the second run
@@ -1436,10 +1169,10 @@ stub_helper reference-implementations/shared-install/install-shared-artifact.sh 
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"; printf 'first\n'  > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 rm -rf "$CLAUDE_SKILLS/agentic-apps-workflow"
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"; printf 'second\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 VAULT="$CASE_HOME/.agenticapps/pre-install/.claude/skills"
 kept="$(grep -rl 'first' "$VAULT"/*pre-install* 2>/dev/null | head -1)"
 n_backups="$(ls -d "$VAULT"/*pre-install* 2>/dev/null | wc -l | tr -d ' ')"
@@ -1468,7 +1201,7 @@ stub_helper reference-implementations/shared-install/install-project-hooks.sh   
 stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
 mkdir -p "$CLAUDE_SKILLS/agenticapps-workflow/skill"
 printf 'name: agentic-apps-workflow\n' > "$CLAUDE_SKILLS/agenticapps-workflow/skill/SKILL.md"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 left="$(ls -d "$CLAUDE_SKILLS"/*pre-install* 2>/dev/null | head -1)"
 nested="$(find "$CLAUDE_SKILLS" -name SKILL.md -path '*pre-install*' 2>/dev/null | head -1)"
 b="$(ls -d "$CASE_HOME/.agenticapps/pre-install/.claude/skills"/*pre-install* 2>/dev/null | head -1)"
@@ -1495,7 +1228,7 @@ stub_helper reference-implementations/shared-install/install-shared-artifact.sh 
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
 printf 'notes\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"; chmod 640 "$CLAUDE_SKILLS/agentic-apps-workflow"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 b="$(ls -d "$CASE_HOME/.agenticapps/pre-install/.claude/skills"/*pre-install* 2>/dev/null | head -1)"
 if ! require_ran; then :
 elif [ -z "$b" ]; then
@@ -1519,7 +1252,7 @@ printf 'irreplaceable\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"
 # The directory the backup would be written into is read-only, so preserving is
 # impossible while replacing is not. Proceeding here would destroy the only copy.
 chmod 555 "$CLAUDE_SKILLS"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 chmod 755 "$CLAUDE_SKILLS"
 if ! require_ran; then :
 elif [ ! -f "$CLAUDE_SKILLS/agentic-apps-workflow" ] || ! grep -q irreplaceable "$CLAUDE_SKILLS/agentic-apps-workflow"; then
@@ -1541,7 +1274,7 @@ stub_helper reference-implementations/shared-install/install-project-hooks.sh   
 stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"
 printf 'the thing to get back\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
-run_install --host claude --replace-unrecognised --accept-host-config
+run_install --host claude --replace-unrecognised
 # A restore command that is printed but never executed is documentation, and
 # documentation is not a rollback plan. This runs it.
 restore="$(printf '%s' "$RUN_OUT" | grep -oE '(rm -rf [^;]+; *)?mv +[^[:space:]]+ +[^[:space:]]+' | head -1)"

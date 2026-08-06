@@ -8,20 +8,20 @@ install core's own git pre-commit hook. A host is an optional addition to that
 install, never a precondition for it.
 
 An operator who has never heard of the five hosts SHALL still get a working
-install: the git and CI floor is the workflow, and host wiring is what makes it
-convenient.
+install. The git and CI floor **is** the workflow; a host adds skills, and
+nothing else.
 
 #### Scenario: A bare run installs without a host
 
 - **WHEN** the operator runs the installer with no arguments
 - **THEN** the payload is published and core's git pre-commit hook is installed
-- **AND** the run succeeds without any host being detected, named, or wired
+- **AND** the run succeeds without any host being detected or named
 
 #### Scenario: No host is installed on the machine
 
 - **WHEN** the installer runs on a machine where no host is installed
 - **THEN** it exits successfully, having published the payload and the hook
-- **AND** it reports that no host was wired rather than treating it as an error
+- **AND** it reports that no host was bound rather than treating it as an error
 
 ### Requirement: The installer orchestrates the existing install paths rather than reimplementing them
 
@@ -81,7 +81,7 @@ be the same skill.
 
 #### Scenario: A skill is bound into a host
 
-- **WHEN** the installer wires a host whose skill directory is known
+- **WHEN** the installer binds a host whose skill directory is known
 - **THEN** each entry in `skills/` appears in that directory as a symlink
   resolving to the core checkout
 - **AND** no regular file or directory with the same name is written there
@@ -246,98 +246,44 @@ failure on a machine that is in exactly the intended state.
 - **THEN** the step is counted as satisfied
 - **AND** it does not by itself make the run exit non-zero
 
-#### Scenario: Requested wiring is skipped for a missing tool
-
-- **WHEN** the operator names a host to wire and the tool needed to edit that
-  host's configuration is absent
-- **THEN** the skill binding for that host still proceeds
-- **AND** the wiring step is named as skipped, with the command that completes it
-- **AND** the run exits non-zero
-
 #### Scenario: Nothing was requested that could not be done
 
 - **WHEN** every step the operator asked for was performed
 - **THEN** the run exits zero
 
-### Requirement: Host configuration is changed only with the operator's acceptance
+### Requirement: The installer writes no host configuration
 
-A host's configuration file belongs to that host, not to this workflow, and on a
-real machine it carries entries written by unrelated tools. The installer SHALL
-obtain the operator's acceptance before modifying such a file, SHALL default to
-no when asked interactively, and SHALL report rather than choose when it cannot
-ask.
+The installer SHALL NOT create or modify any file a host reads as
+configuration. A host receives skill bindings, and nothing else.
 
-Before modifying one, the installer SHALL preserve a copy that the operator can
-restore, and SHALL confirm the modified content parses before it replaces the
-original.
+The enforcement floor is git and CI, which every host shares. A per-host hook
+was the only host-specific thing this installer did, and it was the weakest of
+the three surfaces the gate fires at: with no active change the gate returns
+satisfied, so the hook never enforced spec-before-code, and the condition it did
+enforce is caught again at `git commit` and again in CI. It cost three
+implementations, a JSON merge against a file other tools write to, an opt-in
+flag, and a Tier 2 dependency.
 
-The opt-in that permits this without a prompt SHALL be a named flag, with an
-environment-variable equivalent for automated callers, and SHALL appear in the
-installer's own usage output. An opt-in that cannot be named cannot be given, so
-without one every non-interactive run either prompts into a closed input or
-assumes consent it was never granted.
+Every host is therefore treated identically. There is deliberately no per-host
+branch in the binding path: the moment one exists, the second is cheap.
 
-#### Scenario: Acceptance is declined
+#### Scenario: A host is bound
 
-- **WHEN** the operator declines the change to a host's configuration
-- **THEN** the file is not modified
-- **AND** the step is reported as skipped, which exits non-zero
+- **WHEN** the installer binds any host
+- **THEN** that host's skills are bound by symlink
+- **AND** no file that host reads as configuration is created or modified
 
-#### Scenario: The run cannot ask
+#### Scenario: The removed opt-in is passed
 
-- **WHEN** the installer runs non-interactively without a named opt-in
-- **THEN** it reports the configuration change it would have made and does not
-  make it
+- **WHEN** an operator or script passes the opt-in that formerly permitted a
+  host configuration change
+- **THEN** the run fails with an unknown-argument error naming it
+- **AND** it is not accepted, ignored, or silently treated as a no-op
 
-#### Scenario: The modified content does not parse
+#### Scenario: Every host is bound the same way
 
-- **WHEN** the rendered configuration does not parse
-- **THEN** the original file is left byte-for-byte unchanged
-- **AND** the failure is reported and the step counted as skipped
-
-### Requirement: Wiring never asserts a rule the gate does not enforce
-
-Text the installer writes into a host — a plugin, an adapter, or a message it
-causes a host to print — SHALL describe the gate's actual behaviour. It SHALL
-NOT state that review evidence is required, that a review count is enforced, or
-any other condition the gate does not block on.
-
-An operator who is told the gate requires reviews will go and get reviews to
-unblock an edit that was never blocked for that reason, and will mistrust every
-later message from the same source. Wiring carried forward from an older
-installation SHALL be checked against current gate behaviour before it is
-reused, never copied on the assumption that an installed file is current.
-
-#### Scenario: Existing wiring is carried forward
-
-- **WHEN** wiring is derived from a copy installed by a previous version
-- **THEN** its description of gate behaviour is verified against the gate as it
-  now behaves
-- **AND** any statement the gate no longer implements is corrected before the
-  wiring is installed
-
-#### Scenario: Wiring reports a blocked edit
-
-- **WHEN** installed wiring blocks an edit and explains why
-- **THEN** the explanation names only the condition the gate actually blocked on
-
-### Requirement: A host whose wiring is unknown is bound as far as it is known
-
-Hosts differ in how much of them has been measured. The installer SHALL bind
-each host to the extent its layout is confirmed, and SHALL NOT guess at the rest.
-
-For a host with a known skill directory and no confirmed hook wiring, the
-installer SHALL create the skill binding and SHALL NOT write any hook
-configuration. That state is conformant, not degraded: the host runs on the git
-and CI floor, which is where enforcement actually lives. Because the operator
-did not request wiring that does not exist, this state does not exit non-zero.
-
-#### Scenario: A host has a known skill directory and no confirmed wiring
-
-- **WHEN** the installer binds such a host
-- **THEN** the skills are bound into that host's skill directory
-- **AND** no hook configuration file is created or modified for that host
-- **AND** the host is reported as installed with wiring absent, not failed
+- **WHEN** the installer binds two different hosts
+- **THEN** neither is treated as a special case in the binding path
 
 ### Requirement: A host is detected by evidence that it is installed
 
@@ -347,13 +293,13 @@ presence of a directory alone.
 
 A directory can exist for unrelated reasons, and one skill directory in this
 layout is shared by two hosts and by unrelated tools, so its presence identifies
-no host at all. Wiring a host that is not installed writes configuration nobody
-reads and reports an install that did not happen.
+no host at all. Binding a host that is not installed creates symlinks nobody
+resolves and reports an install that did not happen.
 
 #### Scenario: A directory exists but the host does not
 
 - **WHEN** a host's directory exists and that host is not installed
-- **THEN** auto-detection does not report that host as present and does not wire it
+- **THEN** auto-detection does not report that host as present and does not bind it
 
 #### Scenario: A skill directory is shared by more than one host
 
@@ -367,7 +313,7 @@ reads and reports an install that did not happen.
 The installer SHALL provide a check mode reporting, for each declared artifact
 and binding: whether it is present, which version it holds, and whether it is
 current with respect to the checkout. For each host it SHALL report whether
-skills are bound and whether the hook is wired.
+skills are bound.
 
 Presence alone is not a state worth reporting. A stale, downgraded or
 hand-edited executable is present, and reporting it as installed tells the
@@ -493,25 +439,31 @@ explicit opt-in with a stated reason for an operator who means it.
 
 ### Requirement: The installer is short enough to be read before it is trusted
 
-The installer SHALL NOT exceed 250 executable lines, counting neither comments
+The installer SHALL NOT exceed 228 executable lines, counting neither comments
 nor blank lines. An operator is being asked to let it write into their home
-directory and their host configuration, and the honest basis for that trust is
-reading it.
+directory, and the honest basis for that trust is reading it.
 
-> **The number was 200, and it was raised once, deliberately.** The first draft
-> of this requirement was written before the second review round, which added
-> behaviour rather than polish: currency judged by content rather than by
-> version marker (13 lines), the archived-binding scan that must not consult the
-> legacy manifest (14), `wire_opencode`, which the first draft created and never
-> installed (10), the preserved-copy collision, permission and failure rules (8),
-> and the second opt-in, separated from the first because one grants an editor
-> config edit and the other grants deleting a directory (12). That is 57 lines
-> the original 200 predates; without them the implementation measures ~189.
+> **The number was 200, then 250, and it is now 228 — and every move is
+> itemised, which is the whole point of having one.**
 >
-> The budget worked as designed here. It did not prevent the growth — it made
-> the growth itemisable, and forced the choice to be made in this document
-> rather than absorbed silently in the script. Raising it is the outcome the
-> requirement's own escape clause prescribes, not a failure of it.
+> It was raised to 250 after the second review round, for 57 lines of behaviour
+> the 200 predated: currency judged by content rather than by version marker
+> (13), the archived-binding scan that must not consult the legacy manifest
+> (14), `wire_opencode`, which the first draft created and never installed (10),
+> the preserved-copy collision, permission and failure rules (8), and the second
+> opt-in, separated from the first because one grants an editor config edit and
+> the other grants deleting a directory (12).
+>
+> Two of those five were host wiring. Removing it takes back `wire_opencode`
+> (10) and the second opt-in (12), so the raise gives back 22 and the budget
+> returns to 228. It is **not** left at 250: a ceiling that stays where the
+> removed behaviour put it is a ceiling that quietly funds the next thing nobody
+> argued for. The implementation measures 210, so the headroom is 18, and it is
+> stated here rather than discovered later.
+>
+> The budget worked as designed in both directions. It did not prevent the
+> growth — it made the growth itemisable. It takes no credit for the shrink; it
+> just declines to keep the room the shrink freed.
 
 A budget with no stated order of sacrifice is a suggestion, because the choice of
 what to drop then falls to whoever is writing the last line and is furthest from
@@ -523,9 +475,12 @@ the legacy manifest, and every acceptance and preservation rule. None may be
 omitted to fit.
 
 Deferrable, in order: reporting distinctions within check mode that collapse into
-a coarser but still correct state; then hook wiring for an individual host, which
-leaves that host bound and unwired — a state this specification already defines
-as conformant.
+a coarser but still correct state; then the archived-binding sweep's per-name
+reporting, which may collapse to a count.
+
+The deferrable list no longer ends in host wiring, because there is none. That
+removes the cheapest thing this budget used to be able to sacrifice, which is a
+reason to watch it, not a reason to raise it.
 
 Anything deferred SHALL be reported to the operator, naming what was deferred and
 why. If the mandatory behaviour alone exceeds the budget, the overage SHALL be
@@ -535,7 +490,7 @@ by amending this specification rather than silently in the implementation.
 #### Scenario: The budget is measured
 
 - **WHEN** the installer's executable lines are counted
-- **THEN** the count is at most 250
+- **THEN** the count is at most 228
 
 #### Scenario: The budget cannot be met
 

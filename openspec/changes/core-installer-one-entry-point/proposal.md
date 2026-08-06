@@ -15,8 +15,8 @@ Linear issue: AGE-503.
 - **NEW** `install.sh` at the root of core — the one entry point. Four modes:
   - bare — publish the payload and install core's own git pre-commit hook. No
     host required.
-  - `--host <name>` (repeatable) — additionally wire the named host.
-  - `--host auto` — detect installed hosts and wire what is found.
+  - `--host <name>` (repeatable) — additionally bind the named host's skills.
+  - `--host auto` — detect installed hosts and bind what is found.
   - `--check` — the doctor table. Reports, changes nothing.
 - `install.sh` is a **front end**. It publishes through the two existing
   installers and installs core's hook through `install-core-git-hooks.sh` rather
@@ -36,15 +36,13 @@ Linear issue: AGE-503.
 - **NEW** a named manifest of the legacy skill names this workflow has installed
   under, so they can be replaced or removed. Iterating today's `skills/` cannot
   find them.
-- **NEW** `hosts/` — the one place in this repo where a host name may appear:
-  the opencode plugin and the codex adapter. `skills/` stays host-neutral.
-- The opencode plugin is **derived from current gate behaviour, not lifted**.
-  The installed copy states that a change must pass validation *and* carry two
-  reviews, which the gate stopped enforcing at 2.0.0.
-- Two hosts (`pi`, `omp`) get skills and no hook wiring. Both read
-  `~/.agents/skills`, so one host-neutral directory covers both — this change
-  resolves what an earlier session recorded as unknown for them. Unwired is a
-  conformant state: those hosts run on the git and CI floor.
+- **The installer writes no host configuration.** A host gets skills and
+  nothing else, so every host is treated identically and there is no per-host
+  branch in the binding path. This repository consequently contains no
+  host-named code at all.
+- All five hosts get skills and no hook. `pi` and `omp` share `~/.agents/skills`,
+  so one host-neutral directory covers both — resolving what an earlier session
+  recorded as unknown for them.
 - **BREAKING** for anyone whose skills resolve through a host-repo installer.
   Those bindings are replaced by symlinks into `core/skills/`.
 
@@ -88,9 +86,10 @@ None. Two existing capabilities were checked line by line, and this change
 
 - `installer-prerequisite-consent` requires that a skipped requested step exits
   non-zero, and that changes to software the workflow does not own are made
-  only with acceptance. The first draft exited zero on a skipped wiring and
-  edited host configuration unasked. The installer now conforms; the capability
-  is unchanged.
+  only with acceptance. The first draft exited zero on a skipped step and
+  edited host configuration unasked. The installer now writes no host
+  configuration at all, so the second half cannot arise; the capability is
+  unchanged.
 - `project-hook-binding` defines the attestation the project-hook set carries
   and defines currency against an authority checkout. This change publishes
   through the installer that writes that attestation, and `--check` reports the
@@ -101,7 +100,7 @@ that would have written an instruction file is deferred.
 
 ## Impact
 
-- New: `install.sh`, `hosts/`, the legacy-binding manifest, and a test suite.
+- New: `install.sh`, the legacy-binding manifest, and a test suite.
 - **Not** superseded: `install-shared-artifact.sh`, `install-project-hooks.sh`
   and `install-core-git-hooks.sh` become the internals this change gives one
   door to. An earlier draft proposed replacing them, which would have discarded
@@ -123,5 +122,29 @@ that would have written an instruction file is deferred.
   checkout's skill directly or doing it by hand. The window is accepted rather
   than avoided: the alternative is leaving a binding into an archived checkout,
   which is the condition this change exists to end. It makes the `--project`
-  follow-up a precondition for deleting those checkouts in Phase 5b — alongside
-  the codex adapter and the opencode plugin, which are also sourced from them.
+  follow-up a precondition for deleting those checkouts in Phase 5b.
+
+## Scope narrowed after round three
+
+Host hook wiring was in this change and has been removed from it, before the
+installer was ever run for real. Three measurements decided it: the host hook
+returns satisfied when no change is open, so it never enforced spec-before-code;
+the condition it did enforce is caught again at `git commit` and again in CI;
+and it accounted for every host-specific line in the repository — 27 executable
+lines here, 293 in `hosts/`, one opt-in flag and the `jq` dependency.
+
+Narrowing rather than shipping-then-removing was deliberate. The wiring was
+built, tested and reviewed, and deleting it discards that work. Shipping it into
+`main` so a following change could delete it discards the same work and leaves a
+release in between whose installer edits configuration files the next release
+un-edits. The red-flag list names sunk-cost reasoning about deleting code
+directly.
+
+This is the second narrowing of this change, and both came from review:
+`--project` went for being two artifacts wearing one flag, and the wiring has
+gone for being a fourth concern in a change about having one door.
+
+The successor is `one-enforcement-floor`, which moves the git hook from a
+per-repository copy to a machine-level `core.hooksPath` binding and drops
+`--project`. It is a separate change because it alters what the workflow
+guarantees locally, and that should be reviewable on its own.

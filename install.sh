@@ -2,7 +2,7 @@
 # install.sh — the one entry point that puts this workflow on a machine.
 #
 #   ./install.sh                          payload + core's git pre-commit hook
-#   ./install.sh --host claude --host pi  ...plus wiring for the named hosts
+#   ./install.sh --host claude --host pi  ...plus skills for the named hosts
 #   ./install.sh --host auto              ...for whichever hosts are installed
 #   ./install.sh --check                  report state, change nothing
 #
@@ -12,17 +12,18 @@
 # resolution that tolerates linked worktrees and core.hooksPath. A front end
 # that reimplements its back end acquires the back end's bugs without its fixes.
 #
+# IT WRITES NO HOST CONFIGURATION. A host gets skills, and nothing else. The
+# enforcement floor is git and CI, which every host shares; the per-host hook
+# was the only host-specific thing here and it is not coming back by accident.
+#
 # Tier 1 is git and bash. Nothing else may hard-fail the install.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.agenticapps/bin"
-GATE="$BIN/openspec-change-gate.sh"
 SHARED="$ROOT/reference-implementations/shared-install/install-shared-artifact.sh"
 PROJHOOKS="$ROOT/reference-implementations/shared-install/install-project-hooks.sh"
 COREHOOKS="$ROOT/tools/install-core-git-hooks.sh"
-ADAPTER="$ROOT/hosts/codex/openspec-change-gate-adapter.sh"
-PLUGIN_SRC="$ROOT/hosts/opencode/openspec-change-gate.ts"
 
 # Published through the ARBITRATING helper, one call each, with the marker key
 # that makes its version comparison work. The project-hook set is NOT here: it
@@ -52,7 +53,6 @@ ARCHIVED="claude-workflow codex-workflow opencode-workflow pi-agentic-apps-workf
 
 MODE=install
 REQUESTED=""
-ACCEPT_HOST_CONFIG="${INSTALL_ACCEPT_HOST_CONFIG:-0}"
 REPLACE_UNRECOGNISED="${INSTALL_REPLACE_UNRECOGNISED:-0}"
 SKIPPED=0
 
@@ -65,7 +65,6 @@ newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail 
 
 usage() {
   sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
-  say "  --accept-host-config     edit host configuration unprompted (INSTALL_ACCEPT_HOST_CONFIG=1)"
   say "  --replace-unrecognised   replace an unrecognised binding target (INSTALL_REPLACE_UNRECOGNISED=1)"
 }
 
@@ -99,9 +98,9 @@ is_archived() {
 }
 
 # $1 already-granted flag, $2 prompt, $3 what to report when it is not granted.
-# Two opt-ins share this, and they stay separate flags on purpose: one grants
-# "edit the JSON your editor reads", the other "delete a directory that may hold
-# work", and an operator granting the first has not considered the second.
+# There was a second opt-in here, granting "edit the JSON your editor reads".
+# It went with the host wiring: a consent rule for an act that can no longer
+# occur is dead text, and dead text is read as a live guarantee.
 ask() {
   [ "$1" = 1 ] && return 0
   if [ -t 0 ]; then printf '%s [y/N] ' "$2"; read -r a && case "$a" in y | Y) return 0 ;; esac; fi
@@ -110,8 +109,6 @@ ask() {
 }
 consent() { ask "$REPLACE_UNRECOGNISED" "Replace $1 ($2)?" \
   "not replaced without acceptance: $1 ($2) — pass --replace-unrecognised"; }
-accept_host_config() { ask "$ACCEPT_HOST_CONFIG" "Modify $1 to add $GATE?" \
-  "host configuration unchanged without acceptance: $1 (would add $GATE) — pass --accept-host-config"; }
 
 # ── Bindings ───────────────────────────────────────────────────────────────
 # Reached only after sweep_vendored, so an archived symlink cannot still be
@@ -211,43 +208,6 @@ scan_archived() {
   return 0
 }
 
-# ── Wiring ─────────────────────────────────────────────────────────────────
-# jq is Tier 2. Hand-rolling a JSON merge against a file four other tools write
-# to is how you corrupt somebody's editor config, so wiring uses jq and refuses
-# without it — printing the block, so finishing by hand does not mean
-# reconstructing it.
-wire_json() {
-  local f="$1" cmd="$2" tmp
-  have jq || { skip "wiring $f needs jq; add this command by hand: $cmd"; return 1; }
-  mkdir -p "$(dirname "$f")" 2>/dev/null
-  [ -f "$f" ] || printf '{}\n' > "$f"
-  jq -e . "$f" >/dev/null 2>&1 || { skip "$f does not parse; left unchanged"; return 1; }
-  jq -e --arg c "$cmd" '[.hooks.PreToolUse[]?.hooks[]?.command] | index($c)' "$f" >/dev/null 2>&1 && return 0
-  accept_host_config "$f" || return 1
-  tmp="$(mktemp)"
-  jq --arg c "$cmd" '.hooks.PreToolUse = ((.hooks.PreToolUse // []) +
-      [{matcher: "Edit|Write|MultiEdit", hooks: [{type: "command", command: $c}]}])' "$f" > "$tmp" 2>/dev/null
-  # Re-parse the RENDER, not jq's exit status. A jq that succeeds and emits
-  # nonsense is the case that puts a corrupt file where your config was.
-  jq -e . "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; skip "rendered $f did not parse; original unchanged"; return 1; }
-  preserve "$f" || { rm -f "$tmp"; skip "could not preserve $f"; return 1; }
-  mv "$tmp" "$f" && say "  wired $f"
-}
-
-wire_claude() { wire_json "$HOME/.claude/settings.json" "$GATE"; }
-wire_codex()  { wire_json "$HOME/.codex/hooks.json" "$ADAPTER"; }
-
-wire_opencode() {
-  local dst="$HOME/.config/opencode/plugin/openspec-change-gate.ts"
-  [ -f "$PLUGIN_SRC" ] || { skip "no opencode plugin at $PLUGIN_SRC"; return 1; }
-  cmp -s "$PLUGIN_SRC" "$dst" 2>/dev/null && return 0
-  accept_host_config "$dst" || return 1
-  mkdir -p "$(dirname "$dst")" 2>/dev/null
-  if [ -e "$dst" ]; then preserve "$dst" || { skip "could not preserve $dst"; return 1; }; fi
-  cp "$PLUGIN_SRC" "$dst" 2>/dev/null || { skip "could not write $dst"; return 1; }
-  say "  wired $dst"
-}
-
 # ── Check ──────────────────────────────────────────────────────────────────
 # Currency is judged by CONTENT against the checkout. A marker comparison
 # reports a hand-edited artifact as current, which is the condition an operator
@@ -303,8 +263,10 @@ publish() {
   return 0
 }
 
+# Every host is treated identically: it gets skills. There is deliberately no
+# per-host branch here — the moment one exists, the next one is cheap.
 install_hosts() {
-  local h name dir exe readers seen="" wired
+  local h name dir readers seen=""
   for h in $HOSTS; do
     name="${h%%:*}"; dir="$(field "$h" 2)"
     case " $REQUESTED " in *" $name "*) ;; *) continue ;; esac
@@ -314,11 +276,7 @@ install_hosts() {
     seen="$seen $dir"
     bind_dir "$HOME/$dir" "$readers"
   done
-  for name in $REQUESTED; do
-    wired="wire_$name"
-    if declare -F "$wired" >/dev/null; then "$wired"
-    else say "  $name: skills bound, no hook wiring — conformant, it runs on the git and CI floor"; fi
-  done
+  say "  no host configuration was written — the gate runs at git commit and in CI"
 }
 
 detect() {
@@ -332,7 +290,6 @@ while [ $# -gt 0 ]; do
     --help | -h) usage; exit 0 ;;
     --check) MODE=check; shift ;;
     --host) REQUESTED="$REQUESTED $2"; shift 2 ;;
-    --accept-host-config) ACCEPT_HOST_CONFIG=1; shift ;;
     --replace-unrecognised) REPLACE_UNRECOGNISED=1; shift ;;
     *) say "unknown argument: $1"; usage; exit 64 ;;
   esac
@@ -340,7 +297,6 @@ done
 
 have git || { say "FAILED: git is required and was not found. Nothing was published."; exit 1; }
 have bash || { say "FAILED: bash is required and was not found. Nothing was published."; exit 1; }
-have jq || say "NOTE: jq is absent. Host wiring needs it; install with: brew install jq"
 
 if [ "$MODE" = check ]; then do_check; exit 0; fi
 
