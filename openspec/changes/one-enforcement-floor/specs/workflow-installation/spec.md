@@ -19,24 +19,41 @@ nothing else.
 - **AND** the machine-level hooks directory is bound through `core.hooksPath`
 - **AND** the run succeeds without any host being detected or named
 
+#### Scenario: No host is installed on the machine
+
+- **WHEN** the installer runs on a machine where no host is installed
+- **THEN** it exits successfully, having published the payload and the hook
+- **AND** it reports that no host was bound rather than treating it as an error
+
 ### Requirement: The installer is short enough to be read before it is trusted
 
 The installer SHALL NOT exceed 217 executable lines, counting neither comments
 nor blank lines.
 
-> **This change spends, it does not save.** The host wiring was already removed
-> by `core-installer-one-entry-point`, which is where the budget came back from
-> 250 to 217 and where the implementation landed at 210. This change adds: the
-> published hook, the global binding, the foreign-binding refusal, and four new
-> `--check` reports. That is growth, and 7 lines of headroom is plainly not
-> enough for it.
+> **The headroom is zero, and this change still claims no raise.** The budget
+> came back from 250 to 217 in `core-installer-one-entry-point`, where the
+> implementation landed at 210. It is **217 today** — measured 2026-08-07 with
+> the canonical counter, `grep -cvE '^[[:space:]]*(#|$)'`. The intervening
+> change `fresh-clone-needs-nothing` spent every remaining line on the
+> `init-project` artifact and the opsx binder. Both figures this note used to
+> carry — "landed at 210", "7 lines of headroom" — are therefore stale, and so
+> is the 212 that replaced the first of them.
 >
-> The budget is therefore **not pre-raised here**, and saying in advance that it
-> will not fit is the point rather than an admission. If the mandatory behaviour
-> does not fit, the escape clause applies as written — itemise the overage, name
-> the behaviour responsible, and raise the number in this document. What is not
-> permitted is arriving at 240 and discovering the ceiling had already been
-> moved to accommodate it.
+> An earlier revision concluded from that arithmetic that the growth "is plainly
+> not enough" to fit and a raise was unavoidable. **That conclusion assumed the
+> floor's wiring would be added to the installer. It displaces instead.** The
+> machine-level floor supersedes `tools/install-core-git-hooks.sh` as the thing
+> the installer invokes, so the floor binder takes that helper's variable and its
+> call site: one variable for one variable, one call for one call. The published
+> hook, the foreign-binding refusal and the `--check` reports live in the binder
+> and the gate, which carry no budget.
+>
+> The budget is therefore **not raised here**, and that is a measured claim
+> rather than an aspiration: the arithmetic is 217 → 217. The escape clause is
+> unchanged and still applies to anything that turns out not to fit — itemise
+> the overage, name the behaviour responsible, and raise the number in this
+> document. What is not permitted is arriving at 240 and discovering the ceiling
+> had already been moved to accommodate it.
 
 Mandatory: every mode named in this specification, publishing, skill binding,
 the global floor binding, the foreign-binding refusal, the legacy manifest, and
@@ -54,6 +71,19 @@ and why.
 - **WHEN** the installer's executable lines are counted
 - **THEN** the count is at most 217, or the budget has been raised in this
   document with the overage itemised
+
+#### Scenario: The budget cannot be met
+
+- **WHEN** the behaviour this specification requires cannot fit the budget
+- **THEN** what is dropped is taken from the deferrable list, in the stated order
+- **AND** each deferral is reported to the operator with the reason
+- **AND** no mandatory behaviour is omitted to fit
+
+#### Scenario: The mandatory behaviour alone exceeds the budget
+
+- **WHEN** the mandatory behaviour alone cannot fit the budget
+- **THEN** the overage is reported together with the behaviour responsible
+- **AND** the budget is not raised without amending this specification
 
 #### Scenario: The growth is accounted for
 
@@ -85,16 +115,73 @@ different sizes, and no surface named the divergence.
 
 #### Scenario: A repository without a local override is covered without being visited
 
-- **WHEN** a repository with no local `core.hooksPath` on a bound machine runs
-  `git commit`
+- **WHEN** an **enrolled** repository with no local `core.hooksPath` on a bound
+  machine runs `git commit`
 - **THEN** the published gate runs
-- **AND** the repository required no installation step of its own
+- **AND** the repository required no hook installation step of its own
 
 #### Scenario: A repository needs different hooks
 
 - **WHEN** a repository sets its own `core.hooksPath` in local configuration
 - **THEN** the local setting governs that repository
 - **AND** the global binding SHALL NOT reach it
+
+### Requirement: The floor governs only repositories that enrolled in it
+
+A global `core.hooksPath` runs the published hook in **every** repository on the
+machine. The hook SHALL therefore determine whether the repository opted into
+this workflow before it does anything else, and SHALL exit 0 without output when
+it did not.
+
+Enrolment is a local git config key, `agenticapps.workflow.enrolled`.
+
+**This is a measured requirement, not a precaution.** With the predicate absent,
+a repository containing any `openspec/` tree that fails `openspec validate --all`
+has every commit blocked — a test fixture, a vendored example, an abandoned
+experiment — while a repository with no `openspec/` at all, and one whose
+`openspec/` is unrelated, both commit normally. So the failure lands precisely on
+repositories that touched OpenSpec once and never adopted the workflow, and it
+arrives as a message about spec deltas that means nothing to them.
+
+Enrolment is an **act**, deliberately, rather than an inference from the shape of
+a directory. A predicate that guesses from shape makes the wrong outcome rarer
+without making it impossible, and its failures are silent for the person hit
+by them.
+
+The cost is named: an unenrolled repository that ought to be governed is
+silently ungated. `--check` SHALL therefore report a repository that carries
+`openspec/` and is not enrolled, so the gap is visible rather than assumed
+absent. Without that report this predicate is a drifting list under another name.
+
+#### Scenario: An unenrolled repository is left alone
+
+- **WHEN** `git commit` runs on a bound machine in a repository with no
+  `agenticapps.workflow.enrolled` key
+- **THEN** the hook SHALL exit 0
+- **AND** SHALL produce no output
+- **AND** SHALL NOT invoke the gate
+
+#### Scenario: An unenrolled repository carries a malformed openspec tree
+
+- **WHEN** an unenrolled repository contains an `openspec/` tree that fails
+  `openspec validate --all`
+- **THEN** the commit SHALL succeed
+- **AND** SHALL NOT be blocked on the validity of a spec delta the repository
+  never opted into
+
+#### Scenario: An enrolled repository is gated
+
+- **WHEN** an enrolled repository stages code while `openspec validate --all` is
+  not green
+- **THEN** the commit SHALL be blocked, exactly as a per-repository install would
+  have blocked it
+
+#### Scenario: A repository carries openspec but never enrolled
+
+- **WHEN** `--check` runs in a repository that carries `openspec/` and has no
+  enrolment key
+- **THEN** it SHALL report the repository as unenrolled and therefore ungated
+- **AND** SHALL NOT report the machine's global binding as governing it
 - **AND** the installer neither prevents nor repairs this
 
 ### Requirement: A local binding that is redundant is swept; one that is real is kept

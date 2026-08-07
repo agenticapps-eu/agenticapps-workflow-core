@@ -206,11 +206,21 @@ ancestor and re-appending the remaining components.
 - **AND** SHALL NOT attempt to create or write a literal `.git/hooks/` path
 - **AND** SHALL report that the hook it installs is shared with the main checkout
 
-#### Scenario: core.hooksPath points outside the working tree
+#### Scenario: core.hooksPath points outside the working tree but inside the git common directory
 
-- **WHEN** the installer runs where `core.hooksPath` names a directory outside the working tree
+- **WHEN** the installer runs where `core.hooksPath` names a directory outside
+  the working tree and inside the repository's git common directory — of which
+  `.git/hooks` is the ordinary case
 - **THEN** it SHALL install into the directory the resolver returns
 - **AND** SHALL NOT refuse on the grounds that the setting is present
+
+> **Narrowed deliberately.** This scenario previously said "outside the working
+> tree" with no upper bound, which contradicted the refusal above: the
+> machine-level published directory is *also* outside the working tree, and this
+> scenario would have required installing into it while the refusal required
+> declining. The prose already named the common directory as the predicate; the
+> scenario had not been narrowed to match, so a reader following scenarios alone
+> would have implemented the defect.
 
 #### Scenario: core.hooksPath names the default directory
 

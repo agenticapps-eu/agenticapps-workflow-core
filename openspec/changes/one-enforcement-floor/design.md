@@ -187,6 +187,120 @@ Dropping `--project` also **releases the sequencing constraint** recorded in
 deleted the archived checkouts. It no longer does. Phase 5b's remaining blocker
 is the codex adapter and opencode plugin — which this change deletes.
 
+## The scope predicate — open, and the reviewers found it
+
+A global binding means the published hook runs in **every repository on this
+machine**, including every repository that never opted into this workflow. Two
+reviewers raised this independently; it was measured on 2026-08-07 rather than
+argued, by installing the reference `pre-commit` into throwaway repositories and
+committing staged code:
+
+| Repository shape | Result |
+|---|---|
+| No `openspec/` directory at all | exit 0, no output |
+| `openspec/` present, unrelated content, empty `specs/` and `changes/` | exit 0 |
+| `openspec/` containing anything that fails `openspec validate --all` | **exit 1 — commit blocked** |
+
+The first two are the reassuring cases and they behave correctly. **The third is
+the defect.** A repository acquires a blocking commit hook by the accident of
+containing a directory called `openspec` — a test fixture, a vendored example,
+an abandoned experiment, a sample copied from documentation. Nobody in that
+repository opted in, and the failure arrives as `commit BLOCKED` with a message
+about spec deltas that will mean nothing to them.
+
+This is the difference between the floor being *reachable* everywhere and being
+*imposed* everywhere, and the change currently specifies only the first.
+
+### Decided 2026-08-07 — an explicit opt-in marker
+
+A repository is in scope when it carries a local git config key,
+`agenticapps.workflow.enrolled`. The published hook checks it first and exits 0
+otherwise:
+
+```sh
+git config --get agenticapps.workflow.enrolled >/dev/null 2>&1 || exit 0
+exec "$GATE" --pre-commit
+```
+
+The third row above becomes exit 0, because a fixture repository has no marker.
+An enrolled repository with a malformed delta still blocks, which is the whole
+point of the floor.
+
+**Alternatives rejected.** *An ownership check on the `openspec/` tree* — in
+scope if the tree looks like ours — needs no enrolment step and works on
+existing repositories immediately, but it infers intent from shape, so a
+vendored example that happens to match still blocks. It makes the failure rarer
+without making it impossible, and the failure is silent for the person hit by
+it. *A declared repository list* is auditable in one file but is state that
+drifts: a new repository is ungated until someone remembers to add it, so it
+fails open silently, which is the one posture the floor exists to remove.
+
+The marker wins because enrolment is an act, not an inference. It also makes
+`--check` honest — "not enrolled" is a fact it can report, where "does not look
+like ours" is a guess.
+
+**What it costs, named rather than discovered later.** Enrolment is a step, so
+a repository that should be governed and is not enrolled is silently ungated —
+the same failure the declared-list option was rejected for. The difference is
+where it can be caught: enrolment happens at project initialisation, which is
+already a deliberate act with an owner, and `--check` can name an unenrolled
+repository that carries `openspec/`. That check is required, not optional; it is
+what keeps the marker from becoming the drifting list under another name.
+
+**Its owner is `init-project.sh`, and that amends the script's stated
+contract.** Today its header promises it writes "exactly two things:
+`openspec/`, and one instruction file ... No skills, no hooks, no host
+configuration." A local git config key is none of those, but it is a third
+write, so the header is wrong the moment enrolment lands. The contract is
+amended deliberately — to two files and one local git config key — rather than
+left to read as a guarantee the script no longer keeps. Recorded as task 2.8b.
+
+## Decision 4 — the floor supersedes core's per-repository hook installer
+
+`install.sh` calls `tools/install-core-git-hooks.sh` on every run, and that call
+is what puts a `pre-commit` into whatever repository the installer happens to be
+run from. Once the floor is bound machine-wide, that call is the collision
+described in the risk table: the helper resolves its destination with
+`git rev-parse --git-path hooks`, which honours `core.hooksPath`, so a globally
+bound machine redirects it into the published directory.
+
+### Alternatives considered
+
+**A. Supersede: `install.sh` stops calling it.** *(chosen)*
+
+The floor binder takes the helper's variable and its call site — one variable
+for one variable, one call for one call. `install-core-git-hooks.sh` is not
+deleted. It survives as **core's own tool**, invoked by core rather than by the
+machine installer, and the refusal added in the `core-self-enforcement` delta
+covers a by-hand run on a globally bound machine.
+
+This is the right shape independent of the budget. Installing a *per-repository*
+hook from the *machine-level* installer was always a category error: it wrote
+into whichever repository the operator's shell happened to be sitting in, which
+is not a property of the machine. The floor is the machine-level act; the local
+hook is core's business.
+
+**B. Retarget: keep both call sites.**
+
+Rejected. It preserves the category error, keeps two surfaces writing hooks with
+no arbitration between them, and grows the installer by roughly three lines
+against zero headroom — so it also forces a budget raise, which A does not.
+
+### The measured consequence
+
+The installer is at **217** with a budget of 217. Under A the arithmetic is
+217 → 217 and no raise is claimed. Under B it is 217 → ~220 and the escape
+clause would have to be invoked. The budget did not decide this, but it is the
+cheaper option on the axis the specification actually constrains.
+
+### What A costs, and it is not nothing
+
+Nothing then establishes core's own local binding. `install.sh` was doing it as
+a side effect, and `core-self-enforcement` now *requires* core to carry a local
+`core.hooksPath` and makes its absence a CI failure. The delta says core SHALL
+have one; it does not say who creates it. That is a real gap this decision
+opens, and it is recorded as task 3.5 rather than assumed to resolve itself.
+
 ## The question this change refuses to answer by implication
 
 `host-neutral-instruction-files` requires a project's `AGENTS.md` to carry
@@ -204,11 +318,25 @@ deciding it should. It is named here as the most likely next change, and it
 needs its own evidence: whether the skill actually loads on every host, and what
 a project file is for once behaviour lives elsewhere.
 
-Note the live counter-evidence, which is why this is not a formality: the skill
-that loaded in this very session was the 402-line copy from an **archived**
-checkout, not core's 235-line v4.0.0. A workflow that lives only in a skill is a
-workflow whose delivery is exactly as reliable as skill resolution, and skill
-resolution demonstrably picked the wrong file today.
+The counter-evidence this section used to cite has since been overtaken, and the
+correction matters in both directions. It read: *the skill that loaded in this
+very session was the 402-line copy from an archived checkout, not core's
+235-line v4.0.0*. That was true when written. It is **false as of 2026-08-07**:
+`~/.claude/skills/agentic-apps-workflow` now resolves to core's v4.0.0, the
+hyphenless 402-line duplicate no longer exists on this machine, and
+`fresh-clone-needs-nothing` fixed it — `LEGACY_DIRS` in `install.sh` removes the
+copied duplicate, and the sweep rebinds the archived link.
+
+So the delivery risk was real and is now closed on this machine. What it does
+**not** license is repealing the requirement by implication, and the reason has
+changed rather than disappeared: one machine resolving correctly after a
+targeted fix is evidence about one machine, not about skill resolution as a
+delivery mechanism. Open question 9.7 records that `scan_archived` walks skill
+directories only and structurally cannot see command directories — two links
+into an archived checkout survived every install that way. The deferral
+therefore stands on its original grounds, with its evidence bar unchanged:
+whether the skill actually loads on every host, and what a project file is for
+once behaviour lives elsewhere.
 
 ## Risks
 
@@ -216,7 +344,8 @@ resolution demonstrably picked the wrong file today.
 |---|---|
 | A repo adopts husky and the global path silently disables it | Already the case in `fbc-platform`, and already handled: husky sets a local `core.hooksPath`, which git prefers over the global one. `--check` reports the effective binding per repository so the opt-out is visible rather than inferred |
 | A repository leaves the floor by accident, via a local `core.hooksPath` nothing reports | The more likely failure and already true in six repositories. Five are redundant and are unset by the sweep; `--check` names any repository the floor cannot reach |
-| Core's own git-hook installer collides with the global binding | `tools/install-core-git-hooks.sh` resolves via `git rev-parse --git-path hooks`, which honors `core.hooksPath` — so once bound globally it writes into the machine-level directory, either refusing forever on a foreign marker or publishing core's working-tree-resolving hook to every repository. Resolved in tasks 3.2/3.3 and requires a `core-self-enforcement` delta |
+| Core's own git-hook installer collides with the global binding | `tools/install-core-git-hooks.sh` resolves via `git rev-parse --git-path hooks`, which honors `core.hooksPath` — so once bound globally it writes into the machine-level directory, either refusing forever on a foreign marker or publishing core's working-tree-resolving hook to every repository. **Decision 4 removes the collision at its source: `install.sh` no longer calls it**, so the machine installer never triggers the redirect. The `core-self-enforcement` delta's refusal — destination outside the git *common* directory — covers a by-hand run on a bound machine, which is now the only way to reach it |
+| Nothing establishes core's local binding once the installer stops calling the helper | Opened by Decision 4 and tracked as task 3.5. `core-self-enforcement` requires the binding and makes its absence a CI failure, so the gap is loud rather than silent — but it is unassigned until 3.5 names an owner |
 | An operator has a global `core.hooksPath` already set to something else | The installer refuses to overwrite a foreign binding and reports it, the same posture `install-core-git-hooks.sh` already takes toward a foreign hook |
 | Removing the host hook is felt as "the workflow got weaker" | It is weaker in latency and identical in enforcement. `--check` and the run summary should say which surfaces are active rather than leaving it to be inferred |
 | Nine stale per-repository gate copies remain — 10 distinct hooks directories, less `fbc-platform`'s husky | They become **inert**, not competing — verified: with `core.hooksPath` set, `.git/hooks/` is not consulted at all. They are still removed, because an executable hook on disk that never runs is read by the next person as the one that does |
