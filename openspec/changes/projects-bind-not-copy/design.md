@@ -76,7 +76,7 @@ open; it is not a copy checked into eight repositories.
 The change began as the skill copies. Donald's question — *aren't the other hooks
 in cparx wrong too?* — is what surfaced the hook half, and the answer is yes, on a
 delay: `normalize-claude-md` is declared on `main` and undeclared the moment PR
-#87 merges, at which point seven repositories bind a hook the fleet does not name
+#87 merges, at which point six repositories bind a hook the fleet does not name
 and the implementation keeps running because manifest rows outside the declared
 set are carried forward by design.
 
@@ -89,9 +89,64 @@ same `.claude/` directories and two checks that each answer half the question.
 *Alternative rejected: put the hook half in PR #87.* It is the change that
 creates the orphan, so there is a real argument that it should clean up after
 itself. Rejected because #87 is a narrow retirement that has already been
-reviewed, and adding a seven-repository sweep to it turns it into a fleet change
+reviewed, and adding a six-repository sweep to it turns it into a fleet change
 and discards that review. The sequencing constraint carries the same guarantee at
 a fraction of the cost: #87 does not merge first.
+
+### `database-sentinel` is removed, and the alternatives are on the record
+
+Decided 2026-08-07, after both plan reviewers found the change claiming to have
+decided and stating nothing.
+
+**A. Remove it with the surface.** *(chosen)*
+
+**B. Keep it, and accept the surface stays open for one hook.** This has the
+better security argument and it is worth writing down properly, because it is
+not a weak one. The `DROP TABLE` / `TRUNCATE` / `DELETE`-without-`WHERE` arms
+intercept an **irreversible** action, and the standard justification for
+deleting a host hook — "the condition is caught again at `git commit` and in
+CI" — is *false* here. Destructive SQL never enters git. Removing these arms
+removes the only such interception in the workflow and nothing downstream
+replaces it.
+
+Rejected on reach. The hook fires from `.claude/settings.json`, so it protects
+Claude sessions and nothing else; codex, opencode, pi and omp get none of it.
+Multi-agent is a permanent condition, not a phase, so a guard covering one host
+of five is not a floor — it is a floor-shaped thing in one room. Keeping it also
+means this change closes a surface and then leaves it open, which is the kind of
+exception that is remembered as a rule.
+
+The hook's own header declines the credit that argument B would need: *"THIS IS
+NOT a security boundary… `psql -f script.sql` never presents the SQL to the
+regex… a speed bump, not a control."* A speed bump for one of five hosts does
+not buy an exception to the rule this change exists to state.
+
+**C. Keep only the destructive-SQL arms, drop the `.env` arm.** The `.env` arm
+is the weakest of the three — it matches `Edit`/`Write`/`MultiEdit` on a path,
+and the likeliest way an agent writes that file is `cat > .env` through `Bash`,
+which presents no `file_path` at all. What it does catch is also found by
+`cso`'s secrets archaeology and intercepted by the host's permission prompts.
+
+Rejected, but only on the same reach argument as B — a narrower host-specific
+hook is still a host-specific hook. Worth recording that it was the strongest
+compromise, because if the reach problem is ever solved (a hook surface every
+host reads), C is where to restart rather than B.
+
+**What replaces it.** Nothing, inside this workflow, and the change says so
+plainly rather than implying continuity. The destructive-SQL protection is
+reassigned to the host's own permission layer — a Bash deny rule in the
+operator's configuration. That is host-specific by nature, which is precisely
+why it belongs to the operator and not to core: core cannot ship it without
+reacquiring the property this change removes.
+
+**A consequence that improves the check.** `SHIMMED-HOOKS` held two names.
+Removing `database-sentinel` while this change removes `openspec-change-gate`'s
+project binding leaves it **empty**, which dissolves the objection raised
+against the second pass — that `OPT-OUTS` sanctions a *missing* binding and has
+no axis for an *extra* one, so a retained hook would fail the both-directions
+check forever with no way to record it as intended. An empty declaration needs
+no sanctioned exceptions, and the reverse pass becomes a flat rule: a project
+binds no fleet hook at all.
 
 ### The check declares its fleet, and `FLEET` is the declaration
 

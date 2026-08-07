@@ -92,16 +92,28 @@ checkout` arming every host is a real observation but is scope creep inside a
 requirement about symlinks (both) and wants its own change; the name-collision
 false positive; the removal-record naming no artifact.
 
-### Needs your decision, not mine
+### Resolved after review — 2026-08-07
 
-**`database-sentinel`.** Both reviewers independently found that the change says
-"it is decided rather than assumed either way, and the change states which" and
-then states neither — matching handoff open question 1. opencode adds the part
-that makes it urgent: `check-shims.sh`'s `OPT-OUTS` axis covers *missing*
-bindings only, so if the hook is kept, the new both-directions check fails
-forever with no sanctioned way to record the exception. Keeping it is not
-currently expressible. This is the same question the handoff has carried open
-for three sessions and it now blocks the check design.
+**`database-sentinel` is removed with the surface.** Donald's decision, taken
+after asking whether the hook adds anything given the `cso` skill. It does —
+`cso` is detection and the hook is interception, and they do not substitute —
+but that is not sufficient. The alternatives, including the strongest
+compromise (drop the `.env` arm, keep the destructive-SQL arms), are recorded in
+`design.md` rather than lost with the decision. What is *not* claimed is that
+the protection survives: the `DROP`/`TRUNCATE`/`DELETE` arms intercept an
+irreversible action that no other surface sees, and the change says so and
+reassigns it to the operator's host permission layer.
+
+This also resolves opencode's `OPT-OUTS` objection without building anything.
+`SHIMMED-HOOKS` held two names; both go, so the declaration is empty and there
+are no sanctioned extras to express.
+
+**Correction to what I wrote above.** I said the `one-enforcement-floor`
+dependency should be added "to `proposal.md` and to tasks". The tasks already
+had it, at 3.10. It was missing from `proposal.md` and from the spec delta, and
+it has been added there.
+
+### Was yours to decide, now decided
 
 **FLEET carries retired `agenticapps-dashboard`.** When that checkout is
 deleted, "report, never skip" fails the check permanently, and the spec has no
@@ -109,11 +121,19 @@ scenario for removing a name from the declaration.
 
 ### Consequence
 
-Not applied. Nothing here undermines the change's premise — the payload really
-is published and then shadowed, and the measurements behind that hold. What it
-needs is the floor dependency recorded, the precedence measured before any
-deletion, the declaration kept coherent with the sweep, and `database-sentinel`
-actually decided.
+**Repaired 2026-08-07, not applied.** Nothing here undermined the change's
+premise — the payload really is published and then shadowed, and the
+measurements behind that hold. Every finding above is now either folded into the
+artifacts or recorded as deliberately not taken. `openspec validate --all
+--strict` is green.
+
+What still gates code is task 1: precedence has never been observed on this
+machine, so nothing may be deleted until it is measured, and pi's unbound
+`~/.pi/agent/skills` has to be bound or the claim scoped. Those are measurements,
+not edits.
+
+These repairs changed `tasks.md`, so this review is now stale by its
+`tasks-digest` and the gate will say so. Re-review before code.
 
 <!-- openspec-review-trailer v1
 implementing-host: claude

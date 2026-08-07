@@ -20,18 +20,24 @@ installer does not touch. Naming the boundary is the point: a reader of this
 requirement should not have to infer whether projects were considered and
 exempted, or simply never reached.
 
-**What follows from that, stated here because it belongs to the capability and
-not to a security appendix: a checkout of this repository is live prompt code
-for every bound host.** The symlink resolves through the working tree, so
-whatever is checked out at load time is what the agents execute as their
-instructions — which is the property that makes editing core reach every host
-at once, and the same property that makes `gh pr checkout` of a branch touching
-`skills/` arm every host on the machine with unreviewed instructions, before the
-review, including the agent performing it. A branch carrying a skill change is
-therefore reviewed by reading the diff. A machine that must do both SHALL bind
-to a worktree pinned to the reviewed branch rather than to the one it reviews
-from. This is a consequence to be stated and lived with, not a reason to copy;
-copying trades it for the drift above, which is worse and permanent.
+**A consequence of binding by symlink, recorded here and normative nowhere in
+this change: a checkout of this repository is live prompt code for every bound
+host.** The symlink resolves through the working tree, so whatever is checked
+out at load time is what the agents execute as their instructions — the property
+that makes editing core reach every host at once, and the same property that
+makes `gh pr checkout` of a branch touching `skills/` arm every host on the
+machine with unreviewed instructions, before the review, including the agent
+performing it.
+
+This is stated and not required, deliberately. It is a real hazard and it wants
+its own change: pinning host bindings to a reviewed worktree separate from the
+one a pull request is read from is a claim about how this machine is
+provisioned, with its own scenarios and its own tests, and it has nothing to do
+with whether a *project* carries a skill copy. An earlier revision put a `SHALL`
+here with no scenario and no task behind it, inside a requirement about symlinks
+— which is how an unenforceable rule enters a spec. It is a consequence to live
+with rather than a reason to copy; copying trades it for the drift above, which
+is worse and permanent.
 
 #### Scenario: A skill is bound into a host
 

@@ -84,18 +84,49 @@ two surfaces, then describes projects binding it at a third.
 five hosts and for a human with an editor; it is host-agnostic by construction
 and it is the floor. What goes is `.claude/settings.json`.
 
-### `database-sentinel` is argued, not swept
+### `database-sentinel` is removed, and this is the decision
 
-It is a `PreToolUse` hook and therefore host-specific, so the rule above reaches
-it. It is also the one hook with a real answer: it guards a class of file before
-a tool call happens, and a pre-commit hook cannot stop an agent from reading a
-`.env` and putting it somewhere. Commit-time enforcement is the wrong shape for
-that threat.
+An earlier revision of this section said the hook "is decided rather than
+assumed either way, and the change states which" — and then stated neither.
+Both plan reviewers caught it. It is decided here: **the hook is removed with
+the surface.**
 
-So it is decided rather than assumed either way, and the change states which. A
-sweep that removed it silently because it was removing hooks would drop a real
-protection on a technicality, and one that kept it silently would leave the
-host-specific surface alive for one hook and call the surface closed.
+The reasoning, arm by arm, because the three do not have the same answer:
+
+- **The `.env` arm is redundant and largely ineffective.** It blocks
+  `Edit`/`Write`/`MultiEdit` against a `.env` path, but the likeliest way an
+  agent writes that file is `cat > .env` through `Bash`, which presents no
+  `file_path` for the arm to match. What it does catch, `cso`'s secrets
+  archaeology finds and the host's own permission prompts intercept.
+- **The `DROP TABLE` / `TRUNCATE` / `DELETE`-without-`WHERE` arms are the real
+  loss**, and the change SHALL NOT pretend otherwise. They are the only
+  interception of an **irreversible** action anywhere in this workflow, and the
+  argument that retired the host hook — "the condition it enforces is caught
+  again at `git commit` and in CI" — is simply **false** for them. Destructive
+  SQL never enters git. No downstream surface sees it.
+
+It is removed anyway, for the reason that outweighs that: it protects Claude
+sessions only. Codex, opencode, pi and omp get nothing from it, and multi-agent
+is a permanent condition rather than a phase. A guard that covers one of five
+hosts is not a floor, and keeping it would leave the host-specific surface alive
+for a single hook while this change calls that surface closed. Its own header
+already declines the credit — *"THIS IS NOT a security boundary… `psql -f
+script.sql` never presents the SQL to the regex… a speed bump, not a control."*
+
+**What replaces it is named rather than left implicit.** The destructive-SQL
+protection belongs at the host's own permission layer — a Bash deny rule in the
+operator's configuration — which is host-specific by nature and therefore the
+operator's to hold, not core's to ship. This change SHALL record that as the
+mitigation and SHALL NOT claim the protection survives the removal.
+
+**One consequence is worth stating because it is an improvement.**
+`SHIMMED-HOOKS` declares exactly two hooks, `database-sentinel` and
+`openspec-change-gate`. Removing the first while this change removes the
+project binding of the second leaves the declaration **empty**. That dissolves
+the objection raised against the both-directions check — that `OPT-OUTS` can
+record a *missing* binding as sanctioned but never an *extra* one — because
+after this there are no sanctioned extras. The reverse pass becomes a flat rule:
+a project binds no fleet hook at all.
 
 ## The same shape, in the wiring
 
@@ -103,11 +134,18 @@ The skill copies are one instance of a general condition: **a project holds
 something core does not sanction, and nothing looks.** The other instance is
 live.
 
-Seven fleet repositories bind `normalize-claude-md` — a `PostToolUse` hook that
+Six fleet repositories bind `normalize-claude-md` — a `PostToolUse` hook that
 rewrites `CLAUDE.md` on every edit. On `main` that is correct; the hook is
 declared. The change retiring it removes it from `ARTIFACTS` and `SHIMMED-HOOKS`
-**and leaves all seven bindings in place**, so the moment that retirement merges,
-seven repositories are binding a hook the fleet no longer declares.
+**and leaves all six bindings in place**, so the moment that retirement merges,
+six repositories are binding a hook the fleet no longer declares.
+
+> **The count was seven in an earlier revision and it was wrong.** Measured
+> 2026-08-07: `agenticapps-dashboard`, `agenticapps-roadmap`, `callbot`,
+> `cparx`, `fbc-platform` and `fx-signal-agent` bind it; **`agents-task-viewer`
+> does not**. The seventh was the worktree — which this change is the one
+> declaring is not a fleet member, so reaching seven required breaking its own
+> rule. Corrected here and in `session-handoff.md`.
 
 It does not stop running when that happens. `install-project-hooks.sh` carries
 forward manifest rows outside the declared set by design, so the implementation
@@ -120,9 +158,9 @@ withdrawn.
 **The conformance check cannot see any of this**, because it iterates the
 declaration: for each declared hook, is it bound with the authority's bytes. That
 detects a missing member, which is what `ARTIFACTS` was written to detect. It is
-blind to an extra one. A conformance run inspected those same seven repositories
+blind to an extra one. A conformance run inspected those same six repositories
 on 2026-08-06 and reported "every declared hook is bound with the authority's
-bytes" — true, complete, and silent about the eighth binding in each of them.
+bytes" — true, complete, and silent about the extra binding in each of them.
 
 So this change covers both surfaces. Skills and hooks are the same rule wearing
 two names, and splitting them would leave the second one to be rediscovered.
@@ -170,14 +208,23 @@ two names, and splitting them would leave the second one to be rediscovered.
 - **No change to `install.sh`.** Its budget, its modes and its tests are
   untouched, which is the main reason this is a separate change and not an
   amendment to a spec archived yesterday.
+- **This change SHALL NOT land before `one-enforcement-floor`.** Its own
+  measurement is the argument: `cparx` has no `pre-commit` and no
+  `core.hooksPath`, so the `PreToolUse` entry this change deletes is the *only*
+  gate that repository has. Removing it first leaves `cparx` with nothing rather
+  than with something better. The requirement text asserts "the enforcement floor
+  SHALL be the machine-level git hook" as though that floor already existed in
+  `cparx`; it does not until `one-enforcement-floor` binds it. An earlier
+  revision recorded the dependency on `core-installer-one-entry-point` for the
+  skill half and omitted this one for the hook half.
 - **The removals are only safe because the host binding landed first.** If
   `core-installer-one-entry-point` were reverted, deleting these copies would
   leave those repositories with no workflow skill at all. The ordering is a
   dependency, and it is stated in `design.md`.
 - **PR #87 acquires a precondition.** It retires `normalize-claude-md` in core
-  and orphans it in seven repositories, so it SHALL NOT merge before the hook
+  and orphans it in six repositories, so it SHALL NOT merge before the hook
   sweep here lands. That is a constraint on a reviewed, open PR and it is stated
-  rather than assumed. The alternative — widening #87 to carry a seven-repository
+  rather than assumed. The alternative — widening #87 to carry a six-repository
   sweep — turns a narrow retirement into a fleet change and loses the review it
   already has.
 - **`tools/check-shims.sh` gains a second pass** and therefore a second way to

@@ -26,6 +26,17 @@ enforcement.
 A hook whose protection is genuinely pre-tool rather than pre-commit is not
 excluded by this requirement — it is required to argue that, in the change that
 keeps it, and to say what it protects that commit-time enforcement cannot.
+**Making that argument successfully is necessary and not sufficient**: a
+protection that reaches one host of five is not a floor, and the surface is not
+closed while a single hook holds it open.
+
+`database-sentinel` is the worked case and it is decided: **removed.** Its
+destructive-SQL arms do make the pre-tool argument, and make it correctly —
+`DROP TABLE` never enters git, so no commit-time or CI surface can see it, and
+they are the only interception of an irreversible action in this workflow. It is
+removed regardless, because it protects Claude sessions only. The protection is
+not claimed to survive; it is reassigned to the host's own permission layer,
+which is the operator's configuration and not core's to ship.
 
 #### Scenario: A hook is bound through a single-host surface
 
@@ -41,6 +52,45 @@ keeps it, and to say what it protects that commit-time enforcement cannot.
   cannot
 - **AND** a hook with no such statement is removed with the surface
 
+#### Scenario: The pre-tool argument succeeds and the hook is still removed
+
+- **WHEN** a hook's protection genuinely cannot be provided at commit time, and
+  the surface carrying it reaches only one of the provisioned hosts
+- **THEN** the hook is removed with the surface
+- **AND** the change names what is lost and where the protection is reassigned
+- **AND** the change SHALL NOT describe the protection as preserved
+
+### Requirement: No project binds any fleet hook once the surface is closed
+
+After this change `SHIMMED-HOOKS` names no hook, and a project SHALL bind none.
+
+The declaration held exactly two entries. `database-sentinel` is removed with
+the host-specific surface, and `openspec-change-gate`'s project binding is
+replaced by the machine-level git hook, so the set is empty rather than
+shortened. That is a stronger and simpler rule than the one it replaces: the
+reverse pass no longer asks whether a held hook appears in a declaration, it
+asks whether any fleet hook is held at all.
+
+This also removes the need for a sanctioned-extra mechanism. `OPT-OUTS` can
+record a *missing* binding as intended and has no axis for an *extra* one, so a
+retained hook would have failed the both-directions check permanently with no
+way to say it was deliberate. An empty declaration means there is nothing to
+sanction.
+
+#### Scenario: A project holds no fleet hook
+
+- **WHEN** both passes run against a repository carrying no fleet hook shim and
+  no host configuration entry for one
+- **THEN** it is reported conformant
+
+#### Scenario: A project still holds a fleet hook
+
+- **WHEN** a repository holds a shim or a host configuration entry for any fleet
+  hook
+- **THEN** the condition is reported, naming the repository and the hook
+- **AND** the check exits non-zero
+- **AND** no opt-out sanctions it
+
 ### Requirement: A project binds no hook the declaration does not name
 
 A project SHALL NOT bind, in its host configuration or its project hook
@@ -55,9 +105,12 @@ cannot detect a missing artifact" — every one of them is checked by iterating 
 declaration and asking whether the machine satisfies it. Nothing walks the other
 direction and asks what the machine holds that the declaration does not.
 
-The consequence is not hypothetical. `normalize-claude-md` is bound by seven fleet
-repositories, and the change retiring it removes it from `ARTIFACTS` and
-`SHIMMED-HOOKS` in core while leaving all seven bindings in place. Because
+The consequence is not hypothetical. `normalize-claude-md` is bound by six fleet
+repositories — `agenticapps-dashboard`, `agenticapps-roadmap`, `callbot`,
+`cparx`, `fbc-platform` and `fx-signal-agent`, measured 2026-08-07.
+`agents-task-viewer` does **not** bind it, which is why it is the clean
+reference — and the change retiring it removes it from `ARTIFACTS` and
+`SHIMMED-HOOKS` in core while leaving all six bindings in place. Because
 `install-project-hooks.sh` carries forward manifest rows outside the declared set
 by design, the implementation stays on disk and the hook keeps running: a retired
 hook rewriting `CLAUDE.md` on every edit in seven repositories, published by

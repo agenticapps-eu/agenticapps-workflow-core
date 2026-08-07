@@ -15,6 +15,11 @@ for this pair on this machine. Nothing below runs until it has been.
 - [ ] 1.4 Confirm each of the eight repositories is otherwise clean: no second
       copy under another name, and no `skills/` entry of core's shadowed by a
       differently-named directory
+- [ ] 1.5 **pi reads `~/.pi/agent/skills`, which the installer does not bind and
+      this change does not sweep** — measured empty. Either bind it before the
+      sweep or scope the precedence claim to the hosts where the binding is
+      verified. "Every host reads a directory the installer binds" is false as
+      written, and a deletion resting on it could leave pi resolving nothing
 
 ## 2. RED: the check, before the sweep
 
@@ -40,21 +45,25 @@ the condition rather than the absence of it.
 
 `check-shims.sh` iterates `SHIMMED-HOOKS` and asks whether each declared hook is
 bound. It cannot ask what is bound that is not declared, which is why it reported
-a clean fleet on 2026-08-06 while seven repositories bound `normalize-claude-md`.
+a clean fleet on 2026-08-06 while six repositories bound `normalize-claude-md`.
 
 - [ ] 2b.1 A pass over each declared repository's `.claude/hooks/` **and** its
       `.claude/settings.json`, reporting any fleet-shared hook `SHIMMED-HOOKS`
       does not name. Both surfaces, because a shim file with no settings entry is
       dead weight and a settings entry with no shim file is a broken hook
-- [ ] 2b.2 RED: it reports `normalize-claude-md` in all seven repositories that
-      bind it, and exits non-zero
+- [ ] 2b.2 RED: it reports `normalize-claude-md` in all six repositories that
+      bind it, and exits non-zero — dashboard, roadmap, callbot, cparx,
+      fbc-platform, fx-signal-agent. **Not** `agents-task-viewer`, which does not
+      bind it; an earlier revision said seven and counted the worktree
 - [ ] 2b.3 RED: a repository binding exactly the declared set is reported
       conformant by both passes
 - [ ] 2b.4 RED: one clean pass does not suppress the other's finding — a
       repository correct on hooks and wrong on skills is reported wrong
 - [ ] 2b.5 A hook the fleet never declared and never installed is not reported.
-      The criterion is `SHIMMED-HOOKS` membership among fleet-shared hooks, not
-      "every hook in the directory" — a project's own hooks are its business
+      The criterion is fleet-shared provenance, not "every hook in the
+      directory" — a project's own hooks are its business. Note that
+      `SHIMMED-HOOKS` is empty after 3.9b, so membership can no longer be the
+      test; the pass asks whether a *fleet-shared* hook is bound at all
 
 ## 3. Sweep the fleet
 
@@ -75,14 +84,24 @@ not a fleet member, and is handled with its parent.
       `.claude/settings.json` hook surface: the `openspec-change-gate` and
       `normalize-claude-md` entries with their shim files. The `openspec-*`
       skills stay, and a PR that touches them is wrong
-- [ ] 3.9 **`database-sentinel` is decided before 3.8 runs, not during.** It is
-      the one hook with a pre-tool argument: it guards a class of file before a
-      tool call, and a pre-commit hook cannot stop an agent reading a `.env` and
-      putting it somewhere. Either it is kept — and the change states what it
-      protects that commit-time enforcement cannot, and accepts that the
-      host-specific surface stays open for one hook — or it goes with the
-      surface. Removing it silently because the sweep was removing hooks drops a
-      real protection on a technicality
+- [ ] 3.9 **`database-sentinel` is removed with the surface — decided
+      2026-08-07, no longer an open question.** Each PR removes its
+      `.claude/settings.json` entry and its shim alongside the others. The
+      decision and its cost are argued in `proposal.md`; the short form is that
+      its destructive-SQL arms are a real loss that no other surface replaces,
+      and it goes anyway because it reaches one host of five
+- [ ] 3.9a Remove `database-sentinel` from `SHIMMED-HOOKS`, and delete
+      `reference-implementations/project-hooks/database-sentinel.sh`
+- [ ] 3.9b `SHIMMED-HOOKS` is then **empty** — both entries are gone, since
+      `openspec-change-gate`'s project binding goes with the surface too.
+      Confirm the file survives as an empty declaration rather than being
+      deleted: the reverse pass reads it, and an absent file and an empty one
+      must not mean the same thing
+- [ ] 3.9c Record the reassigned protection in the operator's host permission
+      configuration — a Bash deny rule for `DROP TABLE`, `TRUNCATE TABLE` and
+      `DELETE` without `WHERE`. This is host-specific by nature and therefore
+      **not** core's to ship; the task is to write it down where the operator
+      will find it, not to install it from here
 - [ ] 3.10 **The git floor must exist before the gate shim is removed.** In
       `cparx` there is no `.git/hooks/pre-commit` and `core.hooksPath` is unset,
       so removing the `PreToolUse` entry today leaves that repository with no
@@ -90,7 +109,18 @@ not a fleet member, and is handled with its parent.
       supplies the floor, so it lands first — a second sequencing constraint,
       stated like the first
 - [ ] 3.11 `agents-task-viewer` and core already bind neither
-      `normalize-claude-md` nor its shim — confirm rather than assume
+      `normalize-claude-md` nor its shim — confirmed 2026-08-07 for
+      `agents-task-viewer`; confirm core rather than assume
+- [ ] 3.12 **`agenticapps-dashboard-add-agent-board` is swept in its own right,
+      not by its parent.** It is a linked worktree on its own branch carrying the
+      oldest copy on the machine — 415 lines, v3.0.0. Cleaning the dashboard's
+      main checkout changes nothing about it, and a check resolving only the
+      first directory matching the repository name would report it clean while
+      the stale skill still loads there
+- [ ] 3.13 `FLEET` names retired `agenticapps-dashboard`. Decide now whether the
+      name stays after its checkout is eventually deleted, and make removal
+      possible with a recorded reason — otherwise "report, never skip" fails the
+      check forever the day that directory goes
 
 ## 4. GREEN, and the declaration
 
