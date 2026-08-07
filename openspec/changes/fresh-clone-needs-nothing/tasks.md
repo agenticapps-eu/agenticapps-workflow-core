@@ -55,6 +55,22 @@ skill directory". `~/.agents/skills` is not pi's.
 - [ ] 3.5 RED: it writes no host configuration, no hook, no skill, no CI workflow
       file, and makes no network call
 - [ ] 3.6 A test suite against a scratch repository — no case touches a real one
+- [ ] 3.7 RED: only `CLAUDE.md` exists as a regular file → its content becomes
+      `AGENTS.md` and `CLAUDE.md` becomes a symlink. **Assert the negative too:**
+      no run ever leaves two regular instruction files, which is what appending to
+      `CLAUDE.md` and creating `AGENTS.md` separately would do
+- [ ] 3.8 RED: both exist byte-identical → collapse to the symlink; `CLAUDE.md` is
+      a symlink elsewhere → refuse without following it; either name is a
+      directory or a dangling link → refuse
+- [ ] 3.9 RED: the section is written behind the markers
+      `host-neutral-instruction-files` makes normative, and their presence is what
+      makes a second run a no-op. No marker of this change's own
+- [ ] 3.10 RED: `openspec` absent → refuse before writing anything. Reachable by
+      design, since this change makes `openspec` a reported, non-blocking
+      prerequisite
+- [ ] 3.11 RED: invoked from a subdirectory → resolves the repository root; no
+      second `openspec/` beside the first; every target preflighted before the
+      first write
 
 ## 4. Build the initializer
 
@@ -92,10 +108,21 @@ skill directory". `~/.agents/skills` is not pi's.
 
 ## 6. Sweep the seven existing repositories
 
-- [ ] 6.1 **Hard precondition:** both `projects-bind-not-copy` (skills) and
-      `one-enforcement-floor` (hooks) have landed. The sweep SHALL refuse
-      otherwise — removing a repository's hooks before the floor exists leaves it
-      unprotected rather than differently protected
+- [ ] 6.0 **The sweeper is its own artifact, not a mode of the initializer.** The
+      initializer writes two files and removes nothing; folding removal into it
+      breaks its "does only what this capability names" requirement
+- [ ] 6.1 **Hard precondition, checked by effect:** the skill resolves for the
+      host in use and the enforcement floor is active *for the repository being
+      swept*. Do not check whether `projects-bind-not-copy` or
+      `one-enforcement-floor` is merged — that is a fact about core's history, not
+      about the machine the sweep is running on
+- [ ] 6.1a Refuse on a repository whose worktree is not clean. `git revert`
+      restores committed files and nothing else, so an unclean sweep is an
+      irreversible one
+- [ ] 6.1b Remove only from an **exact manifest** of artifacts this workflow
+      published. Anything else in a scheduled path is a refusal, not a deletion
+- [ ] 6.1c Act on the enumerated seven. **No directory glob** — a glob over the
+      family directory reaches the stray worktree in 6.8
 - [ ] 6.2 Remove `.claude/skills/` (core-published names only), `.claude/hooks/`,
       `claude-md/`, `workflow-config.md`, `commands/`
 - [ ] 6.3 **Keep `openspec/`.** It is the repository's truth, and the one thing
@@ -130,6 +157,12 @@ skill directory". `~/.agents/skills` is not pi's.
 
 - [ ] 8.1 `openspec validate --all --strict` green
 - [ ] 8.2 The installer's own test suite passes with the corrected pi mapping
+- [ ] 8.2a **Observe pi resolving the skill**, and record the observation. Until
+      that exists, pi is *corrected but unconfirmed* — the current evidence is that
+      `~/.pi/agent/skills` holds symlinks, which is directory presence, the thing
+      this change's new requirement refuses as evidence
+- [ ] 8.2b Confirm a name collision in pi's shared directory is reported and the
+      other tool's entry is left intact
 - [ ] 8.3 A swept repository contains exactly `openspec/`, the instruction file,
       and the six `openspec-*` skills — nothing this workflow publishes
 - [ ] 8.4 `git revert` of a sweep commit restores a repository, with no archived

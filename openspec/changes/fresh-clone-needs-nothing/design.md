@@ -161,6 +161,38 @@ decides which rule survives, and that is not the initializer's decision.
 Rollback: `git revert` per repository for step 5; the installer changes are
 ordinary reverts.
 
+## Reviewer findings not adopted
+
+Round one was gemini, codex and opencode; all three returned REQUEST-CHANGES and
+most of what they raised is folded in above. Three findings are declined, and the
+reasons are here so the next reader can see they were weighed rather than missed.
+
+**Windows symlink fallback (gemini).** Declined. `core.symlinks=false` would make
+`CLAUDE.md` and `AGENTS.md` two real files — precisely the failure the requirement
+exists to prevent — so the "fallback" reintroduces the defect deliberately. This
+workflow runs on one machine and no second machine has it. Recorded in the spec as
+an assumption rather than engineered around; if a Windows host ever appears, that
+is a new decision and not a robustness measure smuggled in ahead of a user.
+
+**A distinct non-zero exit code for missing prerequisites (gemini, codex).**
+Declined as new specification. `workflow-installation` already carries *A
+requested step that was skipped exits non-zero*, which is the automation-visible
+signal both reviewers asked for. Adding a second, differently-shaped exit
+contract in this change would put two rules over one behaviour.
+
+**A dangling reference to "the named opt-in flag" (opencode).** Not a defect. The
+flag is named normatively in the landed `installer-prerequisite-consent` spec —
+`AGENTICAPPS_INSTALL_PREREQS=1` and `--install-prereqs` — and a delta modifying
+that capability refers to its own capability's vocabulary. The reviewer's related
+caution is sound and unrelated: `REPLACE_UNRECOGNISED` governs binding targets,
+not prerequisite installation, and nothing here should conflate them.
+
+**One pattern is worth naming.** Three separate findings — the six `openspec-*`
+skills, one-commit-per-repository, and excluding the stray worktree — were all
+cases where `tasks.md` was already correct and the spec delta was not. Tasks are
+discarded at archive time and the spec is what survives, so a disagreement between
+them always resolves toward the spec being wrong.
+
 ## Open Questions
 
 1. **Is omp's skill directory ever going to be establishable?** If omp reads no

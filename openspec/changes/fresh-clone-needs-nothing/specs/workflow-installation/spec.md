@@ -42,6 +42,27 @@ absence is what nobody notices.
 - **THEN** it SHALL be confirmed by the host resolving the skill, not by the
   symlink existing — the symlink existing is what was already true for pi
 
+#### Scenario: A corrected mapping has not yet been confirmed by resolution
+
+- **WHEN** a mapping is corrected on the strength of a directory's contents, and
+  no observation of the host resolving the skill has been made
+- **THEN** the host SHALL be recorded as **corrected but unconfirmed**, not as
+  fixed
+- **AND** this applies to pi: `~/.pi/agent/skills` holding per-skill symlinks is
+  the presence of a directory, which this very requirement refuses as evidence.
+  Claiming pi fixed on that basis would apply to pi the standard this change was
+  written to stop applying to omp
+
+#### Scenario: A bound directory is shared with an unrelated tool
+
+- **WHEN** the installer binds into a directory another tool populates, and a
+  name it would write is already present
+- **THEN** it SHALL NOT overwrite the other tool's entry, and SHALL report the
+  collision naming both
+- **AND** the co-tenancy SHALL be reported by the check mode thereafter, because
+  the other tool can remove core's links on its own sweep and nothing else would
+  notice
+
 ## MODIFIED Requirements
 
 ### Requirement: A host is detected by evidence that it is installed

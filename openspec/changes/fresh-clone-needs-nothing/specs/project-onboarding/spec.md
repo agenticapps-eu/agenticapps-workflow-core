@@ -5,9 +5,23 @@
 A repository that uses this workflow SHALL carry exactly two workflow artifacts:
 an `openspec/` directory, and one instruction file. Both SHALL be committed.
 
-It SHALL NOT carry skills, hooks, hook shims, host settings written by this
-workflow, workflow configuration files, or command definitions. Those are
-machine-level and are established by `install.sh`.
+It SHALL NOT carry **any artifact this workflow publishes** — skills, hooks, hook
+shims, host settings written by this workflow, workflow configuration files, or
+command definitions. Those are machine-level and are established by `install.sh`.
+
+**The prohibition is scoped by publisher, not by file type.** Artifacts another
+tool installs per-project remain that tool's business: the `openspec-*` skills are
+written by the `openspec` CLI, are required for its commands to resolve, and are
+neither published nor swept by this workflow. A rule phrased as "no skills in a
+repository" would order the deletion of files this workflow does not own and
+whose removal breaks the CLI the rest of this capability depends on.
+
+#### Scenario: A repository carries skills installed by another tool
+
+- **WHEN** a repository carries the `openspec-*` skills written by the `openspec`
+  CLI
+- **THEN** they are not a violation of this requirement, because this workflow
+  neither publishes nor removes them
 
 The division is what makes a fresh clone work: the repository carries what is
 true *about this repository*, which no other machine can supply, and the machine
@@ -18,8 +32,20 @@ the drift this workflow spent its history removing.
 #### Scenario: A repository is cloned onto a machine with the workflow installed
 
 - **WHEN** a repository carrying `openspec/` and its instruction file is cloned
-  onto a machine where `install.sh` has run
+  onto a machine where the skill resolves for the host in use, the enforcement
+  floor is effective for that clone, and `openspec` is present
 - **THEN** the workflow is usable with no further per-repository step
+- **AND** the condition is those three effects, not the fact that `install.sh`
+  exited zero — an install can complete with `openspec` missing, with a host's
+  binding unconfirmed, and a clone can set `core.hooksPath` locally and bypass a
+  floor that is otherwise active
+
+#### Scenario: The machine is equipped but the clone bypasses the floor
+
+- **WHEN** a cloned repository configures its own hooks path, so the machine-level
+  floor does not apply to it
+- **THEN** this SHALL be reported as the clone's condition rather than counted as
+  a satisfied fresh-clone claim
 
 #### Scenario: A repository is cloned onto a machine without the workflow
 
@@ -31,15 +57,29 @@ the drift this workflow spent its history removing.
 
 - **WHEN** a repository holds a skill, hook, shim, or workflow configuration file
   this workflow publishes
-- **THEN** it is reported as a defect, because it is a copy of something the
-  machine already provides
+- **THEN** the initializer's check mode SHALL name it and the file it duplicates,
+  because it is a copy of something the machine already provides
+- **AND** the check mode SHALL be the named reporter, so this is verifiable
+  against an implementation rather than an obligation with no holder
 
 ### Requirement: The instruction file is one file under two names
 
 A repository's instruction file SHALL be `AGENTS.md`, with `CLAUDE.md` a symlink
 to it. Where either already exists as a regular file, the workflow's section
-SHALL be appended behind a provenance marker and the existing content SHALL be
-preserved.
+SHALL be appended behind the markers `host-neutral-instruction-files` makes
+normative — never a marker of this capability's own — and the existing content
+SHALL be preserved.
+
+**Every starting state is defined, because the interesting ones are the states
+that can silently produce two real files.** Appending to an existing `CLAUDE.md`
+and separately creating `AGENTS.md` is the obvious implementation and it is
+forbidden: it produces exactly the two divergent copies this requirement exists
+to prevent.
+
+Symlinks are assumed to work. This workflow runs on one machine, and a
+filesystem without symlinks would require a two-real-file fallback — reintroducing
+the failure mode deliberately, for a platform with no user here. If that changes,
+it is a new decision and not a fallback smuggled in as robustness.
 
 `AGENTS.md` is the cross-host surface — codex, opencode, pi and omp all read it.
 Claude reads `CLAUDE.md`. Two real files would be two versions of one rule, which
@@ -51,17 +91,52 @@ bytes by construction. Core already does this with its own `AGENTS.md`.
 - **WHEN** the initializer runs in a repository with no instruction file
 - **THEN** `AGENTS.md` is created and `CLAUDE.md` is created as a symlink to it
 
-#### Scenario: An instruction file already exists
+#### Scenario: Only `AGENTS.md` exists
 
-- **WHEN** `CLAUDE.md` or `AGENTS.md` exists as a regular file with content
-- **THEN** the workflow's section is appended behind a provenance marker
-- **AND** no existing line is removed or rewritten
+- **WHEN** `AGENTS.md` exists as a regular file with content and `CLAUDE.md` does
+  not exist
+- **THEN** the workflow's section is appended to `AGENTS.md` behind the normative
+  markers, `CLAUDE.md` is created as a symlink to it, and no existing line is
+  removed or rewritten
 
-#### Scenario: Both exist as separate regular files
+#### Scenario: Only `CLAUDE.md` exists
+
+- **WHEN** `CLAUDE.md` exists as a regular file with content and `AGENTS.md` does
+  not exist
+- **THEN** its content SHALL become `AGENTS.md`, and `CLAUDE.md` SHALL be replaced
+  by a symlink to it, preserving every existing line
+- **AND** the initializer SHALL NOT append to `CLAUDE.md` while creating a
+  separate `AGENTS.md`, because that produces the two real files this requirement
+  exists to prevent
+- **AND** the operator SHALL be told that content previously read only by Claude
+  is now read by every host that reads `AGENTS.md`, because that is a disclosure,
+  not a rename
+
+#### Scenario: Both exist as separate regular files and differ
 
 - **WHEN** both exist independently and their contents differ
 - **THEN** the initializer SHALL report the divergence and SHALL NOT silently
   choose one, because collapsing them is a decision about which rule survives
+
+#### Scenario: Both exist as separate regular files and are identical
+
+- **WHEN** both exist independently with byte-identical content
+- **THEN** `AGENTS.md` is kept and `CLAUDE.md` is replaced by a symlink to it,
+  because there is no rule to choose between and no content to lose
+
+#### Scenario: `CLAUDE.md` is already a symlink to something else
+
+- **WHEN** `CLAUDE.md` is a symlink whose target is not the repository's
+  `AGENTS.md`
+- **THEN** the initializer SHALL refuse and report the target, and SHALL NOT
+  rewrite the link
+- **AND** it SHALL NOT follow the link to write through it, because the target may
+  lie outside the repository
+
+#### Scenario: An instruction path is a directory or a dangling link
+
+- **WHEN** either name exists as a directory, or as a symlink with no target
+- **THEN** the initializer SHALL refuse and report what it found, changing nothing
 
 ### Requirement: The initializer is idempotent and adds nothing on a second run
 
@@ -155,6 +230,28 @@ runs inside someone's repository, against files they already own.
   workflow file into the repository
 - **THEN** it is not part of this initializer, and the capability is the reason
 
+#### Scenario: `openspec` is not installed
+
+- **WHEN** the initializer runs on a machine where `openspec` is unavailable
+- **THEN** it SHALL refuse before writing anything, and SHALL name `openspec` as
+  the missing prerequisite
+- **AND** this state is reachable by design: the same change declares `openspec` a
+  *reported*, non-blocking prerequisite of `install.sh`, so "installed
+  successfully, `openspec` absent" is a state the machine can be in
+
+#### Scenario: The initializer is run from a subdirectory
+
+- **WHEN** it is invoked below the repository root
+- **THEN** it SHALL resolve the root and write there, or refuse if there is no
+  repository, and SHALL NOT create a second `openspec/` beside the first
+
+#### Scenario: A step fails part-way through
+
+- **WHEN** any write fails after another has succeeded
+- **THEN** the initializer SHALL report what was written and what was not
+- **AND** SHALL check every target before writing any of them, so the common
+  refusals happen before the first change rather than half-way through
+
 #### Scenario: An operator reads it before running it
 
 - **WHEN** an operator opens the initializer to decide whether to trust it
@@ -170,9 +267,29 @@ archived, the end state is the two artifacts above, and a repository is either i
 that shape or not. A chain exists to keep "what does v1.3.0 look like on disk"
 single-sourced across many versions; one target state has no such problem.
 
-Rollback SHALL be `git revert`. No copy of the removed files SHALL be retained in
-the repository — they are committed, so history already holds them, and a
-retained copy is the duplication this workflow removes.
+**The sweep is a distinct operation from the initializer and SHALL be named as
+one.** The initializer writes two artifacts and removes nothing; the sweep
+removes. Folding removal into the initializer would break its "does only what
+this capability names" and "short enough to be read" requirements, so they are
+two things with two names.
+
+**The sweep SHALL remove only from an exact manifest of artifacts this workflow
+published**, and SHALL refuse rather than delete when it meets anything else. It
+SHALL refuse on a repository whose worktree is not clean. It SHALL operate on an
+enumerated list of repositories, never on a directory glob.
+
+Ownership has to be proven because the rollback does not cover the alternative:
+`git revert` restores committed files, and it restores nothing that was untracked
+or locally modified. A sweep that deleted a directory wholesale would be
+irreversible for exactly the files nobody had committed yet. The enumeration
+matters for the same reason in a different direction — a glob over the family
+directory would reach `agenticapps-dashboard-add-agent-board`, a stray worktree
+with its own gate whose disposition is undecided.
+
+Rollback SHALL be `git revert` of **one commit per repository**, which the sweep
+SHALL produce. No copy of the removed files SHALL be retained in the repository —
+they are committed, so history already holds them, and a retained copy is the
+duplication this workflow removes.
 
 #### Scenario: A repository provisioned by a retired scaffolder is swept
 
@@ -187,6 +304,29 @@ retained copy is the duplication this workflow removes.
   place
 - **THEN** the sweep SHALL refuse, because removing a repository's hooks before
   the floor exists leaves it unprotected rather than differently protected
+- **AND** the precondition SHALL be checked by observing the effect on this
+  machine — the skill resolving, and the floor being active for this repository —
+  never by inspecting whether a change in core's history has been merged, which
+  is a fact about a different repository than the one being swept
+
+#### Scenario: The sweep meets a file it does not own
+
+- **WHEN** a path scheduled for removal holds content outside the manifest of
+  artifacts this workflow published
+- **THEN** the sweep SHALL refuse for that repository and report the path,
+  because removal is justified by ownership and nothing else
+
+#### Scenario: The sweep meets uncommitted work
+
+- **WHEN** the repository's worktree is not clean
+- **THEN** the sweep SHALL refuse, because `git revert` cannot restore untracked
+  or modified files and the rollback would be a false promise
+
+#### Scenario: The sweep is pointed at a set of repositories
+
+- **WHEN** the sweep runs across the fleet
+- **THEN** it SHALL act on an enumerated list, and a repository absent from that
+  list SHALL NOT be swept because it happened to be found on disk
 
 #### Scenario: An operator wants the previous state back
 

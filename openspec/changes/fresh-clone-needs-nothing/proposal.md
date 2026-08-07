@@ -57,6 +57,14 @@ it.
 **pi is bound where pi reads**
 
 - The host mapping is corrected from `.agents/skills` to `.pi/agent/skills`.
+- **Corrected is not confirmed.** The evidence for the new path is that the
+  directory holds per-skill symlinks — which is directory presence, the thing this
+  change's own new requirement refuses as evidence. Until pi is observed resolving
+  the skill, the mapping is recorded **corrected but unconfirmed**. Calling it
+  fixed would apply to pi exactly the standard this change exists to stop applying
+  to omp.
+- The directory is populated by another tool, so a name collision is reported and
+  never overwritten.
 - **New requirement:** a host's skill directory is established by evidence that
   the host reads it, not by assumption. This is the discipline already applied to
   host *detection*; it was never applied to the *path*.
@@ -100,6 +108,13 @@ it.
 - `installer-prerequisite-consent`: `openspec` and `superpowers` are declared
   prerequisites of `install.sh`, and a prerequisite owned by a host is reported
   rather than offered.
+- `host-neutral-instruction-files`: **required, not optional.** That capability
+  exempts `CLAUDE.md` from its marker and frontmatter rules because "Claude is its
+  only reader, so there is nothing to deduplicate". A symlink inverts that
+  premise — Claude then reads the shared bytes — so the exemption is narrowed to a
+  `CLAUDE.md` that is a separate regular file, and the initializer is bound to the
+  markers that capability already makes normative instead of inventing a second
+  provenance convention.
 
 ## Impact
 
