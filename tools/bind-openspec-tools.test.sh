@@ -141,15 +141,33 @@ printf '%s' "$OUT" | grep -qi 'unverified\|unconfirmed' \
 
 # ---------------------------------------------------------------------------
 echo
-echo "E. omp — nothing established at all"
+echo "E. omp — established from its own source, no longer unverified"
 # ---------------------------------------------------------------------------
+# omp is @oh-my-pi/pi-coding-agent. Its own dist names the directories it reads:
+#   "NEVER edit user-authored skills under ~/.omp/agent/skills or .omp/skills"
+#   "Load commands from .agent/commands and .agents/commands (project walk-up
+#    + user home)"
+# That is source evidence about what the host loads, which is what this change's
+# requirement asks for — not a directory's existence, and not symmetry with pi.
 fresh omp
 [ "$RC" -eq 0 ] && ok "exits zero" || bad "exits zero" "got $RC" "$(printf '%s' "$OUT" | head -3)"
+
+[ -L "$HOME_DIR/.omp/agent/skills/openspec-propose" ] \
+  && ok "omp skills bind into ~/.omp/agent/skills" \
+  || bad "omp skills bind into ~/.omp/agent/skills" "missing"
+
+# omp also reads ~/.claude/commands and ~/.config/opencode/commands, so it would
+# inherit opsx from those if they happen to be bound. It gets its own anyway:
+# otherwise omp works only on machines where another host was also requested.
+[ -e "$HOME_DIR/.agents/commands/opsx-propose.md" ] \
+  && ok "omp commands bind into ~/.agents/commands, so omp stands alone" \
+  || bad "omp commands bind into ~/.agents/commands, so omp stands alone" \
+         "omp would then depend on claude or opencode also being installed"
+
 printf '%s' "$OUT" | grep -qi 'unverified\|unconfirmed' \
-  && ok "omp is recorded unverified" || bad "omp is recorded unverified" "$(printf '%s' "$OUT" | head -3)"
-[ ! -d "$HOME_DIR/.omp" ] \
-  && ok "no directory is created for omp" \
-  || bad "no directory is created for omp" "a directory was created for a host with no established path"
+  && bad "omp is no longer reported unverified" \
+         "its source establishes both directories: $(printf '%s' "$OUT" | head -3)" \
+  || ok "omp is no longer reported unverified"
 
 # ---------------------------------------------------------------------------
 echo

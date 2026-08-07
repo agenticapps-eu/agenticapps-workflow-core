@@ -80,22 +80,30 @@ link() {
   mkdir -p "$(dirname "$dst")" && ln -s "$src" "$dst"
 }
 
-# generate <host> — into $STORE/<host>, once. openspec needs no git repository.
+# generate <host> <tool> — into $STORE/<host>, once. The tool name is not always
+# the host name: omp is `oh-my-pi` to the CLI. openspec needs no git repository.
 generate() {
-  local host="$1" dir="$STORE/$1"
+  local dir="$STORE/$1" tool="$2"
   [ -d "$dir" ] && return 0
   mkdir -p "$dir" || return 1
-  ( cd "$dir" && openspec init --tools "$host" >/dev/null 2>&1 ) || return 1
+  ( cd "$dir" && openspec init --tools "$tool" >/dev/null 2>&1 ) || return 1
 }
 
 for host in $HOSTS; do
+  tool="$host"
   # host : where the CLI writes : machine skill dir : machine command dir : command style
   case "$host" in
     claude)   src=.claude;          skills=.claude/skills;           cmds=.claude/commands;           style=nested ;;
     codex)    src=.codex;           skills=.codex/skills;            cmds="";                         style=none ;;
     opencode) src=.opencode;        skills=.config/opencode/skills;  cmds=.config/opencode/commands;  style=flat ;;
     pi)       src=.pi;              skills=.pi/agent/skills;         cmds="";                         style=unverified ;;
-    omp)      src="";               skills="";                       cmds="";                         style=unverified ;;
+    # omp is @oh-my-pi/pi-coding-agent, and its own dist names both directories:
+    # "NEVER edit user-authored skills under ~/.omp/agent/skills", and "Load
+    # commands from .agent/commands and .agents/commands (project walk-up + user
+    # home)". It also reads ~/.claude/commands and ~/.config/opencode/commands,
+    # so it would inherit opsx from a neighbour — it gets its own regardless, or
+    # omp works only on machines where some other host was also requested.
+    omp)      src=.omp; tool=oh-my-pi; skills=.omp/agent/skills;      cmds=.agents/commands;           style=flat ;;
     *) note "$host: unknown host, skipped"; rc=1; continue ;;
   esac
 
@@ -109,7 +117,7 @@ for host in $HOSTS; do
     continue
   fi
 
-  generate "$host" || { note "generation failed"; rc=1; continue; }
+  generate "$host" "$tool" || { note "generation failed"; rc=1; continue; }
 
   n=0
   for s in "$STORE/$host/$src"/skills/openspec-*; do

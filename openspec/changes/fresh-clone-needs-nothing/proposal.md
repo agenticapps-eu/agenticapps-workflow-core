@@ -68,10 +68,17 @@ it.
 - **New requirement:** a host's skill directory is established by evidence that
   the host reads it, not by assumption. This is the discipline already applied to
   host *detection*; it was never applied to the *path*.
-- **omp is recorded as unverified, not fixed.** It maps to `.agents/skills`,
-  it is installed, and it has no skill directory anywhere and no skill path in
-  its config — so there is nothing to check the mapping against. Asserting a fix
-  here would repeat the §13 error of concluding from one location.
+- **omp turned out to be establishable, and its existing mapping is correct.**
+  `@oh-my-pi/pi-coding-agent`'s own `dist` names the directories it loads:
+  `~/.omp/agent/skills`, and `.agents/skills` from user home. So
+  `omp:.agents/skills` has been right all along and
+  `~/.agents/skills/agentic-apps-workflow` has been resolving for omp since
+  6 August. **pi and omp shared one mapping and only one of them was a defect.**
+
+  An earlier revision of this proposal recorded omp unverified. That verdict came
+  from looking for a *directory* and finding none — absence of a directory read as
+  absence of evidence, while the evidence sat in the binary. Worth keeping as a
+  caution: "unverified" is a claim about what was looked at, not about the host.
 
 **The installer declares the prerequisites it actually has**
 

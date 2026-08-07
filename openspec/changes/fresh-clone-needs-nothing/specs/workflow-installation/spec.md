@@ -4,8 +4,12 @@
 
 The installer SHALL bind a host's skills into the directory that host actually
 reads. That directory SHALL be established by evidence — the host's documented
-skill path, or an observed load — and the evidence SHALL be recorded alongside
-the mapping.
+skill path, an observed load, or **the host's own implementation** — and the
+evidence SHALL be recorded alongside the mapping.
+
+The third source is named because it settled a case the first two did not: omp
+documents nothing useful and had no directory to observe, while its shipped code
+names the paths it loads outright. A host is the authority on what a host reads.
 
 Where no such evidence is available, the host SHALL be recorded as **unverified**
 and its mapping SHALL NOT be asserted as correct.
@@ -150,11 +154,17 @@ of per-skill symlinks core did not populate, and core's skill is absent from it 
 so pi has been detected correctly and bound nowhere useful for as long as the
 mapping has existed.
 
-omp's share of that directory is **unverified**, not corrected. omp is installed,
-has no skill directory at `~/.omp/agent/skills` or anywhere else, and names no
-skill path in its config, so there is nothing to check the mapping against.
-Recording it as unverified is the point: concluding from a single location is the
-error this change exists to stop repeating.
+omp's share of that directory is **correct, and established from omp's own
+implementation**, which names both `~/.omp/agent/skills` and `.agents/skills`
+(user home) as directories it loads. So the two hosts shared one mapping and only
+pi was wrong about it.
+
+The route to that conclusion is the part worth keeping. omp was first recorded
+unverified because no `~/.omp/agent/skills` directory existed to find — absence of
+a directory taken as absence of evidence. A host that ships its own loader is
+evidence about itself, and it outranks anything inferred from the filesystem.
+Where a host is recorded unverified, that SHALL mean its implementation was
+consulted and settled nothing, not merely that no directory was found.
 
 #### Scenario: A directory exists but the host does not
 

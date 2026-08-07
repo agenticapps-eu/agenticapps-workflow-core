@@ -17,12 +17,14 @@ skill directory". `~/.agents/skills` is not pi's.
 - [ ] 1.5 Record the co-tenancy: core now writes symlinks alongside another
       tool's 25. Check the existing binding-state requirements cover it; they
       should, but say so rather than assume
-- [ ] 1.6 **omp: record unverified, do not change.** It is installed
-      (`~/.bun/bin/omp`), shares pi's old mapping, has no skill directory at
-      `~/.omp/agent/skills` or anywhere else, and names no skill path in
-      `~/.omp/agent/config.yml`. Moving it to `~/.omp/agent/skills` by symmetry
-      with its documented `AGENTS.md` path is inference from one location — the
-      §13 error. Report it as unconfirmed
+- [x] 1.6 **omp: established, and its existing mapping is correct.** Measured
+      2026-08-07 from `@oh-my-pi/pi-coding-agent`'s own `dist/cli.js`, which names
+      both `~/.omp/agent/skills` and `.agents/skills` (user home) as directories
+      it loads. So `omp:.agents/skills` needs no change and
+      `~/.agents/skills/agentic-apps-workflow` has been resolving for omp since
+      6 August — **pi and omp shared one mapping and only pi was a defect.**
+      The earlier "unverified" verdict came from looking for a directory and
+      finding none; the evidence was in the binary all along
 - [ ] 1.7 Implement the evidence obligation: the installer reports a binding as
       unconfirmed when nothing establishes the host's skill directory, and does
       not count it toward success
@@ -205,6 +207,18 @@ putting behaviour in a repo, so it moves to the machine like everything else.
 - [x] 9.5 A host with no command surface is a **recorded state, not a failure**.
       codex has none, and reporting it as a partial install would make a correct
       install look broken
+- [ ] 9.7 **`scan_archived` cannot see command directories.** It walks
+      `$HOME/<host skill dir>` only, so the two links in
+      `~/.config/opencode/commands/` pointing into the archived
+      `opencode-workflow` survived every install — and they were not dangling, so
+      `setup-agenticapps-workflow` still *ran* the retired scaffolder that writes
+      per-repo files. Removed by hand 2026-08-07; the scan still has the gap, and
+      §9 has just given this workflow command directories of its own to keep clean.
+      **`install.sh` is at exactly its 217-line budget**, so this belongs in a
+      helper or in the binder, not inline
+- [ ] 9.8 Decide the wider residue, out of scope here: 18 `gsd-*.md` in
+      `~/.codex/prompts` and 89 files under `~/.config/opencode/commands/gsd/`,
+      for a system removed 2026-07-28. Live commands for a workflow that is gone
 - [ ] 9.6 Verify `/opsx:propose` resolves in a repository that carries no
       `.claude/` at all. That is the whole point, and it is the assertion that
       fails if the binding is wrong.
