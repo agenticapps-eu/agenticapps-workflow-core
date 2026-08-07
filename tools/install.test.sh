@@ -1040,6 +1040,47 @@ fi
 finish_case
 
 echo
+echo "install.sh — fresh-clone-needs-nothing task 9: the openspec tooling is bound machine-level"
+new_case "the binder is delegated to, once, naming every requested host"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
+stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND 0
+run_install --host claude --host codex
+binder_calls="$(calls | grep -c '^OPSXBIND')"
+if [ "$RUN_RC" -ne 0 ]; then
+  bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
+elif [ "$binder_calls" -ne 1 ]; then
+  bad "$CASE_NAME" "expected exactly one binder call, saw $binder_calls" \
+                   "install.sh delegates; per-host knowledge belongs in the binder" \
+                   "calls: $(calls | tr '\n' ';')"
+elif ! calls | grep '^OPSXBIND' | grep -q -- '--host claude'; then
+  bad "$CASE_NAME" "claude was not named to the binder" "calls: $(calls | grep '^OPSXBIND')"
+elif ! calls | grep '^OPSXBIND' | grep -q -- '--host codex'; then
+  bad "$CASE_NAME" "codex was not named to the binder" "calls: $(calls | grep '^OPSXBIND')"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+new_case "a binder failure is reported and does not fail the whole install"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
+stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+# 1 is what the binder returns when it could not generate, or when a name
+# collided. Neither means the workflow failed to install.
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND 1
+run_install --host claude
+if ! printf '%s' "$RUN_OUT" | grep -qiE 'opsx|openspec tooling|binder'; then
+  bad "$CASE_NAME" "a binder failure was silent" "$(printf '%s' "$RUN_OUT" | tail -4)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
 echo "install.sh — fresh-clone-needs-nothing task 4.1c: the initializer is reported like the others"
 new_case "--check names the initializer"
 new_core

@@ -176,7 +176,7 @@ writes command and skill files into the repository. That is the last thing still
 putting behaviour in a repo, so it moves to the machine like everything else.
 `init-project.sh` therefore runs `--tools none`, which is already implemented.
 
-- [ ] 9.1 **Measured 2026-08-07 — the shapes differ per host, so one pattern will
+- [x] 9.1 **Measured 2026-08-07 — the shapes differ per host, so one pattern will
       not do.** Skills are uniform (`<host>/skills/openspec-*/SKILL.md`, six of
       them); the command surface is not:
 
@@ -187,15 +187,22 @@ putting behaviour in a repo, so it moves to the machine like everything else.
       | opencode | `.opencode/commands/opsx-*.md` — flat, hyphenated |
       | pi | `.pi/prompts/opsx-*.md` — *prompts*, not commands |
 
-- [ ] 9.2 Establish each host's machine-level command directory **by evidence**,
-      exactly as §1 requires of skill directories. Do not infer pi's from
-      opencode's — the project-level shapes already prove they differ, and
-      assuming symmetry is the error that left pi bound to a directory it never
-      read
-- [ ] 9.3 Generate, never hand-copy. Only the CLI knows the file contents, so
+- [x] 9.2 Establish each host's machine-level command directory **by evidence**,
+      exactly as §1 requires of skill directories. **Measured — see
+      `MEASUREMENT-opsx.md`.** Commands bind for **two hosts only**:
+      `~/.claude/commands` and `~/.config/opencode/commands`. `~/.codex/prompts`
+      exists but the CLI generates no codex commands to put in it. **pi has no
+      bindable command directory at all** — no `~/.pi/agent/prompts`, no prompt
+      path in its `settings.json`; it installs extensions as *packages*. Reaching
+      pi means publishing a pi package, which is a different mechanism and a
+      separate decision
+- [x] 9.2a Record pi's and omp's command surfaces **unverified**. Do not create
+      `~/.pi/agent/prompts` on the strength of pi's *project-level* `.pi/prompts/`
+      — that inference is the exact shape of the defect §1 is fixing
+- [x] 9.3 Generate, never hand-copy. Only the CLI knows the file contents, so
       generate into a scratch directory with `--tools <host>` and bind the result
-- [ ] 9.4 Bind by symlink, never copy — the same rule core's own skills follow
-- [ ] 9.5 A host with no command surface is a **recorded state, not a failure**.
+- [x] 9.4 Bind by symlink, never copy — the same rule core's own skills follow
+- [x] 9.5 A host with no command surface is a **recorded state, not a failure**.
       codex has none, and reporting it as a partial install would make a correct
       install look broken
 - [ ] 9.6 Verify `/opsx:propose` resolves in a repository that carries no

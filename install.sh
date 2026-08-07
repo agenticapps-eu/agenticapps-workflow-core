@@ -24,6 +24,7 @@ BIN="$HOME/.agenticapps/bin"
 SHARED="$ROOT/reference-implementations/shared-install/install-shared-artifact.sh"
 PROJHOOKS="$ROOT/reference-implementations/shared-install/install-project-hooks.sh"
 COREHOOKS="$ROOT/tools/install-core-git-hooks.sh"
+OPSXBIND="$ROOT/reference-implementations/openspec-tools/bind-openspec-tools.sh"
 
 # Published through the ARBITRATING helper, one call each, with the marker key
 # that makes its version comparison work. The project-hook set is NOT here: it
@@ -296,6 +297,21 @@ install_hosts() {
     seen="$seen $dir"
     bind_dir "$HOME/$dir" "$readers"
   done
+
+  # The openspec CLI's own skills and commands, bound once per machine so no
+  # repository has to carry them. ONE call naming every host: the per-host
+  # shapes differ wildly — claude nests its commands, opencode flattens them,
+  # codex has none and pi has no machine directory at all — and that knowledge
+  # belongs in the binder, not in a per-host branch here. A binder failure is
+  # reported and does not fail the install: it means openspec is missing or a
+  # name collided, neither of which is the workflow failing to install.
+  local hostargs="" n
+  for n in $REQUESTED; do hostargs="$hostargs --host $n"; done
+  # It reports itself; capturing its output here would only be this file
+  # reprinting another file's words, and the budget is spent better elsewhere.
+  # shellcheck disable=SC2086
+  "$OPSXBIND" $hostargs || say "  opsx tooling: not fully bound"
+
   say "  no host configuration was written — the gate runs at git commit and in CI"
 }
 

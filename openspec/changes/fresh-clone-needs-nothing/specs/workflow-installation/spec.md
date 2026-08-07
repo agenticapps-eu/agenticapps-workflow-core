@@ -95,11 +95,24 @@ the same reason every other skill in this workflow is.
   machine-level directories
 - **AND** `/opsx:*` resolves in a repository that carries no host directory at all
 
-#### Scenario: A host has no command surface
+#### Scenario: A host's command surface has nothing to bind
 
-- **WHEN** a host provides no command or prompt directory — as codex does not
-- **THEN** its skills are bound and the absent command surface is recorded
-- **AND** this SHALL NOT be reported as a partial or failed install
+- **WHEN** the CLI generates no command files for a detected host — as it does
+  not for codex, whose `~/.codex/prompts` exists and is populated by other tools
+- **THEN** its skills are bound and the empty command surface is recorded
+- **AND** this SHALL NOT be reported as a partial or failed install, because the
+  absence is on the generator's side rather than the host's
+
+#### Scenario: A host has no bindable command directory at all
+
+- **WHEN** a host exposes no global command or prompt directory — as pi does not,
+  installing extensions as packages instead
+- **THEN** its command surface SHALL be recorded **unverified**, and no directory
+  SHALL be created to bind into
+- **AND** a directory SHALL NOT be inferred from that host's *project-level*
+  layout, because pi writing `.pi/prompts/` inside a repository is not evidence
+  that pi reads `~/.pi/agent/prompts` outside one — that inference is the defect
+  this capability's evidence requirement exists to prevent
 
 #### Scenario: A command directory is assumed rather than established
 
