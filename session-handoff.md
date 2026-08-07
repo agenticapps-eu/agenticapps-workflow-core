@@ -1,123 +1,133 @@
-# Session Handoff — 2026-08-06 (ninth session)
+# Session Handoff — 2026-08-07 (tenth session)
 
-**The real run happened, it is verified, and the change is archived.**
-`openspec/specs/workflow-installation/spec.md` is durable current truth — 13
-requirements. `one-enforcement-floor` is the only active change and it is
-unblocked. Branch `feat/one-skills-payload`, nine commits, all green, **pushed**;
-PR #88 updated and retitled.
+**Nothing is in flight and nothing is blocked.** `core-installer-one-entry-point`
+ran for real, was reviewed three more times and is archived;
+`openspec/specs/workflow-installation/spec.md` is durable truth. Two new changes
+are proposed and unreviewed. Three changes are now active.
 
-Detail lives in `openspec/changes/archive/2026-08-06-core-installer-one-entry-point/`
-— `CODE-REVIEW.md`, `SECURITY-REVIEW.md`, and the round-six and round-seven
-sections of `design.md`. This file carries only what does not.
+| Branch | State |
+|---|---|
+| `feat/one-skills-payload` | pushed; **PR #88** retitled and rewritten. Carries the payload, the installer, the real run and the archive |
+| `feat/projects-bind-not-copy` | pushed, **no PR yet**. Carries `projects-bind-not-copy` and `fleet-carries-only-current`, both proposal-only |
 
-## Accomplished
+Detail for the archived change is in
+`openspec/changes/archive/2026-08-06-core-installer-one-entry-point/` —
+`CODE-REVIEW.md`, `SECURITY-REVIEW.md`, and the round-six and round-seven
+sections of `design.md`. This file carries only what lives nowhere else.
 
-- **The install ran for real** (`f3db223`): 15 rebindings, 11 removals, one
-  legacy copy removed — the 26 bindings into archived checkouts, now 0. All five
-  hosts resolve into core; pi and omp bound for the first time.
-  `docs/evidence/install-run-after.md`.
-- **Verified**: fleet shims still bind the authority's bytes; the declared set is
-  published at the reference hash; no host configuration file was touched.
-- **Three review passes** — round five on the diff (4 real defects, fixed with
-  proven negative tests), `cso`, round six, round seven. Then the archive.
+## The correction that matters most
 
-## Decisions
+**The project hook surface is the host hook, one directory down.** Donald caught
+this; I had it wrong for most of the session.
 
-- **The preservation requirement was wrong, not the run.** It said every replaced
-  or removed binding is preserved; the run changed 26 symlinks and wrote one
-  preserved directory. A symlink has no content beyond its target and a copy of
-  one resolves into the checkout about to be deleted.
-- **A checkout of this repo is live prompt code for five hosts.** Now stated in
-  the capability rather than a security appendix. Review skill changes by diff;
-  pin a worktree if a machine must run and review at once.
-- **Reviewing stopped at round seven.** The code had not changed since round
-  five; six and seven were spec and prose coherence. Specs get amended after
-  archive.
-- **`REVIEWER_TIMEOUT` does not reach `run-plan-review.sh`** — it reads
-  `REVIEW_TIMEOUT`. Six rounds of opencode's opinion went to that. Silent
-  failure: the reviewer times out and is simply not counted.
-- **The budget test enforced 250 while the spec says 217.** Round four lowered it
-  everywhere except the test enforcing it. `install.sh` is 212.
+`core-installer-one-entry-point` deleted the host hook for three reasons: with no
+active change `gate_check` returns satisfied so it never enforced
+spec-before-code (verified at `openspec-change-gate.sh:506`); the condition it
+did enforce is caught again at `git commit` and in CI; and it was every
+host-specific line in the repository. **All three apply verbatim to
+`.claude/settings.json` inside a repository** — that file is Claude-only wherever
+it sits. The change closed the surface at `$HOME` and left an identical one
+committed in nine checkouts.
 
-## Files modified
+Measured in `cparx`, and it is worse than redundant: no `.git/hooks/pre-commit`,
+`core.hooksPath` unset globally and locally, and the only invoker of the gate
+shim is a `PreToolUse` entry. **The gate fires at neither of the two surfaces
+`docs/HOW-IT-FITS-TOGETHER.md` claims for it.**
 
-- `install.sh` — 212 executable lines, shellcheck clean
-- `tools/install.test.sh` — 49 cases; budget corrected; three new cases proven RED
-- `docs/evidence/install-run-after.md`, `.gitignore` — new
-- the change bundle, now archived
+A git hook is *not* a host hook. `one-enforcement-floor`'s machine-wide
+`core.hooksPath` fires for all five hosts and for a person with an editor. That
+is the floor and it stays. What goes is `.claude/settings.json`.
+
+Why I missed it: the handoff, the design and the topology doc all stop at "host
+hooks dropped" and then leave the project shim standing without saying why. I
+read that as settled rather than unfinished.
 
 ## The mistake I made, and undid
 
 `git add -A` in the archive commit (`925481a`) swept in three untracked
-leftovers: six `.claude/skills/gitnexus/` skill directories, **a 44-line GitNexus
-section appended to core's own `CLAUDE.md`** instructing agents to run
-`npx gitnexus analyze`, and five `.planning/skill-observations/` files — the notes
-the handoff had just called Donald's to delete.
+leftovers: six `.claude/skills/gitnexus/` directories, five
+`.planning/skill-observations/` files, and **a 44-line GitNexus section appended
+to core's own `CLAUDE.md`** telling agents to run `npx gitnexus analyze`.
 
 Undone in `8e7eaec`: `CLAUDE.md` restored, tracking removed, both paths
 `.gitignore`d. The files stay on disk, so **the gitnexus skills still load in this
-repo until deleted** — a decision not yet taken. A blanket add cannot tell the
-work from whatever else is lying around, and here that includes removed software
-and instruction text.
+repo until deleted** — not yet decided.
 
-## The payload is not one payload yet
+## What the fleet actually looks like
 
-| Repo | family | copy |
-|---|---|---|
-| agenticapps-dashboard | agenticapps | 331 lines, v3.2.0 |
-| agenticapps-roadmap | agenticapps | 324 lines, v3.2.0 |
-| agents-task-viewer | agenticapps | 324 lines, v3.2.0 |
-| dashboard-add-agent-board | agenticapps | **415 lines, v3.0.0** |
-| callbot | factiv | 324 lines, v3.2.0 |
-| cparx | factiv | 324 lines, v3.2.0 |
-| fbc-platform | factiv | **346 lines, v3.2.0** |
-| fx-signal-agent | factiv | 324 lines, v3.2.0 |
+Measured 2026-08-07 across the nine repositories carrying `openspec/`:
 
-Core ships **235 lines, v4.0.0**. All eight are committed directories in
-`.claude/skills/`, not symlinks — four byte-sizes across two claimed versions,
-and `fbc-platform` differs from its three v3.2.0 siblings while claiming to be
-them. Each repo also carries six copied `openspec-*` skills; core carries those
-six too.
+- **Eight carry a committed `.claude/skills/agentic-apps-workflow/`** at four
+  byte-sizes (324/331/346/415) across two claimed versions, while core publishes
+  235 lines at v4.0.0. `fbc-platform` differs from its three v3.2.0 siblings while
+  claiming to be them.
+- **Seven bind `normalize-claude-md`**, which is declared on `main` and undeclared
+  the moment PR #87 merges — and keeps running either way, because
+  `install-project-hooks.sh` carries forward manifest rows outside the declared
+  set by design.
+- `check-shims.sh` **cannot see any of this**: it iterates the declaration, so it
+  detects a missing member and is blind to an extra one.
+- `.planning/` survives in nine repositories and **is not one condition** —
+  `agenticapps-roadmap` has **134 tracked files** under it.
+- `## Coding Discipline` is inlined in eight `CLAUDE.md` files, ~80 lines each.
+- `agents-task-viewer` is the clean reference: two shims, two registrations, no
+  `normalize-claude-md`, no skill copy.
 
-So: **the project-specific workflow copies were never removed.** The run bound
-host directories; project `.claude/skills/` is a different surface, and
-`--project` — the mode that would have reached it — is superseded. Which skill
-loads there is loader ordering between the project copy and the new core symlink.
+The six `openspec-*` skills every repo carries are **upstream OpenSpec's** — MIT,
+"Requires openspec CLI" — and implement `/opsx:*`. Out of scope everywhere.
 
-`.planning/` also survives in `cparx`, `fbc-platform` and `fx-signal-agent`, with
-a **tracked** `config.json` in the latter two. Neither `factiv-website` nor
-`factiv-design-system` is a workflow project.
+## Sequencing, which is now the fragile part
+
+1. `one-enforcement-floor` **before** `projects-bind-not-copy`. cparx has no git
+   floor at all today, so removing its `PreToolUse` entry first leaves it with no
+   gate rather than a better one.
+2. `projects-bind-not-copy` **before PR #87**. #87 retires `normalize-claude-md`
+   in core and orphans it in seven repositories; the sweep has to land first so
+   #87 keeps the narrow review it already has.
+3. `fleet-carries-only-current` **after** `projects-bind-not-copy`, which builds
+   the sweep pattern, the declared-fleet resolution and the both-directions check
+   it reuses.
 
 ## Next session: start here
 
-A proposal for the project-local copies is the live work — Donald asked for it
-and it is the one that matters, because the other candidates are deferrals while
-this is a payload published and then shadowed in eight repositories.
+`one-enforcement-floor` has **no plan review at all** (its task 8.2), no code, and
+is now first in the chain. That is the action:
 
-After it: `one-enforcement-floor` has **no plan review at all** (task 8.2) and no
-code, which is when a plan review is cheapest — `run-plan-review.sh
-one-enforcement-floor --implementing-host claude`, `REVIEW_TIMEOUT=600`. Then the
-check-mode change carrying all four deferred reporting gaps.
+```
+REVIEW_TIMEOUT=600 run-plan-review.sh one-enforcement-floor --implementing-host claude
+```
+
+`REVIEWER_TIMEOUT` does **not** reach that script — six rounds of opencode's
+opinion were lost to that, and it fails silently by not counting the reviewer.
+
+Then plan-review the two new proposals, which are unreviewed and were written
+fast.
 
 ## Open questions
 
-1. **Four check-mode gaps**, all reported rather than silent: a host called bound
-   on one of two skills; an archived binding reported as plain `bound`; core's
-   pre-commit hook never reported though it is the bare-run postcondition; and no
-   defined exit status for an absent, stale, modified or unreadable artifact.
-   Each is a legitimate deferral; four in one mode is a change asking to be
-   written.
-2. **`is_archived` matches link text, not the resolved target**, and ownership is
-   a repository-name substring. Both want a portable `realpath` and should land
-   together.
-3. **Reported paths carry `/Users/donald` and are unescaped.** Third time raised,
-   third time deferred to `screen-review-egress`.
-4. **`workflow.mmd` still says the gate requires "REVIEWS ≥ 2".** Untrue since
-   gate 2.0.0. Probably belongs with `one-enforcement-floor`.
-5. **Does `AGENTS.md` still need a workflow section** once the skill carries the
+1. **`database-sentinel` is undecided by design.** It is host-specific like the
+   rest, and it is the one hook with a pre-tool argument: it guards a class of
+   file before the tool call, and a pre-commit hook cannot stop an agent reading
+   a `.env` and putting it somewhere. Keep it and say what it protects that
+   commit-time cannot, or remove it with the surface. Not by default.
+2. **`docs/HOW-IT-FITS-TOGETHER.md` is provably wrong** — "one gate, two
+   surfaces", then projects binding it at a third, and in cparx it fires at
+   neither. Queued as task 6.3, not fixed.
+3. **`agenticapps-roadmap`'s 134 tracked planning files** are a migration
+   decision, not cleanup. `fleet-carries-only-current` refuses to sweep them.
+4. **Four check-mode gaps** in `--check`, all reported rather than silent: a host
+   called bound on one of two skills; an archived binding reported as plain
+   `bound`; core's pre-commit hook never reported; no defined exit status for an
+   absent, stale, modified or unreadable artifact.
+5. **`is_archived` matches link text, not the resolved target**, and ownership is
+   a repository-name substring. Both want a portable `realpath`.
+6. **Reported paths carry `/Users/donald` and are unescaped.** Deferred to
+   `screen-review-egress` for the third time.
+7. **`workflow.mmd` still says the gate requires "REVIEWS ≥ 2".** Untrue since
+   gate 2.0.0.
+8. **Does `AGENTS.md` still need a workflow section** once the skill carries the
    workflow? `host-neutral-instruction-files` says yes. Still open.
-6. **`~/.config/opencode/rules/gsd-oc-work-hard.md`** is a live global rule file
-   reaching opencode, left over from GSD.
-7. **pi reads a fifth directory**, `~/.pi/agent/skills`, neither bound nor swept.
-   Measured empty: 25 entries, all relative symlinks into `~/.agents/skills`.
-8. **PRs #86, #87, #88 and #78 are open.** This work sits on top of #87.
+9. **pi reads a fifth directory**, `~/.pi/agent/skills`, neither bound nor swept.
+   Measured empty.
+10. **PRs #78, #86, #87, #88 are open.** No PR yet for
+    `feat/projects-bind-not-copy`.
