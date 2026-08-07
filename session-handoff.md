@@ -1,145 +1,125 @@
-# Session Handoff — 2026-08-07 (eleventh session)
+# Session Handoff — 2026-08-07 (twelfth session)
 
-Two of the three active changes are plan-reviewed and **both are repaired**.
-Nothing is blocked on a decision. Branch `feat/projects-bind-not-copy` carries
-all of it; still **no PR** for it.
+The precedence measurement is **done** — it was the only thing blocking code.
+Branch `feat/projects-bind-not-copy` is now **PR #89**, 18 commits, `gate` green.
+Four changes in flight, all planning artifacts, **no code written yet**.
 
-| Change | State |
-|---|---|
-| `one-enforcement-floor` | **two review rounds**, repaired after each, validates `--strict`. Round 2 stale by digest |
-| `projects-bind-not-copy` | **two review rounds**, repaired after each, validates `--strict`. Round 2 stale by digest |
-| `fleet-carries-only-current` | still unreviewed |
+| Change | Reviews | State |
+|---|---|---|
+| `projects-bind-not-copy` | 2 rounds × 3 vendors | repaired; measurement folded in |
+| `one-enforcement-floor` | 2 rounds × 3 vendors | repaired, artifact-complete |
+| `diagram-is-the-surface` | 2 rounds × 3 vendors | repaired (1 approve, 2 request-changes) |
+| `fresh-clone-needs-nothing` | **none** | proposed this session |
+| `fleet-carries-only-current` | **none** | still never reviewed |
 
 ## Accomplished
 
-- Plan-reviewed `one-enforcement-floor` — gemini, codex, opencode; claude
-  excluded and recorded as excluded. All REQUEST-CHANGES.
-- Plan-reviewed `projects-bind-not-copy` — codex and opencode counted. gemini
-  returned a verdict with no body and the producer **rejected** it, which is
-  §07 rule 3 working rather than a failure.
-- Repaired `one-enforcement-floor` against the findings and Donald's coverage
-  decision, and wrote the `core-self-enforcement` delta it was missing.
-- Repaired `projects-bind-not-copy`, including Donald's decision to **remove
-  `database-sentinel`**. `openspec validate --all --strict` green, 12/12.
+- Merged **#87** and **#88**; closed **#86** (two generations stale — it carried
+  the 2026-08-05 handoff). Opened **#89**, merged `main` in, `gate` passed in 32s.
+- **Measured loader precedence per host.** `MEASUREMENT.md` in
+  `projects-bind-not-copy`. Corrected three of its own tasks.
+- Proposed and twice-reviewed **`diagram-is-the-surface`** — removes `gate/`,
+  `GSD_SKIP_REVIEWS`, `gitnexus`, `database-sentinel.sh`.
+- Proposed **`fresh-clone-needs-nothing`** — pi binding, project onboarding,
+  installer prerequisites.
 
-## The finding that mattered, and no reviewer made it
+## The measurement, and what it changed
 
-`design.md` nominated its own fatal objection — *"the set displaced by a global
-binding is empty… that is the objection that would kill this decision if it
-held"* — and the measurement behind it was false in every clause.
+**The hosts disagree.** Claude resolves the host binding in all four repos probed,
+including both outlier copies. Codex resolves it uncontested — no fleet repo has a
+`.codex` copy at all. **opencode is a race**: it reads four directories carrying
+the name, its logs show each collision replacing the last, and the scan order
+differed in all six repos captured. Three consecutive runs in `cparx` loaded
+v3.2.0, v4.0.0, v3.2.0.
 
-Re-measured with `git rev-parse --path-format=absolute --git-path hooks` rather
-than by assuming `.git/hooks`: **11 repositories**, 10 distinct hooks
-directories, **15 hook types**, and **husky ^9.1.7 + lint-staged** in
-`fbc-platform` since 15 July. Sizes 1201/1376/2270/5844/39 — nothing is 883.
-The original sweep almost certainly used a `find` that missed worktrees and
-`core.hooksPath` redirection; mine did too on the first attempt, and gave three
-different answers before it was right.
+That is a better argument than the proposal made. A copy that reliably loses is
+untidy; a copy that wins half the time means the fleet runs two workflow versions
+with no way to tell which from inside the session.
 
-**Husky survives anyway, and that is the real finding.** It sets a *local*
-`core.hooksPath`, and git prefers local over global. So the decision is correct
-on grounds it never stated — and the true premise cuts both ways: **six
-repositories already set a local binding**, so the new floor reaches none of
-them, including three of the five carrying the gate. Five are redundant (they
-name the directory git resolves anyway); Donald chose to sweep those and leave
-`fbc-platform`'s husky binding as a genuine opt-out. That is now in the change.
+Corrections, each measured: **seven** repos not eight (core carries none);
+**five** byte-identical siblings not three, and **two** outliers not one
+(`agenticapps-dashboard` carries a third variant nobody had named); **pi loses
+nothing** to the sweep — no repo has a `.pi` copy either, so pi resolves no
+workflow skill today, before any sweep.
 
-## Round 2, and three things I had wrong
+## Four things I had wrong, all caught
 
-Both changes re-reviewed 2026-08-07, three vendors each, all REQUEST-CHANGES.
-Round 1 found the evidence wrong; round 2 found the mechanisms under-specified.
-Three findings were mine, and each was verified before being accepted:
+1. **§13 was in `diagram-is-the-surface` and should never have been.** I claimed
+   no host bound `ts-declare-first` — derived from one dangling symlink in
+   `~/.claude/skills`. Three hosts bind it, and pi reached `full` conformance at
+   host v0.6.0 *by* binding it. Dropped from the change.
+2. **"The hatch's only live consumers are its tests" was false.**
+   `run-plan-review.sh:677` recommends `GSD_SKIP_REVIEWS=1` to the operator at a
+   failure path. The real surface is 20+ files, including core's own trigger skill.
+3. **The removal never reached where things execute.**
+   `~/.agenticapps/bin/database-sentinel.sh` exists right now, and
+   `~/.agenticapps/bin/normalize-claude-md.sh` is **still installed** after #87
+   retired it. Deleting sources while installed copies survive is now its own
+   requirement.
+4. **"Reaches one of five hosts" is wrong.** All five hosts *support* a global
+   instruction file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+   `~/.config/opencode/AGENTS.md`, `~/.pi/agent/AGENTS.md`,
+   `~/.omp/agent/AGENTS.md`); one is populated. The conclusion holds on the
+   one-copy argument, not the stated reason. Fix in this repo *and* the global file.
 
-1. **The dangling-binding scenario was inverted.** I wrote that a
-   `core.hooksPath` naming an absent directory fails every commit on the
-   machine. Tested on git 2.50.1: the commit **succeeds, exit 0, silently
-   ungated** — the failure mode `core-self-enforcement` calls the one that must
-   never happen. opencode reasoned from the same behaviour in the opposite
-   direction and was also wrong. It makes publish-before-bind more important,
-   not less.
-2. **The "empty `SHIMMED-HOOKS`" dividend was circular.** On `main` that file
-   holds **three** names. I read this branch's working tree — stacked on #87,
-   which already removes `normalize-claude-md` — and presented a post-#87 state
-   as the pre-change state.
-3. **The branch violates its own sequencing rule.** #87's commits are ancestors
-   of HEAD, verified with `git merge-base --is-ancestor`, while the document
-   said twice that #87 must not merge first. Now a **coordinated landing**: no
-   ordering is green throughout, which is an argument for keeping `OPT-OUTS`
-   rather than dissolving it.
+Also caught by reviewers: the `db-sentinel` arm on `workflow.mmd` is the **skill
+gate** (`spec/17` lines 99–100), not the removed hook — I nearly deleted a live
+gate.
 
-Also: **pi holds 26 skills, not none** — "measured empty" was repeated from this
-handoff without checking. pi is now explicitly out of scope until its directory
-is bound, and the resulting regression is stated.
+## Decisions
 
-## Corrections to the previous handoff
+- **Close PR #78, do not rewrite it.** All four host scaffolder repos are
+  archived; core has no `migrations/`. §08 governs a format with no live
+  implementer. The one migration the new direction needs is a one-shot sweep, not
+  a chain. §08 itself becomes a removal candidate — decided against
+  `fresh-clone-needs-nothing`, not separately.
+- **A repo carries `openspec/` and one instruction file**, both committed.
+  `AGENTS.md` real, `CLAUDE.md` a symlink to it. Nothing else.
+- **No global instruction files for workflow behaviour** — five hosts means five
+  files; the skill is one file reaching all of them.
+- **No `.archive/` copy in the sweep.** Files are committed, so git is the
+  rollback; a retained copy is the duplication being removed.
+- **One review round per change, then move on.** Saved to memory.
 
-- **Six repositories bind `normalize-claude-md`, not seven** — dashboard,
-  roadmap, callbot, cparx, fbc-platform, fx-signal-agent. `agents-task-viewer`
-  does not, which the previous handoff itself said two paragraphs later. The
-  seventh was the worktree. opencode caught this; verified.
-- The `883`-byte hook does not exist. Core's own is 1376.
-- **`~/.pi/agent/skills` is not empty** — 26 skills, symlinked to
-  `~/.agents/skills/`. Only `agentic-apps-workflow` is missing. The previous
-  handoff's "measured empty" was wrong and reached the spec before it was caught.
+## Files modified
+
+- `openspec/changes/projects-bind-not-copy/MEASUREMENT.md` — new, the evidence
+- `openspec/changes/projects-bind-not-copy/tasks.md` — tasks 1.1–1.7 corrected
+- `openspec/changes/diagram-is-the-surface/` — new change, twice reviewed
+- `openspec/changes/fresh-clone-needs-nothing/` — new change, unreviewed
+- `session-handoff.md` — this file
 
 ## Next session: start here
 
-`one-enforcement-floor` is now artifact-complete and validates `--strict`. The
-`core-self-enforcement` delta is written: the inversion is **kept**, core sets a
-local `core.hooksPath` that git prefers over the global binding, the installer
-refuses when `git rev-parse --git-path hooks` returns the machine-level
-directory, and core's binding is **declared** so the sweep cannot remove it —
-it names core's own default hooks directory, so it is redundant by value and
-load-bearing in fact, which is the trap.
+**Decide the two open questions in `fresh-clone-needs-nothing`'s design, then
+review it once.** They are the only things blocking that change, and both are
+yours rather than derivable: **where the initializer lives and what it is called**
+(core has no project-side surface; making it an `install.sh` subcommand overloads
+a script whose header says it targets a *machine*), and **whether a repo gets a CI
+workflow file** (CI is the only enforcement surface that survives a machine
+without the workflow, so "a fresh clone needs nothing" is true only for the two
+local surfaces).
 
-So the remaining step before code is one thing:
-
-**Round 2 is done and folded in.** What blocks code now is *measurement*, not
-editing — see open question 2. A third review round is worth running only after
-the deferred items in each `REVIEWS.md` ("Accepted as true, not yet folded in")
-are written up; everything else raised is specified.
-
-**Round 1 is preserved inside each `REVIEWS.md`** under a collapsed "Round 1 —
-superseded" section. The producer publishes with `mv -f`, so it discards the
-previous file including any resolution — back it up before re-running.
-
-```
-REVIEW_TIMEOUT=600 run-plan-review.sh <slug> --implementing-host claude
-```
-
-`REVIEWER_TIMEOUT` still does not reach that script. `REVIEW_TIMEOUT` does.
-
-Both changes need it, so one pass covers both. Then review
-`fleet-carries-only-current`, which has never been reviewed at all.
+Then: `REVIEW_TIMEOUT=600 run-plan-review.sh fresh-clone-needs-nothing
+--implementing-host claude`. The producer publishes with `mv -f` — back up any
+existing `REVIEWS.md` first. `REVIEWER_TIMEOUT` does not reach that script.
 
 ## Open questions
 
-1. ~~`database-sentinel`~~ — **decided 2026-08-07: removed with the surface.**
-   Not free, and the change says so: the `DROP`/`TRUNCATE`/`DELETE`-without-
-   `WHERE` arms are the only interception of an irreversible action in the
-   workflow, and "caught again at commit and in CI" is false for them because
-   destructive SQL never enters git. Removed because it fires from
-   `.claude/settings.json` and so reaches one host of five. Protection
-   reassigned to the operator's own Bash deny rules, not claimed as surviving.
-   Falls out for free: `SHIMMED-HOOKS` held two names, both go, so the
-   declaration is empty and there are no sanctioned extras for `OPT-OUTS` to
-   express.
-2. **Precedence has still never been measured, and it is the only thing
-   blocking code.** `projects-bind-not-copy` task 1, and round 2 sharpened it:
-   measure **per host**, not once, since one loader validates one host and pi
-   already proves they differ. Nothing may be deleted until it is done.
-3. **Each `REVIEWS.md` has an "Accepted as true, not yet folded in" list.**
-   Real findings, deliberately deferred rather than dropped — blast radius
-   beyond the fleet, sweep discovery, non-`pre-commit` hook types, the
-   `codex-workflow` hook's per-host reviewer wiring, the nine-checkouts
-   arithmetic, worktree discoverability. Write these up before a third round.
-4. **The plan-review producer records vendor names but not resolved models.**
-   §07 rule 4 asks for models; two arms on one model would be one opinion
-   wearing two names, and neither review record can rule that out.
-5. `docs/HOW-IT-FITS-TOGETHER.md` is still provably wrong. Task 6.3.
-6. `workflow.mmd` still says the gate requires "REVIEWS ≥ 2". Untrue since 2.0.0.
-7. Reported paths still carry `/Users/donald` unescaped — deferred to
-   `screen-review-egress` for the fourth time.
-8. Does `AGENTS.md` still need a workflow section once the skill carries it?
-9. The gitnexus skills still load in this repo until deleted. Not decided.
-10. **PRs #78, #86, #87, #88 open.** Still no PR for `feat/projects-bind-not-copy`.
+1. **Initializer location and name** — blocking `fresh-clone-needs-nothing`.
+2. **Does a repo need a CI workflow file?** Out of scope there; unowned.
+3. **§18's version number** — blocking one task in `diagram-is-the-surface`.
+   Removing `GSD_SKIP_REVIEWS` is breaking to the gate interface but not to the
+   numbered sections; §18 is normative and two statements change.
+4. **`fleet-carries-only-current` has never been reviewed.**
+5. **`agenticapps-dashboard-add-agent-board`** — a stray worktree with its own gate
+   and conformance harness, the likeliest source of the repeated fleet miscounts.
+   A naive fleet loop would sweep it. Needs its own decision.
+6. **Is omp's skill directory ever establishable?** If omp reads no skills, the
+   mapping should be removed rather than corrected.
+7. **CodeRabbit has not reviewed anything in this repo today** — four for four
+   hollow greens ("rate limited", "116 files exceed the limit of 100"). Its check
+   state is not evidence.
+8. Reported paths still carry `/Users/donald` unescaped — deferred a fifth time.
+9. The gitnexus skills still load in this repo until `diagram-is-the-surface`
+   lands.
