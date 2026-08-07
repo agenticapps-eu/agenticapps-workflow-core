@@ -7,57 +7,50 @@
 # Review record
 
 - requested: gemini codex claude opencode
-- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
+- counted:   gemini (APPROVE) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
 - excluded:  claude (declared implementing host)
 - failed:    (none)
 
 ## Reviewer: gemini
-_generated 2026-08-07T13:02:44Z · timeout 600s_
+_generated 2026-08-07T13:22:33Z · timeout 600s_
 
-VERDICT: REQUEST-CHANGES
-
-*   The new requirement "The diagram is the test for what belongs" is strong, but the exception "or is required to make a step on it work" is ambiguous. This could be interpreted to include development tooling (linters, test harnesses, doc generators) that isn't part of the core runtime loop and isn't on the diagram. Please tighten this definition to clarify the boundary, for example by specifying "required for the *runtime execution* of a step."
-*   The "Risks / Trade-offs" section correctly notes that the deletion of `database-sentinel.sh` is gated on another change (`projects-bind-not-copy`). The change would be stronger if it specified the gating mechanism — is it a CI check that will fail if the other change hasn't landed, or a manual process for the operator landing the change?
-*   The retirement of §13 is marked BREAKING, and the risk to an unknown host is documented as an open question. This is correct. However, the change could be slightly de-risked by including a non-normative plan to announce the breaking change through other channels, if any exist (e.g., a community mailing list, a host developer Discord). If none exist, that's fine, but it's worth stating.
+VERDICT: APPROVE
+- The rationale for removing each piece of vestigial surface is clear and well-supported by evidence from the repository.
+- The self-correction regarding `spec/13-ts-declare-first.md` demonstrates diligence and strengthens confidence in the change's other claims.
+- The new capability `vestigial-surface-removal` is carefully scoped to enforcement/interface artifacts, correctly exempting historical records like ADRs and changelogs.
+- The requirement to resolve diagram/implementation conflicts against the decision record (not just defaulting to the code) is a crucial process improvement that reinforces spec-first authority.
+- The change correctly identifies and redacts a machine-local path from evidence, showing appropriate attention to detail.
 
 ## Reviewer: codex
-_generated 2026-08-07T13:03:57Z · timeout 600s_
+_generated 2026-08-07T13:24:46Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
 
-- The “diagram is the test” rule is dangerously broad: tests, ADRs, specifications, installers, and support tooling may be neither drawn nor runtime-required. Define artifact scope and explicit governance/support exemptions.
-- The “diagram is wrong” scenario automatically changes the diagram to match implementation, reversing spec-first authority. Require reconciliation against normative requirements and recorded decisions; implementation may be the defect.
-- Hatch requirements contradict themselves: the interface “shall not exist,” yet behavior when set is guaranteed and tested, while task 3.4 forbids that exact ignored-variable test.
-- “Reporting-only environment variable ⇒ remove” is an invalid general rule; logging, diagnostics, and verbosity controls legitimately affect reporting without blocking.
-- §13 retirement lacks a normative delta and its version remains unresolved. Moreover, `reference-implementations/README.md` records Codex, OpenCode, and Pi bindings of §13, contradicting the claimed absence of host implementations.
-- Cleanup tasks omit live references already present in `spec/18-retargeted-change-gate.md`, the workflow skill, gate CI configuration, project-hook shim, and review tooling. Task 9.4 therefore cannot pass as written.
-- Ownership of `SHIMMED-HOOKS` is contradictory: this change claims to remove the entry while also requiring `projects-bind-not-copy` to remove it first. Assign one owner and pin an objectively verifiable prerequisite.
-- “Remove if a dependency cannot be found” treats absence of local evidence as proof of no external consumers, despite explicitly admitting external hosts are unobservable. Require deprecation/migration treatment appropriate to the major breaking change.
-- Recording the OpenCode MCP entry “verbatim” may capture credentials, tokens, usernames, or private paths. Require secret-redacted evidence, a targeted JSON edit, backup, and startup/config validation.
+- **HIGH:** Task 1.2 conflates the removable `database-sentinel.sh` hook with the still-required upstream database-security audit. Removing the diagram arm contradicts ADR-0012, spec §17, and the workflow skill. Keep the arm or normatively retire that gate and its safety guarantees.
+- **HIGH:** `vestigial-surface-removal` both includes operator documentation and explicitly exempts all authored prose, `docs/`, `prompts/`, `tools/`, tests, and `spec/`. Several scenarios and tasks therefore both require and forbid applying the capability to the same artifacts.
+- **HIGH:** The proposal labels removal of `GSD_SKIP_REVIEWS` “BREAKING” and changes normative §18, then claims nothing breaks the spec surface. Spec §09 requires a major version for breaking removals; the versioning decision is unresolved.
+- **MEDIUM:** Cleanup coverage is incomplete. `workflow-diagram.mmd` duplicates the stale diagram, while `SIMPLIFICATION-PLAN.md`, `docs/recipes/0001-planning-to-openspec.md`, and other files still describe review blocking. Task 9.4 does not search for these claims.
+- **MEDIUM:** `database-sentinel.sh` has two owners. `projects-bind-not-copy` already requires deleting both the declaration and implementation; task 5.1 duplicates that work, while its fallback can separate declaration, fleet unbinding, and implementation removal across releases.
+- **MEDIUM:** Machine-level mutations lack normative scenarios and a safe rollback contract. Backing up the entire `opencode.json` may duplicate secrets or private paths without defined permissions or retention, while redacted evidence cannot restore the removed entry.
+- **PROCESS:** The current `REVIEWS.md` is stale; the gate reports that its digest no longer matches the revised artifacts.
 
 ## Reviewer: opencode
-_generated 2026-08-07T13:07:30Z · timeout 600s_
+_generated 2026-08-07T13:28:48Z · timeout 600s_
 
-Session-handoff exists (modified today). Let me verify the load-bearing claims before ruling.
-Let me verify the remaining load-bearing claims: the published gate copy, the current spec's hatch requirements, §18, and the change's own task list.
-The published gate copy finding is significant. Let me confirm the current spec's requirements, the overview's version/retirement procedure, and the published copy's status.
 VERDICT: REQUEST-CHANGES
 
-- **Central premise is false for the published gate.** The change's justification for removing the hatch — "nothing blocks on reviews since 2.0.0," so the override is unnecessary — holds only for `reference-implementations/openspec-change-gate/openspec-change-gate.sh`. The published copy at `gate/openspec-change-gate.sh` still defaults `MIN_REVIEWERS=2`, still returns 2 (block) on insufficient reviewers (line 85), and `GSD_SKIP_REVIEWS=1` there is a *live* escape from a *live* block (line 75), documented as such in `gate/README.md` (contract clause 5). The change never mentions `gate/` — not in Impact, not in tasks, not in Risks. Whichever way that's resolved (replace the published copy → this change is silently re-shipping the 2.0.0 enforcement change to every shimmed project; leave it → the published gate violates the new "SHALL NOT read GSD_SKIP_REVIEWS" requirement it implements), the proposal as written is wrong about the system it modifies.
-- **§18 is left specifying the removed interface.** `spec/18-retargeted-change-gate.md` line 104 (truth-table row for the hatch) and line 235 ("the gate keeps `GSD_SKIP_REVIEWS` for exactly that reason") will describe behavior the new capability forbids. Impact lists only "spec/ — §13 removed"; no task edits §18. Task 1.4 even cites §18's history of carrying a stale claim — and then leaves the current one in place.
-- **run-plan-review.sh prescribes the hatch at a failure point.** Line 676–679: when fewer than MIN reviewers produce output it exits 1 and tells the operator to `use GSD_SKIP_REVIEWS=1 for a logged emergency override`. That contradicts "the conformance rows are the flag's only live consumers," is not in task 3.5's surface list, and is not covered by any delta scenario (it's a reference implementation, not a "host instruction file, skill, or shim"). After this change lands, the failure path advises a dead flag — the exact failure mode the `vestigial-surface-removal` capability exists to prevent.
-- **Task 3.5's "known surfaces" is badly incomplete.** Live hits the list misses: `skills/agentic-apps-workflow/SKILL.md:56` (core's *own* trigger skill), `gate/README.md`, `reference-implementations/openspec-change-gate/README.md` (lines 42, 126), `reference-implementations/project-hooks/openspec-change-gate.shim.sh`, `.claude/hooks/openspec-change-gate.sh`, `docs/HOW-IT-FITS-TOGETHER.md`, `WORKFLOW-EXPLAINED.md`, `OpenSpec-Change-Cheatsheet.html`, `publish/index.html`, `prompts/03-cparx-sandbox-pilot.md`. Only the 9.4 grep backstops these, and the delta's removal scenario doesn't cover repo docs or published artifacts at all.
-- **The diagram-as-arbiter requirement is unbounded as specified.** "An artifact SHALL belong in this repository only if it appears on that diagram, or is required to make a step on it work" literally condemns `adrs/`, `tools/`, `docs/`, `publish/`, `prompts/`, `MEASUREMENT.md`, and `CHANGELOG.md` — none are on the diagram, none make a step run. The change applies the test to five hand-picked artifacts, but the spec states it absolutely with no exemption class (records, tests, tooling), and it partially conflicts with the sibling requirement that decision records be retained. As written it mandates deleting most of the repo; it needs scoping to the class of artifact it actually governs.
-- **Untestable scenario:** "dependency SHALL be demonstrated by locating it, and the artifact SHALL be removed if it cannot be found" requires proving a negative with no procedure, scope, or timebox. No conformance row could ever pass or fail this deterministically — ironic in a change whose rigor argument rests on verifiable evidence.
-- **Missing precondition in the "proceed without a review" scenario:** "the gate SHALL allow the edit" omits "given `openspec validate --all` is green." As written the scenario contradicts the gate's one blocking condition and a literal test of it (validate RED, no review) fails.
-- **Understated dependency, not sequencing.** Task 5.1 is gated on `projects-bind-not-copy`, which per today's session-handoff has **no PR**, and is itself blocked on the precedence measurement ("nothing may be deleted until it is done"). The design frames this as ordering; it is a hard block on an unmerged, itself-blocked change. Either say that plainly with an explicit fallback (carry the SHIMMED-HOOKS edit here if that change stalls), or move the `database-sentinel.sh` deletion back to its owner.
-- **Minor — PII hygiene:** task 6.2 records the opencode.json MCP entry "verbatim"; it embeds a `/Users/donald/...` fnm path, and unescaped home paths in published records are already handoff open question 7 (deferred four times). Don't repeat the known egress issue in the new ADR.
+I verified the change's factual claims against the working tree before judging it. They hold up well: `gate/` exists and nothing resolves it (`resolve-core-artifact.sh` maps the shared install to `reference-implementations/openspec-change-gate/`; the installed `~/.agenticapps/bin/openspec-change-gate.sh` is sha-identical to the reference implementation, not to `gate/`), the reference gate reads `GSD_SKIP_REVIEWS` only to suppress NOTE lines (line 517), `run-plan-review.sh:677` does recommend it at a failure path, `workflow.mmd` lines 7 and 13 are both stale as described, `SHIMMED-HOOKS:24` still names `database-sentinel`, and `.claude/skills/gitnexus/` contains exactly six skills. The self-corrections from prior review rounds are real improvements. But:
 
-What checked out: §15 vacancy precedent and the retirement procedure in `00-overview.md` (line 92–93), spec_version 1.6.0, both false `workflow.mmd` lines, the gate header's "blocking floor (spec 1.1.0 MUST)" at line 151 (plus two more wrong lines at 85/173, which task 2.3 at least gestures at), and the decision to delete rather than retain-but-ignore the hatch.
+- **The installed `database-sentinel.sh` is not in the removal plan — the same defect this change exists to fix.** Task 5.1 deletes `reference-implementations/project-hooks/database-sentinel.sh` and the `SHIMMED-HOOKS` entry, but `~/.agenticapps/bin/database-sentinel.sh` exists *right now* and the project-hooks README records the whole fleet binding it, with shims that invoke the installed path. Deleting the repo implementation while the installed copy remains means the hook keeps running — a removal whose primary artifact survives exactly where it executes. Task 6 ("machine-level") covers the symlink and the MCP entry but not this. Add its removal (with the same redacted-evidence treatment) or state explicitly why it is out of scope.
+- **Task 5.1's fallback contradicts the Capabilities scoping.** The proposal declines to delta `project-hook-binding` because `projects-bind-not-copy` owns the `SHIMMED-HOOKS` edit — yet the fallback says "carry the declaration edit here." If the fallback triggers, this change edits exactly the surface its Capabilities section refused to touch. Either scope a conditional delta for it or drop the fallback and make the block unconditional.
+- **The `BREAKING` label vs. "2.0.0 stays uncontested."** The What Changes section marks `GSD_SKIP_REVIEWS` removal BREAKING; the design argues nothing here is breaking so the version stands. Both cannot be asserted without addressing what BREAKING means for versioning — removing a documented interface variable that operators may export is breaking by any reading the repo has previously used. Resolve the tension explicitly.
+- **One scenario promises more than the stated verification can deliver.** "No environment variable able to alter that outcome" is a universal behavioral claim, but the change forbids behaviour-when-set tests and verifies only absence of one name by grep. A differently-named override would pass every check specified. Restate the scenario as what is actually verified (source inspection for any bypass path), or accept a behavioral test for the validate-RED-blocks case.
+- **No mechanical guard against recurrence of a second published copy.** The change's own thesis is that unenforced rules fail silently, and `gate/` drifted for a month precisely because nothing checked for it. Task 9.4 is a one-time grep. Consider a conformance/CI assertion (no `gate/`, single gate copy) — otherwise the capability documents the rule the same way the stale docs did.
+- **Minor: Impact section and task 4.6 disagree** — Impact omits root `CLAUDE.md` (= `AGENTS.md`), `.claude/hooks/openspec-change-gate.sh`, `docs/instruction-file-audit-2026-08.md`, and `prompts/03-cparx-sandbox-pilot.md`, all of which advertise the hatch and appear in 4.6. And Migration Plan step numbers ("steps 7 and 9 are not in version control") don't match tasks.md numbering (6 and 8).
 
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:18587091d5ca6e3b2b252212157a931ce290b1351f2d4fb7af7d37cbb687e9d8
+digest: sha256:2060f8a179c215e5bd3dd02471d44b87a54baa33fe71e30aa2713d638a27b550
 producer-version: 1.2.0
-tasks-digest: sha256:55822e12af9dc231d98f467abd2880ad1ad4aed4f52951f9a0636710d10b936d
+tasks-digest: sha256:14905018756a5361780c9c2b7f9472bff63d566332f3bb64e4a6cba8b9b40e47
 -->

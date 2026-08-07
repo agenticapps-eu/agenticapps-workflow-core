@@ -39,8 +39,19 @@ know about.
 #### Scenario: Validation is not green and no review exists
 
 - **WHEN** `openspec validate --all` fails and no review exists
-- **THEN** the gate SHALL block, on the validation condition alone, with no
-  environment variable able to alter that outcome
+- **THEN** the gate SHALL block, on the validation condition alone
+
+#### Scenario: No bypass path replaces the removed one
+
+- **WHEN** the gate's source is inspected for any environment variable that can
+  turn a blocking outcome into a permitting one
+- **THEN** there SHALL be none
+
+*An earlier revision folded this into the scenario above as "with no environment
+variable able to alter that outcome" — a universal behavioural claim backed only
+by a grep for one name, which a differently-named override would have passed. It
+is separated here and stated as what is actually verified: inspection of the
+source for any bypass path, not a test of one variable.*
 
 #### Scenario: Conformance rows assert the hatch
 

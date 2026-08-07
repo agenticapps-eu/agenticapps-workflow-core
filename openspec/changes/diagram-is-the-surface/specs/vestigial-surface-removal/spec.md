@@ -4,12 +4,23 @@
 
 This capability SHALL apply only to **shipped enforcement and interface
 artifacts**: executables that gate, block, or permit an action; environment
-variables and flags that alter their behaviour; published copies of either; and
-the documentation that instructs an operator to use them.
+variables and flags that alter their behaviour; and published copies of either.
 
-It SHALL NOT apply to records, tests, tooling, or authored prose. Specifically
-exempt: `adrs/`, `openspec/`, `CHANGELOG.md`, `docs/`, `prompts/`, `tools/`,
-`spec/`, and every test harness.
+**Deletion** SHALL NOT reach records, tests, tooling, or authored prose.
+Specifically exempt from deletion: `adrs/`, `openspec/`, `CHANGELOG.md`, `docs/`,
+`prompts/`, `tools/`, `spec/`, and every test harness.
+
+**Correction** reaches further than deletion, and the two must not be conflated.
+A statement instructing an operator to use a removed interface SHALL be corrected
+wherever it appears, including inside an exempt file. Correcting a sentence in
+`docs/` is not deleting `docs/`.
+
+*An earlier revision put "the documentation that instructs an operator to use
+them" inside the governed class while simultaneously exempting every file such
+documentation lives in, so the same artifact was both required and forbidden.
+Separating the deletion scope from the correction scope is what resolves it —
+the exemption was always about not deleting records, never about leaving false
+instructions standing in them.*
 
 **An earlier revision stated the rule over all artifacts** — *"an artifact SHALL
 belong in this repository only if it appears on the diagram or is required to
@@ -25,7 +36,14 @@ author happened to intend.
 
 - **WHEN** an artifact is a decision record, an archived change, a changelog
   entry, a test, or authored documentation
-- **THEN** this capability SHALL NOT be applied to it, whatever the diagram shows
+- **THEN** it SHALL NOT be deleted by this capability, whatever the diagram shows
+
+#### Scenario: A record contains an instruction to use a removed interface
+
+- **WHEN** an exempt file contains a statement telling an operator to set a flag
+  or run an executable that this capability removed
+- **THEN** that statement SHALL be corrected in place, and the file SHALL NOT be
+  deleted
 
 #### Scenario: An artifact gates an action
 
@@ -99,6 +117,41 @@ byte-identical to that. So it enforces nothing and misinforms everyone.
 - **WHEN** an installer or hook does resolve a published copy
 - **THEN** it SHALL be kept synchronised with the implementation, and the
   resolution path SHALL be recorded so the question is answerable without a sweep
+
+### Requirement: A removal reaches the installed copy, not only the source
+
+Removing a shipped enforcement artifact SHALL remove every installed copy of it
+in the same change. A removal that deletes the source while an installed copy
+survives in the shared install directory SHALL NOT be recorded as complete.
+
+This is the failure mode this capability exists to name, found inside this very
+change. `reference-implementations/project-hooks/database-sentinel.sh` was
+scheduled for deletion while `~/.agenticapps/bin/database-sentinel.sh` — the copy
+the shims actually invoke — was not, so the hook would have kept running with its
+source gone. Measured on the same directory:
+`~/.agenticapps/bin/normalize-claude-md.sh` is **still installed** after PR #87
+retired it, which is the same defect one removal earlier and nothing detected it.
+
+#### Scenario: An installed copy outlives the implementation it was removed from
+
+- **WHEN** an enforcement artifact is deleted from this repository and a copy of
+  it exists in the shared install directory
+- **THEN** the installed copy SHALL be removed in the same change, because an
+  artifact deleted from source but surviving where it executes has not been
+  removed
+
+#### Scenario: The shared install directory is enumerated at removal time
+
+- **WHEN** any enforcement artifact is removed
+- **THEN** the shared install directory SHALL be listed and compared against what
+  the repository still publishes, and every orphan SHALL be reported
+
+#### Scenario: An orphan predates this change
+
+- **WHEN** the comparison finds an installed artifact whose source was removed by
+  an earlier change
+- **THEN** it SHALL be reported rather than silently swept, because it is evidence
+  the earlier removal was recorded complete when it was not
 
 ### Requirement: Retention on compatibility grounds is evidenced
 

@@ -67,8 +67,23 @@ and pi reached `full` conformance at host v0.6.0 *by* binding §13, after ADR-00
 reversed its minimal-host framing to do so. Removing it breaks three hosts and
 demotes one. It is dropped, not deferred: the evidence says it is load-bearing.
 
-This also dissolves the spec-version collision with PR #78. Nothing here is
-breaking to the `spec/` surface, so 2.0.0 stays uncontested.
+**On BREAKING and the version, which two reviewers found in tension.** Both
+readings were in this document: `GSD_SKIP_REVIEWS` marked **BREAKING**, and the
+design claiming nothing here breaks the `spec/` surface. They are not the same
+claim, and the document should not have left them adjacent without saying so.
+
+Removing a documented environment variable an operator may have exported is
+breaking **to the gate's interface**, and it is labelled so. It is not breaking to
+the **numbered `spec/` sections**, which is what §09's host-conformance versioning
+governs — no section is removed and no host's `implements_spec` claim is
+invalidated. But §18 is normative and two of its statements are edited, so this is
+not version-neutral either: it is a `spec/` change at §18, and the version it
+lands at SHALL be decided before the §18 task runs.
+
+What it is *not* is a competitor for 2.0.0 on the grounds §13 would have created —
+that collision was about removing a whole section, and §13 is no longer here.
+Whether §18's edit is a minor or a major under §09 is the open question, and it is
+recorded as one rather than assumed away in either direction.
 
 ## Capabilities
 

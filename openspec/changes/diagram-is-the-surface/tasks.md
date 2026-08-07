@@ -8,13 +8,28 @@ the correction is argued from ADR-0027 and `change-gate-enforcement`, not from
 - [ ] 1.1 `workflow.mmd` line 7 — the hook node reads *"no code edits until
       validate GREEN and REVIEWS ≥ 2"*. Restate it as the one condition that
       blocks: `openspec validate --all` not green
-- [ ] 1.2 `workflow.mmd` line 13 — the conditional-gates node routes
-      *"db-sentinel if SQL/RLS"* to a hook being removed. Remove that arm, keep
-      the arms that survive
-- [ ] 1.3 Re-render or re-check the diagram so the corrected source is what
+- [ ] 1.2 `workflow.mmd` line 13 — **do not remove the db-sentinel arm.** An
+      earlier revision did, on the assumption it named the removed
+      `PreToolUse` hook. It does not: `spec/17-lifecycle-and-gate-mapping.md`
+      lines 99–100 make `database-security` and `db-pre-launch-audit`
+      **Conditional (db-sentinel)** gates, and
+      `skills/agentic-apps-workflow/SKILL.md` lines 110–119 bind
+      `database-sentinel` as an **upstream skill** whose Critical/High findings
+      block branch close. The hook and the skill gate are different things with
+      the same name — removing the hook does not retire the gate.
+      Disambiguate the arm so it plainly names the skill gate, or leave it
+      unchanged. Retiring the gate would need its own normative change against
+      §17 and ADR-0012
+- [ ] 1.3 `workflow-diagram.mmd` **duplicates** `workflow.mmd` and carries the
+      same stale statements. It is the same class of defect as `gate/` — a second
+      copy nothing reconciles. Determine which is canonical, delete the other, and
+      record which readers were being served by the duplicate
+- [ ] 1.4 Re-render or re-check the diagram so the corrected source is what
       readers see, and record where the rendered copy lives if one is published
-- [ ] 1.4 Confirm no other shipped text asserts "REVIEWS ≥ 2" as blocking.
-      Handoff open question 6
+- [ ] 1.5 Confirm no other shipped text asserts "REVIEWS ≥ 2" as blocking —
+      including `SIMPLIFICATION-PLAN.md` and
+      `docs/recipes/0001-planning-to-openspec.md`, which describe review blocking
+      and were missed by an earlier revision. Handoff open question 6
 
 ## 2. Remove `gate/` — the largest single item
 
@@ -98,12 +113,25 @@ proceed without evidence that is absent.
 ## 5. Finish the removals already decided
 
 - [ ] 5.1 Delete `reference-implementations/project-hooks/database-sentinel.sh`.
-      **Hard block, not an ordering preference.** Precondition, objectively
+      **Hard block, and the block is unconditional.** Precondition, objectively
       checkable: `database-sentinel` absent from
       `reference-implementations/project-hooks/SHIMMED-HOOKS` on the merge base.
       `projects-bind-not-copy` owns that edit and is unmerged with no PR.
-      **Fallback if it stalls:** carry the declaration edit here, or drop this
-      deletion — do not delete an implementation the declaration still names
+      **If it stalls, this task drops** — it does not acquire the declaration
+      edit. An earlier revision offered that as a fallback, which would have made
+      this change edit `project-hook-binding`, the exact surface its Capabilities
+      section declines to delta. One owner, no conditional second owner
+- [ ] 5.1a **Delete `~/.agenticapps/bin/database-sentinel.sh`** in the same
+      change. It exists right now (5.2k, 6 Aug) and it is the copy the shims
+      actually invoke, so deleting only the repository implementation leaves the
+      hook running with its source gone. Redacted evidence, as §6
+- [ ] 5.1b **`~/.agenticapps/bin/normalize-claude-md.sh` is still installed**
+      after PR #87 retired it — the same defect, one removal earlier, undetected.
+      Report it and remove it, or record why it stays. Found while verifying 5.1a
+- [ ] 5.1c Enumerate `~/.agenticapps/bin/` against what the repository still
+      publishes and report every orphan. Current contents: `reviewer-cli.sh`,
+      `openspec-change-gate.sh`, `normalize-claude-md.sh`, `run-plan-review.sh`,
+      `database-sentinel.sh`
 - [ ] 5.2 Delete core's own `.claude/skills/gitnexus/` — six skills, still loading
       in this repository. Handoff open question 9
 - [ ] 5.3 Leave `adrs/0012` unedited; it records `database-sentinel`'s reasoning
@@ -170,3 +198,15 @@ open question 7, deferred four times, and this change will not repeat it.
       nothing else about §13
 - [ ] 9.6 The gate still runs from `~/.agenticapps/bin/` after `gate/` is removed,
       and a fleet repository's hook still resolves it
+- [ ] 9.7 **A conformance assertion, not a one-time grep.** `gate/` drifted for a
+      month because nothing checked for it, and this change's own thesis is that
+      unenforced rules fail silently. Add a check that fails when a second copy of
+      the gate exists in the repository, and when
+      `~/.agenticapps/bin/` holds an artifact the repository no longer publishes.
+      Without it this capability documents its rule exactly the way the stale
+      docs documented theirs
+- [ ] 9.8 Reconcile the Impact section against task 4.6 — Impact omits root
+      `CLAUDE.md` (= `AGENTS.md`), `.claude/hooks/openspec-change-gate.sh`,
+      `docs/instruction-file-audit-2026-08.md` and
+      `prompts/03-cparx-sandbox-pilot.md`. Renumber the design's Migration Plan
+      references, which cite steps 7 and 9 for what this file numbers 6 and 8
