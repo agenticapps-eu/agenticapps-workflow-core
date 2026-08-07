@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — the one entry point that puts this workflow on a machine.
 #
-#   ./install.sh                          payload + core's git pre-commit hook
+#   ./install.sh                          payload + the machine-level git floor
 #   ./install.sh --host claude --host pi  ...plus skills for the named hosts
 #   ./install.sh --host auto              ...for whichever hosts are installed
 #   ./install.sh --check                  report state, change nothing
@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.agenticapps/bin"
 SHARED="$ROOT/reference-implementations/shared-install/install-shared-artifact.sh"
 PROJHOOKS="$ROOT/reference-implementations/shared-install/install-project-hooks.sh"
-COREHOOKS="$ROOT/tools/install-core-git-hooks.sh"
+FLOORBIND="$ROOT/reference-implementations/global-floor/bind-global-floor.sh"
 OPSXBIND="$ROOT/reference-implementations/openspec-tools/bind-openspec-tools.sh"
 
 # Published through the ARBITRATING helper, one call each, with the marker key
@@ -342,8 +342,8 @@ case " $REQUESTED " in *" auto "*) REQUESTED="$(detect)"; say "detected hosts:${
 
 say "publishing to $BIN"
 publish
-say "installing core's git pre-commit hook"
-"$COREHOOKS" >/dev/null 2>&1 || skip "core's git pre-commit hook was not installed"
+say "binding the machine-level enforcement floor"
+"$FLOORBIND" || skip "the machine-level enforcement floor was not bound"
 
 if [ -n "${REQUESTED// /}" ]; then
   say "binding hosts:$REQUESTED"

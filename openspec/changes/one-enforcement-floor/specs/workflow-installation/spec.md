@@ -306,6 +306,39 @@ level up.
 - **WHEN** `core.hooksPath` already resolves to the published directory
 - **THEN** the installer reports it as satisfied and changes nothing
 
+### Requirement: Nothing is published into a directory another account can write
+
+The installer SHALL refuse to publish into the machine-level hooks directory,
+and SHALL NOT bind it, if that directory is a symlink or is group- or
+world-writable.
+
+The dispatcher already refuses a symlinked or group/world-writable `hooks.d`,
+for the reason that either lets another local account supply code that runs on
+every commit. It cannot make the same check about the directory it *lives in*:
+by the time the dispatcher runs, anyone who could write there has already
+replaced it. The check therefore has to sit one level up, in the thing that
+creates the directory, and it has to happen before anything is written.
+
+The symlink case is the sharper of the two and was measured rather than
+reasoned about. `mkdir -p` over an existing symlink succeeds silently, so
+without the check the run published the dispatcher into the link's target and
+bound `core.hooksPath` to it — handing the machine's commit-time hook directory
+to whoever owned that target. The mode case is quieter: the directory's
+permissions otherwise come from the operator's umask, which is 022 on a stock
+macOS and is not guaranteed to be.
+
+#### Scenario: The published directory is a symlink
+
+- **WHEN** the machine-level hooks directory exists and is a symlink
+- **THEN** nothing is published and `core.hooksPath` SHALL NOT be set
+- **AND** the run exits non-zero naming the directory
+
+#### Scenario: The published directory is writable by others
+
+- **WHEN** the machine-level hooks directory is group- or world-writable
+- **THEN** nothing is published and `core.hooksPath` SHALL NOT be set
+- **AND** the run exits non-zero and says what to change
+
 ### Requirement: The published hook composes rather than monopolises
 
 The published `pre-commit` SHALL dispatch to the gate and then to an

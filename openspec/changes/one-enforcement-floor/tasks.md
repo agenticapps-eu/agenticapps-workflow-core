@@ -98,14 +98,61 @@ ran, so this change starts from an installer that writes no host configuration.
 
 ## 2. Publish and bind the global floor
 
-- [ ] 2.1 Publish the gate's `pre-commit` to the machine-level hooks directory
+- [x] 2.1 Publish the gate's `pre-commit` to the machine-level hooks directory
       through the arbitrating installer, with a version marker, exactly as the
-      other three executables are published
-- [ ] 2.2 Bind it with `git config --global core.hooksPath <dir>`
-- [ ] 2.3 Refuse and report a foreign existing `core.hooksPath`; the step counts
-      as skipped so the run exits non-zero
-- [ ] 2.4 Report an existing binding that is already ours as satisfied, not as
-      a no-op and not as a fresh install
+      other three executables are published. **Built 2026-08-07** —
+      `reference-implementations/global-floor/bind-global-floor.sh`, published to
+      `~/.agenticapps/git-hooks/` under the `global-floor-version` key. Delegation
+      is asserted by a recorder standing in for the helper, not inferred from the
+      destination bytes: no assertion about the published file can tell a correct
+      delegation from a `cp` that produced the same bytes, and a `cp` would
+      silently overwrite a newer published hook
+- [x] 2.1a **The published directory already holds a foreign file on this
+      machine, and the binder overwrites it without saying so.** Measured
+      2026-08-07: `~/.agenticapps/git-hooks/pre-commit` exists, dated 25 Jul,
+      2270 bytes — it is **opencode's host-local variant**, not core's
+      dispatcher, published by the archived opencode installer and never bound
+      (no global `core.hooksPath` exists, per 0.4). Probed against a copy rather
+      than the real file: it carries no `global-floor-version` marker, the
+      arbitrating helper therefore reads it as `0.0.0` and installs over it,
+      exit 0, reporting only `(was 0.0.0)`.
+      **This is an asymmetry worth naming rather than a defect to fix here.**
+      `install-core-git-hooks.sh` *refuses* a hook it does not own; the floor
+      binder *overwrites* one, because the helper's ownership model is version
+      markers and an unmarked file is the oldest possible version. The binding
+      is protected — 2.3 — and the file in the directory is not. Feed this into
+      2.9's preflight: what publishing will replace belongs in the same report
+      as what the binding will newly govern
+- [x] 2.1b **The published directory needed the same guard the dispatcher gives
+      `hooks.d`, and did not have it.** Found by the §gate `cso` pass on this
+      diff, not by review. The dispatcher refuses a symlinked or
+      group/world-writable `hooks.d`; it cannot make that check about the
+      directory it lives in, because by the time it runs anyone who could write
+      there has already replaced it. Measured: `mkdir -p` over an existing
+      symlink succeeds silently, and the run then published the dispatcher into
+      the link's target **and bound `core.hooksPath` to it** — the machine's
+      commit-time hook directory handed to whoever owned that target. Guard
+      added ahead of publishing, symlink checked before `mkdir`, two cases in
+      the suite.
+      **Recorded honestly: this requirement was written after the code.** That
+      is the wrong order and it is the red flag the workflow names. The
+      alternative was dropping a demonstrated local-privilege hazard because it
+      arrived at the wrong step, which is worse. It is a fresh requirement in
+      the delta that no reviewer has seen — see open question 7
+- [x] 2.2 Bind it with `git config --global core.hooksPath <dir>`. **Built and
+      tested 2026-08-07**, publish first and bind second, with the interrupted
+      run completing on re-run rather than starting over. **Not yet run for real
+      on this machine** — that waits on 2.8c and 2.9, per the note below
+- [x] 2.3 Refuse and report a foreign existing `core.hooksPath`; the step counts
+      as skipped so the run exits non-zero. **Built.** The report names both the
+      existing value and the value it would have set, and points at `hooks.d` as
+      the supported way to compose — a refusal that does not say what to do
+      instead is a refusal an operator routes around
+- [x] 2.4 Report an existing binding that is already ours as satisfied, not as
+      a no-op and not as a fresh install. **Built.** Compared by raw string
+      first and physical path second: on macOS a home directory reached through
+      a symlink spells the same directory two ways, and a binder that read its
+      own binding as foreign would refuse permanently
 - [x] 2.5 The published hook dispatches to the gate and propagates its exit
       status. **Built 2026-08-07** —
       `reference-implementations/global-floor/pre-commit`. Status is propagated
@@ -169,7 +216,7 @@ ran, so this change starts from an installer that writes no host configuration.
 
 - [ ] 3.1 Remove the gate `pre-commit` from each of the repositories carrying
       one, having confirmed the global binding is live first
-- [ ] 3.2 `tools/install-core-git-hooks.sh` — **superseded. Decided 2026-08-07,
+- [x] 3.2 `tools/install-core-git-hooks.sh` — **superseded. Decided 2026-08-07,
       recorded as design Decision 4.** It resolves its destination with
       `git rev-parse --git-path hooks` (line 54), which honors `core.hooksPath`
       by its own header's admission (line 13), so once the binding is global,
@@ -180,7 +227,18 @@ ran, so this change starts from an installer that writes no host configuration.
       `COREHOOKS` variable (line 26) and its call site (lines 345–346), one for
       one. The script is not deleted — it survives as core's own tool, and the
       refusal added in the `core-self-enforcement` delta covers a by-hand run on
-      a bound machine, which becomes the only way to reach it
+      a bound machine, which becomes the only way to reach it.
+      **Landed 2026-08-07 and the swap was line-for-line as predicted.**
+      `install.sh` is at **217** before and after — the budget assertion is
+      `-le 217` and would have failed immediately otherwise. One departure from
+      the old call site, deliberate: the `>/dev/null 2>&1` is gone, because the
+      binder's foreign-binding report names the existing value and the value it
+      would have set, and discarding its output would throw away the only
+      surface that says either. Two test cases changed shape rather than
+      wording — "a foreign pre-commit hook is refused" now asserts a foreign
+      *global* `core.hooksPath`, since the machine installer no longer writes a
+      per-repository hook and the old assertion would have passed because
+      nothing happened rather than because something was refused
 - [ ] 3.3 Core's own binding: ADR-0028 has core resolve its *working-tree* gate,
       and `core-self-enforcement` says the shared install "SHALL NOT be
       consulted" — which a machine-level published hook cannot satisfy. Resolve
