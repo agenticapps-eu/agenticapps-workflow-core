@@ -1,99 +1,92 @@
-# Session Handoff — 2026-08-07 (fourteenth session)
+# Session Handoff — 2026-08-07 (fifteenth session)
 
-**The first code in this whole effort got written.** Five sessions of planning,
-and `fresh-clone-needs-nothing` now has three working artifacts, all installed on
-this machine. PR #89, 28 commits.
+**No code. Plan repair, two decisions, and a machine cleanup that mattered more
+than it looked.** `one-enforcement-floor` is now re-reviewed and its largest
+risk is closed by decision. Still on `feat/projects-bind-not-copy` (PR #89).
 
 | Change | State |
 |---|---|
-| `fresh-clone-needs-nothing` | **§3, §4, §9 built and installed.** §1, §2, §5, §6 open |
-| `one-enforcement-floor` | reviewed ×2, **no code — this is next** |
+| `fresh-clone-needs-nothing` | §3, §4, §9 built and installed. §1, §2, §5, §6 open |
+| `one-enforcement-floor` | **re-reviewed, findings folded, scope predicate decided — ready for code** |
 | `projects-bind-not-copy` | reviewed ×2, no code |
 | `diagram-is-the-surface` | reviewed ×2, no code |
-| `fleet-carries-only-current` | **never reviewed**, five sessions old |
+| `fleet-carries-only-current` | **never reviewed**, six sessions old |
 
 ## Accomplished
 
-- **`init-project.sh`** — the project installer. `reference-implementations/init-project/`,
-  published into `~/.agenticapps/bin` by `install.sh`. 47 assertions.
-- **`bind-openspec-tools.sh`** — binds the openspec CLI's skills and commands
-  machine-level so no repo carries them. 29 assertions.
-- `install.test.sh` 52/0, all suites green, shellcheck clean.
-- **Ran `./install.sh --host auto` and `--host omp`.** Machine is on the new
-  workflow: 4 artifacts current, 5 hosts bound, opsx bound.
-- **Cleaned the machine** — see 9.8. Removed 19 codex `gsd-*.md`, 88 opencode
-  gsd files, `~/.gitnexus`, orphaned `normalize-claude-md.sh`, the **live**
-  gitnexus MCP registrations in codex and opencode, and two dead pi packages.
+- **Tasks 0.2, 0.4, 1.2, 3b.2 measured and recorded.** Installer is at
+  **217/217 — zero headroom**, not the 212-with-5-spare the task claimed.
+- **Task 3.2 decided: supersede.** The floor binder takes `COREHOOKS`'s variable
+  and call site one-for-one, so the arithmetic is 217 → 217 and **no budget
+  raise is claimed**. Design Decision 4.
+- **Task 2.8 decided: explicit opt-in marker** — `agenticapps.workflow.enrolled`,
+  a local git config key, checked ahead of the gate. Prototyped and proven.
+- **8.2b re-review ran.** gemini APPROVE, codex REQUEST-CHANGES ×10, opencode
+  timed out. Three findings verified empirically; all three were real. Five more
+  accepted into tasks; one declined with a reason.
+- **gitnexus fully removed** — package, 22 skills, npx caches, hooks, logs,
+  4 stale memories. ~3.2 GB. It was *not* removed on 2026-07-28 as recorded.
+- Removed the stray `agenticapps-dashboard-add-agent-board` worktree and
+  `.claude/skills/gitnexus` from this repo.
 
 ## Decisions
 
-- **The initializer is a published bin script**, not an `install.sh` subcommand
-  and not a skill step. It *cannot* live in a repo: the capability holds a repo
-  to two artifacts and no executables, so it would be the first thing swept.
-- **No CI workflow file.** "A fresh clone needs nothing" now states its scope —
-  the two surfaces `install.sh` establishes.
-- **`openspec init --tools none`.** Every other value writes per-host files into
-  the repo; `--tools claude` alone writes six commands and six skills.
-- **opsx binds machine-level**, reversing tasks 6.4/8.3 which had said to keep
-  the six per-repo skills.
-- **omp is establishable — "unverified" repealed.** Its own `dist/cli.js` names
-  `~/.omp/agent/skills` and `.agents/skills`. So `omp:.agents/skills` was
-  correct all along and **only pi was the defect**. The old verdict came from
-  looking for a directory and finding none; the evidence was in the binary.
-  The spec now names a host's own implementation as an evidence source.
+- **Supersede, not retarget** (3.2) — installing a per-repository hook from the
+  machine-level installer was always a category error; it wrote into whichever
+  repo the shell sat in. Budget was the cheaper argument, not the reason.
+- **Opt-in marker over shape-inference or a declared list** (2.8) — enrolment is
+  an act, not a guess. Both rejected alternatives fail silently for the person
+  hit by them.
+- **`init-project.sh` owns enrolment**, which amends its "writes exactly two
+  things" header contract. Amend it in the same diff (2.8b).
+- **Declined the privacy finding** — redacting paths would remove the evidence
+  that makes the measurements checkable.
 
 ## Files modified
 
-- `reference-implementations/init-project/init-project.sh` — new
-- `reference-implementations/openspec-tools/bind-openspec-tools.sh` — new
-- `tools/init-project.test.sh`, `tools/bind-openspec-tools.test.sh` — new
-- `install.sh` — one `ARTIFACTS` line; one delegated binder call
-- `tools/install.test.sh` — 3 new cases; 2 enumerations that silently missed
-  new artifacts
-- `openspec/changes/fresh-clone-needs-nothing/` — `MEASUREMENT-opsx.md` new,
-  plus a `host-neutral-instruction-files` delta from the review round
+- `openspec/changes/one-enforcement-floor/tasks.md` — 0.2, 0.4, 1.2, 3b.2, 8.2b
+  closed; 3.2/5.7/6.13/7.2/3b.1/3.5 corrected; 2.8, 2.8a–c, 2.9, 3.5, 3b.5,
+  4.1a, 6.9a added
+- `.../design.md` — Decision 4, the scope-predicate decision, two risk rows, and
+  a falsified skill-resolution claim corrected
+- `.../specs/workflow-installation/spec.md` — three dropped scenarios restored;
+  new requirement "The floor governs only repositories that enrolled in it";
+  budget blockquote rewritten
+- `.../specs/core-self-enforcement/spec.md` — the "outside the working tree"
+  scenario narrowed to inside the git common directory
+- `REVIEWS.md` — round two
+- Machine: gitnexus gone; dashboard worktree gone
 
 ## Next session: start here
 
-**`one-enforcement-floor`, and read its task 0.2 first — it is now wrong.**
-It records the installer at 212 executable lines with 5 lines of headroom under
-the 217 budget. §9 spent all five: `install.sh` is at **exactly 217**, and
-`tools/install.test.sh` asserts it. So the budget raise that task called "near
-certain" is now unavoidable, and the requirement demands the growth be itemised
-rather than pre-approved. Re-measure, then decide whether the floor's wiring goes
-inline (needs a raise) or into a helper (does not) — the file's own header says
-it is a front end that delegates, which argues for the helper.
+**Task 1.2 is the thing to look at first, because it says the change's premise is
+false.** Three sites in `install.sh` carry host-named code outside `HOSTS` and
+`--check` — `ARCHIVED` (line 54), `neutral_of()`'s `codex-`/`opencode-` prefix
+stripping (160–161), and a hard-coded `~/.claude/skills` (166). All inherited,
+none introduced here. Task 7.2 expects the after-measurement to be clean and it
+cannot be. Decide: accept them as recorded inherited exceptions, or open a
+separate change. Do not restate the old expectation and pass against it.
 
-After that, 0.4: record the six repositories setting a local `core.hooksPath`.
-`git config --global core.hooksPath` is **unset**, so there is no floor today.
-
-**Why this is the blocker for everything else:** projects cannot be swept until a
-floor exists that survives deleting a repo's hooks. `factiv/cparx` still carries
-`.claude/hooks` and `.claude/skills`; sweeping now leaves it with no gate. The
-sweeper itself is also unbuilt — `reference-implementations/` has no sweep
-artifact, and §6 is entirely open.
+Then code, in this order: **2.8a** (enrolment predicate in the published hook —
+already prototyped), **2.8b/2.8c**, then section 2 proper. TDD, RED before GREEN.
 
 ## Open questions
 
-1. **`fleet-carries-only-current` has never been reviewed** — six sessions old.
+1. **`fleet-carries-only-current` still never reviewed** — six sessions old.
 2. **§18's version number** — still blocking a task in `diagram-is-the-surface`.
-3. **9.6 unconfirmed:** `/opsx:propose` has not been observed resolving. A host
-   loads commands at session start, so the session that bound them cannot see
-   them. **Try `/opsx:propose` in a repo with no `.claude/` early next session** —
-   confirming a binding because the symlink exists is what was true of pi for
-   months.
-4. **9.7:** `scan_archived` walks skill directories only and structurally cannot
-   see command directories. Two links into the archived `opencode-workflow`
-   survived every install that way — and were *not* dangling, so
-   `setup-agenticapps-workflow` still ran the retired scaffolder. Removed by
-   hand; the gap is still there, and §9 just added more command directories.
-5. **pi's opsx commands are unreachable by symlink.** pi installs extensions as
-   packages. Reaching it means publishing a pi package — a separate decision.
-6. **gitnexus's binary is still installed and on `PATH`** even though its configs
-   are gone. Uninstalling it was beyond what I could establish safely.
-7. **`agenticapps-dashboard-add-agent-board`** — stray worktree, still undecided.
-   The sweep now refuses globs, which contains it without deciding it.
-8. **CodeRabbit still has not reviewed anything here.** Its check state is not
-   evidence.
-9. `database-sentinel.sh` stays installed until `diagram-is-the-surface` lands.
-   Its source is still live in core, so it is not residue yet.
+3. **Machine-level *commands* still unconfirmed.** Machine-level *skills* are
+   confirmed (`openspec-propose` et al. loaded this session with no local copy),
+   but this repo carries `.claude/commands/opsx/`, which shadows the global one.
+   Test in a repo with no `.claude/`.
+4. **9.7 is now measured, and it is structural.** Sweeps test `[ -L ]` first, so
+   copied *directories* are invisible to them — that is how 22 gitnexus skills
+   survived a "complete" removal for ten days. `LEGACY_DIRS` names exactly one
+   directory. Saved as a memory.
+5. **pi's opsx commands unreachable by symlink** — needs a pi package.
+6. **Task 3.5 has no owner yet** — nothing establishes core's local
+   `core.hooksPath` now that `install.sh` stops calling the hook installer.
+7. **opencode timed out** at 180s in the review and was not counted. Raise
+   `REVIEW_TIMEOUT` if a third opinion is wanted.
+8. **CodeRabbit still has not reviewed anything here.**
+9. Three cparx `tool-results` transcripts still mention gitnexus; left as
+   session history, not residue.
