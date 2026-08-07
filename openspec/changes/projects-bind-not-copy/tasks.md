@@ -71,14 +71,25 @@ not a fleet member, and is handled with its parent.
 - [ ] 3.6 `fx-signal-agent` (324 lines, v3.2.0)
 - [ ] 3.7 `fbc-platform` (346 lines, v3.2.0) — last, and only after 1.3 has said
       what its extra 22 lines were
-- [ ] 3.8 Each PR removes `.claude/skills/agentic-apps-workflow/` **and**, in the
-      seven that bind it, the `normalize-claude-md` shim plus its `PostToolUse`
-      entry in `.claude/settings.json`. The `openspec-*` skills stay, and a PR
-      that touches them is wrong
-- [ ] 3.9 `database-sentinel` and `openspec-change-gate` stay bound in every
-      repository. They are declared, they are current, and a sweep that removes
-      them because it was removing hooks is the failure this task exists to name.
-      `agents-task-viewer` and core already bind neither
+- [ ] 3.8 Each PR removes `.claude/skills/agentic-apps-workflow/` **and** the
+      `.claude/settings.json` hook surface: the `openspec-change-gate` and
+      `normalize-claude-md` entries with their shim files. The `openspec-*`
+      skills stay, and a PR that touches them is wrong
+- [ ] 3.9 **`database-sentinel` is decided before 3.8 runs, not during.** It is
+      the one hook with a pre-tool argument: it guards a class of file before a
+      tool call, and a pre-commit hook cannot stop an agent reading a `.env` and
+      putting it somewhere. Either it is kept — and the change states what it
+      protects that commit-time enforcement cannot, and accepts that the
+      host-specific surface stays open for one hook — or it goes with the
+      surface. Removing it silently because the sweep was removing hooks drops a
+      real protection on a technicality
+- [ ] 3.10 **The git floor must exist before the gate shim is removed.** In
+      `cparx` there is no `.git/hooks/pre-commit` and `core.hooksPath` is unset,
+      so removing the `PreToolUse` entry today leaves that repository with no
+      gate at all rather than with a better one. `one-enforcement-floor` is what
+      supplies the floor, so it lands first — a second sequencing constraint,
+      stated like the first
+- [ ] 3.11 `agents-task-viewer` and core already bind neither
       `normalize-claude-md` nor its shim — confirm rather than assume
 
 ## 4. GREEN, and the declaration
@@ -111,7 +122,15 @@ not a fleet member, and is handled with its parent.
       with a **tracked** `config.json` in the latter two, after a fleet-wide
       deletion on 2026-08-05 that did not complete. Adjacent, not this change —
       recorded so the next sweep does not rediscover it
-- [ ] 6.3 **Is the project `PreToolUse` gate worth keeping?** Verified at source
+- [ ] 6.3 `docs/HOW-IT-FITS-TOGETHER.md` is internally inconsistent: it says one
+      gate at two surfaces, git pre-commit and CI, and then describes projects
+      binding it at a third. Reconcile it against what this change leaves behind
+- [ ] 6.4 **Superseded — kept for the record.** This asked whether the project
+      `PreToolUse` gate is worth keeping and deferred it to
+      `one-enforcement-floor`. It is answered here instead: the surface is
+      Claude-only, which is the reason the host hook was deleted, so the question
+      was already decided and only its scope was missed. Original text: verified
+      at source
       (`openspec-change-gate.sh:506`): `gate_check` returns 0 with no active
       change. That is the measurement `one-enforcement-floor` used to delete the
       *host* hook, and it holds identically for the project one — same

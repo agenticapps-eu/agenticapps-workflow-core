@@ -1,5 +1,46 @@
 ## ADDED Requirements
 
+### Requirement: The workflow binds no host-specific hook surface
+
+The workflow SHALL NOT bind a hook through a surface only one host reads.
+`.claude/settings.json` is such a surface — Claude reads it, and Codex, opencode,
+pi and omp read nothing from it — and this holds wherever the file sits, in
+`$HOME` or in a repository. The enforcement floor SHALL be the machine-level git
+hook, which fires for every host and for a person with an editor.
+
+The host hook was deleted for three stated reasons: with no active change the
+gate returns satisfied, so it never enforced spec-before-code; the condition it
+did enforce is caught again at `git commit` and in CI; and it was every
+host-specific line in the repository. **All three apply unchanged to the same
+file inside a repository.** The surface was closed at `$HOME` and left open in
+nine checkouts, and nothing recorded a reason for the distinction because there
+is not one — the change simply did not reach that far.
+
+The measurement that settles it: in `cparx` on 2026-08-07 there was no
+`.git/hooks/pre-commit`, `core.hooksPath` was unset globally and locally, and the
+only invoker of the gate shim was a `PreToolUse` entry. The gate fired at neither
+of the two surfaces its own documentation claims. A Claude-only hook that returns
+satisfied whenever no change is active was the whole of that repository's
+enforcement.
+
+A hook whose protection is genuinely pre-tool rather than pre-commit is not
+excluded by this requirement — it is required to argue that, in the change that
+keeps it, and to say what it protects that commit-time enforcement cannot.
+
+#### Scenario: A hook is bound through a single-host surface
+
+- **WHEN** the workflow would register a hook in a configuration file only one
+  host reads
+- **THEN** it does not
+- **AND** the enforcement is placed at the machine-level git hook instead
+
+#### Scenario: A hook claims a pre-tool protection
+
+- **WHEN** a hook is proposed for retention on a host-specific surface
+- **THEN** the change states what it protects that commit-time enforcement
+  cannot
+- **AND** a hook with no such statement is removed with the surface
+
 ### Requirement: A project binds no hook the declaration does not name
 
 A project SHALL NOT bind, in its host configuration or its project hook

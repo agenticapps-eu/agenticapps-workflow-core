@@ -52,6 +52,51 @@ workflow.
   openspec CLI"*, and installed per-project by that tool. They are not ours to
   collapse, and deleting them would break `/opsx:*` in every repo.
 
+## The project hook surface is host-specific, and that is the whole argument
+
+`core-installer-one-entry-point` deleted the host hook for three reasons: with no
+active change the gate returns satisfied so it never enforced spec-before-code;
+the condition it did enforce is caught again at `git commit` and in CI; and it
+was every host-specific line in the repository. The gate's own header makes the
+case against itself — a `PreToolUse` hook "cannot gate the session that installed
+it, and it does not exist at all for a human with an editor."
+
+**All three reasons apply verbatim to the project hook**, because
+`.claude/settings.json` is Claude-only whether it sits in `$HOME` or in a
+repository. Codex, opencode, pi and omp read nothing from it. The change deleted
+the host-specific surface and left an identical one committed in nine
+repositories.
+
+Measured in `cparx` on 2026-08-07, and it is worse than redundant:
+
+- no `.git/hooks/pre-commit`
+- `core.hooksPath` unset, globally and locally
+- the **only** invoker of the gate shim is the `PreToolUse` entry
+
+So the gate fires at neither of the two surfaces `docs/HOW-IT-FITS-TOGETHER.md`
+claims for it. In that repository the "two surfaces" are zero, and a Claude-only
+hook that returns satisfied whenever there is no active change is the entire
+enforcement story. The doc is also internally inconsistent — it says one gate,
+two surfaces, then describes projects binding it at a third.
+
+**A git hook is not a host hook, and this change does not touch it.**
+`one-enforcement-floor`'s machine-wide `core.hooksPath` binding fires for all
+five hosts and for a human with an editor; it is host-agnostic by construction
+and it is the floor. What goes is `.claude/settings.json`.
+
+### `database-sentinel` is argued, not swept
+
+It is a `PreToolUse` hook and therefore host-specific, so the rule above reaches
+it. It is also the one hook with a real answer: it guards a class of file before
+a tool call happens, and a pre-commit hook cannot stop an agent from reading a
+`.env` and putting it somewhere. Commit-time enforcement is the wrong shape for
+that threat.
+
+So it is decided rather than assumed either way, and the change states which. A
+sweep that removed it silently because it was removing hooks would drop a real
+protection on a technicality, and one that kept it silently would leave the
+host-specific surface alive for one hook and call the surface closed.
+
 ## The same shape, in the wiring
 
 The skill copies are one instance of a general condition: **a project holds
@@ -93,12 +138,15 @@ two names, and splitting them would leave the second one to be rediscovered.
 
 ### Modified Capabilities
 
-- `project-hook-binding`: gains the requirement that a project binds no hook the
-  declaration does not name, that retiring a hook and removing its bindings are
-  not separated across releases, and that the fleet check walks **both**
-  directions — one pass asking whether anything declared is missing, one asking
-  whether anything held is undeclared. The capability governs shims thoroughly
-  and has never said what happens to a binding whose declaration goes away.
+- `project-hook-binding`: gains the requirement that **the workflow binds no
+  host-specific hook surface** — `.claude/settings.json` is Claude-only wherever
+  it sits, and the enforcement floor is the machine-level git hook, which is not.
+  Plus: a project binds no hook the declaration does not name; retiring a hook and
+  removing its bindings are not separated across releases; and the fleet check
+  walks **both** directions, one pass asking whether anything declared is
+  missing, one asking whether anything held is undeclared. The capability governs
+  shims thoroughly and never said what happens to a binding whose declaration
+  goes away, nor why a surface deleted at `$HOME` was kept in the repository.
 - `workflow-installation`: the "skills are bound by symlink and never copied"
   requirement currently scopes itself to host skill directories. The prohibition
   on copies is stated as a general principle — *"a copied skill is a second
