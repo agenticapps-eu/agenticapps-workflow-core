@@ -71,6 +71,28 @@ should be paid deliberately, not discovered. The answer at that point is a
 bootstrapping story for a fresh machine, which is the capability window already
 open; it is not a copy checked into eight repositories.
 
+### One rule, two surfaces, because the second was found by asking about the first
+
+The change began as the skill copies. Donald's question — *aren't the other hooks
+in cparx wrong too?* — is what surfaced the hook half, and the answer is yes, on a
+delay: `normalize-claude-md` is declared on `main` and undeclared the moment PR
+#87 merges, at which point seven repositories bind a hook the fleet does not name
+and the implementation keeps running because manifest rows outside the declared
+set are carried forward by design.
+
+Keeping these in one change is deliberate. They are the same sentence — *a
+project holds what core does not sanction* — and they are fixed by the same two
+things: a sweep across the same eight repositories, and a check that walks the
+direction the existing checks do not. Splitting them means two sweeps over the
+same `.claude/` directories and two checks that each answer half the question.
+
+*Alternative rejected: put the hook half in PR #87.* It is the change that
+creates the orphan, so there is a real argument that it should clean up after
+itself. Rejected because #87 is a narrow retirement that has already been
+reviewed, and adding a seven-repository sweep to it turns it into a fleet change
+and discards that review. The sequencing constraint carries the same guarantee at
+a fraction of the cost: #87 does not merge first.
+
 ### The check declares its fleet, and `FLEET` is the declaration
 
 `reference-implementations/project-hooks/FLEET` already names seven of the eight

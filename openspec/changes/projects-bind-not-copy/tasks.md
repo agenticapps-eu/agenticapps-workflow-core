@@ -36,6 +36,26 @@ the condition rather than the absence of it.
 - [ ] 2.6 A test suite for the above, against a scratch root — no case touches a
       real repository
 
+## 2b. RED: the second pass, for hooks
+
+`check-shims.sh` iterates `SHIMMED-HOOKS` and asks whether each declared hook is
+bound. It cannot ask what is bound that is not declared, which is why it reported
+a clean fleet on 2026-08-06 while seven repositories bound `normalize-claude-md`.
+
+- [ ] 2b.1 A pass over each declared repository's `.claude/hooks/` **and** its
+      `.claude/settings.json`, reporting any fleet-shared hook `SHIMMED-HOOKS`
+      does not name. Both surfaces, because a shim file with no settings entry is
+      dead weight and a settings entry with no shim file is a broken hook
+- [ ] 2b.2 RED: it reports `normalize-claude-md` in all seven repositories that
+      bind it, and exits non-zero
+- [ ] 2b.3 RED: a repository binding exactly the declared set is reported
+      conformant by both passes
+- [ ] 2b.4 RED: one clean pass does not suppress the other's finding — a
+      repository correct on hooks and wrong on skills is reported wrong
+- [ ] 2b.5 A hook the fleet never declared and never installed is not reported.
+      The criterion is `SHIMMED-HOOKS` membership among fleet-shared hooks, not
+      "every hook in the directory" — a project's own hooks are its business
+
 ## 3. Sweep the fleet
 
 One PR per repository, each stating the skill, the version the copy claimed, and
@@ -51,8 +71,15 @@ not a fleet member, and is handled with its parent.
 - [ ] 3.6 `fx-signal-agent` (324 lines, v3.2.0)
 - [ ] 3.7 `fbc-platform` (346 lines, v3.2.0) — last, and only after 1.3 has said
       what its extra 22 lines were
-- [ ] 3.8 Each PR removes only `.claude/skills/agentic-apps-workflow/`. The
-      `openspec-*` skills stay, and a PR that touches them is wrong
+- [ ] 3.8 Each PR removes `.claude/skills/agentic-apps-workflow/` **and**, in the
+      seven that bind it, the `normalize-claude-md` shim plus its `PostToolUse`
+      entry in `.claude/settings.json`. The `openspec-*` skills stay, and a PR
+      that touches them is wrong
+- [ ] 3.9 `database-sentinel` and `openspec-change-gate` stay bound in every
+      repository. They are declared, they are current, and a sweep that removes
+      them because it was removing hooks is the failure this task exists to name.
+      `agents-task-viewer` and core already bind neither
+      `normalize-claude-md` nor its shim — confirm rather than assume
 
 ## 4. GREEN, and the declaration
 
@@ -84,3 +111,20 @@ not a fleet member, and is handled with its parent.
       with a **tracked** `config.json` in the latter two, after a fleet-wide
       deletion on 2026-08-05 that did not complete. Adjacent, not this change —
       recorded so the next sweep does not rediscover it
+- [ ] 6.3 **Is the project `PreToolUse` gate worth keeping?** Verified at source
+      (`openspec-change-gate.sh:506`): `gate_check` returns 0 with no active
+      change. That is the measurement `one-enforcement-floor` used to delete the
+      *host* hook, and it holds identically for the project one — same
+      implementation, reached through a shim. What the project hook has that the
+      host one did not is a repository with `openspec/` in it, so an active
+      change is likelier and it buys in-session latency over `git commit`. That
+      is the whole of what it buys. **The question belongs to
+      `one-enforcement-floor`**, which is the change reasoning about enforcement
+      surfaces and which has no plan review yet — the cheapest possible moment to
+      put it. Not decided here
+- [ ] 6.4 Every fleet project still carries a
+      `setup-gstack-gsd-superpowers-workflow.md` slash command offering to
+      install GSD, removed on 2026-07-28 — 133 lines in `cparx`. Same class as
+      the skill copies and not swept by this change, because a command is neither
+      a skill nor a hook and widening the check to "anything stale under
+      `.claude/`" is a different rule needing its own argument

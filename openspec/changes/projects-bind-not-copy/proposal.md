@@ -52,6 +52,36 @@ workflow.
   openspec CLI"*, and installed per-project by that tool. They are not ours to
   collapse, and deleting them would break `/opsx:*` in every repo.
 
+## The same shape, in the wiring
+
+The skill copies are one instance of a general condition: **a project holds
+something core does not sanction, and nothing looks.** The other instance is
+live.
+
+Seven fleet repositories bind `normalize-claude-md` — a `PostToolUse` hook that
+rewrites `CLAUDE.md` on every edit. On `main` that is correct; the hook is
+declared. The change retiring it removes it from `ARTIFACTS` and `SHIMMED-HOOKS`
+**and leaves all seven bindings in place**, so the moment that retirement merges,
+seven repositories are binding a hook the fleet no longer declares.
+
+It does not stop running when that happens. `install-project-hooks.sh` carries
+forward manifest rows outside the declared set by design, so the implementation
+stays in `~/.agenticapps/bin/` and the shim keeps resolving it — a retired hook,
+published by nothing and attested by nothing, editing the instruction file every
+host reads. If the file is ever pruned, the shim fails open and reports hourly,
+advising an installer run that would re-publish an implementation deliberately
+withdrawn.
+
+**The conformance check cannot see any of this**, because it iterates the
+declaration: for each declared hook, is it bound with the authority's bytes. That
+detects a missing member, which is what `ARTIFACTS` was written to detect. It is
+blind to an extra one. A conformance run inspected those same seven repositories
+on 2026-08-06 and reported "every declared hook is bound with the authority's
+bytes" — true, complete, and silent about the eighth binding in each of them.
+
+So this change covers both surfaces. Skills and hooks are the same rule wearing
+two names, and splitting them would leave the second one to be rediscovered.
+
 ## Capabilities
 
 ### New Capabilities
@@ -63,6 +93,12 @@ workflow.
 
 ### Modified Capabilities
 
+- `project-hook-binding`: gains the requirement that a project binds no hook the
+  declaration does not name, that retiring a hook and removing its bindings are
+  not separated across releases, and that the fleet check walks **both**
+  directions — one pass asking whether anything declared is missing, one asking
+  whether anything held is undeclared. The capability governs shims thoroughly
+  and has never said what happens to a binding whose declaration goes away.
 - `workflow-installation`: the "skills are bound by symlink and never copied"
   requirement currently scopes itself to host skill directories. The prohibition
   on copies is stated as a general principle — *"a copied skill is a second
@@ -90,3 +126,11 @@ workflow.
   `core-installer-one-entry-point` were reverted, deleting these copies would
   leave those repositories with no workflow skill at all. The ordering is a
   dependency, and it is stated in `design.md`.
+- **PR #87 acquires a precondition.** It retires `normalize-claude-md` in core
+  and orphans it in seven repositories, so it SHALL NOT merge before the hook
+  sweep here lands. That is a constraint on a reviewed, open PR and it is stated
+  rather than assumed. The alternative — widening #87 to carry a seven-repository
+  sweep — turns a narrow retirement into a fleet change and loses the review it
+  already has.
+- **`tools/check-shims.sh` gains a second pass** and therefore a second way to
+  fail. Repositories that pass today may not after, which is the point.
