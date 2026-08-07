@@ -463,7 +463,7 @@ fi
 finish_case
 
 echo
-echo "install.sh — task 2.1: the three workflow executables go through the arbitrating helper"
+echo "install.sh — task 2.1: the four workflow executables go through the arbitrating helper"
 new_case "each workflow executable is published through install-shared-artifact.sh with its own marker key"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
@@ -476,6 +476,10 @@ missing=""
 calls | grep -q '^SHARED .*openspec-change-gate\.sh .* gate-version$'          || missing="$missing gate-version"
 calls | grep -q '^SHARED .*run-plan-review\.sh .* run-plan-review-version$'    || missing="$missing run-plan-review-version"
 calls | grep -q '^SHARED .*reviewer-cli\.sh .* reviewer-cli-version$'          || missing="$missing reviewer-cli-version"
+# fresh-clone-needs-nothing task 4.1a. The initializer is machine-installed and
+# repository-invoked, exactly like the three above, so it is published the same
+# way rather than becoming a subcommand or a file a repository carries.
+calls | grep -q '^SHARED .*init-project\.sh .* init-project-version$'          || missing="$missing init-project-version"
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
 elif [ -n "$missing" ]; then
@@ -557,7 +561,7 @@ stub_helper tools/install-core-git-hooks.sh GITHOOK 0
 # lands, and a stub lands nothing.
 run_install
 notexec=""
-for a in openspec-change-gate.sh run-plan-review.sh reviewer-cli.sh database-sentinel.sh; do
+for a in openspec-change-gate.sh run-plan-review.sh reviewer-cli.sh database-sentinel.sh init-project.sh; do
   d="$CASE_HOME/.agenticapps/bin/$a"
   [ -f "$d" ] || { notexec="$notexec $a(absent)"; continue; }
   [ -x "$d" ] || notexec="$notexec $a"
@@ -1030,6 +1034,21 @@ elif [ "$before_state" != "$after_state" ]; then
                    "$(diff <(printf '%s' "$before_state") <(printf '%s' "$after_state") | head -4)"
 elif ! printf '%s' "$RUN_OUT" | grep -qiE 'absent|not installed|missing|—'; then
   bad "$CASE_NAME" "nothing was reported as absent" "$(printf '%s' "$RUN_OUT" | head -5)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
+echo "install.sh — fresh-clone-needs-nothing task 4.1c: the initializer is reported like the others"
+new_case "--check names the initializer"
+new_core
+run_install --check
+if ! require_ran; then :
+elif ! printf '%s' "$RUN_OUT" | grep -q 'init-project'; then
+  bad "$CASE_NAME" "check mode does not report the initializer" \
+                   "an artifact that installs but never appears in --check is invisible state" \
+                   "$(printf '%s' "$RUN_OUT" | head -6)"
 else
   ok "$CASE_NAME"
 fi

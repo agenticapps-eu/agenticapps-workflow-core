@@ -31,7 +31,8 @@ COREHOOKS="$ROOT/tools/install-core-git-hooks.sh"
 # project-hook-binding requires and that this helper does not.
 ARTIFACTS="openspec-change-gate/openspec-change-gate.sh:gate-version
 run-plan-review/run-plan-review.sh:run-plan-review-version
-reviewer-cli/reviewer-cli.sh:reviewer-cli-version"
+reviewer-cli/reviewer-cli.sh:reviewer-cli-version
+init-project/init-project.sh:init-project-version"
 
 # host : skill directory (under $HOME) : executable that proves it is installed
 HOSTS="claude:.claude/skills:claude

@@ -44,53 +44,53 @@ skill directory". `~/.agents/skills` is not pi's.
 
 ## 3. RED: the initializer
 
-- [ ] 3.1 RED: running the initializer in a bare repository produces `openspec/`
+- [x] 3.1 RED: running the initializer in a bare repository produces `openspec/`
       and `AGENTS.md`, with `CLAUDE.md` a symlink to it, and nothing else
-- [ ] 3.2 RED: running it twice changes nothing the second time — no duplicated
+- [x] 3.2 RED: running it twice changes nothing the second time — no duplicated
       section, no re-created symlink, no re-initialized `openspec/`
-- [ ] 3.3 RED: an existing `CLAUDE.md` with content keeps every line, and the
+- [x] 3.3 RED: an existing `CLAUDE.md` with content keeps every line, and the
       workflow section is appended behind a provenance marker
-- [ ] 3.4 RED: both files existing independently with different content is
+- [x] 3.4 RED: both files existing independently with different content is
       reported and refused, not silently collapsed
-- [ ] 3.5 RED: it writes no host configuration, no hook, no skill, no CI workflow
+- [x] 3.5 RED: it writes no host configuration, no hook, no skill, no CI workflow
       file, and makes no network call
-- [ ] 3.6 A test suite against a scratch repository — no case touches a real one
-- [ ] 3.7 RED: only `CLAUDE.md` exists as a regular file → its content becomes
+- [x] 3.6 A test suite against a scratch repository — no case touches a real one
+- [x] 3.7 RED: only `CLAUDE.md` exists as a regular file → its content becomes
       `AGENTS.md` and `CLAUDE.md` becomes a symlink. **Assert the negative too:**
       no run ever leaves two regular instruction files, which is what appending to
       `CLAUDE.md` and creating `AGENTS.md` separately would do
-- [ ] 3.8 RED: both exist byte-identical → collapse to the symlink; `CLAUDE.md` is
+- [x] 3.8 RED: both exist byte-identical → collapse to the symlink; `CLAUDE.md` is
       a symlink elsewhere → refuse without following it; either name is a
       directory or a dangling link → refuse
-- [ ] 3.9 RED: the section is written behind the markers
+- [x] 3.9 RED: the section is written behind the markers
       `host-neutral-instruction-files` makes normative, and their presence is what
       makes a second run a no-op. No marker of this change's own
-- [ ] 3.10 RED: `openspec` absent → refuse before writing anything. Reachable by
+- [x] 3.10 RED: `openspec` absent → refuse before writing anything. Reachable by
       design, since this change makes `openspec` a reported, non-blocking
       prerequisite
-- [ ] 3.11 RED: invoked from a subdirectory → resolves the repository root; no
+- [x] 3.11 RED: invoked from a subdirectory → resolves the repository root; no
       second `openspec/` beside the first; every target preflighted before the
       first write
 
 ## 4. Build the initializer
 
-- [ ] 4.1 Write it at `reference-implementations/init-project/init-project.sh`,
+- [x] 4.1 Write it at `reference-implementations/init-project/init-project.sh`,
       carrying an `init-project-version:` marker line — decided; it is published
       like the gate rather than added as an `install.sh` subcommand
-- [ ] 4.1a Publish it from `install.sh`: one `ARTIFACTS` line,
+- [x] 4.1a Publish it from `install.sh`: one `ARTIFACTS` line,
       `init-project/init-project.sh:init-project-version`. Through the arbitrating
       helper, never by copy — `workflow-installation` already requires this of any
       published executable that is not a project hook
-- [ ] 4.1b Do **not** add `~/.agenticapps/bin` to `PATH`. It is not on it today and
+- [x] 4.1b Do **not** add `~/.agenticapps/bin` to `PATH`. It is not on it today and
       putting it there means writing shell configuration, which `install.sh`
       refuses. Onboarding documents the absolute path
-- [ ] 4.1c Confirm `--check` reports the initializer like the other artifacts, and
+- [x] 4.1c Confirm `--check` reports the initializer like the other artifacts, and
       that installing twice leaves one copy at one version
-- [ ] 4.2 Implement to pass §3, and no further
-- [ ] 4.3 Short enough to read before trusting. It runs inside someone's
+- [x] 4.2 Implement to pass §3, and no further
+- [x] 4.3 Short enough to read before trusting. It runs inside someone's
       repository against files they already own, which is a higher-trust surface
       than the machine installer
-- [ ] 4.4 Write the workflow section it appends. It is a pointer to the trigger
+- [x] 4.4 Write the workflow section it appends. It is a pointer to the trigger
       skill plus whatever is genuinely repository-specific — not a copy of
       behaviour, which is the drift this whole effort removes
 
