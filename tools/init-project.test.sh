@@ -63,9 +63,17 @@ fi
 # initializer does, never what the CLI does.
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
+# It refuses `init` without --tools exactly as the real CLI does. An earlier,
+# more permissive double accepted a bare `openspec init` and hid the fact that
+# the real one exits 1 on it — the suite was green while the script could not
+# initialize a single real repository.
 cat > "$FAKEBIN/openspec" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = "init" ]; then
+  case " $* " in
+    *" --tools "*) ;;
+    *) echo "Error: No tools detected and no --tools flag provided." >&2; exit 1 ;;
+  esac
   mkdir -p openspec/specs openspec/changes
   printf '%s\n' "$*" >> "$PWD/.openspec-invocations"
   exit 0
@@ -141,6 +149,15 @@ grep -q '^init' "$r/.openspec-invocations" 2>/dev/null \
   && ok "openspec/ is created by invoking the CLI, not by hand" \
   || bad "openspec/ is created by invoking the CLI, not by hand" \
          "the initializer never ran 'openspec init'"
+
+# Every --tools value except none writes per-host command and skill files into
+# the repository; `--tools claude` alone writes six commands and six skills
+# under .claude/. The flag is not optional either — the real CLI exits 1 without
+# it, which a laxer double here concealed.
+grep -q '^init --tools none$' "$r/.openspec-invocations" 2>/dev/null \
+  && ok "the CLI is invoked with --tools none" \
+  || bad "the CLI is invoked with --tools none" \
+         "recorded: $(cat "$r/.openspec-invocations" 2>/dev/null || echo '(nothing)')"
 
 [ -f "$r/AGENTS.md" ] && [ ! -L "$r/AGENTS.md" ] \
   && ok "AGENTS.md is a regular file" \
