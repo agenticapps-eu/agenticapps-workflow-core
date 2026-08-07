@@ -26,6 +26,34 @@ the chain and must land before `projects-bind-not-copy`.
       tenth directory is `fbc-platform`'s husky. `cparx` carries none.
       The earlier figures — nine repositories, sizes 883/1201/2270/5844, "no
       husky, no `pre-push`, no `commit-msg`" — were wrong in every clause
+- [x] 0.3a **Classify the nine, because they are not nine candidates.**
+      Re-measured 2026-08-07 resolving each hooks directory rather than assuming
+      `.git/hooks`. 0.3 counted the copies correctly and never asked what they
+      were:
+
+      | Repository | Bytes | Disposition |
+      |---|---|---|
+      | `agenticapps-workflow-core` | 1376 | core itself — local binding, 3.3/3.5 |
+      | `claude-workflow` | 1201 | archived, deleted wholesale by Phase 5b |
+      | `codex-workflow` | 5844 | archived, deleted wholesale by Phase 5b |
+      | `opencode-workflow` | 2270 | archived, deleted wholesale by Phase 5b |
+      | `agenticapps-dashboard` | 5844 | retired 2026-08-05 |
+      | `agenticapps-roadmap` | 1201 | **live — migration set** |
+      | `agents-task-viewer` | 1201 | **live — migration set** |
+      | `callbot` | 1201 | **live — migration set** |
+      | `fx-signal-agent` | 1201 | **live — migration set** |
+
+      **The migration set is four.** The four exclusions follow the precedent
+      `fleet-carries-only-current` already set — "cleaning a repository
+      scheduled for deletion" is out of scope — and core is excluded because it
+      keeps a local binding by ADR-0028. `fbc-platform` carries husky, not the
+      gate.
+      Note the four byte-identical 1201-byte copies. That is what Decision 4's
+      category error looks like from the outside: `install.sh` wrote a hook into
+      whichever repository the shell was sitting in, so this population mixes
+      deliberate adoption with drive-by installs and nothing on disk separates
+      them. It is the evidence for Decision 5 refusing to translate the hook
+      into a marker unasked
 - [x] 0.4 Record the six repositories that set a local `core.hooksPath` and what
       each names, as the before-state for the sweep in section 3.
       **Done 2026-08-07.** Neither `--global` nor `--system` sets it, so there is
@@ -214,8 +242,18 @@ ran, so this change starts from an installer that writes no host configuration.
 
 ## 3. Retire the per-repository copies
 
-- [ ] 3.1 Remove the gate `pre-commit` from each of the repositories carrying
-      one, having confirmed the global binding is live first
+- [ ] 3.1 Remove the gate `pre-commit` from each repository in the **migration
+      set**, and only after that repository is enrolled and the global binding
+      is verified to govern it by resolving its hooks directory.
+      **Rewritten 2026-08-07 by Decision 5** — it previously read "remove from
+      each of the repositories carrying one, having confirmed the global binding
+      is live first", which composed with the enrolment predicate to take every
+      repository gated today from gated to silently ungated. "The binding is
+      live" is a fact about the machine; "the binding governs this repository"
+      is a fact about the repository, and a local `core.hooksPath` makes them
+      different facts in five repositories today.
+      **The migration set is four, not nine** — see the corrected population in
+      0.3a. Archived and retired checkouts are excluded and reported as excluded
 - [x] 3.2 `tools/install-core-git-hooks.sh` — **superseded. Decided 2026-08-07,
       recorded as design Decision 4.** It resolves its destination with
       `git rev-parse --git-path hooks` (line 54), which honors `core.hooksPath`
@@ -463,15 +501,34 @@ tasks that had already been ticked, because each of those ticks was wrong:
 **Not fixed here, and each needs a decision rather than a patch.** Listed
 highest-consequence first:
 
-- [ ] 9.4 **Nothing enrols the repositories that are gated today.** Raised by
-      codex and opencode independently, and it is the largest hole in the
-      change. §3 removes the nine per-repository gate copies; the published hook
+- [x] 9.4 **Nothing enrols the repositories that are gated today.** Raised by
+      codex and opencode independently, and it was the largest hole in the
+      change. §3 removes the per-repository gate copies; the published hook
       exits 0 without the marker; 2.8b only covers `init-project.sh` for *future*
-      projects. So the repositories the floor exists for go from gated to
-      **silently ungated at install time** — the exact failure this change
-      claims to eliminate. Needs a requirement that the sweep enrols each
-      repository carrying a gate copy, or refuses to remove its hook, with
-      ordering and rollback stated
+      projects. Composed, those three took every repository gated today from
+      gated to **silently ungated at install time**.
+      **Decided 2026-08-07 as design Decision 5**, with a normative requirement
+      — "No repository is left with neither surface" — and five scenarios, so it
+      survives archival rather than living only in prose. The migration enrols
+      first, verifies the binding governs the repository by **resolving its
+      hooks directory** rather than inferring from global config, and only then
+      removes the local hook; anything failing leaves the hook in place and is
+      reported. Rejected translating the existing hook into a marker unasked:
+      `install.sh` wrote hooks into whichever repository the shell was sitting
+      in, so the population mixes deliberate adoption with drive-by installs and
+      nothing on disk separates them.
+      Two corrections fell out of it: **the migration set is four, not nine**
+      (0.3a), and 3.1's "having confirmed the global binding is live" was the
+      wrong predicate — that is a fact about the machine, and what matters is a
+      fact about the repository
+- [ ] 9.4a Implement it: fold the migration report into 2.9's preflight rather
+      than building a second acceptance. What the binding will newly govern,
+      what publishing will replace (2.1a) and what will be enrolled are one
+      report and one acceptance, not three that have to agree
+- [ ] 9.4b The interruption scenario needs a test that actually interrupts —
+      kill the migration between two repositories and assert the invariant holds
+      across the boundary, rather than asserting each repository in isolation
+      and calling the composition proven
 - [ ] 9.5 **The unwind requirement contradicts its own ordering.** "Publish
       before bind" plus "SHALL unset a binding it created if publishing did not
       complete" — if publishing precedes binding and publishing fails, there is

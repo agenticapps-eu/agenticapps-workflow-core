@@ -301,6 +301,109 @@ a side effect, and `core-self-enforcement` now *requires* core to carry a local
 have one; it does not say who creates it. That is a real gap this decision
 opens, and it is recorded as task 3.5 rather than assumed to resolve itself.
 
+## Decision 5 — the migration enrols before it removes, and never the reverse
+
+Raised as 9.4 by codex and opencode independently in the second review round,
+and it was the largest hole in the change. §3 removes the per-repository gate
+copies. The published hook exits 0 without `agenticapps.workflow.enrolled`.
+2.8b enrols only *future* projects, through `init-project.sh`. Composed, those
+three take every repository that is gated **today** from gated to **silently
+ungated at install time** — which is the precise failure this change was written
+to eliminate.
+
+### The population was wrong, and that changes the size of the problem
+
+Re-measured 2026-08-07 by resolving each repository's hooks directory rather
+than assuming `.git/hooks`. Nine repositories carry a gate `pre-commit`, and
+they are not nine migration candidates:
+
+| Repository | Bytes | Disposition |
+|---|---|---|
+| `agenticapps-workflow-core` | 1376 | core itself — keeps a **local** binding, tasks 3.3/3.5 |
+| `claude-workflow` | 1201 | archived checkout, deleted wholesale by Phase 5b |
+| `codex-workflow` | 5844 | archived checkout, deleted wholesale by Phase 5b |
+| `opencode-workflow` | 2270 | archived checkout, deleted wholesale by Phase 5b |
+| `agenticapps-dashboard` | 5844 | retired 2026-08-05 |
+| `agenticapps-roadmap` | 1201 | **live** |
+| `agents-task-viewer` | 1201 | **live** |
+| `callbot` | 1201 | **live** |
+| `fx-signal-agent` | 1201 | **live** |
+
+`fbc-platform` carries husky, not the gate, and is the one genuine opt-out.
+
+**The live migration set is four repositories.** The four excluded are excluded
+on a precedent this fleet already set: `fleet-carries-only-current` holds that
+"cleaning a repository scheduled for deletion" is out of scope. Enrolling a
+checkout that Phase 5b deletes is work whose only product is a config key in a
+directory that will not exist.
+
+### The existing hook is evidence of enrolment, and is not enrolment
+
+The tempting reading is that a repository carrying the gate has already opted
+in, so the migration should simply translate the old representation of
+enrolment — a file on disk — into the new one — a config key — and ask nobody.
+
+**That reading is unsafe, and Decision 4 is why.** `install.sh` called
+`install-core-git-hooks.sh` on *every* run, and that call wrote a `pre-commit`
+into whichever repository the operator's shell happened to be sitting in. This
+population is that category error's residue. Some of these nine were enrolled
+deliberately and some were enrolled by standing in the wrong directory, and
+**nothing on disk distinguishes them** — note that four of the live and
+near-live repositories carry byte-identical 1201-byte copies, which is what a
+run of drive-by installs looks like.
+
+So carrying a hook is good evidence for *proposing* enrolment and is not itself
+the act. Translating it silently would enshrine the accidents as policy, and do
+it at the exact moment the change is claiming to make enrolment deliberate.
+
+### The decision
+
+The migration proposes, the operator accepts once, and removal is conditional:
+
+1. The preflight names every repository carrying a gate copy, classified, with
+   what will happen to each. This is the **same report** as task 2.9's — what
+   the binding will newly govern, what publishing will replace (2.1a) and what
+   will be enrolled belong in one acceptance, not three.
+2. On acceptance, per repository, in this order: enrol → **verify the global
+   binding actually governs it, by resolving its hooks directory rather than by
+   inference** → then remove the local hook.
+3. **A repository that is not enrolled does not have its hook removed.** Any
+   step failing leaves the hook in place and is reported.
+
+The invariant, stated so it can be tested rather than hoped for: **no repository
+ends the migration with neither surface.** After it, each is enrolled and
+governed by the floor, or still carrying its own hook, or explicitly declined
+and reported. Never hook-removed-and-unenrolled.
+
+The ordering is not cosmetic. Removing first and enrolling second leaves a
+window where the repository has no gate at all, and a migration interrupted in
+that window — a laptop closed, a terminal killed — leaves it there permanently
+with nothing reporting it. Enrol-first's worst interruption leaves a repository
+enrolled with a redundant local hook, which is the state it is already in today.
+
+### Alternatives considered
+
+**B. Two separate acts — the sweep removes only from already-enrolled
+repositories.** Rejected, though it satisfies the invariant. It is the same
+guarantee reached by leaving the operator four manual steps and a half-migrated
+machine, and a migration that requires remembering is one that stops halfway.
+
+**C. Translate the hook into a marker with no acceptance.** Rejected above: it
+cannot tell a deliberate enrolment from a drive-by install, and it manufactures
+consent at the moment the change is asserting consent is required.
+
+**D. Leave the per-repository copies in place.** Rejected, and already rejected
+in the risk table for a reason unchanged by this: with `core.hooksPath` set the
+copies are inert, and an executable hook on disk that never runs is read by the
+next person as the one that does.
+
+### What this costs
+
+The preflight grows a third thing to report and the sweep gains an ordering
+constraint with a per-repository failure path. Both are real work, and both were
+already implied by 2.9 and 3b.5 — this decision names them as one act rather
+than three that have to agree with each other.
+
 ## The question this change refuses to answer by implication
 
 `host-neutral-instruction-files` requires a project's `AGENTS.md` to carry

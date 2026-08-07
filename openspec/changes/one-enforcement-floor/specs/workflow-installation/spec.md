@@ -184,6 +184,69 @@ absent. Without that report this predicate is a drifting list under another name
 - **AND** SHALL NOT report the machine's global binding as governing it
 - **AND** the installer neither prevents nor repairs this
 
+### Requirement: No repository is left with neither surface
+
+A repository carrying a per-repository gate hook SHALL NOT have that hook
+removed unless it is enrolled **and** the global binding has been verified to
+govern it. Enrolment SHALL precede removal, and the verification SHALL resolve
+the repository's hooks directory rather than infer coverage from the global
+configuration.
+
+Composed carelessly, three of this change's own parts destroy the floor they
+build: the sweep removes the per-repository copies, the published hook exits 0
+without `agenticapps.workflow.enrolled`, and enrolment is only wired for *new*
+projects. Every repository gated today would end the migration silently
+ungated — the exact failure this change exists to eliminate.
+
+Ordering is load-bearing rather than cosmetic. Removing first leaves a window in
+which the repository has no gate at all, and a migration interrupted inside that
+window leaves it there permanently with nothing reporting it. Enrolling first
+has a worst case of a repository enrolled while still carrying a redundant local
+hook, which is the state every one of them is in today.
+
+Carrying a gate hook is evidence for **proposing** enrolment and is not
+enrolment. The installer wrote a `pre-commit` into whichever repository the
+operator's shell was sitting in, so this population mixes deliberate adoption
+with drive-by installs and nothing on disk separates them. A migration that
+translated the hook into a marker unasked would enshrine the accidents as
+policy, at the moment this change is asserting that enrolment is an act.
+
+#### Scenario: A gated repository is migrated
+
+- **WHEN** the migration processes a repository carrying a gate hook and the
+  operator has accepted
+- **THEN** it is enrolled first
+- **AND** the global binding is confirmed to govern it by resolving its hooks
+  directory
+- **AND** only then is the local hook removed
+
+#### Scenario: Enrolment fails
+
+- **WHEN** a repository cannot be enrolled
+- **THEN** its local hook SHALL remain in place
+- **AND** the repository is reported as not migrated
+
+#### Scenario: The global binding does not reach the repository
+
+- **WHEN** a repository is enrolled but resolving its hooks directory shows the
+  global binding does not govern it
+- **THEN** its local hook SHALL remain in place
+- **AND** the repository is reported, naming the binding that displaced it
+
+#### Scenario: The migration is interrupted
+
+- **WHEN** the migration is interrupted partway through the set
+- **THEN** every repository already processed is enrolled and governed
+- **AND** every repository not yet processed still carries its own hook
+- **AND** no repository is enrolled-and-unremoved in a way that gates twice, nor
+  removed-and-unenrolled in a way that gates not at all
+
+#### Scenario: A repository scheduled for deletion is not migrated
+
+- **WHEN** a repository carrying a gate hook is an archived or retired checkout
+- **THEN** it is excluded from the migration set and reported as excluded
+- **AND** its hook is left alone rather than removed
+
 ### Requirement: A local binding that is redundant is swept; one that is real is kept
 
 Git resolves a local `core.hooksPath` in preference to the global one, so a
