@@ -170,6 +170,59 @@ else
   ok "an enrolled repository is gated and the failure propagates"
 fi
 
+# --- the marker must be LOCAL ----------------------------------------------
+# Raised independently by codex and opencode, and reproduced before it was
+# written up: `git config --get` resolves across system, global AND local, so a
+# single `git config --global agenticapps.workflow.enrolled true` — an operator
+# slip, or a tool defaulting it — enrols every repository on the machine and
+# voids the scope predicate entirely. The predicate exists to fix the measured
+# defect where a stray `openspec/` tree blocked commits in repositories that
+# never opted in; read at global scope it reintroduces exactly that, machine
+# wide, which is strictly worse than the defect it was built to remove.
+setup_case; assert_isolated
+git config --global agenticapps.workflow.enrolled true
+echo 1 > "$CASE/gate-rc"   # the gate would block if it were consulted
+stage_code
+rc=$(run_hook)
+if [ "$rc" != 0 ]; then
+  bad "a global marker does not enrol a repository" "exit was $rc"
+elif traced "gate ran"; then
+  bad "a global marker does not enrol a repository" \
+      "the gate ran — the predicate is reading global scope, so ONE key enrols the machine"
+else
+  ok "a marker set only in global config does not enrol a repository"
+fi
+
+# --- the marker's VALUE decides, not its presence ---------------------------
+# `git config --get` exits 0 for any value, so `false` enrolled. An operator who
+# writes `false` has stated the opposite of enrolment and is entitled to have it
+# mean that; a key whose value is ignored is not an opt-in, it is a tripwire.
+setup_case; assert_isolated
+git -C "$REPO" config "$ENROL_KEY" false
+echo 1 > "$CASE/gate-rc"
+stage_code
+rc=$(run_hook)
+if [ "$rc" != 0 ]; then
+  bad "a marker set to false does not enrol" "exit was $rc"
+elif traced "gate ran"; then
+  bad "a marker set to false does not enrol" "the gate ran — the value is being ignored"
+else
+  ok "a marker whose value is false does not enrol"
+fi
+
+# --- a garbage value is not enrolment either --------------------------------
+setup_case; assert_isolated
+git -C "$REPO" config "$ENROL_KEY" "banana"
+echo 1 > "$CASE/gate-rc"
+stage_code
+rc=$(run_hook)
+if [ "$rc" != 0 ] || traced "gate ran"; then
+  bad "a malformed marker value does not enrol" \
+      "exit was $rc, gate ran=$(traced 'gate ran' && echo yes || echo no)"
+else
+  ok "a marker whose value is not a boolean true does not enrol"
+fi
+
 echo
 echo "global-floor dispatcher — gate dispatch (tasks 2.5)"
 
@@ -310,6 +363,57 @@ if [ "$rc" != 0 ]; then
   bad "an absent hooks.d is not an error" "exit was $rc: $(cat "$CASE/out")"
 else
   ok "an absent hooks.d is not an error"
+fi
+
+# --- an entry linking outside hooks.d is refused ----------------------------
+# THE PROHIBITION IN 2.7 WAS TRIVIALLY DEFEATED, and this suite did not notice.
+# The dispatcher checks whether hooks.d ITSELF is a symlink and never resolves
+# its ENTRIES, so one symlink from hooks.d into a clone re-enabled exactly the
+# repository-controlled execution 2.7 forbids — while every other case here
+# still passed. Demonstrated end to end before this was written: the linked
+# script ran and the hook exited 0.
+#
+# The comparison is against the CANONICAL target, not the link text. A relative
+# link (`../../../repo/evil.sh`) lands outside just as surely as an absolute
+# one, and comparing the string would pass it.
+setup_case; assert_isolated
+enrol; mkdir -p "$HOOKDIR/hooks.d"
+printf '#!/usr/bin/env bash\necho "outside ran" >> "%s"\nexit 0\n' "$TRACE" > "$REPO/evil.sh"
+chmod +x "$REPO/evil.sh"
+ln -s "$REPO/evil.sh" "$HOOKDIR/hooks.d/10-innocuous"
+stage_code
+rc=$(run_hook)
+if traced "outside ran"; then
+  bad "a hooks.d entry linking outside the directory is not executed" \
+      "the linked script RAN — 2.7's prohibition is defeated by one symlink"
+elif [ "$rc" = 0 ]; then
+  bad "a hooks.d entry linking outside the directory is refused" \
+      "it was not executed, but the hook exited 0 rather than refusing"
+elif ! grep -q "evil.sh" "$CASE/out" 2>/dev/null; then
+  bad "the refusal names the target" "output: $(cat "$CASE/out")"
+else
+  ok "a hooks.d entry linking outside the directory is refused, naming the target"
+fi
+
+# --- a link that stays inside hooks.d is fine -------------------------------
+# The refusal is about leaving the directory, not about symlinks. An operator
+# who keeps hooks under version control and links them into place within
+# hooks.d has not escaped anything, and refusing that would push them toward
+# copies that silently drift instead.
+setup_case; assert_isolated
+enrol; mkdir -p "$HOOKDIR/hooks.d"
+printf '#!/usr/bin/env bash\necho "inside ran" >> "%s"\nexit 0\n' "$TRACE" \
+  > "$HOOKDIR/hooks.d/.real-hook"
+chmod +x "$HOOKDIR/hooks.d/.real-hook"
+ln -s "$HOOKDIR/hooks.d/.real-hook" "$HOOKDIR/hooks.d/10-linked"
+stage_code
+rc=$(run_hook)
+if [ "$rc" != 0 ]; then
+  bad "a hooks.d entry linking within the directory still runs" "exit was $rc: $(cat "$CASE/out")"
+elif ! traced "inside ran"; then
+  bad "a hooks.d entry linking within the directory still runs" "it did not run"
+else
+  ok "a hooks.d entry whose target stays inside hooks.d still runs"
 fi
 
 echo

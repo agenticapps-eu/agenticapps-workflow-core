@@ -425,3 +425,98 @@ resolve anyway, so unsetting them changes nothing today and restores reach.
       change that gets archived
 - [ ] 8.5 Update `docs/HOW-IT-FITS-TOGETHER.md` — its hooks section and its open
       questions both become wrong the moment this lands
+
+## 9. From the second plan-review round (2026-08-07)
+
+`REVIEWS.md` round two: gemini APPROVE, codex REQUEST-CHANGES ×7, opencode
+REQUEST-CHANGES ×8. **opencode completed this time** — the 180s default was the
+whole reason it timed out last round; 420s was enough, so the standing "raise
+`REVIEW_TIMEOUT` for a third opinion" question is closed and three vendors are
+now on the record.
+
+Three findings were **verified empirically and fixed in the same session**, all
+three in the guards this change exists to be. They are recorded against the
+tasks that had already been ticked, because each of those ticks was wrong:
+
+- [x] 9.1 **2.8a's predicate read the wrong scope, and ignored the value.**
+      `git config --get` resolves across system, global and local, so one
+      `git config --global agenticapps.workflow.enrolled true` enrolled every
+      repository on the machine — the measured defect the predicate was built to
+      remove, reintroduced machine-wide by the predicate itself. It also exits 0
+      for any value, so `false` enrolled. Both reproduced in a sandbox before
+      being written up. Now `--local --type=bool` with an explicit comparison,
+      three new cases. Raised independently by codex and opencode
+- [x] 9.2 **2.7's prohibition was defeated by a single symlink, and the suite
+      did not notice.** The dispatcher checked whether `hooks.d` *itself* was a
+      symlink and never resolved its *entries*, so a link from `hooks.d` into a
+      clone re-enabled repository-controlled execution at commit time while
+      every other case in the suite still passed. Demonstrated end to end — the
+      linked script ran, the hook exited 0 — then fixed and re-run against the
+      same fixture. Entries now resolve canonically, on the target rather than
+      the link text, and must land inside `hooks.d`. Task 2.7 was marked done
+      last session "with two negative tests"; the spec had required this all
+      along and said exactly why. `global-floor-version` 1.0.0 → 1.1.0
+- [x] 9.3 A link whose target stays *inside* `hooks.d` still runs, asserted as a
+      regression guard so 9.2's fix does not push operators toward copies that
+      silently drift
+
+**Not fixed here, and each needs a decision rather than a patch.** Listed
+highest-consequence first:
+
+- [ ] 9.4 **Nothing enrols the repositories that are gated today.** Raised by
+      codex and opencode independently, and it is the largest hole in the
+      change. §3 removes the nine per-repository gate copies; the published hook
+      exits 0 without the marker; 2.8b only covers `init-project.sh` for *future*
+      projects. So the repositories the floor exists for go from gated to
+      **silently ungated at install time** — the exact failure this change
+      claims to eliminate. Needs a requirement that the sweep enrols each
+      repository carrying a gate copy, or refuses to remove its hook, with
+      ordering and rollback stated
+- [ ] 9.5 **The unwind requirement contradicts its own ordering.** "Publish
+      before bind" plus "SHALL unset a binding it created if publishing did not
+      complete" — if publishing precedes binding and publishing fails, there is
+      no binding to unwind. Confirmed while implementing 2.1: the branch is
+      unreachable and the code has no unwind because none is possible. Either
+      delete the clause or give it the post-bind failure it was written for
+- [ ] 9.6 **Binding activates every hook type in the published directory, not
+      just `pre-commit`.** codex, MEDIUM/SECURITY, and it generalises 2.1a:
+      ownership and permissions establish who wrote a file, never that the
+      operator intended it to run fleet-wide. `~/.agenticapps/git-hooks/` on
+      this machine already holds a file nobody bound. Inventory and require
+      consent, or refuse unexpected entries before binding
+- [ ] 9.7 **The enrolment predicate and `hooks.d` have no stated ordering.** The
+      hook exits 0 before the gate when unenrolled, so an operator's
+      machine-level hooks never run in unenrolled repositories. Both readings
+      are defensible; the spec picks neither. opencode
+- [ ] 9.8 **"Identical in enforcement" is false for repositories without CI.**
+      The design says CI "does not run on most of these repositories", which
+      leaves one surface that `--no-verify` bypasses, where the removed
+      PreToolUse hook gated edits regardless of commit flags. The design counts
+      the latency loss and never counts the bypass-path loss. opencode
+- [ ] 9.9 **The budget claim is forward-looking and only partly measured.**
+      opencode is right that the sweep, the exemption key and the effective-
+      binding `--check` are unwritten behaviour that no pre-implementation
+      measurement can cover — and wrong about the one part now measurable: the
+      Decision 4 swap landed 217 → 217, measured against a `-le 217` assertion.
+      Show the arithmetic for what remains, or invoke the escape clause now
+- [ ] 9.10 **Repository discovery is undefined** for both the sweep and
+      `--check`'s "names any repository the floor cannot reach". Same finding as
+      3b.5, raised again independently — worth promoting out of a sub-task
+- [ ] 9.11 **The `core-self-enforcement` contradiction.** codex HIGH: the design
+      removes the host `PreToolUse` hook while the unchanged durable requirement
+      still mandates it. Either carry a core-only exception explicitly or amend
+      every affected requirement and scenario
+- [ ] 9.12 **`--project`'s removal is not normative** — stated in proposal,
+      design and an open task, but no scenario requires rejection without
+      writes, so it does not survive archival and cannot be tested. codex
+- [ ] 9.13 **3.5's gap is live, and it collides with the sweep.** Measured
+      2026-08-07 after `9b322fc`: core has **no** local `core.hooksPath` and
+      resolves the default `.git/hooks`, so the moment the global binding exists
+      git prefers the published directory and core's own hook stops running
+      silently — the inversion ADR-0028 forbids. There is nothing to preserve,
+      only something to create. Worse, core's `<common-dir>/hooks` **is**
+      `.git/hooks`, so the only value core's binding can take is exactly the
+      value 3b.2's predicate classifies as redundant: **the sweep would unset
+      the binding 3.5 exists to establish.** 3.4 anticipates this as "declare
+      core's binding", which is now load-bearing rather than tidy. codex raised
+      the establisher half; the collision is new

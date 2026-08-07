@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
 # pre-commit — the machine-level enforcement floor (spec §18).
 #
-# global-floor-version: 1.0.0
+# global-floor-version: 1.1.0
+#
+#   1.1.0 — two defects the first plan-review round found, both reproduced
+#           before being written up, both in the guards this file exists to be:
+#           * the enrolment predicate read system and global scope, so ONE
+#             `git config --global agenticapps.workflow.enrolled true` enrolled
+#             every repository on the machine — the measured defect the
+#             predicate was built to remove, reintroduced machine-wide by the
+#             predicate. Now `--local`.
+#           * it also ignored the value, so `false` enrolled. Now `--type=bool`
+#             and an explicit comparison.
+#           * a hooks.d entry that is a symlink out of the directory was
+#             executed, which defeated the repository-controlled-code
+#             prohibition below with a single link while every other guard here
+#             still read as satisfied. Entries now resolve canonically and must
+#             land inside hooks.d.
 #
 # VERSION MARKER — read by the installer before writing this file to the
 # published hooks directory. Installers MUST refuse to overwrite a higher
@@ -49,7 +64,22 @@ say() { printf 'global-floor: %s\n' "$*" >&2; }
 #
 # Silent on the way out, deliberately: this hook runs in unrelated repositories
 # all day and has nothing to say to them.
-git config --get agenticapps.workflow.enrolled >/dev/null 2>&1 || exit 0
+#
+# `--local` AND `--type=bool`, both load-bearing, both added after two reviewers
+# raised them independently and both reproduced before being written up:
+#
+#   - a bare `git config --get` resolves across system, global and local, so one
+#     `git config --global agenticapps.workflow.enrolled true` — an operator
+#     slip, or a tool defaulting it — enrolled EVERY repository on the machine.
+#     That is the measured defect this predicate exists to remove, reintroduced
+#     machine-wide by the predicate itself.
+#   - `--get` exits 0 for any value, so `false` enrolled. An operator who writes
+#     `false` has said the opposite of enrolment and is entitled to have it mean
+#     that. A key whose value is ignored is not an opt-in, it is a tripwire.
+#
+# `--type=bool` normalises git's boolean spellings (yes/on/1) and yields nothing
+# for a malformed value, which the comparison then declines.
+[ "$(git config --local --type=bool --get agenticapps.workflow.enrolled 2>/dev/null)" = true ] || exit 0
 
 # ── hooks.d ownership ──────────────────────────────────────────────────────
 # Checked BEFORE any entry runs, and about the DIRECTORY rather than its
@@ -109,12 +139,51 @@ fi
 #
 # A repository that needs its own hooks has git's local `core.hooksPath`, which
 # is the supported answer and costs nothing to support.
+# Resolve $1 through any symlinks and print the physical directory holding it.
+# Bounded, because a symlink cycle here would hang every commit on the machine.
+# `readlink` without -f: BSD readlink only gained it recently and this file
+# cannot assume the operator's macOS is new enough.
+resolved_dir_of() {
+  local p="$1" t n=0
+  while [ -h "$p" ] && [ "$n" -lt 16 ]; do
+    t="$(readlink "$p")"
+    case "$t" in
+      /*) p="$t" ;;
+      *)  p="$(dirname "$p")/$t" ;;
+    esac
+    n=$((n + 1))
+  done
+  [ -h "$p" ] && return 1          # still a link after 16 hops: a cycle
+  (cd "$(dirname "$p")" 2>/dev/null && pwd -P)
+}
+
 if [ -d "$HOOKS_D" ]; then
+  HOOKS_D_P="$(cd "$HOOKS_D" && pwd -P)"
   for entry in "$HOOKS_D"/*; do
     # Debris — READMEs, .disabled files, directories, a non-executable draft —
     # is skipped rather than run. `-f` and `-x` together, so a directory whose
     # bit happens to be set is not executed.
     [ -f "$entry" ] && [ -x "$entry" ] || continue
+
+    # AN ENTRY MUST RESOLVE INSIDE hooks.d. Without this the prohibition in the
+    # header is defeated by one symlink: a link from here into a clone re-enables
+    # repository-controlled execution at commit time while every other guard in
+    # this file still reads as satisfied. Demonstrated end to end before it was
+    # fixed — the linked script ran and the hook exited 0.
+    #
+    # Compared on the CANONICAL target, never the link text. A relative link
+    # (`../../../repo/evil.sh`) leaves the directory just as surely as an
+    # absolute one, and comparing strings would wave it through.
+    if [ -h "$entry" ]; then
+      entry_dir="$(resolved_dir_of "$entry")"
+      if [ -z "$entry_dir" ] || [ "$entry_dir" != "$HOOKS_D_P" ]; then
+        say "REFUSED — $entry resolves to ${entry_dir:-an unresolvable target}/$(basename "$(readlink "$entry")"),"
+        say "which is outside $HOOKS_D. Composition entries must live in the"
+        say "directory you own; a link out of it runs code you did not put there."
+        exit 1
+      fi
+    fi
+
     "$entry"
     rc=$?
     if [ "$rc" -ne 0 ]; then
