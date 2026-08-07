@@ -3,29 +3,66 @@
 The design rests on a claim about loader precedence that has not been observed
 for this pair on this machine. Nothing below runs until it has been.
 
-- [ ] 1.1 Establish which `agentic-apps-workflow` a session in one of the eight
+**Measured 2026-08-07. Evidence in `MEASUREMENT.md`, which is the record this
+section demanded — read it before acting on any conclusion restated here.**
+
+- [x] 1.1 Establish which `agentic-apps-workflow` a session in one of the **seven**
       repositories actually loads — the project copy or the host binding. Record
-      the evidence, not the conclusion
+      the evidence, not the conclusion.
+      **Result: it depends on the host, and on opencode it is not stable.**
+      *Corrected: seven repositories, not eight. `FLEET` names seven and core
+      carries no copy. The eighth is the same worktree-shaped miscount that
+      produced "seven bind `normalize-claude-md`" when the answer was six.*
 - [ ] 1.2 If the host binding wins, stop and re-open the proposal: the copies are
       inert, the argument for removing them survives and the urgency does not,
-      and a change written on the other premise should not be executed on this one
-- [ ] 1.3 Read `fbc-platform`'s copy against the three byte-identical v3.2.0
+      and a change written on the other premise should not be executed on this one.
+      **Fires partly.** On Claude (4 of 4 repositories) and codex the binding
+      wins and the copies are inert, so the urgency does not survive there. On
+      opencode the project copy wins in some sessions and loses in others — so
+      on one of three bound hosts the copies are live. The proposal is re-opened
+      on that basis, not closed; see 1.7
+- [x] 1.3 Read `fbc-platform`'s copy against the **five** byte-identical v3.2.0
       siblings and record what differs. A local edit someone made on purpose is
-      not a duplicate to collapse
-- [ ] 1.4 Confirm each of the eight repositories is otherwise clean: no second
+      not a duplicate to collapse.
+      *Corrected twice: **five** siblings share `d95f20c0…` (roadmap,
+      agents-task-viewer, callbot, cparx, fx-signal-agent), not three. And
+      fbc-platform is **not** the only outlier — `agenticapps-dashboard` carries
+      a third variant at 331 lines, matching the size global `CLAUDE.md`
+      attributes to the archived `claude-workflow/skill`. A task that names one
+      outlier would have swept the other without looking at it.*
+- [ ] 1.4 Confirm each of the **seven** repositories is otherwise clean: no second
       copy under another name, and no `skills/` entry of core's shadowed by a
-      differently-named directory
-- [ ] 1.5 **pi reads `~/.pi/agent/skills`, which the installer does not bind.**
-      It holds **26** skills symlinked to `~/.agents/skills/` — not empty, which
-      an earlier revision claimed on the handoff's unverified word. Only
+      differently-named directory.
+      *Partly done: four repositories carry a stale `SKILL.md.pre-0034` beside
+      the live file — roadmap, agents-task-viewer, callbot, fx-signal-agent.
+      The rest of this check is still outstanding*
+- [x] 1.5 **pi reads `~/.pi/agent/skills`, which the installer does not bind.**
+      It holds **25** skills symlinked to `~/.agents/skills/`, and
       `agentic-apps-workflow` is absent. **Decided:** this capability is scoped
       to hosts whose skill directory the installer binds, so pi is out of scope
-      until binding it lands as a `workflow-installation` change. Record that a
-      pi session in a swept repository will resolve no workflow skill
-- [ ] 1.6 **Measure precedence per host, not once.** Task 1.1 validates one
+      until binding it lands as a `workflow-installation` change.
+      *Corrected: the regression this task told us to record does not exist. No
+      fleet repository has a copy in `.pi/skills` either — those directories hold
+      the same six `openspec-*` skills. A pi session resolves no workflow skill
+      **today**, before any sweep, so the sweep takes nothing from pi. The
+      earlier framing charged this change for a gap it does not cause*
+- [x] 1.6 **Measure precedence per host, not once.** Task 1.1 validates one
       loader; the requirement's scenarios are host-parametric and pi already
-      proves the hosts differ. Either measure on each host whose directory is
-      bound, or state which hosts the claim covers
+      proves the hosts differ.
+      **Done, and the hosts do differ.** Claude: binding wins, stable. Codex:
+      binding wins, uncontested — no fleet repository has a `.codex` copy at all.
+      opencode: see 1.7. pi: unbound, nothing competes
+- [ ] 1.7 **On opencode the winner is a race, and this replaces the argument the
+      proposal makes.** opencode reads four directories carrying the name — the
+      three global symlinks plus the project's own `.claude/skills` — and its
+      logs show each collision replacing the last, so the directory scanned last
+      wins. The scan order differed in all six repositories captured, and three
+      consecutive runs in `cparx` loaded v3.2.0, v4.0.0, v3.2.0.
+      Rewrite the proposal's case around this: a copy that reliably loses is
+      untidy, but a copy that wins in half of sessions means the fleet runs two
+      workflow versions non-deterministically with no way to tell which from
+      inside the session. Deleting the copies collapses every ordering to v4.0.0,
+      which is what makes it a fix rather than a reshuffle
 
 ## 2. RED: the check, before the sweep
 
