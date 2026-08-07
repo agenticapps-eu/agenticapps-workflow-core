@@ -83,9 +83,10 @@ different sizes, and no surface named the divergence.
 - **AND** `core.hooksPath` in global git configuration resolves to that
   directory
 
-#### Scenario: Every repository is covered without being visited
+#### Scenario: A repository without a local override is covered without being visited
 
-- **WHEN** a repository on a bound machine runs `git commit`
+- **WHEN** a repository with no local `core.hooksPath` on a bound machine runs
+  `git commit`
 - **THEN** the published gate runs
 - **AND** the repository required no installation step of its own
 
@@ -93,7 +94,37 @@ different sizes, and no surface named the divergence.
 
 - **WHEN** a repository sets its own `core.hooksPath` in local configuration
 - **THEN** the local setting governs that repository
+- **AND** the global binding SHALL NOT reach it
 - **AND** the installer neither prevents nor repairs this
+
+### Requirement: A local binding that is redundant is swept; one that is real is kept
+
+Git resolves a local `core.hooksPath` in preference to the global one, so a
+repository carrying either is outside the floor. The installer SHALL distinguish
+the two cases rather than treat every local binding as an opt-out.
+
+A local binding that names the directory git would resolve anyway grants no
+behaviour — unsetting it changes nothing except restoring the floor's reach, and
+that is what makes the sweep safe. A local binding that names anything else is a
+deliberate act and SHALL be left alone and reported.
+
+This is not hypothetical tidying. Six repositories on the machine this was
+measured on set a local `core.hooksPath`; five name their own default directory,
+and one names a husky installation. The floor as originally specified would have
+reached none of them, and nothing would have said so.
+
+#### Scenario: A redundant local binding is swept
+
+- **WHEN** a repository's local `core.hooksPath` names the directory git would
+  resolve without it
+- **THEN** the installer unsets it, having confirmed the equivalence first
+- **AND** the repository is governed by the global binding afterwards
+
+#### Scenario: A real local binding is preserved
+
+- **WHEN** a repository's local `core.hooksPath` names any other directory
+- **THEN** the installer SHALL NOT unset it
+- **AND** SHALL report the repository as outside the floor by its own choice
 
 ### Requirement: A foreign global hooks binding is reported, never overwritten
 
@@ -121,18 +152,40 @@ level up.
 
 ### Requirement: The published hook composes rather than monopolises
 
-The published `pre-commit` SHALL dispatch to the gate and SHALL NOT assume it is
-the only work a machine wants done before a commit.
+The published `pre-commit` SHALL dispatch to the gate and then to an
+operator-owned, machine-level `hooks.d` directory alongside the published
+directory, running each entry and failing the commit on the first non-zero exit.
+
+It SHALL NOT execute anything resolved from inside a repository — not
+`.git/hooks/`, not a tracked path, not a fallback gate at a repository-relative
+location. A hook bound machine-wide that falls back to repository-controlled
+code makes the contents of every clone executable at commit time, which is the
+property `core.hooksPath` exists to remove. Composition is for the operator,
+who is the party that wanted it; a repository that needs its own hooks has
+git's local override, which is the supported answer.
 
 `core.hooksPath` replaces the hooks directory rather than adding to it, so a
-repository that later adopts another hook manager finds its hooks silently not
-running. The set displaced was empty when measured, and a design that is correct
-only while that stays true is a design with an expiry date nobody wrote down.
+repository that adopts another hook manager leaves the floor. That is not a
+future hazard — `fbc-platform` runs husky today and is outside the floor for
+exactly this reason, correctly and by its own local binding.
 
 #### Scenario: The published hook runs the gate
 
 - **WHEN** the published `pre-commit` runs
 - **THEN** it invokes the gate and propagates its exit status
+
+#### Scenario: The dispatcher composes with the operator's own hooks
+
+- **WHEN** the machine-level `hooks.d` directory contains executable entries
+- **THEN** the published hook runs each of them
+- **AND** a non-zero exit from any entry fails the commit
+
+#### Scenario: The dispatcher refuses repository-controlled code
+
+- **WHEN** a repository contains its own `pre-commit` or a repository-relative
+  gate
+- **THEN** the published hook SHALL NOT execute it
+- **AND** the refusal SHALL hold whether or not the shared gate is available
 
 #### Scenario: A repository has hooks the global directory does not carry
 
@@ -144,6 +197,13 @@ only while that stays true is a design with an expiry date nobody wrote down.
 `--check` SHALL report whether `core.hooksPath` is set, whether it resolves to
 the published directory, and whether the published `pre-commit` is current by
 content against the checkout.
+
+It SHALL report the **effective** binding for the repository it runs in, not the
+global one. A local `core.hooksPath` is preferred by git, so reporting the
+global binding as active is simply wrong wherever one is set — and one is set in
+six repositories today. A `--check` that says the floor is bound while the
+repository it ran in is outside the floor is worse than no report, because it is
+believed.
 
 Removing a surface makes it more important, not less, that an operator can see
 which surfaces remain. "The workflow got weaker" and "the workflow moved its
@@ -160,6 +220,19 @@ floor" are indistinguishable from the outside unless something says which.
 - **WHEN** `--check` runs where `core.hooksPath` is unset
 - **THEN** it reports the floor as not bound
 - **AND** it states what to run to bind it
+
+#### Scenario: The repository is outside the floor
+
+- **WHEN** `--check` runs in a repository with a local `core.hooksPath`
+- **THEN** it reports the effective binding rather than the global one
+- **AND** it states that the global floor does not govern this repository
+
+#### Scenario: The binding is dangling
+
+- **WHEN** `core.hooksPath` is set to a directory that does not exist
+- **THEN** `--check` reports the binding as dangling
+- **AND** it states that `git commit` fails in every repository the binding
+  governs until the directory is restored
 
 #### Scenario: The published hook has been hand-edited
 

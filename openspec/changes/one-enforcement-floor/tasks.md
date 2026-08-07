@@ -1,18 +1,29 @@
 # Tasks — one enforcement floor
 
-**Blocked until `core-installer-one-entry-point` is archived.** The requirements
-this change modifies do not exist in `openspec/specs/` until then.
+**No longer blocked.** `core-installer-one-entry-point` was archived on
+2026-08-06 and `workflow-installation` is durable truth. This change is first in
+the chain and must land before `projects-bind-not-copy`.
 
 ## 0. Prerequisites
 
-- [ ] 0.1 `core-installer-one-entry-point` is archived and `workflow-installation`
-      exists in `openspec/specs/`
+- [x] 0.1 `core-installer-one-entry-point` is archived and `workflow-installation`
+      exists in `openspec/specs/` — confirmed 2026-08-07
 - [ ] 0.2 Record the installer's executable line count before any edit. The
-      predecessor left it at 210 against a 217 budget, so this change has 7
-      lines of headroom and will almost certainly need a raise — the requirement
-      demands the growth be itemised, not pre-approved
-- [ ] 0.3 Record which repositories carry a `.git/hooks/pre-commit` and the byte
-      size of each, as the before-state evidence for the divergence claim
+      budget is 217 and the canonical counter in `tools/install.test.sh` reports
+      **212**, not the 210 an earlier revision claimed — so headroom is 5 lines,
+      not 7, and a raise is near certain. The requirement demands the growth be
+      itemised, not pre-approved
+- [x] 0.3 Record which repositories carry a `pre-commit` and the byte size of
+      each. **Done 2026-08-07**, resolving hooks directories with
+      `git rev-parse --path-format=absolute --git-path hooks` rather than
+      assuming `.git/hooks`: 11 repositories over 10 distinct hooks directories
+      (`agenticapps-dashboard-add-agent-board` is a linked worktree sharing the
+      dashboard's); nine are the gate at 1201, 1376, 2270 and 5844 bytes; the
+      tenth directory is `fbc-platform`'s husky. `cparx` carries none.
+      The earlier figures — nine repositories, sizes 883/1201/2270/5844, "no
+      husky, no `pre-push`, no `commit-msg`" — were wrong in every clause
+- [ ] 0.4 Record the six repositories that set a local `core.hooksPath` and what
+      each names, as the before-state for the sweep in section 3
 
 ## 1. Inherited, not done here
 
@@ -37,18 +48,51 @@ ran, so this change starts from an installer that writes no host configuration.
       a no-op and not as a fresh install
 - [ ] 2.5 The published hook dispatches to the gate and propagates its exit
       status
+- [ ] 2.6 The dispatcher composes with an operator-owned, machine-level
+      `hooks.d` alongside the published directory, running each entry and
+      failing the commit on the first non-zero exit
+- [ ] 2.7 The dispatcher SHALL NOT exec anything resolved from inside a
+      repository — not `.git/hooks/`, not a tracked path. A global hook that
+      falls back to repository-controlled code makes every clone executable at
+      commit time, which is the property `core.hooksPath` exists to remove.
+      Assert it as a negative test, not a convention
 
 ## 3. Retire the per-repository copies
 
 - [ ] 3.1 Remove the gate `pre-commit` from each of the repositories carrying
       one, having confirmed the global binding is live first
-- [ ] 3.2 `tools/install-core-git-hooks.sh` — decide by reading it whether it is
-      superseded or retargeted, and record which. It is a delegation target of
-      the current installer, so this is not a delete-on-sight
+- [ ] 3.2 `tools/install-core-git-hooks.sh` — superseded or retargeted, and
+      record which. **This is not open-ended: it resolves its destination with
+      `git rev-parse --git-path hooks` (line 54), which honors `core.hooksPath`
+      by its own header's admission (line 13).** Once the binding is global,
+      running it writes into the machine-level directory — either refusing
+      permanently because the published hook carries a foreign marker, or
+      colliding markers and publishing core's working-tree-resolving hook to
+      every repository on the machine. Both are defects; pick the retarget
 - [ ] 3.3 Core's own binding: ADR-0028 has core resolve its *working-tree* gate,
-      which a machine-level published hook does not preserve. Resolve
+      and `core-self-enforcement` says the shared install "SHALL NOT be
+      consulted" — which a machine-level published hook cannot satisfy. Resolve
       explicitly — an ADR if the inversion is being changed, a documented
-      local `core.hooksPath` override if it is being kept
+      local `core.hooksPath` override if it is being kept. **Either way this
+      needs a `core-self-enforcement` spec delta, which the change does not yet
+      carry** (create it with `/opsx:continue`)
+
+## 3b. Sweep the redundant local bindings
+
+Six repositories set a local `core.hooksPath`, which git prefers over the global
+one, so the new floor reaches none of them. Five name the directory git would
+resolve anyway, so unsetting them changes nothing today and restores reach.
+
+- [ ] 3b.1 Unset the local `core.hooksPath` in `claude-workflow`, `callbot`,
+      `fx-signal-agent` and `agenticapps-dashboard` — four configs, five
+      bindings, since the dashboard's linked worktree shares its config
+- [ ] 3b.2 Confirm each named its own default hooks directory before unsetting,
+      so the sweep is provably a no-op rather than assumed to be one
+- [ ] 3b.3 Leave `fbc-platform`'s `.husky/_` binding untouched. It is a genuine
+      opt-out protecting a real husky installation, and the change records it as
+      such rather than treating it as drift
+- [ ] 3b.4 Confirm after the sweep that the global binding governs each swept
+      repository, by resolving its hooks directory rather than by inference
 
 ## 4. Drop `--project`
 
@@ -67,6 +111,15 @@ ran, so this change starts from an installer that writes no host configuration.
 - [ ] 5.3 `--check` names the active enforcement surfaces
 - [ ] 5.4 `--check` reports a repository whose own hooks are displaced by the
       global binding
+- [ ] 5.5 `--check` reports the **effective** binding for the repository it runs
+      in, not the global one. A local `core.hooksPath` wins, so reporting the
+      global binding as active is wrong in six repositories today
+- [ ] 5.6 `--check` names any repository the floor cannot reach, so an accidental
+      opt-out is visible rather than inferred
+- [ ] 5.7 `--check` reports a **dangling** binding — `core.hooksPath` set to a
+      directory that no longer exists, which fails `git commit` machine-wide.
+      The currency checks cover drift in a hook that is present; none covers the
+      target being absent
 
 ## 6. Tests (TDD — RED before GREEN on every one)
 
@@ -85,6 +138,15 @@ ran, so this change starts from an installer that writes no host configuration.
 - [ ] 6.8 Every case runs against a per-case `HOME` **and a per-case git config**;
       a test that sets a global `core.hooksPath` against the real home would
       rebind the operator's machine
+- [ ] 6.9 The dispatcher runs `hooks.d` entries and fails on the first non-zero
+- [ ] 6.10 The dispatcher does not exec a repository's `.git/hooks/pre-commit`
+      even when one is present — the negative test for task 2.7
+- [ ] 6.11 A repository whose local `core.hooksPath` names its own default
+      directory is swept, and is governed by the global binding afterwards
+- [ ] 6.12 A repository with a genuine foreign local binding, husky-shaped, is
+      left alone by the sweep
+- [ ] 6.13 A dangling `core.hooksPath` is reported by `--check` rather than
+      discovered at the next commit
 
 ## 7. Evidence
 
@@ -97,8 +159,17 @@ ran, so this change starts from an installer that writes no host configuration.
 ## 8. Close
 
 - [ ] 8.1 `openspec validate --all` green
-- [ ] 8.2 `run-plan-review.sh one-enforcement-floor --implementing-host claude`
-      — other-vendor reviewers, **before code**
+- [x] 8.2 `run-plan-review.sh one-enforcement-floor --implementing-host claude`
+      — ran 2026-08-07. gemini, codex and opencode counted, all REQUEST-CHANGES,
+      claude excluded as implementing host. `REVIEWS.md` carries the findings
+      and the resolution
+- [ ] 8.2b **Re-review after this repair.** These edits changed `tasks.md`, so
+      the trailer's `tasks-digest` no longer matches and the gate will report
+      the review as stale — correctly, because the plan the reviewers read is
+      not the plan any more. Re-run before code
+- [ ] 8.2c Create the `core-self-enforcement` spec delta with `/opsx:continue`.
+      It is the one artifact this change needs and does not have; the update
+      step may not create new files under the specs glob
 - [ ] 8.3 Stage-2 code review on the diff, in an independent context
 - [ ] 8.4 ADR for the enforcement-surface decision; it changes what the workflow
       guarantees locally and that belongs in a decision record, not only in a

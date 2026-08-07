@@ -84,7 +84,7 @@ repositories at all. Removing both the host hook and the git hook leaves the
 workflow with no local enforcement whatsoever, which is a different and much
 larger claim than the one this change makes.
 
-### The displacement risk, measured rather than assumed
+### The displacement risk, measured — and the first measurement was wrong
 
 `core.hooksPath` **replaces** the hooks directory; it does not add to it.
 Verified rather than read: with `core.hooksPath` set, a `pre-commit` in
@@ -93,17 +93,79 @@ reports that the local one was skipped. So a global setting could silently
 disable every existing per-repository hook on the machine. That is the objection
 that would kill this decision if it held.
 
-It does not hold here. Across `~/Sourcecode`, exactly **nine** repositories have
-a non-sample git hook, all nine are `pre-commit`, and all nine are this gate.
-There is no husky, no lefthook, no lint-staged, no `pre-push`, no `commit-msg`.
-The set displaced by a global binding is empty.
+**An earlier revision of this section said it did not hold, and that was false.**
+It claimed exactly nine repositories, all `pre-commit`, all this gate, and "no
+husky, no lefthook, no lint-staged, no `pre-push`, no `commit-msg`". Re-measured
+2026-08-07 across `~/Sourcecode`, resolving each repository's hooks directory
+with `git rev-parse --path-format=absolute --git-path hooks`:
 
-Two honest caveats. The measurement covers this machine, which is the entire
-population — but it is a measurement of *now*, and a repository that later
-adopts husky would break at that moment rather than at this one. The published
-hook therefore has to be composable, which is why the task list requires it to
-be a dispatcher rather than a monolith, and why `--check` must report the
-binding rather than assume it.
+- **11 repositories** carry a `pre-commit`, over 10 distinct hooks directories —
+  `agenticapps-dashboard-add-agent-board` is a linked worktree sharing the
+  dashboard's.
+- **15 hook types** are present, not one: `pre-push`, `commit-msg`,
+  `post-checkout`, `post-commit`, `post-merge`, `post-rewrite`,
+  `prepare-commit-msg`, `pre-rebase` and more.
+- **husky ^9.1.7 with lint-staged ^17.0.7** is installed in `fbc-platform`,
+  hooks dated 15 July — they predated the original measurement.
+- Sizes are **1376, 1201, 2270, 5844 and 39**. Nothing is 883 bytes.
+
+The correction is recorded rather than quietly applied, because this change's
+stated virtue is being measured rather than assumed, and on its central safety
+claim it was assumed.
+
+### Why the decision survives the correction — for a different reason
+
+Husky is not displaced, and the reason is not that it is absent. `fbc-platform`
+sets a **local** `core.hooksPath` of `.husky/_`, and git resolves local before
+global. Alternative C — per-repository opt-out via local configuration — is
+already doing the work, unprompted, for the one repository that needed it.
+
+So the design is right and its stated grounds were wrong. The premise it
+actually rests on is *local overrides global*, not *the set displaced is empty*.
+
+### What that premise costs, which the earlier version did not see
+
+Six repositories already set a local `core.hooksPath`: `claude-workflow`,
+`callbot`, `fx-signal-agent`, `agenticapps-dashboard` and its linked worktree at
+their own `.git/hooks`, and `fbc-platform` at `.husky/_`.
+
+Local beats global, so **the global binding reaches none of them** — including
+three of the five repositories currently carrying the 1201-byte gate. The
+override was framed above as a rare escape for a repository that wants different
+hooks. It is the majority condition among repositories that carry hooks at all,
+and five of the six point at their own *default* directory, which is a no-op
+setting that reads as tool-written rather than chosen.
+
+Two consequences follow, and they point in opposite directions:
+
+1. A repository can opt out of the enforcement floor by accident, and nothing
+   reports that it has. This is the mirror image of the displacement risk and it
+   is the more likely failure, because it is already true.
+2. Those five redundant bindings are **safe to unset** — they name the directory
+   git would resolve anyway — so the sweep restores global reach without
+   changing behaviour in any of them today. `fbc-platform`'s is a real opt-out
+   and stays.
+
+The remaining caveat is unchanged and now better founded: a repository that
+later adopts a hook manager sets its own path and leaves the floor silently,
+so `--check` must report the **effective** binding per repository rather than
+assert the global one.
+
+### The composition contract
+
+The published hook must be composable, and the two reviewers who raised this
+disagreed about how. One asked that it exec the repository's original
+`.git/hooks/`; the other objected that doing so re-enables execution of
+repository-controlled code at commit time, which is precisely what `hooksPath`
+takes away. Both are right about their own half.
+
+The contract is therefore: the published `pre-commit` dispatches to the gate and
+then to an **operator-owned, machine-level `hooks.d`** alongside the published
+directory. It SHALL NOT exec anything resolved from inside a repository. That
+buys composition for the operator, who is the party that actually wanted it,
+without making a clone's contents executable at commit time. A repository that
+needs its own hooks has git's local override, which is the supported answer and
+costs us nothing to support.
 
 ## Decision 3 — drop `--project`
 
@@ -152,7 +214,9 @@ resolution demonstrably picked the wrong file today.
 
 | Risk | Mitigation |
 |---|---|
-| A future repo adopts husky and the global path silently disables it | The published hook is a dispatcher; `--check` reports the binding and whether it is current; git's own local override is the escape |
+| A repo adopts husky and the global path silently disables it | Already the case in `fbc-platform`, and already handled: husky sets a local `core.hooksPath`, which git prefers over the global one. `--check` reports the effective binding per repository so the opt-out is visible rather than inferred |
+| A repository leaves the floor by accident, via a local `core.hooksPath` nothing reports | The more likely failure and already true in six repositories. Five are redundant and are unset by the sweep; `--check` names any repository the floor cannot reach |
+| Core's own git-hook installer collides with the global binding | `tools/install-core-git-hooks.sh` resolves via `git rev-parse --git-path hooks`, which honors `core.hooksPath` — so once bound globally it writes into the machine-level directory, either refusing forever on a foreign marker or publishing core's working-tree-resolving hook to every repository. Resolved in tasks 3.2/3.3 and requires a `core-self-enforcement` delta |
 | An operator has a global `core.hooksPath` already set to something else | The installer refuses to overwrite a foreign binding and reports it, the same posture `install-core-git-hooks.sh` already takes toward a foreign hook |
 | Removing the host hook is felt as "the workflow got weaker" | It is weaker in latency and identical in enforcement. `--check` and the run summary should say which surfaces are active rather than leaving it to be inferred |
-| Nine stale per-repository copies remain | They become **inert**, not competing — verified: with `core.hooksPath` set, `.git/hooks/` is not consulted at all. They are still removed, because an executable hook on disk that never runs is read by the next person as the one that does |
+| Nine stale per-repository gate copies remain — 10 distinct hooks directories, less `fbc-platform`'s husky | They become **inert**, not competing — verified: with `core.hooksPath` set, `.git/hooks/` is not consulted at all. They are still removed, because an executable hook on disk that never runs is read by the next person as the one that does |
