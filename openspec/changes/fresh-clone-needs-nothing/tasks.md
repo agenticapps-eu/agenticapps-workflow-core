@@ -216,9 +216,17 @@ putting behaviour in a repo, so it moves to the machine like everything else.
       §9 has just given this workflow command directories of its own to keep clean.
       **`install.sh` is at exactly its 217-line budget**, so this belongs in a
       helper or in the binder, not inline
-- [ ] 9.8 Decide the wider residue, out of scope here: 18 `gsd-*.md` in
-      `~/.codex/prompts` and 89 files under `~/.config/opencode/commands/gsd/`,
-      for a system removed 2026-07-28. Live commands for a workflow that is gone
+- [x] 9.8 **Machine cleaned 2026-08-07.** Removed 19 `gsd-*.md` from
+      `~/.codex/prompts`, 88 files under `~/.config/opencode/commands/gsd/`,
+      `~/.gitnexus`, and the orphaned `~/.agenticapps/bin/normalize-claude-md.sh`
+      (retired by #87, source gone from core, installed copy outlived it).
+      Also removed the **gitnexus MCP server** from `~/.codex/config.toml` and
+      `~/.config/opencode/opencode.json` — gitnexus was declared removed on
+      2026-07-28, but its binary is still on `PATH`, so those registrations were
+      live rather than dangling. And dropped `npm:pi-gsd` and the archived
+      `git:…/pi-agentic-apps-workflow` from `~/.pi/agent/settings.json`.
+      `database-sentinel.sh` was left alone: it is still a live project hook with
+      a source in core, and `diagram-is-the-surface` has not landed
 - [ ] 9.6 Verify `/opsx:propose` resolves in a repository that carries no
       `.claude/` at all. That is the whole point, and it is the assertion that
       fails if the binding is wrong.
