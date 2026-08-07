@@ -52,20 +52,19 @@ name the directory git resolves anyway); Donald chose to sweep those and leave
 
 ## Next session: start here
 
-`one-enforcement-floor` needs two things before code, in this order:
+`one-enforcement-floor` is now artifact-complete and validates `--strict`. The
+`core-self-enforcement` delta is written: the inversion is **kept**, core sets a
+local `core.hooksPath` that git prefers over the global binding, the installer
+refuses when `git rev-parse --git-path hooks` returns the machine-level
+directory, and core's binding is **declared** so the sweep cannot remove it —
+it names core's own default hooks directory, so it is redundant by value and
+load-bearing in fact, which is the trap.
 
-1. **`/opsx:continue`** to create the `core-self-enforcement` spec delta — the
-   one artifact the change needs and does not have. The update step may not
-   create new files under the specs glob, which is why it is not done. The
-   mechanism is verified and concrete: `tools/install-core-git-hooks.sh:54`
-   resolves via `git rev-parse --git-path hooks`, which honors `core.hooksPath`
-   by its own header's admission at line 13 — so once bound globally, core's
-   installer writes into the machine-level directory and either refuses forever
-   on a foreign marker or publishes core's working-tree-resolving hook to every
-   repository on the machine.
-2. **Re-review**, because these edits changed `tasks.md` and the trailer's
-   `tasks-digest` no longer matches. The gate already reports it stale, which is
-   correct.
+So the remaining step before code is one thing:
+
+**Re-review.** The repair and the delta both changed the artifacts, so the
+trailer's `tasks-digest` no longer matches and the gate already reports the
+review as stale — correctly.
 
 ```
 REVIEW_TIMEOUT=600 run-plan-review.sh <slug> --implementing-host claude
@@ -78,12 +77,24 @@ Then repair `projects-bind-not-copy` against its resolution, and review
 
 ## Open questions
 
-1. **`database-sentinel` has stopped being a loose end and is now blocking.**
-   Both reviewers of `projects-bind-not-copy` found it claimed decided and never
-   decided. opencode added the part that matters: `check-shims.sh`'s `OPT-OUTS`
-   axis records a *missing* binding only, never an *extra* one — so keeping the
-   hook makes the new both-directions check fail forever with no sanctioned way
-   to say that is intended. Keeping it is not currently expressible.
+1. **`database-sentinel` — still open, but no longer shapeless.** Donald asked
+   whether it adds anything given the `cso` skill. It does, and not where the
+   change assumes: `cso` is *detection* (on-demand audit), the hook is
+   *interception* (exit 2 at the tool-call boundary). Read the three arms
+   separately — the `.env` arm is genuinely redundant and is also the most
+   easily bypassed, since `cat > .env` via Bash presents no `file_path` for it
+   to see; the `DROP`/`TRUNCATE` and `DELETE`-without-`WHERE` arms are the only
+   thing in the whole workflow that stops an **irreversible** action, and the
+   "caught again at commit and in CI" argument that justified deleting the host
+   hook is simply false for them — destructive SQL never touches git.
+   The hook's own header refuses the credit anyway: not a security boundary,
+   `psql -f` bypasses the regex entirely, "a speed bump, not a control."
+   The real comparison is therefore the harness's own Bash permission prompts,
+   not `cso`. Proposed third option: **drop the `.env` arm, keep the SQL arms,
+   stop calling it fleet-shared** — one narrow declared exception is
+   expressible in `check-shims.sh`, where a whole undecided hook is not.
+   Cutting the other way: it protects claude sessions only, so codex, opencode
+   and pi get nothing, and multi-agent is permanent. Not decided.
 2. **`projects-bind-not-copy` omits its dependency on `one-enforcement-floor`.**
    cparx has no floor at all, so removing its `PreToolUse` entry first leaves it
    with nothing. The chain order is right; the change does not record it.
