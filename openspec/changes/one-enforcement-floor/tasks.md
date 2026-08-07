@@ -71,10 +71,30 @@ ran, so this change starts from an installer that writes no host configuration.
       `sweep_vendored` → `bind_dir` → `install_hosts`, and `scan_archived` runs
       on the install path. Lines 5, 148 and 303–304 are comments and do not bear
       on the claim. **This is inherited, not introduced here** — every site
-      predates this change. It is recorded rather than fixed, because task 7.2
-      expects the after-measurement to be `HOSTS` and `--check` only, and that
-      expectation is now known to be unreachable without removal work this
-      change has not scoped. Resolve in 7.2 before relying on it
+      predates this change.
+
+      **Resolved 2026-08-07: accepted as recorded exceptions, no separate
+      change.** Two reasons, in order of weight.
+
+      First, **this task was testing a stricter claim than any spec makes.** The
+      durable requirement is "One command installs the workflow, and it names no
+      host", and its body is about the operator's interface — "installable by a
+      single command that requires no host argument", "an operator who has never
+      heard of the five hosts SHALL still get a working install". It says nothing
+      about host names appearing in the source. All three sites satisfy the
+      requirement as written: a bare run still takes no host argument and still
+      names no host to the operator. The phrase "no host-named code outside
+      `HOSTS` and `--check` strings" is this task's own gloss, and it is a
+      tighter bar than the specification sets.
+
+      Second, **they are transitional and already scheduled for deletion.**
+      `ARCHIVED` names archived *checkouts*, not hosts, and `neutral_of()` exists
+      only to map the archived host installers' vendored skills back to neutral
+      ones. `fleet-carries-only-current` records those checkouts as deleted
+      wholesale by Phase 5b, at which point `ARCHIVED`, `is_archived`,
+      `neutral_of` and `sweep_vendored` are all dead code. Removing them now
+      would delete the machinery that performs the conversion before the
+      conversion has run
 
 ## 2. Publish and bind the global floor
 
@@ -86,16 +106,30 @@ ran, so this change starts from an installer that writes no host configuration.
       as skipped so the run exits non-zero
 - [ ] 2.4 Report an existing binding that is already ours as satisfied, not as
       a no-op and not as a fresh install
-- [ ] 2.5 The published hook dispatches to the gate and propagates its exit
-      status
-- [ ] 2.6 The dispatcher composes with an operator-owned, machine-level
+- [x] 2.5 The published hook dispatches to the gate and propagates its exit
+      status. **Built 2026-08-07** —
+      `reference-implementations/global-floor/pre-commit`. Status is propagated
+      **verbatim**, not collapsed to 1: the gate distinguishes its failure modes
+      by status and flattening them discards the only machine-readable thing it
+      produces. Fails open with a warning when the gate is absent, per §18
+- [x] 2.6 The dispatcher composes with an operator-owned, machine-level
       `hooks.d` alongside the published directory, running each entry and
-      failing the commit on the first non-zero exit
-- [ ] 2.7 The dispatcher SHALL NOT exec anything resolved from inside a
+      failing the commit on the first non-zero exit. **Built.** `hooks.d` is a
+      subdirectory of the published hooks directory, which git ignores because
+      it only execs files named for a hook. Entries run in lexical order;
+      non-executables, directories and debris are skipped; the first non-zero
+      stops the rest, because a later entry running after an earlier refusal
+      would act on the state the refusal existed to prevent
+- [x] 2.7 The dispatcher SHALL NOT exec anything resolved from inside a
       repository — not `.git/hooks/`, not a tracked path. A global hook that
       falls back to repository-controlled code makes every clone executable at
       commit time, which is the property `core.hooksPath` exists to remove.
-      Assert it as a negative test, not a convention
+      Assert it as a negative test, not a convention. **Built, with two negative
+      tests.** The concrete difference from the per-repository hook is the
+      *absence* of its `[ -x "$GATE" ] || GATE="$(git rev-parse
+      --show-toplevel)/bin/openspec-change-gate.sh"` fallback — that branch is
+      correct for a hook a repository installs for itself and forbidden for one
+      bound machine-wide
 - [x] 2.8 **Scope predicate decided 2026-08-07: an explicit opt-in marker.**
       Measured first: the gate exits 0 in a repository with no `openspec/` and in
       one whose `openspec/` is unrelated, but **blocks the commit** in any
@@ -106,7 +140,7 @@ ran, so this change starts from an installer that writes no host configuration.
       risk. The published hook now checks a local git config key,
       `agenticapps.workflow.enrolled`, and exits 0 when it is absent. Rationale
       and the two rejected alternatives are in `design.md`
-- [ ] 2.8a Implement the predicate in the published hook, ahead of the gate call,
+- [x] 2.8a Implement the predicate in the published hook, ahead of the gate call,
       with the negative test: a repository carrying a malformed `openspec/` tree
       and **no** marker commits successfully.
       **Prototyped and proven 2026-08-07** — one line ahead of the existing hook
@@ -257,14 +291,20 @@ resolve anyway, so unsetting them changes nothing today and restores reach.
 - [ ] 6.8 Every case runs against a per-case `HOME` **and a per-case git config**;
       a test that sets a global `core.hooksPath` against the real home would
       rebind the operator's machine
-- [ ] 6.9 The dispatcher runs `hooks.d` entries and fails on the first non-zero
-- [ ] 6.9a `hooks.d` **itself** being a symlink is covered, not only its entries.
+- [x] 6.9 The dispatcher runs `hooks.d` entries and fails on the first non-zero
+      — **done**, plus lexical ordering, debris skipping and an absent `hooks.d`
+- [x] 6.9a `hooks.d` **itself** being a symlink is covered, not only its entries.
       Checking entry symlinks alone does not establish that the directory is
       operator-owned — repointing `hooks.d` redirects every entry at once. Assert
       ownership and permissions so another local user cannot install code that
-      runs on every commit. Raised by a reviewer as MEDIUM/SECURITY
-- [ ] 6.10 The dispatcher does not exec a repository's `.git/hooks/pre-commit`
-      even when one is present — the negative test for task 2.7
+      runs on every commit. Raised by a reviewer as MEDIUM/SECURITY.
+      **Done** — refuses a symlinked `hooks.d`, one not owned by the caller, and
+      one that is group- or world-writable, all checked before any entry runs
+- [x] 6.10 The dispatcher does not exec a repository's `.git/hooks/pre-commit`
+      even when one is present — the negative test for task 2.7. **Done**, and a
+      second case covers the sharper form: with the machine gate *removed* and a
+      repository-supplied `bin/openspec-change-gate.sh` present, the dispatcher
+      fails open rather than resolving into the repository
 - [ ] 6.11 A repository whose local `core.hooksPath` names its own default
       directory is swept, and is governed by the global binding afterwards
 - [ ] 6.12 A repository with a genuine foreign local binding, husky-shaped, is
@@ -278,13 +318,15 @@ resolve anyway, so unsetting them changes nothing today and restores reach.
 ## 7. Evidence
 
 - [ ] 7.1 Installer line count, before and after, with the delta explained
-- [ ] 7.2 Host-named code in the repository, before and after. **The expected
-      after-state is not `HOSTS` and `--check` only** — task 1.2 measured three
-      inherited sites that fall outside both (`ARCHIVED`, `neutral_of()`'s
-      prefix stripping, and its hard-coded `~/.claude/skills`). Either record
-      them as accepted inherited exceptions with the reason, or open a separate
-      change to remove them. Do **not** quietly restate the old expectation and
-      report a pass against it
+- [ ] 7.2 Host-named code in the repository, before and after. **Measure against
+      the requirement, not against the old gloss.** The bar is "a bare run takes
+      no host argument and names no host to the operator", which is what
+      `workflow-installation` actually requires. The three inherited sites task
+      1.2 found (`ARCHIVED`, `neutral_of()`'s prefix stripping, its hard-coded
+      `~/.claude/skills`) are accepted exceptions and SHALL be listed by name in
+      the evidence, with Phase 5b named as their deletion trigger. What this task
+      catches is a **new** site introduced by this change — the count of accepted
+      exceptions must not grow from three
 - [ ] 7.3 `--check` output before and after, as the restore reference
 - [ ] 7.4 A real commit gated through the global binding, with the gate's output
 
