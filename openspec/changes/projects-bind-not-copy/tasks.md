@@ -15,11 +15,17 @@ for this pair on this machine. Nothing below runs until it has been.
 - [ ] 1.4 Confirm each of the eight repositories is otherwise clean: no second
       copy under another name, and no `skills/` entry of core's shadowed by a
       differently-named directory
-- [ ] 1.5 **pi reads `~/.pi/agent/skills`, which the installer does not bind and
-      this change does not sweep** — measured empty. Either bind it before the
-      sweep or scope the precedence claim to the hosts where the binding is
-      verified. "Every host reads a directory the installer binds" is false as
-      written, and a deletion resting on it could leave pi resolving nothing
+- [ ] 1.5 **pi reads `~/.pi/agent/skills`, which the installer does not bind.**
+      It holds **26** skills symlinked to `~/.agents/skills/` — not empty, which
+      an earlier revision claimed on the handoff's unverified word. Only
+      `agentic-apps-workflow` is absent. **Decided:** this capability is scoped
+      to hosts whose skill directory the installer binds, so pi is out of scope
+      until binding it lands as a `workflow-installation` change. Record that a
+      pi session in a swept repository will resolve no workflow skill
+- [ ] 1.6 **Measure precedence per host, not once.** Task 1.1 validates one
+      loader; the requirement's scenarios are host-parametric and pi already
+      proves the hosts differ. Either measure on each host whose directory is
+      bound, or state which hosts the claim covers
 
 ## 2. RED: the check, before the sweep
 
@@ -64,12 +70,47 @@ a clean fleet on 2026-08-06 while six repositories bound `normalize-claude-md`.
       directory" — a project's own hooks are its business. Note that
       `SHIMMED-HOOKS` is empty after 3.9b, so membership can no longer be the
       test; the pass asks whether a *fleet-shared* hook is bound at all
+- [ ] 2b.6 **An empty declaration does not print the conformance sentence.**
+      Verified defect: `check-shims.sh:34` reads the declaration through
+      `sed … 2>/dev/null | awk 'NF'`, so an absent file and an empty one are
+      indistinguishable, and with zero declared hooks the forward loop never
+      runs, `bad` stays 0, and line 91 prints "Every declared hook is bound with
+      the authority's bytes" and exits 0. This change creates that state at
+      3.9b, so it fixes it: empty reports that nothing was checked, absent is an
+      error, and neither claims conformance
+- [ ] 2b.7 The reverse pass identifies a fleet hook by its shim resolving an
+      implementation under `~/.agenticapps/bin/`, not by declaration membership
+      — which is empty after 3.9b and cannot discriminate. RED: a project's own
+      unrelated `PostToolUse` hook is not reported
+- [ ] 2b.8 Retired hook names are kept as **tombstones** in the declaration, so
+      a stale `normalize-claude-md` binding is reported as retired rather than
+      becoming indistinguishable from a project-authored hook
+- [ ] 2b.9 A sanctioned-transition entry exists for the interim in which a hook
+      is retired in core and still bound in repositories. Retirement across nine
+      per-repo PRs cannot be atomic, so the check needs a way to say "extra, and
+      deliberate, until this lands" — the `OPT-OUTS` axis, kept rather than
+      dissolved
 
 ## 3. Sweep the fleet
 
 One PR per repository, each stating the skill, the version the copy claimed, and
-the version now resolved. `agenticapps-dashboard-add-agent-board` is a worktree,
-not a fleet member, and is handled with its parent.
+the version now resolved.
+
+`agenticapps-dashboard-add-agent-board` is a worktree and **not** a fleet
+member, so it gets no `FLEET` entry — but it is swept and checked **in its own
+right**, not "handled with its parent", which is what an earlier revision of
+this line said and which task 3.12 then contradicted. It sits on its own branch
+with the oldest copy on the machine, so cleaning the dashboard's main checkout
+changes nothing about it.
+
+Discovery is the unresolved part and it is a task, not an assumption:
+`check-shims.sh:44` resolves a repository with
+`find "$root" -maxdepth 2 -type d -name "$name" | head -1` — first match wins,
+so it cannot see a second checkout of the same repository at all. Worktrees have
+to be enumerated (`git worktree list` from each resolved repository is the
+obvious mechanism) or they are invisible by construction. Note the trap this
+sets with the removability rule: once retired `agenticapps-dashboard` leaves
+`FLEET`, a worktree discovered only *via* its parent becomes undiscoverable.
 
 - [ ] 3.1 `agenticapps-roadmap` (324 lines, v3.2.0)
 - [ ] 3.2 `agents-task-viewer` (324 lines, v3.2.0)
@@ -102,6 +143,13 @@ not a fleet member, and is handled with its parent.
       `DELETE` without `WHERE`. This is host-specific by nature and therefore
       **not** core's to ship; the task is to write it down where the operator
       will find it, not to install it from here
+- [ ] 3.9d **The deny rule exists and is verified before 3.9 deletes the hook,
+      or the loss is recorded as unmitigated.** Both reviewers made this point
+      and it is fair: a change that demands "verified rather than assumed"
+      cannot discharge its own mitigation with a document. Either the rule is in
+      place and demonstrated to block `DROP TABLE`, or the change states plainly
+      that the only irreversible-action interception was removed with nothing
+      replacing it. "Reassigned" is not a third option
 - [ ] 3.10 **The git floor must exist before the gate shim is removed.** In
       `cparx` there is no `.git/hooks/pre-commit` and `core.hooksPath` is unset,
       so removing the `PreToolUse` entry today leaves that repository with no

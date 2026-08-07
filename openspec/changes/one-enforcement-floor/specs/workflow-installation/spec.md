@@ -113,7 +113,27 @@ SHALL NOT rely on the value alone. Core is the case: its binding names its own
 default hooks directory, so it reads as redundant, but removing it hands core to
 the machine-level floor and breaks the resolution inversion `core-self-enforcement`
 requires. Such a binding SHALL be **declared**, and the sweep SHALL exclude any
-declared binding by name rather than by inspecting what it points at.
+declared binding rather than inspecting what it points at.
+
+**The declaration is a git config key in the same local configuration as the
+binding it qualifies:** `agenticapps.hooksbinding = declared`. Named concretely
+because a requirement to "declare" something with no mechanism is not
+implementable, and because it must live where the binding lives — a marker file
+can be deleted while the binding survives, and a list held in core cannot be
+read by a sweep running against a repository core does not know about.
+
+The rule is then mechanical: a local `core.hooksPath` is swept only if it is
+redundant by value **and** carries no `agenticapps.hooksbinding=declared` in the
+same scope.
+
+**Equivalence SHALL be decided on resolved paths, never on strings.** A value
+may be relative (`fbc-platform`'s is `.husky/_`), may contain `~`, may traverse
+a symlink, and in a linked worktree the default resolution is the *main*
+checkout's hooks directory rather than a `.git/hooks` beneath the worktree. The
+comparison is between the canonicalised value and the canonicalised result of
+`git rev-parse --path-format=absolute --git-path hooks` with the local setting
+removed. A naive string comparison either sweeps a real opt-out or preserves a
+redundant one, and both failures are silent.
 
 This is not hypothetical tidying. Six repositories on the machine this was
 measured on set a local `core.hooksPath`; five name their own default directory,
@@ -139,6 +159,41 @@ reached none of them, and nothing would have said so.
 - **WHEN** a repository's local `core.hooksPath` names any other directory
 - **THEN** the installer SHALL NOT unset it
 - **AND** SHALL report the repository as outside the floor by its own choice
+
+### Requirement: The hook is published before the binding is set, and a failed bind unwinds
+
+The installer SHALL publish the `pre-commit` to the machine-level directory
+**before** setting `core.hooksPath`, and SHALL unset a binding it created if
+publishing did not complete.
+
+Order matters here in a way it usually does not. Binding first and failing
+before the hook lands leaves `core.hooksPath` pointing at a directory with no
+`pre-commit` — and a commit under that binding **succeeds silently**, verified
+on git 2.50.1. The machine is then globally unbound in effect while every
+surface reports it as bound. Publishing first means the worst partial state is
+a published hook nothing has bound yet, which is the floor as it exists today
+and is therefore no regression at all.
+
+The two orders are not symmetric and the safe one costs nothing.
+
+#### Scenario: Publishing fails before the binding is set
+
+- **WHEN** publishing the `pre-commit` fails
+- **THEN** `core.hooksPath` SHALL NOT be set
+- **AND** the run exits non-zero naming the publish failure
+
+#### Scenario: The binding fails after the hook is published
+
+- **WHEN** the hook is published and setting `core.hooksPath` fails
+- **THEN** the published hook remains
+- **AND** the run reports the machine as unbound rather than as installed
+
+#### Scenario: A run is interrupted between publish and bind
+
+- **WHEN** a run is interrupted after publishing and before binding
+- **THEN** re-running completes the binding without republishing from scratch
+- **AND** `--check` reports the intermediate state as published-but-unbound
+  rather than as bound
 
 ### Requirement: A foreign global hooks binding is reported, never overwritten
 
@@ -168,7 +223,39 @@ level up.
 
 The published `pre-commit` SHALL dispatch to the gate and then to an
 operator-owned, machine-level `hooks.d` directory alongside the published
-directory, running each entry and failing the commit on the first non-zero exit.
+directory.
+
+**The canonical paths are pinned here rather than left to `install.sh`:** the
+published directory is `~/.agenticapps/git-hooks/`, the dispatcher is
+`~/.agenticapps/git-hooks/pre-commit`, and the composition directory is
+`~/.agenticapps/git-hooks/hooks.d/`. `--check` must verify that
+`core.hooksPath` "resolves to the published directory", which is unverifiable
+while the directory is named only in prose.
+
+**Dispatch order and failure semantics, stated because an earlier revision said
+both "run each entry" and "fail on the first non-zero" and those are different
+contracts:**
+
+- The gate runs **first**. A non-zero gate exit fails the commit immediately and
+  `hooks.d` is **not** entered — the gate is the floor, not one voice among
+  several.
+- `hooks.d` entries then run in **lexical order by filename**, and the first
+  non-zero exit fails the commit; remaining entries do not run. Fail-fast, not
+  run-all.
+- An entry that is **not executable** is skipped and reported, not silently
+  ignored — the same reasoning that makes `--check` verify the dispatcher's own
+  execute bit.
+- Entries whose names begin with `.` or end in `~`, `.bak`, `.sample`, `.orig`
+  or `.rej` are skipped. Editor and packaging debris in a hooks directory is
+  the normal case, and executing it is how a stale backup becomes policy.
+- An **absent** `hooks.d` is not an error. It is the expected state on a machine
+  whose operator composes nothing.
+
+**Entries SHALL be resolved within `hooks.d`, and a symlink whose canonical
+target lies outside it SHALL be refused and reported.** Without this the
+prohibition below is trivially defeated: a single symlink from `hooks.d` into a
+clone re-enables repository-controlled execution at commit time while every
+requirement here still reads as satisfied.
 
 It SHALL NOT execute anything resolved from inside a repository — not
 `.git/hooks/`, not a tracked path, not a fallback gate at a repository-relative
@@ -191,8 +278,34 @@ exactly this reason, correctly and by its own local binding.
 #### Scenario: The dispatcher composes with the operator's own hooks
 
 - **WHEN** the machine-level `hooks.d` directory contains executable entries
-- **THEN** the published hook runs each of them
-- **AND** a non-zero exit from any entry fails the commit
+- **THEN** the published hook runs them in lexical order by filename
+- **AND** the first non-zero exit fails the commit and stops the remaining
+  entries
+
+#### Scenario: The gate fails
+
+- **WHEN** the gate exits non-zero
+- **THEN** the commit fails
+- **AND** no `hooks.d` entry runs
+
+#### Scenario: hooks.d holds debris and non-executable entries
+
+- **WHEN** `hooks.d` contains a non-executable file, a dotfile, or a `~`/`.bak`
+  backup
+- **THEN** none of them is executed
+- **AND** a non-executable entry is reported rather than silently skipped
+
+#### Scenario: hooks.d is absent
+
+- **WHEN** no `hooks.d` directory exists
+- **THEN** the gate runs and the commit proceeds on its verdict alone
+- **AND** this is not reported as a fault
+
+#### Scenario: A hooks.d entry links outside the directory
+
+- **WHEN** an entry is a symlink whose canonical target lies outside `hooks.d`
+- **THEN** it is refused and reported, naming the target
+- **AND** it is not executed, whether or not the target is inside a repository
 
 #### Scenario: The dispatcher refuses repository-controlled code
 
@@ -245,8 +358,26 @@ floor" are indistinguishable from the outside unless something says which.
 
 - **WHEN** `core.hooksPath` is set to a directory that does not exist
 - **THEN** `--check` reports the binding as dangling
-- **AND** it states that `git commit` fails in every repository the binding
-  governs until the directory is restored
+- **AND** it states that commits in every repository the binding governs are
+  proceeding **ungated and silently**, rather than failing
+
+> **An earlier revision of this scenario had it backwards**, asserting that
+> `git commit` fails machine-wide until the directory is restored. Tested on
+> git 2.50.1 with `core.hooksPath` pointing at an absent directory: the commit
+> **succeeds, exit 0**, and nothing is reported. A dangling binding does not
+> break the machine loudly; it removes the floor quietly, which is the failure
+> mode `core-self-enforcement` names as the one this workflow must not have.
+> The correction matters because it changes what `--check` is *for* here: it is
+> not a convenience that explains a visible breakage, it is the only surface
+> that would ever mention this at all.
+
+#### Scenario: The published hook is not executable
+
+- **WHEN** the published `pre-commit` has correct content but lacks its execute
+  bit
+- **THEN** `--check` reports the floor as **not active**
+- **AND** SHALL NOT report it as current on the strength of content alone,
+  because git does not run a non-executable hook
 
 #### Scenario: The published hook has been hand-edited
 

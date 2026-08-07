@@ -70,8 +70,11 @@ is a trade accepted with its cost named, not a property the override lacks.
 - **WHEN** a commit is attempted in core while the global binding is in force and
   core has no local `core.hooksPath`
 - **THEN** the published hook runs and core is gated by the shared install
-- **AND** this SHALL be reported as a violation of the inversion rather than
-  accepted as a working floor
+- **AND** core's CI job SHALL fail, because it is the only surface whose verdict
+  someone is obliged to look at
+- **AND** `--check` SHALL also report it, as the local diagnosis
+- **AND** the condition SHALL NOT be reported only by `--check`, which nobody
+  runs until they already suspect something
 
 #### Scenario: The shared install is absent
 
@@ -133,10 +136,23 @@ second outcome is severe and silent: every repository would begin gating against
 whatever happens to be in core's checkout.
 
 The installer SHALL therefore refuse when the resolved hooks directory lies
-**outside core's own git directory**, report the global binding as the cause,
-and name the local `core.hooksPath` that would fix it. This is a refusal about
-*destination ownership*, distinct from the containment refusal below, which is
-about writing into repository content.
+outside the repository's **git common directory** — `git rev-parse
+--path-format=absolute --git-common-dir` — report the global binding as the
+cause, and name the local `core.hooksPath` that would fix it. This is a refusal
+about *destination ownership*, distinct from the containment refusal below,
+which is about writing into repository content.
+
+**The predicate is the common directory, not the working tree, and the two must
+not be confused.** An earlier revision of this delta said "outside core's own
+git directory" while the requirement below says the installer SHALL install when
+`core.hooksPath` names a directory *outside the working tree* — and `.git/hooks`
+is outside the working tree, so the two read as contradictory. The common
+directory resolves it: `.git/hooks` is inside it and installs normally; the
+machine-level published directory is outside it and is refused. It is
+specifically the **common** directory rather than the git directory because in a
+linked worktree the real hooks directory belongs to the main checkout, and a
+predicate using `--git-dir` would refuse every legitimate install performed from
+a worktree.
 
 One case does warrant refusal: when the resolved hooks directory lies **inside
 the working tree**, installing would write into repository content rather than
@@ -166,6 +182,15 @@ ancestor and re-appending the remaining components.
 - **THEN** it SHALL refuse and exit non-zero
 - **AND** SHALL report that the global floor redirected the resolver
 - **AND** SHALL NOT write into the machine-level published directory
+
+#### Scenario: The installer runs from a linked worktree of core
+
+- **WHEN** the installer runs in a linked worktree whose hooks directory belongs
+  to the main checkout
+- **THEN** the destination is inside the git **common** directory and installs
+  normally
+- **AND** SHALL NOT be refused as foreign on the grounds that it lies outside
+  the worktree's own git directory
 
 #### Scenario: Core carries its own local binding
 

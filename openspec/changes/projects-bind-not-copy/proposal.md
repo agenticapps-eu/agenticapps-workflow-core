@@ -119,14 +119,25 @@ operator's configuration — which is host-specific by nature and therefore the
 operator's to hold, not core's to ship. This change SHALL record that as the
 mitigation and SHALL NOT claim the protection survives the removal.
 
-**One consequence is worth stating because it is an improvement.**
-`SHIMMED-HOOKS` declares exactly two hooks, `database-sentinel` and
-`openspec-change-gate`. Removing the first while this change removes the
-project binding of the second leaves the declaration **empty**. That dissolves
-the objection raised against the both-directions check — that `OPT-OUTS` can
-record a *missing* binding as sanctioned but never an *extra* one — because
-after this there are no sanctioned extras. The reverse pass becomes a flat rule:
-a project binds no fleet hook at all.
+**One consequence looked like a free improvement and is not free. Corrected.**
+
+An earlier revision said `SHIMMED-HOOKS` "declares exactly two hooks", so
+removing `database-sentinel` alongside the gate's project binding would leave it
+empty and dissolve the objection that `OPT-OUTS` can sanction a *missing*
+binding but never an *extra* one.
+
+**On `main` it declares three** — `database-sentinel`, `normalize-claude-md`,
+`openspec-change-gate`. The two-entry reading came from this branch's working
+tree, which is **stacked on `chore/retire-normalize-claude-md`** (PR #87) and
+already carries that removal. A post-#87 state was presented as the pre-change
+state, which made the argument circular: the empty declaration depends on #87
+landing, and this document twice forbids #87 from landing first.
+
+The end state is still empty and still worth having. What is not true is that it
+arrives for free from this change alone. It requires #87, and #87's ordering
+constraint has to be restated as a **coordinated landing** rather than a
+sequence — see the sequencing section below, which an earlier revision also got
+wrong.
 
 ## The same shape, in the wiring
 
@@ -221,11 +232,26 @@ two names, and splitting them would leave the second one to be rediscovered.
   `core-installer-one-entry-point` were reverted, deleting these copies would
   leave those repositories with no workflow skill at all. The ordering is a
   dependency, and it is stated in `design.md`.
-- **PR #87 acquires a precondition.** It retires `normalize-claude-md` in core
-  and orphans it in six repositories, so it SHALL NOT merge before the hook
-  sweep here lands. That is a constraint on a reviewed, open PR and it is stated
-  rather than assumed. The alternative — widening #87 to carry a six-repository
-  sweep — turns a narrow retirement into a fleet change and loses the review it
-  already has.
+- **PR #87 and this change land together, and an earlier revision had this
+  wrong.** It said #87 "SHALL NOT merge before the hook sweep here lands" — a
+  strict ordering. But `feat/projects-bind-not-copy` is **stacked on**
+  `chore/retire-normalize-claude-md`: #87's commits are ancestors of this
+  branch's HEAD, verified with `git merge-base --is-ancestor`. So this change
+  cannot merge unless #87 merges first or with it, which is precisely what the
+  document forbade. The git topology contradicted the spec.
+
+  It is a **coordinated landing**, not a sequence, and the reason the original
+  framing failed is worth keeping: whichever lands alone, the fleet goes red in
+  one direction or the other. #87 first leaves six repositories binding an
+  undeclared hook — the reverse pass fails, which is this change's whole point.
+  The sweep first leaves a declared hook unbound — the forward pass fails. There
+  is no ordering that is green throughout, which is why "retirement and removals
+  SHALL NOT be separated across releases" cannot be satisfied by ordering alone.
+
+  Two ways to discharge it, and the change SHALL pick one rather than leave the
+  interim undefined: land #87 and the sweep in a single merge, or sanction the
+  interim explicitly with a transition entry the check honours. The second is
+  the `OPT-OUTS` axis this change was happy to dissolve, which is an argument
+  for keeping that mechanism rather than removing it.
 - **`tools/check-shims.sh` gains a second pass** and therefore a second way to
   fail. Repositories that pass today may not after, which is the point.

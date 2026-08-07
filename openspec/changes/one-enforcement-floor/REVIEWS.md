@@ -12,6 +12,169 @@
 - failed:    (none)
 
 ## Reviewer: gemini
+_generated 2026-08-07T10:06:42Z · timeout 600s_
+
+VERDICT: REQUEST-CHANGES
+
+- The spec requires that a load-bearing local `core.hooksPath` (specifically for the `core` repo itself) must be "declared" so that an automated cleanup sweep does not remove it. However, the mechanism for this declaration is not defined. The implementation needs a concrete way to identify a declared binding (e.g., a specific key in git config, a marker file) to satisfy this requirement.
+- The security improvement from the new composition contract is a major benefit and should be stated more forcefully. By refusing to execute hooks from within a repository, this design hardens the system against a scenario where `git clone` followed by `git commit` could lead to arbitrary code execution. This is a primary feature, not just a detail.
+- The "sweep" of redundant local `core.hooksPath` settings is an automated modification of git configuration across multiple repositories. While the reasoning is sound (they are no-ops), the change should explicitly frame this as an intentional, opinionated cleanup to establish a uniform enforcement floor, rather than just housekeeping. It's an invasive action justified by the goal, and this trade-off should be stated directly.
+
+## Reviewer: codex
+_generated 2026-08-07T10:08:42Z · timeout 600s_
+
+VERDICT: REQUEST-CHANGES
+
+- **HIGH:** The dangling-binding scenario is factually inverted. An isolated Git test showed a commit succeeds when `core.hooksPath` names a nonexistent directory; enforcement silently disappears rather than commits failing.
+- **HIGH:** A global `core.hooksPath` disables every repository-local hook type, not merely `pre-commit`. The measured 15 hook types may include security or policy checks, yet only `pre-commit` composition is provided. Require preflight/migration, explicit consent, or rollback.
+- **HIGH:** `core-self-enforcement` contradicts itself: it requires refusing any hooks directory outside core’s Git directory, but also requires installing when `core.hooksPath` points outside the working tree. Define the boundary using Git’s common directory and add linked-worktree tests.
+- **MEDIUM:** `--check` compares hook content but not executability. Correct bytes without the executable bit are ignored by Git, so it could falsely report an active floor.
+- **MEDIUM/SECURITY:** “Operator-owned `hooks.d`” is not enforceable as written. Ordering, symlinks, canonical target containment, file type, and permissions are unspecified; a symlink into a repository would violate the stated prohibition on repository-controlled code.
+
+## Reviewer: opencode
+_generated 2026-08-07T10:11:37Z · timeout 600s_
+
+Quick verification of two factual claims before I finalize:
+VERDICT: REQUEST-CHANGES
+
+Verified against the machine before writing this: the hook census in the design matches what I measured (11 repos, sizes 39/1201/1376/2270/5844, six local bindings, fbc-platform husky correctly opted out). The correction section is honest and the local-overrides-global premise now holds. But:
+
+- **Blast radius is under-specified for non-fleet repos.** The floor moves from 9 repos to *every repository on the machine*. No scenario covers a commit in a repo with no `openspec/` directory, or one with an `openspec/` tree from a different workflow. The gate's permissive default is asserted, not specified, as the behavior there — and a slow or noisy gate in arbitrary repos is how operators reach for `--no-verify`, the exact failure mode the 2270-byte hook's own comments warn about.
+- **No install-ordering or rollback requirement.** If the installer binds global `core.hooksPath` and then fails before/while publishing the hook, every commit on the machine hard-fails. The dangling-binding scenario exists only as a `--check` report; nothing requires publish-before-bind or unwind-on-failure. This is the single most dangerous partial state and it is undressed.
+- **The sweep's repo discovery is unspecified.** "The installer unsets it" — for which set of repositories? The six known ones were found by a manual census of `~/Sourcecode` that the design itself admits was wrong twice. Nothing states how the installer enumerates candidate repos, what happens to repos outside the scanned root, or that sweeping is bounded to declared/known repos rather than a filesystem crawl.
+- **Behavioral equivalence of the divergent copies is assumed, not shown.** I read the 5844-byte `codex-workflow` hook: it is not just an older gate — it carries per-host reviewer-identity wiring ("This host's identity, so its own reviews do not satisfy the threshold"). A single machine-wide published hook cannot set a per-repo host identity. Review evidence is non-blocking today, so enforcement is unaffected — but "four versions of one authority" is not quite true, and the change makes those copies inert without a task that diffs them for load-bearing extras beyond the gate.
+- **"Reported as a violation" has no reporter.** The core-self-enforcement scenario "Core's local binding is absent" says the condition SHALL be reported as a violation — by what surface? The gate, the hook's stderr, `--check`? If it's `--check`, that's a report nobody sees until they think to run it; if it's the hook, say so.
+- **The `hooks.d` contract is internally contradictory and under-specified.** "Running each entry and failing the commit on the first non-zero exit" says both run-all and fail-fast. Unspecified: entry ordering, dotfiles/backup files (`foo~`, `.bak`), non-executable entries, absent `hooks.d`, and whether a gate failure short-circuits `hooks.d` or the dispatch continues.
+- **"Current by content against the checkout at the same version"** — which checkout, and what establishes "same version"? Core's working tree may be dirty or on a feature branch; `--check` then compares the published hook against a moving target. Needs a canonical source (published payload + version marker), not "the checkout."
+- **Sweep equivalence test under-specified.** "Names the directory git would resolve anyway" must handle relative values (fbc-platform's is `.husky/_`), `~` expansion, symlinked hooks dirs, and worktrees (where the default resolution is the *main* checkout's hooks dir, not `.git/hooks` under the worktree). One wrong string comparison either sweeps a real opt-out or preserves a redundant one.
+- **Rationale inconsistency.** The Why claims the parse-failure condition "is caught twice more downstream" (`pre-commit` + CI); the design's own Decision 2D says CI "does not run on most of these repositories at all." For most of the fleet the redundancy is one surface, not two — the latency-loss acceptance should rest on that.
+- **Foreign-binding exit semantics are muddled.** "Reported as skipped, so the run exits non-zero" — after payload and skills have already published. Either define a partial-install state explicitly (what `--check` shows, what re-running does) or don't call a hard failure "skipped."
+- **The machine-level directory path is never pinned in the spec.** "Machine-level hooks directory" and "`hooks.d` alongside the published directory" appear in requirements and scenarios without a fixed path, yet `--check` must verify the binding "resolves to the published directory." The canonical location belongs in the delta, not in install.sh alone.
+
+No PII/secrets issues found; the refusal to exec repository-resolved code at commit time is the right security posture and is well argued. The self-disclosed measurement correction is a strength — but the same rigor now needs to be applied to install ordering, sweep discovery, and copy equivalence before this is ready.
+
+
+## Resolution — round 2
+
+Three vendors, all REQUEST-CHANGES again, but on a different and better class of
+problem: round 1 found the argument's evidence wrong, round 2 found the
+mechanisms under-specified. opencode independently re-measured the corrected
+hook census and confirms it (11 repos, sizes 39/1201/1376/2270/5844, six local
+bindings, `fbc-platform` correctly opted out).
+
+### The finding that says I was wrong, verified
+
+**codex's HIGH on the dangling binding is correct, and my scenario was inverted
+in the dangerous direction.** I wrote that a `core.hooksPath` pointing at an
+absent directory makes `git commit` fail machine-wide. Tested on git 2.50.1 in a
+scratch repository with a fake `HOME`: the commit **succeeds, exit 0**, silently
+ungated. Fixed in the delta, and the correction is left visible because it
+changes what `--check` is for — it is not explaining a visible breakage, it is
+the only surface that would ever mention this.
+
+That also **inverts opencode's related finding**. It argued that binding before
+publishing means "every commit on the machine hard-fails"; in fact they all pass
+ungated, which is worse and makes the publish-before-bind requirement more
+important rather than less. Both reviewers reasoned about the same behaviour and
+both got its direction wrong; the requirement now rests on the measurement.
+
+### Accepted and folded in
+
+- **Publish before bind, unwind on failure** (opencode) — new requirement, with
+  the interrupted-run case. Strengthened by the measurement above.
+- **`hooks.d` was self-contradictory** (opencode) — "run each entry" and "fail on
+  the first non-zero" are different contracts. Now: gate first and short-circuits
+  `hooks.d`; entries in lexical order, fail-fast; non-executable entries skipped
+  *and reported*; dotfiles and `~`/`.bak`/`.orig` debris skipped; absent
+  `hooks.d` is normal.
+- **A symlink out of `hooks.d` defeats the whole prohibition** (codex) — refused
+  by canonical target containment. Without it the "no repository-controlled
+  code" rule is one `ln -s` from meaningless.
+- **The declaration mechanism was undefined** (gemini) — now
+  `agenticapps.hooksbinding = declared`, a git config key in the same scope as
+  the binding it qualifies. A marker file can be deleted while the binding
+  survives; a list in core cannot be read by a sweep against a repository core
+  does not know.
+- **Sweep equivalence must resolve paths, not compare strings** (opencode) —
+  relative values, `~`, symlinks, and worktrees where the default is the *main*
+  checkout's hooks directory. One wrong comparison either sweeps a real opt-out
+  or preserves a redundant one.
+- **`--check` must test the execute bit** (codex) — git ignores a
+  non-executable hook, so correct bytes without the bit is a floor that reports
+  active and is not.
+- **The `core-self-enforcement` predicate contradicted itself** (codex) —
+  "outside core's git directory" versus the inherited "install when
+  `core.hooksPath` points outside the working tree", and `.git/hooks` is outside
+  the working tree. Resolved on the **git common directory**, which also fixes
+  linked worktrees, where the real hooks directory belongs to the main checkout.
+- **"Reported as a violation" named no reporter** (opencode) — it is core's CI
+  job, with `--check` as the local diagnosis. A report only `--check` emits is a
+  report nobody sees until they already suspect.
+- **Canonical paths pinned in the delta** (opencode) —
+  `~/.agenticapps/git-hooks/`, its `pre-commit`, and `hooks.d/`. `--check` cannot
+  verify that the binding "resolves to the published directory" while that
+  directory exists only in prose.
+
+### Accepted as true, not yet folded in
+
+These are real and are recorded rather than silently carried:
+
+- **Blast radius beyond the fleet** (opencode). The floor moves from nine
+  repositories to every repository on the machine, and no scenario covers a
+  commit in a repository with no `openspec/`, or one belonging to a different
+  workflow. The permissive default is asserted rather than specified there. This
+  wants its own requirement and I would rather write it deliberately than
+  bolt it on.
+- **Sweep discovery is unspecified** (opencode). "The installer unsets it" — for
+  which repositories? A filesystem crawl and a declared set are very different
+  blast radii, and the census behind the six was wrong twice.
+- **A global binding disables every hook type, not just `pre-commit`** (codex).
+  Composition is specified for `pre-commit` alone. `fbc-platform` is protected
+  by its local binding, but the general case wants preflight and rollback.
+- **The divergent copies may not be behaviourally equivalent** (opencode). The
+  5844-byte `codex-workflow` hook carries per-host reviewer-identity wiring that
+  a single machine-wide hook cannot reproduce. Enforcement is unaffected because
+  review evidence is non-blocking, but "four versions of one authority" is not
+  quite true and a task should diff them for load-bearing extras.
+- **Rationale inconsistency** (opencode). The Why says the parse-failure
+  condition is "caught twice more downstream", while Decision 2D says CI does
+  not run on most of these repositories. For most of the fleet it is caught
+  once. The latency-loss argument should rest on that.
+- **Foreign-binding "skipped" is muddled** (opencode) — a hard failure after the
+  payload and skills have published is a partial install, and should be named
+  one.
+
+### Not accepted
+
+gemini asks that the composition contract's security benefit be "stated more
+forcefully" and that the sweep be framed as opinionated cleanup. Both are
+presentation. The delta states the prohibition and now enforces it through
+canonical-target containment, which is worth more than emphasis.
+
+### Consequence
+
+Still not ready for code, and the remaining gaps are narrower than round 1's.
+Folding these in changed `tasks.md`, so this record is stale by digest on
+arrival — a third round is warranted only if the deferred items above are
+written up, since everything else here is now specified.
+
+## Round 1 — 2026-08-07, superseded
+
+Preserved here because the producer publishes `REVIEWS.md` with `mv -f`
+and would otherwise discard it. The change was repaired against these
+findings; round 2 above reviewed the repaired text.
+
+<details>
+<summary>Round 1 record, findings and resolution</summary>
+
+# Review record
+
+- requested: gemini codex claude opencode
+- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
+- excluded:  claude (declared implementing host)
+- failed:    (none)
+
+## Reviewer: gemini
 _generated 2026-08-07T09:07:25Z · timeout 600s_
 
 VERDICT: REQUEST-CHANGES
@@ -177,9 +340,11 @@ dispatcher's composition contract and the fallback prohibition together; and
 decide what the change does about six repositories the global binding cannot
 reach — which is a design question, not an edit.
 
+</details>
+
 <!-- openspec-review-trailer v1
 implementing-host: claude
-digest: sha256:0ab0dc32e8788b45dc1067e6ece875aa21fb6420ff199fa52f0ee80b97e973ac
+digest: sha256:90c5c6f13f67c4beb5b7c43b20223c39052f17ea7ad5481de67757c9de63afe2
 producer-version: 1.2.0
-tasks-digest: sha256:9ecd4885c87ba1895eb7389735cff48ea29b77683bb672611197aed983f5ccfc
+tasks-digest: sha256:d1032e75b24c9e6ce8dbfa33b298c035adc1b51c4638ddcdcc6da7f79ce1cd86
 -->

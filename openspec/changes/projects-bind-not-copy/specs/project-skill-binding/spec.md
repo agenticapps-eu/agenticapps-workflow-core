@@ -41,11 +41,28 @@ never been observed on this machine — it is inferred from the copy resolving
 in one repository, and the measurement SHALL be recorded.
 
 The premise that "every host reads a directory the installer binds" is
-additionally **false as stated**: pi reads `~/.pi/agent/skills`, which is
-neither bound by the installer nor swept, and is measured empty. A deletion that
-assumes otherwise could leave pi resolving nothing at all in that repository.
-Either the directory is bound before the sweep, or this requirement is scoped to
-the hosts where the binding is verified.
+additionally **false as stated**: pi reads `~/.pi/agent/skills`, which the
+installer does not bind.
+
+**It is not empty, and an earlier revision said it was.** Measured 2026-08-07 it
+holds **26** skills, symlinked to `~/.agents/skills/`. What is absent is only
+`agentic-apps-workflow`. The error came from repeating an unverified line in the
+handoff, in a requirement whose authority rests on measurement — so it is
+corrected in place rather than quietly fixed.
+
+**The resolution is chosen here rather than left as an either/or.** An
+undecided "either bind it or scope the claim" sitting in normative text is not a
+requirement. **This capability is scoped to hosts whose skill directory the
+installer binds**, and pi is therefore **out of scope until its directory is
+bound**. Binding it is a change to `workflow-installation`, not to this one, and
+doing it by implication here is how a capability acquires an obligation nobody
+specified.
+
+The consequence is stated rather than hidden: after the sweep, a pi session in a
+swept repository resolves **no** workflow skill, because the project copy is
+gone and nothing binds a replacement into pi's directory. That is a real
+regression for one host, it is the price of not widening this change, and
+`--check` SHALL report it rather than leave it to be discovered.
 
 #### Scenario: Precedence is measured before the first removal
 
@@ -69,13 +86,35 @@ the hosts where the binding is verified.
   host
 - **AND** the condition is reported rather than left to be discovered
 
-#### Scenario: A project skill shares a name with a core skill but is not a copy
+**The check acts on names; the human acts on provenance, and the spec SHALL NOT
+pretend otherwise.** An earlier revision gave "a copy" and "an independently
+authored skill with the same name" different outcomes without saying how they
+are told apart — which is not decidable by a script, since authorial intent is
+not in the bytes. `fbc-platform` is the live ambiguous case: 346 lines, matching
+neither core's 235 nor its 324-line siblings.
 
-- **WHEN** a project-local skill has the same name as one core publishes but was
-  independently authored
-- **THEN** the condition is reported as a name collision rather than as a copy
-- **AND** the report distinguishes the two, because deleting an independently
-  authored skill on a name match destroys work rather than collapsing a duplicate
+So the rule is split by who is doing the work:
+
+- **The automated check reports on name alone.** Any project-local skill whose
+  name core publishes is reported. No inference, no heuristic, no byte
+  comparison standing in for provenance.
+- **A report is not a mandate to delete.** Removal is a human act, and where the
+  copy differs from every known version the difference SHALL be read and
+  recorded before the removal, per task 1.3.
+
+#### Scenario: A project skill shares a name with a core skill
+
+- **WHEN** a project-local skill has the same name as one core publishes
+- **THEN** it is reported, on the name alone
+- **AND** the report SHALL NOT assert whether it is a copy or independent work
+
+#### Scenario: A reported skill differs from every known version
+
+- **WHEN** a reported copy matches neither core's published version nor its
+  siblings
+- **THEN** its content is read and what differs is recorded before removal
+- **AND** the record carries the difference itself, not only the version numbers,
+  because three metadata fields cannot preserve a local edit
 
 ### Requirement: The fleet is checked from a declaration that cannot shrink
 

@@ -71,17 +71,79 @@ shortened. That is a stronger and simpler rule than the one it replaces: the
 reverse pass no longer asks whether a held hook appears in a declaration, it
 asks whether any fleet hook is held at all.
 
-This also removes the need for a sanctioned-extra mechanism. `OPT-OUTS` can
-record a *missing* binding as intended and has no axis for an *extra* one, so a
-retained hook would have failed the both-directions check permanently with no
-way to say it was deliberate. An empty declaration means there is nothing to
-sanction.
+**An empty declaration is not the same as an absent one, and the current
+implementation cannot tell them apart.** `check-shims.sh:34` reads the
+declaration with `sed 's/#.*//' "$1" 2>/dev/null | awk 'NF'` — the `2>/dev/null`
+means a **missing file** yields exactly what an **empty file** yields, verified
+by running it against both. With zero declared hooks the forward pass's inner
+loop never executes, `bad` stays `0`, and line 91 prints *"Every declared hook
+is bound with the authority's bytes"* and exits 0.
+
+That is a vacuous truth published as a conformance statement, and it is the
+exact failure this capability exists to prevent — a check reporting a clean
+fleet while nothing was examined. This change **creates** that condition, so it
+carries the fix:
+
+- A declaration file that is absent SHALL be reported as an error, distinctly
+  from one that is present and empty.
+- A forward pass over an empty declaration SHALL report that it checked nothing,
+  and SHALL NOT emit the conformance sentence.
+- With the forward pass vacuous, the success message SHALL describe what was
+  actually verified — which after this change is the reverse pass alone.
+
+**The reverse pass needs a fleet-vs-project discriminator, and membership can no
+longer supply it.** With the declaration empty, "is this hook declared" is
+useless as a test, and a repository's own unrelated `PostToolUse` entry would
+be reported as a defect. A hook is **fleet-shared** if its shim resolves an
+implementation under `~/.agenticapps/bin/`, and that is the criterion. A hook a
+project wrote and owns resolves nothing there and is not this capability's
+business.
+
+**A retired hook needs a durable name, not an inference.** Once
+`normalize-claude-md` leaves the declaration, nothing distinguishes a stale
+binding of it from a project-authored hook that happens to share the shape. The
+declaration SHALL therefore carry retired names as **tombstones** — recorded,
+not silently dropped — so that "declared", "retired" and "never ours" are three
+states rather than two. Shrinking a declaration to nothing and inferring the
+difference is the same shrinkage defect `ARTIFACTS` was written to prevent.
+
+This does **not** remove the need for a sanctioned-transition mechanism, and an
+earlier revision claimed it did. `OPT-OUTS` records a *missing* binding as
+intended and has no axis for an *extra* one — and because retiring a hook in
+core and unbinding it across nine repositories cannot be atomic, there is an
+interim in which extras exist deliberately. That interim needs sanctioning
+whether or not the end state is empty.
 
 #### Scenario: A project holds no fleet hook
 
 - **WHEN** both passes run against a repository carrying no fleet hook shim and
   no host configuration entry for one
 - **THEN** it is reported conformant
+
+#### Scenario: The declaration is empty
+
+- **WHEN** the forward pass runs against an empty declaration
+- **THEN** it reports that no hook was declared and therefore none was checked
+- **AND** it SHALL NOT report that every declared hook is bound
+
+#### Scenario: The declaration file is absent
+
+- **WHEN** the declaration file does not exist
+- **THEN** the check reports it as an error and exits non-zero
+- **AND** the condition is distinguishable from an empty declaration
+
+#### Scenario: A project holds a hook of its own
+
+- **WHEN** a repository binds a hook whose implementation does not resolve under
+  `~/.agenticapps/bin/`
+- **THEN** it is not reported
+- **AND** the reverse pass SHALL NOT treat an unrecognised hook as a fleet hook
+
+#### Scenario: A project still holds a retired fleet hook
+
+- **WHEN** a repository binds a hook recorded as a tombstone in the declaration
+- **THEN** it is reported as a retired binding, distinctly from an undeclared one
+- **AND** the check exits non-zero
 
 #### Scenario: A project still holds a fleet hook
 
