@@ -5,8 +5,8 @@
 requirements, 634 lines. `one-enforcement-floor` is the only active change and
 it is unblocked.
 
-Branch `feat/one-skills-payload`, six commits this session, all green. Nothing
-pushed.
+Branch `feat/one-skills-payload`, eight commits this session, all green,
+**pushed**. PR #88 updated and retitled — it no longer just carries the payload.
 
 ## Accomplished
 
@@ -85,17 +85,71 @@ the code had not changed since round five — rounds six and seven were spec and
 prose coherence only — and every outstanding item is a dispositioned
 carry-forward. Specs are current truth and get amended after archive.
 
+## The mistake I made, and undid
+
+`git add -A` in the archive commit (`925481a`) swept in three untracked
+leftovers nobody chose: six `.claude/skills/gitnexus/` skill directories,
+**a 44-line GitNexus section appended to core's own `CLAUDE.md`** telling agents
+to run `npx gitnexus analyze`, and five `.planning/skill-observations/` files —
+the notes the handoff had just said were Donald's call to delete.
+
+Undone in `8e7eaec`: `CLAUDE.md` restored, tracking removed, both paths added to
+`.gitignore` so a blanket add cannot reinstate them. The files stay on disk.
+**The gitnexus skills still load in this repo until deleted from disk**, which is
+a separate decision and has not been taken.
+
+The lesson is narrower than "don't use `-A`": a blanket add cannot tell the work
+from whatever else is lying around, and this repository is one where "whatever
+else is lying around" includes removed software and instruction text.
+
+## The payload is not one payload yet
+
+Measured after the archive, across the fleet:
+
+| Repo | family | `agentic-apps-workflow` copy |
+|---|---|---|
+| agenticapps-dashboard | agenticapps | 331 lines, v3.2.0 |
+| agenticapps-roadmap | agenticapps | 324 lines, v3.2.0 |
+| agents-task-viewer | agenticapps | 324 lines, v3.2.0 |
+| dashboard-add-agent-board | agenticapps | **415 lines, v3.0.0** |
+| callbot | factiv | 324 lines, v3.2.0 |
+| cparx | factiv | 324 lines, v3.2.0 |
+| fbc-platform | factiv | **346 lines, v3.2.0** |
+| fx-signal-agent | factiv | 324 lines, v3.2.0 |
+
+Core ships **235 lines, v4.0.0**. Every one of those is a committed directory in
+`.claude/skills/`, not a symlink — **four distinct byte-sizes across two claimed
+versions**, and `fbc-platform` differs from its three v3.2.0 siblings while
+claiming to be them. Each repo also carries six copied `openspec-*` skills;
+core carries those six too.
+
+So the answer to "did we remove the project-specific claude workflows" is **no**.
+The install run bound host directories; project `.claude/skills/` is a different
+surface and `--project`, the mode that would have reached it, is superseded.
+Which skill loads in those repos is loader ordering between the project copy and
+the new core symlink — the condition core's own `CLAUDE.md` says not to leave to
+chance, now live in eight repositories.
+
+Neither `factiv-website` nor `factiv-design-system` is a workflow project.
+`.planning/` also survives in `cparx`, `fbc-platform` and `fx-signal-agent`, with
+a **tracked** `config.json` in the latter two.
+
 ## Next session: start here
 
-`one-enforcement-floor` has **no plan review at all** (its task 8.2) and no
-code, which is when a plan review is cheapest. That is the first action:
-`run-plan-review.sh one-enforcement-floor --implementing-host claude`, with
-`REVIEW_TIMEOUT=600` so opencode counts.
+Donald asked for a proposal on the project-local skill copies, and it is being
+drafted now — that is the live work. Three candidates were on the table and this
+is the one that matters most, because the other two are deferrals while this is a
+payload that was published and then shadowed in eight repositories.
 
-Consider first, though, whether the check-mode follow-up should be proposed
-before it: four reporting gaps have accumulated in one mode (open question 1),
-and four deferrals in one place is the argument for one change rather than four
-amendments.
+The other two, in order after it:
+
+- `one-enforcement-floor` has **no plan review at all** (its task 8.2) and no
+  code, which is when a plan review is cheapest:
+  `run-plan-review.sh one-enforcement-floor --implementing-host claude`, with
+  `REVIEW_TIMEOUT=600` so opencode counts.
+- The check-mode follow-up: four reporting gaps have accumulated in one mode
+  (open question 1), which is the argument for one change rather than four
+  amendments.
 
 ## Open questions
 
