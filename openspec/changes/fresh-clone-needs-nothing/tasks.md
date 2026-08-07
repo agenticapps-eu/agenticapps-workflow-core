@@ -207,4 +207,16 @@ putting behaviour in a repo, so it moves to the machine like everything else.
       install look broken
 - [ ] 9.6 Verify `/opsx:propose` resolves in a repository that carries no
       `.claude/` at all. That is the whole point, and it is the assertion that
-      fails if the binding is wrong
+      fails if the binding is wrong.
+
+      **Half-done, and deliberately not ticked.** Run 2026-08-07:
+      `./install.sh --host auto` bound 6 skills + `commands/opsx` for claude, 6+6
+      for opencode, 6 skills for codex, 6 skills for pi; omp recorded unverified;
+      no collisions; `aristotle.md` and opencode's existing links untouched. A
+      fresh repository initialized by the *published* `init-project.sh` carries
+      `openspec/`, `AGENTS.md` and `CLAUDE.md` and nothing else.
+
+      What is NOT confirmed is resolution. A host loads its commands at session
+      start, so the session that did the binding cannot observe it. **Confirm in
+      a new session** — and this change's own rule is why it stays open: the
+      symlink existing is exactly what was true of pi for months
