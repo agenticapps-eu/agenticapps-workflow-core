@@ -59,17 +59,22 @@ this change's own guards did not hold.** Three commits on
 
 ## Next session: start here
 
-**Take 9.4 first, and treat it as a design question rather than a task.**
-Nothing enrols the repositories that are gated *today*. §3 removes the nine
-per-repository gate copies, the published hook exits 0 without the marker, and
-2.8b only covers `init-project.sh` for future projects — so the repositories the
-floor exists for go from gated to **silently ungated at install time**, which is
-the exact failure this change claims to eliminate. codex and opencode raised it
-independently. It probably reshapes §3 and §2.8, so it should be settled before
-2.9, 2.8b or 2.8c get built on top of the current shape.
+**9.4 is settled as design Decision 5** — the migration enrols, verifies the
+binding governs the repository by *resolving its hooks directory*, then removes.
+Normative requirement + five scenarios, so it survives archival. Two corrections
+fell out: the migration set is **four, not nine** (0.3a), and 3.1's predicate
+was wrong — "the binding is live" is a fact about the machine, "the binding
+governs this repository" is a fact about the repository, and a local
+`core.hooksPath` makes those different in five repositories today.
 
-After 9.4: 9.5 (the unwind clause contradicts its own ordering — confirmed
-unreachable while implementing 2.1), then 9.13, then 2.9 → 2.8c → 2.8b.
+**Next is 2.9's preflight, and 9.4a is the reason it comes before 2.8b/2.8c.**
+Three things now want an operator acceptance — what the binding will newly
+govern, what publishing will replace (2.1a), and what will be enrolled (9.4) —
+and they must be **one** report and one acceptance rather than three that have
+to agree with each other. Build it as one.
+
+Then 9.5 (the unwind clause contradicts its own ordering — confirmed unreachable
+while implementing 2.1), 9.13, 2.8c, 2.8b.
 
 **`core.hooksPath` is still unset on this machine and `./install.sh` has not been
 run.** Unchanged, and 9.4 is now a second reason to hold.
@@ -83,12 +88,17 @@ requirement was checked against the code.
 
 ## Open questions
 
-1. **§9 holds all ten review findings** with the reasoning. Highest-consequence:
-   9.4 (nothing enrols today's gated repos), 9.6 (binding activates every hook
-   type in the published directory, generalising 2.1a), 9.11 (the
+1. **§9 holds the review findings** with the reasoning. 9.4 is now closed;
+   still open and highest-consequence: 9.6 (binding activates every hook type in
+   the published directory, generalising 2.1a), 9.11 (the
    `core-self-enforcement` contradiction), 9.13 (3.5 is live and collides with
    the sweep — core's only possible binding value is exactly the value 3b.2
    classifies as redundant, so the sweep would unset it).
+2. **The delta changed again after the reviewers read it**, and this time it is
+   not drift: 9.4's requirement is the fix codex explicitly asked for
+   ("specify and test enrolment-before-removal with rollback on failure"). The
+   digest is stale, and the honest reading is that round three should wait until
+   the rest of §9 is decided rather than fire per finding.
 2. **`fleet-carries-only-current` still never reviewed** — seven sessions old,
    flagged at every commit. Now demonstrably cheap: 420s and three vendors.
 3. **§18's version number** — still blocking a task in `diagram-is-the-surface`.
