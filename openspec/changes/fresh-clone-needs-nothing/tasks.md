@@ -127,9 +127,10 @@ skill directory". `~/.agents/skills` is not pi's.
       `claude-md/`, `workflow-config.md`, `commands/`
 - [ ] 6.3 **Keep `openspec/`.** It is the repository's truth, and the one thing
       here that no other machine can supply
-- [ ] 6.4 Keep the six `openspec-*` skills. Core does not publish them; they are
-      installed per-project by the openspec CLI and deleting them breaks
-      `/opsx:*`
+- [ ] 6.4 **Remove the six `openspec-*` skills and the `opsx` command files too** —
+      reversed once they are bound machine-level (§9). Keeping them would leave
+      new repositories, which never get them, and swept repositories, which kept
+      them, in two different shapes
 - [ ] 6.5 Write the instruction file per §3–§4
 - [ ] 6.6 **No `.archive/` copy.** The files are committed, so git is the
       rollback. A retained copy is the duplication this change removes
@@ -163,7 +164,40 @@ skill directory". `~/.agents/skills` is not pi's.
       this change's new requirement refuses as evidence
 - [ ] 8.2b Confirm a name collision in pi's shared directory is reported and the
       other tool's entry is left intact
-- [ ] 8.3 A swept repository contains exactly `openspec/`, the instruction file,
-      and the six `openspec-*` skills — nothing this workflow publishes
+- [ ] 8.3 A swept repository contains exactly `openspec/` and the instruction
+      file — and `/opsx:*` still resolves in it, from the machine-level binding
 - [ ] 8.4 `git revert` of a sweep commit restores a repository, with no archived
       copy consulted
+
+## 9. Bind the openspec tooling machine-level
+
+The `openspec` CLI is a per-project agent installer: `openspec init --tools <host>`
+writes command and skill files into the repository. That is the last thing still
+putting behaviour in a repo, so it moves to the machine like everything else.
+`init-project.sh` therefore runs `--tools none`, which is already implemented.
+
+- [ ] 9.1 **Measured 2026-08-07 — the shapes differ per host, so one pattern will
+      not do.** Skills are uniform (`<host>/skills/openspec-*/SKILL.md`, six of
+      them); the command surface is not:
+
+      | host | command surface |
+      |---|---|
+      | claude | `.claude/commands/opsx/*.md` — nested directory |
+      | codex | **none at all** — skills only |
+      | opencode | `.opencode/commands/opsx-*.md` — flat, hyphenated |
+      | pi | `.pi/prompts/opsx-*.md` — *prompts*, not commands |
+
+- [ ] 9.2 Establish each host's machine-level command directory **by evidence**,
+      exactly as §1 requires of skill directories. Do not infer pi's from
+      opencode's — the project-level shapes already prove they differ, and
+      assuming symmetry is the error that left pi bound to a directory it never
+      read
+- [ ] 9.3 Generate, never hand-copy. Only the CLI knows the file contents, so
+      generate into a scratch directory with `--tools <host>` and bind the result
+- [ ] 9.4 Bind by symlink, never copy — the same rule core's own skills follow
+- [ ] 9.5 A host with no command surface is a **recorded state, not a failure**.
+      codex has none, and reporting it as a partial install would make a correct
+      install look broken
+- [ ] 9.6 Verify `/opsx:propose` resolves in a repository that carries no
+      `.claude/` at all. That is the whole point, and it is the assertion that
+      fails if the binding is wrong

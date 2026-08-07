@@ -9,19 +9,25 @@ It SHALL NOT carry **any artifact this workflow publishes** — skills, hooks, h
 shims, host settings written by this workflow, workflow configuration files, or
 command definitions. Those are machine-level and are established by `install.sh`.
 
-**The prohibition is scoped by publisher, not by file type.** Artifacts another
-tool installs per-project remain that tool's business: the `openspec-*` skills are
-written by the `openspec` CLI, are required for its commands to resolve, and are
-neither published nor swept by this workflow. A rule phrased as "no skills in a
-repository" would order the deletion of files this workflow does not own and
-whose removal breaks the CLI the rest of this capability depends on.
+**This includes the `openspec` CLI's own per-project files.** `openspec init
+--tools <host>` writes six skills, and for most hosts a set of commands, into the
+repository — it is a per-project agent installer, and it is the last thing still
+putting behaviour in a repository. `workflow-installation` binds those files
+machine-level instead, and the initializer passes `--tools none`, so a repository
+receives none of them and `/opsx:*` resolves from the machine.
 
-#### Scenario: A repository carries skills installed by another tool
+An earlier revision of this requirement kept them, on the grounds that another
+tool owns them and deleting them breaks `/opsx:*`. Ownership was the right test
+and the wrong conclusion: it left new repositories, which never receive them, and
+swept repositories, which kept them, in two different shapes — the drift this
+capability exists to end.
 
-- **WHEN** a repository carries the `openspec-*` skills written by the `openspec`
-  CLI
-- **THEN** they are not a violation of this requirement, because this workflow
-  neither publishes nor removes them
+#### Scenario: A repository carries the openspec CLI's per-host files
+
+- **WHEN** a repository carries `openspec-*` skills or `opsx` command files
+- **THEN** they are removed with everything else, because the machine-level
+  binding provides them
+- **AND** `/opsx:*` SHALL still resolve in that repository afterwards
 
 The division is what makes a fresh clone work: the repository carries what is
 true *about this repository*, which no other machine can supply, and the machine
