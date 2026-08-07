@@ -52,16 +52,24 @@ skill directory". `~/.agents/skills` is not pi's.
       workflow section is appended behind a provenance marker
 - [ ] 3.4 RED: both files existing independently with different content is
       reported and refused, not silently collapsed
-- [ ] 3.5 RED: it writes no host configuration, no hook, no skill, and makes no
-      network call
+- [ ] 3.5 RED: it writes no host configuration, no hook, no skill, no CI workflow
+      file, and makes no network call
 - [ ] 3.6 A test suite against a scratch repository — no case touches a real one
 
 ## 4. Build the initializer
 
-- [ ] 4.1 **Decide where it lives and what it is called** — design open question
-      1. Core has no project-side surface, so there is no precedent. A subcommand
-      of `install.sh` overloads a script whose header says it puts the workflow on
-      a *machine*
+- [ ] 4.1 Write it at `reference-implementations/init-project/init-project.sh`,
+      carrying an `init-project-version:` marker line — decided; it is published
+      like the gate rather than added as an `install.sh` subcommand
+- [ ] 4.1a Publish it from `install.sh`: one `ARTIFACTS` line,
+      `init-project/init-project.sh:init-project-version`. Through the arbitrating
+      helper, never by copy — `workflow-installation` already requires this of any
+      published executable that is not a project hook
+- [ ] 4.1b Do **not** add `~/.agenticapps/bin` to `PATH`. It is not on it today and
+      putting it there means writing shell configuration, which `install.sh`
+      refuses. Onboarding documents the absolute path
+- [ ] 4.1c Confirm `--check` reports the initializer like the other artifacts, and
+      that installing twice leaves one copy at one version
 - [ ] 4.2 Implement to pass §3, and no further
 - [ ] 4.3 Short enough to read before trusting. It runs inside someone's
       repository against files they already own, which is a higher-trust surface

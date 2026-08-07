@@ -31,8 +31,8 @@ categories. Nothing has said what should remain.
 - Fixing omp. Recorded unverified — see Decisions.
 - Writing global instruction files for any host. `install.sh` writes no host
   configuration and that stands.
-- Generating CI workflow files. A repository may want the third enforcement
-  surface; that is a separate choice with its own shape.
+- Generating CI workflow files. **Decided, not deferred:** the initializer writes
+  none, and onboarding's claim covers the two local surfaces. See Decisions.
 
 ## Decisions
 
@@ -79,6 +79,46 @@ scaffolders are archived and the target is a single shape. A chain exists to kee
 "what does v1.3.0 look like on disk" single-sourced across versions; one target
 state has no such problem.
 
+**The initializer is a published executable, not a subcommand and not a skill
+step.** It is `init-project.sh`, published by `install.sh` into
+`~/.agenticapps/bin` through the same arbitrating helper that publishes the gate,
+`reviewer-cli.sh` and `run-plan-review.sh` — one `ARTIFACTS` line, marker key
+`init-project-version`. *This corrects this document's own claim that core has no
+project-side surface and therefore no precedent.* Those three are machine-installed
+and repository-invoked: the gate runs against the repository you are standing in.
+The initializer has exactly that shape, so it inherits version arbitration,
+downgrade refusal, cross-installer locking and atomic replacement rather than
+needing them written again.
+
+*Alternative rejected: an `install.sh --init-project` subcommand.* It would make
+false a header that says the script puts the workflow on a **machine**, and would
+require the installer to acquire a notion of "the repository I am standing in"
+that it does not have. *Alternative rejected: a step in the trigger skill.* It is
+the most consistent with "one file reaches all hosts", but it cannot satisfy the
+RED tests this change requires — a documented step has no scratch-repository test
+suite, and idempotence and the refuse-on-divergence case are exactly what needs
+proving.
+
+**Invocation is by absolute path, and that is deliberate.** `~/.agenticapps/bin`
+is not on `PATH` on this machine and `install.sh` does not put it there, because
+doing so means writing shell configuration and the installer writes none. So
+onboarding reads `~/.agenticapps/bin/init-project.sh`, not a bare command name.
+Putting the directory on `PATH` is the operator's choice, and the four artifacts
+already published there have the same property.
+
+**Onboarding establishes the two local surfaces; CI is not one of them.** A
+repository still carries two artifacts. The initializer writes no CI workflow
+file, and "a fresh clone needs nothing" is therefore a claim about skills and
+enforcement hooks — the surfaces `install.sh` establishes — not about the third
+surface. *Alternative rejected: writing `.github/workflows/`.* It would make the
+claim literally true on all three surfaces, and CI is genuinely the only
+enforcement that survives a machine without the workflow, but it puts a
+GitHub-shaped third artifact into a change whose thesis is that a repository
+carries two things, in a repository that has kept itself forge-neutral. *Also
+rejected: an opt-in `--with-ci` flag* — the default would stay honest, but the
+initializer acquires a second shape to test in exchange for a file whose content
+nobody has specified. The scope limit is now stated rather than implied.
+
 **No `.archive/` copy.** The files are committed, so git already holds them and
 `git revert` restores them. A retained copy inside the repository is a second
 source of the thing being deleted. *Alternative rejected: archive then delete,*
@@ -99,8 +139,9 @@ existing binding-state requirements already define every state a target can be i
 this adds no new state. But the co-tenancy is real and is recorded rather than
 assumed benign.
 
-**An initializer inside someone's repository is a higher-trust surface than a
-machine installer.** → It is required to be short enough to read first, to write
+**An initializer that writes into someone's repository is a higher-trust surface
+than a machine installer**, even though it is published machine-side like every
+other artifact. → It is required to be short enough to read first, to write
 only the two artifacts, and to touch no host configuration and no network.
 
 **The instruction-file append could collide with an existing `AGENTS.md`.** →
@@ -112,7 +153,8 @@ decides which rule survives, and that is not the initializer's decision.
 
 1. Correct pi's mapping and add the evidence obligation to the installer.
 2. Record omp unverified; make the installer report unconfirmed bindings.
-3. Build the initializer, RED first.
+3. Build `init-project.sh`, RED first, and publish it from `install.sh` through
+   the arbitrating helper.
 4. Verify a fresh clone works on all bound hosts with no per-repo step.
 5. Sweep the seven repositories, gated on the two in-flight changes.
 
@@ -121,17 +163,9 @@ ordinary reverts.
 
 ## Open Questions
 
-1. **Where does the initializer live and what is it called?** Core has no
-   project-side surface today, so there is no precedent. A subcommand of
-   `install.sh` would overload a script whose header says it puts the workflow on
-   a *machine*.
-2. **Does a repository want a CI workflow file?** CI is the third enforcement
-   surface and the only one that survives a machine without the workflow. It is
-   out of scope here, but "a fresh clone needs nothing" is true only for the two
-   local surfaces.
-3. **Is omp's skill directory ever going to be establishable?** If omp reads no
+1. **Is omp's skill directory ever going to be establishable?** If omp reads no
    skills at all, binding it is meaningless and the mapping should be removed
    rather than corrected.
-4. **What happens to `agenticapps-dashboard-add-agent-board`?** The stray worktree
+2. **What happens to `agenticapps-dashboard-add-agent-board`?** The stray worktree
    would be swept by a naive fleet loop. Named in `diagram-is-the-surface` as
    needing its own decision; it is a hazard for this change's sweep too.

@@ -42,8 +42,17 @@ it.
 
 **A project initializer**
 
-- One command, idempotent, that creates the two above and does nothing else.
+- `init-project.sh`, idempotent, creating the two above and doing nothing else.
   Small enough to read before trusting, per the same rule `install.sh` follows.
+- **Published like every other executable** — `install.sh` puts it in
+  `~/.agenticapps/bin` through the arbitrating helper, one `ARTIFACTS` line, marker
+  key `init-project-version`. It is machine-installed and repository-invoked, the
+  shape the gate, `reviewer-cli.sh` and `run-plan-review.sh` already have.
+- Invoked by absolute path. That directory is not on `PATH` and `install.sh` will
+  not put it there, because that means writing shell configuration.
+- **It writes no CI workflow file.** A repository carries two artifacts, so the
+  claim in this proposal's title covers the two surfaces `install.sh` establishes —
+  skills and enforcement hooks. CI stays a separate, unowned choice.
 
 **pi is bound where pi reads**
 
@@ -94,9 +103,10 @@ it.
 
 ## Impact
 
-- **`install.sh`** — the `HOSTS` mapping, one line, plus the evidence obligation.
-- **New project initializer** — location to be decided in design; it is core's
-  first project-side surface and the repo has no precedent for one.
+- **`install.sh`** — the `HOSTS` mapping, one line; the evidence obligation; and
+  one new `ARTIFACTS` line publishing the initializer.
+- **New `init-project.sh`** — core's first repository-writing surface, published
+  by the same path as the four artifacts already in `~/.agenticapps/bin`.
 - **Seven fleet repositories** — `.claude/skills/`, `.claude/hooks/`,
   `claude-md/`, `workflow-config.md`, `commands/` removed; `openspec/` kept;
   instruction file written.

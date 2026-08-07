@@ -79,6 +79,68 @@ re-initialize an existing `openspec/`.
 - **WHEN** the provenance marker is present
 - **THEN** the section is not appended again
 
+### Requirement: The initializer is installed with the machine, never carried by the repository
+
+The initializer SHALL be a published executable, installed by `install.sh` into
+the shared bin directory through the same versioned install path as every other
+published executable that is not a project hook, and SHALL be invoked from within
+the repository it initializes.
+
+It SHALL NOT be a file the repository carries. The first requirement in this
+capability says a repository carries `openspec/` and one instruction file and no
+executables, so an initializer living in the repository would be the first thing
+the initializer is required to remove.
+
+It SHALL NOT be a subcommand of the machine installer, which is documented as
+putting the workflow on a *machine* and has no notion of a current repository.
+
+The shared bin directory SHALL NOT be added to `PATH` by the installer, because
+that means writing shell configuration and the installer writes none. Onboarding
+SHALL therefore name the absolute path.
+
+#### Scenario: The initializer is published
+
+- **WHEN** `install.sh` runs
+- **THEN** the initializer is published through the versioned install path with
+  its own version-marker key, and a destination holding a strictly newer version
+  is left intact and reported as satisfied
+
+#### Scenario: An operator looks for the initializer after cloning a repository
+
+- **WHEN** a repository is cloned onto a machine where `install.sh` has run
+- **THEN** the initializer is already present on the machine, and the clone
+  contains no copy of it
+
+#### Scenario: The shared bin directory is not on PATH
+
+- **WHEN** an operator invokes the initializer
+- **THEN** the documented invocation is the absolute path, and the installer has
+  modified no shell configuration to shorten it
+
+### Requirement: Onboarding establishes the two local surfaces, and says so
+
+Onboarding SHALL establish the surfaces `install.sh` establishes — bound skills
+and the enforcement floor — and SHALL NOT generate a CI workflow file.
+
+"A fresh clone needs nothing" is therefore a claim about those two surfaces. CI
+is the third enforcement surface and the only one that survives a machine without
+the workflow installed, which is precisely why it is not established here: it is
+a per-repository choice about a forge, and this capability's first requirement
+holds a repository to two artifacts. Stating the limit is the point — a claim
+that quietly meant "two of three surfaces" would be read as covering all three.
+
+#### Scenario: A repository is initialized
+
+- **WHEN** the initializer runs
+- **THEN** no CI workflow file is created, and the repository still carries
+  exactly the two artifacts this capability names
+
+#### Scenario: A repository wants enforcement that survives an unequipped machine
+
+- **WHEN** a repository needs the workflow enforced where it is not installed
+- **THEN** that is a CI configuration the repository owns, established
+  separately, and its absence is not a defect in onboarding
+
 ### Requirement: The initializer is short enough to be read before it is trusted
 
 The initializer SHALL do only what this capability names. It SHALL NOT write host
@@ -89,8 +151,8 @@ runs inside someone's repository, against files they already own.
 
 #### Scenario: The initializer is asked to do more
 
-- **WHEN** a step would write host configuration, a hook, or a skill into the
-  repository
+- **WHEN** a step would write host configuration, a hook, a skill, or a CI
+  workflow file into the repository
 - **THEN** it is not part of this initializer, and the capability is the reason
 
 #### Scenario: An operator reads it before running it
