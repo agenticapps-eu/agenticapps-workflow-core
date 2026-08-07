@@ -73,9 +73,13 @@ ran, so this change starts from an installer that writes no host configuration.
       and `core-self-enforcement` says the shared install "SHALL NOT be
       consulted" — which a machine-level published hook cannot satisfy. Resolve
       explicitly — an ADR if the inversion is being changed, a documented
-      local `core.hooksPath` override if it is being kept. **Either way this
-      needs a `core-self-enforcement` spec delta, which the change does not yet
-      carry** (create it with `/opsx:continue`)
+      local `core.hooksPath` override if it is being kept. **Decided in the
+      `core-self-enforcement` delta: the inversion is kept, and core sets a
+      local `core.hooksPath` that git prefers over the global binding.** The
+      installer gains a refusal when the resolver returns the machine-level
+      directory, and core's binding is declared so the sweep cannot remove it
+- [ ] 3.4 Declare core's local binding wherever the sweep reads its exclusions,
+      and confirm `--check` reports an undeclared core binding as at risk
 
 ## 3b. Sweep the redundant local bindings
 
@@ -167,9 +171,12 @@ resolve anyway, so unsetting them changes nothing today and restores reach.
       the trailer's `tasks-digest` no longer matches and the gate will report
       the review as stale — correctly, because the plan the reviewers read is
       not the plan any more. Re-run before code
-- [ ] 8.2c Create the `core-self-enforcement` spec delta with `/opsx:continue`.
-      It is the one artifact this change needs and does not have; the update
-      step may not create new files under the specs glob
+- [x] 8.2c `core-self-enforcement` spec delta written 2026-08-07 —
+      `specs/core-self-enforcement/spec.md`. Two MODIFIED requirements (core
+      resolves its own reference implementation; the pre-commit installer
+      resolves the real hooks directory) and one ADDED (core's binding is
+      declared and the sweep does not remove it). `openspec validate
+      one-enforcement-floor --strict` green
 - [ ] 8.3 Stage-2 code review on the diff, in an independent context
 - [ ] 8.4 ADR for the enforcement-surface decision; it changes what the workflow
       guarantees locally and that belongs in a decision record, not only in a

@@ -108,6 +108,13 @@ behaviour — unsetting it changes nothing except restoring the floor's reach, a
 that is what makes the sweep safe. A local binding that names anything else is a
 deliberate act and SHALL be left alone and reported.
 
+**A binding may be redundant by value and still be load-bearing**, and the sweep
+SHALL NOT rely on the value alone. Core is the case: its binding names its own
+default hooks directory, so it reads as redundant, but removing it hands core to
+the machine-level floor and breaks the resolution inversion `core-self-enforcement`
+requires. Such a binding SHALL be **declared**, and the sweep SHALL exclude any
+declared binding by name rather than by inspecting what it points at.
+
 This is not hypothetical tidying. Six repositories on the machine this was
 measured on set a local `core.hooksPath`; five name their own default directory,
 and one names a husky installation. The floor as originally specified would have
@@ -119,6 +126,13 @@ reached none of them, and nothing would have said so.
   resolve without it
 - **THEN** the installer unsets it, having confirmed the equivalence first
 - **AND** the repository is governed by the global binding afterwards
+
+#### Scenario: A declared binding is redundant by value
+
+- **WHEN** a repository's local `core.hooksPath` names its default directory and
+  the binding is declared
+- **THEN** the installer SHALL NOT unset it
+- **AND** SHALL report it as declared rather than as redundant
 
 #### Scenario: A real local binding is preserved
 

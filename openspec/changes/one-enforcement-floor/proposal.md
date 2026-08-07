@@ -123,7 +123,11 @@ What remains sequenced is ordinary: archive the predecessor, then apply this.
   `core.hooksPath` — so once the binding is global that installer writes into
   the machine-level directory, and either refuses permanently on a foreign
   marker or publishes core's working-tree-resolving hook to every repository on
-  the machine. That delta does not exist yet.
+  the machine. **That delta now exists** at
+  `specs/core-self-enforcement/spec.md`: the inversion is kept, core sets a
+  local `core.hooksPath` that git prefers over the global binding, the
+  installer refuses when the resolver returns the machine-level directory, and
+  core's binding is declared so the sweep cannot mistake it for redundant.
 - `change-gate-enforcement` and `project-hook-binding` are read but not
   modified — see `design.md` for why each survives untouched.
 - Affected code: `install.sh`, `tools/install.test.sh`,
