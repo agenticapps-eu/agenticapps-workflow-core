@@ -1,1 +1,12 @@
 .DS_Store
+
+# gstack security reports stay local
+.gstack/
+
+# Removed fleet-wide on 2026-08-05; OpenSpec carries the planning. Ignored
+# rather than merely deleted, because a `git add -A` swept it back in once.
+.planning/
+
+# GitNexus was removed on 2026-07-28. These are untracked leftovers on this
+# machine; ignoring them stops the next blanket add from reinstating them.
+.claude/skills/gitnexus/

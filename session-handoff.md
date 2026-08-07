@@ -1,119 +1,123 @@
-# Session Handoff — 2026-08-05 (sixth session)
+# Session Handoff — 2026-08-06 (ninth session)
 
-Two briefs: collapse the workflow to one repo, and — first — audit the
-instruction files. This session closed collapse Phase 1 and §5a, audit items
-1–5, and is starting **Phase 2**. Subtraction so far: ~10,800 deletions against
-~360 insertions in core, plus the fleet edits.
+**The real run happened, it is verified, and the change is archived.**
+`openspec/specs/workflow-installation/spec.md` is durable current truth — 13
+requirements. `one-enforcement-floor` is the only active change and it is
+unblocked. Branch `feat/one-skills-payload`, nine commits, all green, **pushed**;
+PR #88 updated and retitled.
 
-Donald's fifth-session verdict is on the unmerged branch
-`docs/handoff-donalds-verdict` (`cc71fd3`). Read it.
+Detail lives in `openspec/changes/archive/2026-08-06-core-installer-one-entry-point/`
+— `CODE-REVIEW.md`, `SECURITY-REVIEW.md`, and the round-six and round-seven
+sections of `design.md`. This file carries only what does not.
 
-## Donald's standing requirement (2026-08-05, verbatim intent)
+## Accomplished
 
-> "much leaner workflow within repos, less token consumed, nothing agent
-> specific, installer easy peasy"
+- **The install ran for real** (`f3db223`): 15 rebindings, 11 removals, one
+  legacy copy removed — the 26 bindings into archived checkouts, now 0. All five
+  hosts resolve into core; pi and omp bound for the first time.
+  `docs/evidence/install-run-after.md`.
+- **Verified**: fleet shims still bind the authority's bytes; the declared set is
+  published at the reference hash; no host configuration file was touched.
+- **Three review passes** — round five on the diff (4 real defects, fixed with
+  proven negative tests), `cso`, round six, round seven. Then the archive.
 
-That is the acceptance test for Phase 2 and 3. Measure against it, not against
-the phase checklist.
+## Decisions
 
-## Open PRs (all pushed)
+- **The preservation requirement was wrong, not the run.** It said every replaced
+  or removed binding is preserved; the run changed 26 symlinks and wrote one
+  preserved directory. A symlink has no content beyond its target and a copy of
+  one resolves into the checkout about to be deleted.
+- **A checkout of this repo is live prompt code for five hosts.** Now stated in
+  the capability rather than a security appendix. Review skill changes by diff;
+  pin a worktree if a machine must run and review at once.
+- **Reviewing stopped at round seven.** The code had not changed since round
+  five; six and seven were spec and prose coherence. Specs get amended after
+  archive.
+- **`REVIEWER_TIMEOUT` does not reach `run-plan-review.sh`** — it reads
+  `REVIEW_TIMEOUT`. Six rounds of opencode's opinion went to that. Silent
+  failure: the reviewer times out and is simply not counted.
+- **The budget test enforced 250 while the spec says 217.** Round four lowered it
+  everywhere except the test enforcing it. `install.sh` is 212.
 
-core [#87](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/87) ·
-agents-task-viewer [#19](https://github.com/agenticapps-eu/agents-task-viewer/pull/19) ·
-callbot [#101](https://github.com/agenticapps-eu/callbot/pull/101) ·
-cparx [#126](https://github.com/agenticapps-eu/cparx/pull/126) ·
-fx-signal-agent [#121](https://github.com/agenticapps-eu/fx-signal-agent/pull/121) ·
-fbc-platform [#119](https://github.com/agenticapps-eu/fbc-platform/pull/119)
+## Files modified
 
-Combined: **+612 / −219,137**.
+- `install.sh` — 212 executable lines, shellcheck clean
+- `tools/install.test.sh` — 49 cases; budget corrected; three new cases proven RED
+- `docs/evidence/install-run-after.md`, `.gitignore` — new
+- the change bundle, now archived
 
-## The measurement that defines Phase 2
+## The mistake I made, and undid
 
-Per-session workflow context, per repo — loaded every session, in every repo:
+`git add -A` in the archive commit (`925481a`) swept in three untracked
+leftovers: six `.claude/skills/gitnexus/` skill directories, **a 44-line GitNexus
+section appended to core's own `CLAUDE.md`** instructing agents to run
+`npx gitnexus analyze`, and five `.planning/skill-observations/` files — the notes
+the handoff had just called Donald's to delete.
 
-| repo | instr | wf-config | vendored wf | vendored SKILL | total |
-|---|---:|---:|---:|---:|---:|
-| dashboard | 231 | 99 | 0 | 331 | 661 |
-| agents-task-viewer | 289 | 76 | 90 | 324 | 779 |
-| callbot | 579 | 102 | 90 | 324 | 1095 |
-| cparx | 432 | 101 | 90 | 324 | 947 |
-| fbc-platform | 132 | 98 | 90 | 346 | 666 |
-| fx-signal-agent | 303 | 98 | 90 | 324 | 815 |
+Undone in `8e7eaec`: `CLAUDE.md` restored, tracking removed, both paths
+`.gitignore`d. The files stay on disk, so **the gitnexus skills still load in this
+repo until deleted** — a decision not yet taken. A blanket add cannot tell the
+work from whatever else is lying around, and here that includes removed software
+and instruction text.
 
-**4,963 lines ≈ 10.7k tokens per session per repo.** 324–346 of each repo's
-lines are a *copy* of the trigger skill. Target: a project carries `openspec/`,
-a pre-commit hook, and a few lines pointing at the skill. Nothing else.
+## The payload is not one payload yet
 
-## The gap §5a opened — Phase 2 closes it
+| Repo | family | copy |
+|---|---|---|
+| agenticapps-dashboard | agenticapps | 331 lines, v3.2.0 |
+| agenticapps-roadmap | agenticapps | 324 lines, v3.2.0 |
+| agents-task-viewer | agenticapps | 324 lines, v3.2.0 |
+| dashboard-add-agent-board | agenticapps | **415 lines, v3.0.0** |
+| callbot | factiv | 324 lines, v3.2.0 |
+| cparx | factiv | 324 lines, v3.2.0 |
+| fbc-platform | factiv | **346 lines, v3.2.0** |
+| fx-signal-agent | factiv | 324 lines, v3.2.0 |
 
-Archiving the host repos before Phase 2 was the wrong order (my error). Every
-host's workflow skills are **symlinks into the four archived repos**: Claude 3,
-Codex 8, opencode 11, pi 0 (no skills dir at all), omp 0. 22 dangling
-dependencies. It works only because the local checkouts survive.
+Core ships **235 lines, v4.0.0**. All eight are committed directories in
+`.claude/skills/`, not symlinks — four byte-sizes across two claimed versions,
+and `fbc-platform` differs from its three v3.2.0 siblings while claiming to be
+them. Each repo also carries six copied `openspec-*` skills; core carries those
+six too.
 
-## Phase 2 design — settled by measurement, not by the brief's guess
+So: **the project-specific workflow copies were never removed.** The run bound
+host directories; project `.claude/skills/` is a different surface, and
+`--project` — the mode that would have reached it — is superseded. Which skill
+loads there is loader ordering between the project copy and the new core symlink.
 
-The brief's tier-3 list (trigger, openspec-change-review, database-sentinel,
-impeccable) is **wrong on two of four**:
-
-- `database-sentinel` is upstream — `github.com/Farenhytee/database-sentinel`.
-- `impeccable`, `cso`, `qa` come from gstack.
-
-All four are **tier 2: bound, not owned.** They are already installed globally
-and host-neutral. Core must not carry copies (ADR-0024).
-
-The `codex-*` / `opencode-*` / `pi-*` prefixed gate skills are **thin wrappers**
-— e.g. `codex-database-sentinel-audit` is 136 lines that only say *when* the
-gate fires and then invoke the real skill. There are ~12 of them across three
-hosts. They are the agent-specific layer Donald wants gone. Their only real
-content — the gate-firing conditions — belongs in one gate table in the trigger
-skill.
-
-**So tier 3 is TWO skills, not four:**
-
-```
-core/skills/
-  agentic-apps-workflow/SKILL.md    # the diagram in prose + gate table
-  openspec-change-review/SKILL.md   # produces REVIEWS.md entries
-```
-
-The trigger skill must **absorb three things that today have no other home**,
-or deleting their copies deletes the rules:
-
-1. the §11 coding discipline (~80 lines, in every project's instruction file);
-2. the task-size routing table (only in cparx, and its Medium row still named
-   dead `/prompts:gsd-*` commands — translated in PR #126);
-3. the gate-to-skill bindings currently spread across the 12 wrappers.
-
-Also unblocks trimming the workflow section out of `~/.claude/CLAUDE.md`.
+`.planning/` also survives in `cparx`, `fbc-platform` and `fx-signal-agent`, with
+a **tracked** `config.json` in the latter two. Neither `factiv-website` nor
+`factiv-design-system` is a workflow project.
 
 ## Next session: start here
 
-Write `core/skills/agentic-apps-workflow/SKILL.md` against `workflow.mmd` —
-rewrite, do not pick a winner among the existing copies (331 / 402 / 654 / 621 /
-465 lines, three of them claiming version 3.2.0 or 1.2.x). Then
-`openspec-change-review`. Then Phase 3's `install.sh` + `hosts/*.json`, which
-symlinks `skills/*` into each host's skill dir so `git pull` in core updates
-every host with no install step.
+A proposal for the project-local copies is the live work — Donald asked for it
+and it is the one that matters, because the other candidates are deferrals while
+this is a payload published and then shadowed in eight repositories.
+
+After it: `one-enforcement-floor` has **no plan review at all** (task 8.2) and no
+code, which is when a plan review is cheapest — `run-plan-review.sh
+one-enforcement-floor --implementing-host claude`, `REVIEW_TIMEOUT=600`. Then the
+check-mode change carrying all four deferred reporting gaps.
 
 ## Open questions
 
-1. **Two installed skills both claim `name: agentic-apps-workflow` v3.2.0** and
-   differ: `~/.claude/skills/agenticapps-workflow/skill/SKILL.md` (402 lines,
-   real dir) vs `~/.claude/skills/agentic-apps-workflow` (331, symlink into the
-   archived `claude-workflow`). Which loads is loader ordering. Phase 2 resolves
-   it by publishing one copy from core.
-2. `agenticapps-dashboard` and `agenticapps-roadmap` are both to be **retired**
-   (Donald, this session). Dashboard is the last split brain (231/110); do not
-   spend commits tidying it. Two of my commits sit on its `retire-v1-surfaces`
-   branch — the `.planning` deletion and the §18 fix — because it was not on
-   `main` when I committed; history was not rewritten because he was working in
-   it. cparx and fbc-platform had the same problem and **were** lifted onto clean
-   branches with the originals restored byte-for-byte.
-3. Budgets still far out: gate 775/120, run-plan-review 757/120, reviewer-cli
-   206/80, `install.sh` does not exist (0/200). `tools/` still holds 7,765 lines
-   of conformance harnesses, the prereq analyser and drift-report — none on the
-   diagram, nothing depends on them now the host repos are archived. That is
-   Phase 5b and it is the largest single deletion left.
-4. Core has **no** `migrations/`; §5b's "73 migration documents" has no target
-   here — those 645 files are in the archived host repos.
+1. **Four check-mode gaps**, all reported rather than silent: a host called bound
+   on one of two skills; an archived binding reported as plain `bound`; core's
+   pre-commit hook never reported though it is the bare-run postcondition; and no
+   defined exit status for an absent, stale, modified or unreadable artifact.
+   Each is a legitimate deferral; four in one mode is a change asking to be
+   written.
+2. **`is_archived` matches link text, not the resolved target**, and ownership is
+   a repository-name substring. Both want a portable `realpath` and should land
+   together.
+3. **Reported paths carry `/Users/donald` and are unescaped.** Third time raised,
+   third time deferred to `screen-review-egress`.
+4. **`workflow.mmd` still says the gate requires "REVIEWS ≥ 2".** Untrue since
+   gate 2.0.0. Probably belongs with `one-enforcement-floor`.
+5. **Does `AGENTS.md` still need a workflow section** once the skill carries the
+   workflow? `host-neutral-instruction-files` says yes. Still open.
+6. **`~/.config/opencode/rules/gsd-oc-work-hard.md`** is a live global rule file
+   reaching opencode, left over from GSD.
+7. **pi reads a fifth directory**, `~/.pi/agent/skills`, neither bound nor swept.
+   Measured empty: 25 entries, all relative symlinks into `~/.agents/skills`.
+8. **PRs #86, #87, #88 and #78 are open.** This work sits on top of #87.
