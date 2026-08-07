@@ -12,10 +12,11 @@
 # An expected set discovered from the artifacts cannot detect a missing
 # artifact. It has to be declared somewhere that does not shrink when the thing
 # it describes goes missing, and this is that place — read by
-# install-project-hooks.sh and by provisioning-check.sh, so the two cannot
-# disagree about what "provisioned" means.
+# install-project-hooks.sh. (provisioning-check.sh also read it until both it
+# and its test suite were deleted on 2026-08-05, nothing else having called
+# either.) The declaration stays: the installer still needs a set that does not
+# shrink when the thing it describes goes missing.
 #
 # One hook name per line, without the .sh. Blank lines and # comments ignored.
 
 database-sentinel
-normalize-claude-md

@@ -28,6 +28,4 @@
 #
 # Format: <repo> <hook> <reason>. One per line, blank lines and # ignored.
 
-agents-task-viewer normalize-claude-md collapsing CLAUDE.md's inlined stack block drops pinned-version constraints this project's correctness depends on; opted out 2026-07-21, see that repo's ADR
 agenticapps-workflow-core database-sentinel core holds no database credentials, no .env and no deployment secrets — the hook guards a class of file this repository does not contain, so binding it would score an empty set green
-agenticapps-workflow-core normalize-claude-md core's CLAUDE.md is a scaffolder artifact whose inlined blocks ARE the published template's content; collapsing them is the transformation this repository exists to define, not to undergo

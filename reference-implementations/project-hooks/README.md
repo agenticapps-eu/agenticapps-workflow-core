@@ -3,6 +3,18 @@
 The canonical implementations of the workflow hooks that more than one project
 binds, plus the shim template every project binds them *through*.
 
+> **`normalize-claude-md` was retired on 2026-08-05.** It rewrote `CLAUDE.md`
+> marker blocks into links under `.planning/`, and re-emitted the
+> `/gsd-profile-user` command that was removed with GSD on 2026-07-28 —
+> overwriting a hand-written correction in the one project where it was still
+> live. It was a no-op in five of the seven fleet repos and opted out in a
+> sixth. Its three-clause removal test (§"Removal is argued from the binding")
+> cleared: no spec section bound it, it produced no evidence artifact, and it
+> enforced no gate. Sections below that describe it are kept as a record of the
+> reasoning, not as a description of what ships. `tools/provisioning-check.sh`
+> and its test suite went with it — 1,202 lines whose only caller was each
+> other.
+
 Seven repos used to carry a full copy of each of these files. Four of the eight
 copied hooks had drifted into two or three distinct versions; the one hook that
 was never copied — `openspec-change-gate.sh`, a ~13-line shim — had zero drift
@@ -93,7 +105,6 @@ than assumed:
 |---|---:|---|
 | `openspec-change-gate` | 7 — the whole fleet | 1 — core, ADR-0028 |
 | `database-sentinel` | 7 — the whole fleet | none; core hosts the implementation |
-| `normalize-claude-md` | 6 — all but `agents-task-viewer` | none; core hosts the implementation |
 
 **1.2.0's count was measured, not carried forward from 1.1.0's.** The twenty were
 counted by reading the marker out of each checkout after all seven fleet PRs
@@ -448,7 +459,8 @@ export the override into the operator's shell. A green result therefore reads
 
 ## Provisioning — and the regression it answers
 
-Publish with `install-project-hooks.sh`; check with `tools/provisioning-check.sh`.
+Publish with `install-project-hooks.sh`. (`tools/provisioning-check.sh` was
+deleted 2026-08-05 — nothing invoked it but its own test suite.)
 
 **The state is a triple, not one of four** (design Decision 12, third axis added
 2026-08-03):
@@ -779,7 +791,6 @@ them.
 | File | What |
 |---|---|
 | `database-sentinel.sh` | canonical implementation, published to `~/.agenticapps/bin/` |
-| `normalize-claude-md.sh` | canonical implementation, published to `~/.agenticapps/bin/` |
 | `shim-template.sh` | the authority for shim conformance |
 
 ---
