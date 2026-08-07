@@ -1,13 +1,13 @@
 # Session Handoff — 2026-08-07 (eleventh session)
 
-Two of the three active changes are now plan-reviewed, and one is repaired.
+Two of the three active changes are plan-reviewed and **both are repaired**.
 Nothing is blocked on a decision. Branch `feat/projects-bind-not-copy` carries
 all of it; still **no PR** for it.
 
 | Change | State |
 |---|---|
 | `one-enforcement-floor` | reviewed (3 vendors, all REQUEST-CHANGES), **repaired**, validates. Review now stale by digest — re-review before code |
-| `projects-bind-not-copy` | reviewed (2 counted, gemini rejected), resolution written, **not repaired** |
+| `projects-bind-not-copy` | reviewed (2 counted, gemini rejected), **repaired**, validates `--strict`. Review stale by digest |
 | `fleet-carries-only-current` | still unreviewed |
 
 ## Accomplished
@@ -18,7 +18,9 @@ all of it; still **no PR** for it.
   returned a verdict with no body and the producer **rejected** it, which is
   §07 rule 3 working rather than a failure.
 - Repaired `one-enforcement-floor` against the findings and Donald's coverage
-  decision. `openspec validate --all` green, 12/12.
+  decision, and wrote the `core-self-enforcement` delta it was missing.
+- Repaired `projects-bind-not-copy`, including Donald's decision to **remove
+  `database-sentinel`**. `openspec validate --all --strict` green, 12/12.
 
 ## The finding that mattered, and no reviewer made it
 
@@ -72,44 +74,33 @@ REVIEW_TIMEOUT=600 run-plan-review.sh <slug> --implementing-host claude
 
 `REVIEWER_TIMEOUT` still does not reach that script. `REVIEW_TIMEOUT` does.
 
-Then repair `projects-bind-not-copy` against its resolution, and review
-`fleet-carries-only-current`, which has never been reviewed.
+Both changes need it, so one pass covers both. Then review
+`fleet-carries-only-current`, which has never been reviewed at all.
 
 ## Open questions
 
-1. **`database-sentinel` — still open, but no longer shapeless.** Donald asked
-   whether it adds anything given the `cso` skill. It does, and not where the
-   change assumes: `cso` is *detection* (on-demand audit), the hook is
-   *interception* (exit 2 at the tool-call boundary). Read the three arms
-   separately — the `.env` arm is genuinely redundant and is also the most
-   easily bypassed, since `cat > .env` via Bash presents no `file_path` for it
-   to see; the `DROP`/`TRUNCATE` and `DELETE`-without-`WHERE` arms are the only
-   thing in the whole workflow that stops an **irreversible** action, and the
-   "caught again at commit and in CI" argument that justified deleting the host
-   hook is simply false for them — destructive SQL never touches git.
-   The hook's own header refuses the credit anyway: not a security boundary,
-   `psql -f` bypasses the regex entirely, "a speed bump, not a control."
-   The real comparison is therefore the harness's own Bash permission prompts,
-   not `cso`. Proposed third option: **drop the `.env` arm, keep the SQL arms,
-   stop calling it fleet-shared** — one narrow declared exception is
-   expressible in `check-shims.sh`, where a whole undecided hook is not.
-   Cutting the other way: it protects claude sessions only, so codex, opencode
-   and pi get nothing, and multi-agent is permanent. Not decided.
-2. **`projects-bind-not-copy` omits its dependency on `one-enforcement-floor`.**
-   cparx has no floor at all, so removing its `PreToolUse` entry first leaves it
-   with nothing. The chain order is right; the change does not record it.
-3. **The precedence claim in `projects-bind-not-copy` is asserted in the spec
-   delta and admitted unmeasured in the design.** Nothing may be deleted before
-   task 1 measures it. pi's `~/.pi/agent/skills` is still neither bound nor
-   swept, so "every host reads a directory the installer binds" is false as
-   written.
-4. **The plan-review producer records vendor names but not resolved models.**
+1. ~~`database-sentinel`~~ — **decided 2026-08-07: removed with the surface.**
+   Not free, and the change says so: the `DROP`/`TRUNCATE`/`DELETE`-without-
+   `WHERE` arms are the only interception of an irreversible action in the
+   workflow, and "caught again at commit and in CI" is false for them because
+   destructive SQL never enters git. Removed because it fires from
+   `.claude/settings.json` and so reaches one host of five. Protection
+   reassigned to the operator's own Bash deny rules, not claimed as surviving.
+   Falls out for free: `SHIMMED-HOOKS` held two names, both go, so the
+   declaration is empty and there are no sanctioned extras for `OPT-OUTS` to
+   express.
+2. **Precedence has still never been measured**, and it gates every deletion in
+   `projects-bind-not-copy` (its task 1). pi's `~/.pi/agent/skills` is still
+   neither bound nor swept, so "every host reads a directory the installer
+   binds" is false as written and must be fixed or scoped. These are
+   measurements, not edits — they are what actually blocks code.
+3. **The plan-review producer records vendor names but not resolved models.**
    §07 rule 4 asks for models; two arms on one model would be one opinion
    wearing two names, and neither review record can rule that out.
-5. `docs/HOW-IT-FITS-TOGETHER.md` is still provably wrong. Task 6.3.
-6. `workflow.mmd` still says the gate requires "REVIEWS ≥ 2". Untrue since 2.0.0.
-7. Reported paths still carry `/Users/donald` unescaped — deferred to
+4. `docs/HOW-IT-FITS-TOGETHER.md` is still provably wrong. Task 6.3.
+5. `workflow.mmd` still says the gate requires "REVIEWS ≥ 2". Untrue since 2.0.0.
+6. Reported paths still carry `/Users/donald` unescaped — deferred to
    `screen-review-egress` for the fourth time.
-8. Does `AGENTS.md` still need a workflow section once the skill carries it?
-9. The gitnexus skills still load in this repo until deleted. Not decided.
-10. **PRs #78, #86, #87, #88 open.** Still no PR for `feat/projects-bind-not-copy`.
+7. Does `AGENTS.md` still need a workflow section once the skill carries it?
+8. The gitnexus skills still load in this repo until deleted. Not decided.
+9. **PRs #78, #86, #87, #88 open.** Still no PR for `feat/projects-bind-not-copy`.
