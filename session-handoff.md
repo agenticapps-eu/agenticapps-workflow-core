@@ -1,97 +1,99 @@
 # Session Handoff — 2026-08-07 (sixteenth session)
 
-**Publish and bind landed. §2's code is done except the two guards that gate
-running it for real.** One commit on `feat/projects-bind-not-copy` (PR #89).
-Working tree clean, `openspec validate --all` 14/14.
+**Publish and bind landed, then round two of plan review found that three of
+this change's own guards did not hold.** Three commits on
+`feat/projects-bind-not-copy` (PR #89). Working tree clean, `openspec validate
+--all` 14/14, all three suites green.
 
 | Change | State |
 |---|---|
 | `fresh-clone-needs-nothing` | §3, §4, §9 built and installed. §1, §2, §5, §6 open |
-| `one-enforcement-floor` | **§0, §1, §2's publish/bind and 3.2 done. 2.8b, 2.8c, 2.9 are what remain in §2** |
+| `one-enforcement-floor` | **§2's publish/bind and 3.2 done; §9 holds ten findings that need decisions, not patches** |
 | `projects-bind-not-copy` | reviewed ×2, no code |
 | `diagram-is-the-surface` | reviewed ×2, no code |
 | `fleet-carries-only-current` | **never reviewed**, seven sessions old |
 
 ## Accomplished
 
-- `9b322fc` — **GREEN: `reference-implementations/global-floor/bind-global-floor.sh`**
-  plus `tools/global-floor-bind.test.sh`, 18/18. Closes 2.1, 2.2, 2.3, 2.4, 3.2.
-  shellcheck clean, `install.test.sh` 53/0, `global-floor.test.sh` 13/13.
-- **Decision 4's swap landed line-for-line.** `install.sh` 217 → 217 against a
-  `-le 217` assertion, as predicted.
-- **Two findings, neither from review** — 2.1a and 2.1b below.
-- The `cso` gate ran on the diff, scoped to it rather than as the full 14-phase
-  gstack workflow, whose preamble would have written telemetry and CLAUDE.md
-  routing config without being asked.
+- `9b322fc` — **the floor binder**, `bind-global-floor.sh` + 18 tests. Closes
+  2.1, 2.2, 2.3, 2.4, 3.2. Decision 4's swap landed 217 → 217 as predicted.
+- `115d594` — **round two of plan review, and its three verified fixes.**
+  gemini APPROVE, codex REQUEST-CHANGES ×7, opencode REQUEST-CHANGES ×8.
+- **opencode completed at `REVIEW_TIMEOUT=420`.** The 180s default was the whole
+  reason it timed out last round. Three vendors on the record; question closed.
+- `install.test.sh` 53/0, `global-floor.test.sh` 18/18,
+  `global-floor-bind.test.sh` 18/18, `install.sh` 217, shellcheck clean.
 
 ## Decisions
 
-- **The old call site's `>/dev/null 2>&1` is gone.** The binder's
-  foreign-binding report names the existing value and the value it would have
-  set; discarding its output would throw away the only surface that says either.
-  Still one call for one call, so the budget held.
-- **Two `install.test.sh` cases changed shape, not wording.** The machine
-  installer no longer writes a per-repository hook, so "a foreign pre-commit is
-  refused" would have passed because nothing happened rather than because
-  something was refused. It now asserts a foreign *global* `core.hooksPath`.
-- **`GIT_CONFIG_GLOBAL` is pinned per case** in `install.test.sh`. `install.sh`
-  writes global git config now, and `HOME` alone does not contain that —
-  `git config --global` prefers `$XDG_CONFIG_HOME/git/config` when it exists.
-- **2.1b's requirement was written after the code.** That is the wrong order and
-  it is the red flag the workflow names. The alternative was dropping a
-  demonstrated hazard because it arrived at the wrong step. Recorded as such.
+- **Three guards were wrong and their ticks were wrong.** Recorded against the
+  tasks that carried them rather than quietly re-ticked:
+  - 2.8a's predicate read system and global scope, so one `--global` key
+    enrolled the whole machine — the measured defect it was built to remove,
+    reintroduced by the predicate. It also ignored the value, so `false`
+    enrolled. Now `--local --type=bool`.
+  - 2.7's prohibition was defeated by **one symlink** in `hooks.d`, and the
+    suite did not notice. Demonstrated end to end before the fix and re-run
+    against the same fixture after. `global-floor-version` 1.0.0 → 1.1.0.
+- **Everything was verified in a sandbox before being written up.** Two of the
+  three reviewer claims were exactly right; the budget claim (9.9) was half
+  wrong and is recorded as half wrong.
+- **Ten findings recorded, not patched.** Each needs a decision. Patching them
+  inside a review round is how a plan gets edited to match code.
+- The `cso` gate ran scoped to the diff, not as the full gstack workflow, whose
+  preamble writes telemetry and CLAUDE.md routing config unasked.
 
 ## Files modified
 
 - `reference-implementations/global-floor/bind-global-floor.sh` — new, the binder
+- `reference-implementations/global-floor/pre-commit` — enrolment scope + value,
+  canonical entry resolution, version 1.1.0
 - `tools/global-floor-bind.test.sh` — new, 18 cases
-- `install.sh` — line 4 comment, `COREHOOKS` → `FLOORBIND`, the call site
+- `tools/global-floor.test.sh` — 13 → 18 cases
+- `install.sh` — `COREHOOKS` → `FLOORBIND`, the call site, one comment
 - `tools/install.test.sh` — `GIT_CONFIG_GLOBAL` isolation, 16 stubs retargeted,
   three cases rewritten around the new level
-- `.../tasks.md` — 2.1, 2.2, 2.3, 2.4, 3.2 closed; 2.1a and 2.1b added
-- `.../specs/workflow-installation/spec.md` — new requirement "Nothing is
-  published into a directory another account can write", two scenarios
+- `.../tasks.md` — §2 closed out; **new §9** with the round's ten open findings
+- `.../specs/workflow-installation/spec.md` — the published-directory requirement
+- `.../REVIEWS.md` — round two, three vendors
 
 ## Next session: start here
 
-**The diff wants an independent read before more code stacks on it.** Step 4 is
-code-review on the diff, and §07 independence means a cleared session, not a
-subagent — so that is the first action, not a continuation of §2.
+**Take 9.4 first, and treat it as a design question rather than a task.**
+Nothing enrols the repositories that are gated *today*. §3 removes the nine
+per-repository gate copies, the published hook exits 0 without the marker, and
+2.8b only covers `init-project.sh` for future projects — so the repositories the
+floor exists for go from gated to **silently ungated at install time**, which is
+the exact failure this change claims to eliminate. codex and opencode raised it
+independently. It probably reshapes §3 and §2.8, so it should be settled before
+2.9, 2.8b or 2.8c get built on top of the current shape.
 
-After that, §2's remaining three in this order: **2.9 (the preflight), then
-2.8c (`--check` names an unenrolled repository), then 2.8b (`init-project.sh`
-sets the marker and its header contract is amended in the same diff).** 2.9
-first because it is what unblocks running 2.2 for real, and because 2.1a
-belongs in its report: the preflight should name what publishing will
-**replace**, not only what the binding will newly **govern**.
+After 9.4: 9.5 (the unwind clause contradicts its own ordering — confirmed
+unreachable while implementing 2.1), then 9.13, then 2.9 → 2.8c → 2.8b.
 
-**`core.hooksPath` is still unset on this machine and `./install.sh` has not
-been run.** Binding without the preflight is the machine-wide act the reviewers
-objected to. That hold is unchanged.
+**`core.hooksPath` is still unset on this machine and `./install.sh` has not been
+run.** Unchanged, and 9.4 is now a second reason to hold.
+
+**Step 4's code review on the diff has still not happened.** §07 independence
+means a cleared session, not a subagent. Two commits of shipped code are waiting
+on it, and this round is evidence that the plan reviewers do not catch what a
+diff reader would — they found the enrolment scope from the *snippet in
+design.md*, and missed the symlink hole entirely until the spec's own
+requirement was checked against the code.
 
 ## Open questions
 
-1. **2.1a — the published directory already holds a foreign file.**
-   `~/.agenticapps/git-hooks/pre-commit` is **opencode's host-local variant**,
-   25 Jul, 2270 bytes, no `global-floor-version` marker. Probed against a copy:
-   the arbitrating helper reads unmarked as `0.0.0` and installs over it, exit
-   0. `install-core-git-hooks.sh` *refuses* a hook it does not own; the floor
-   binder *overwrites* one. The binding is protected, the file is not. Decide in
-   2.9 whether that asymmetry is accepted or closed.
-2. **The review is stale, and now by more than edits.** 2.1b added a *new
-   requirement* no reviewer has seen — that is a different thing from the
-   reworded artifacts open question 7 described last session. §2 changed shape,
-   which is the condition that session set for revisiting. Worth a round.
-3. **`fleet-carries-only-current` still never reviewed** — seven sessions old,
-   flagged at every commit. Still the cheapest useful review left.
-4. **§18's version number** — still blocking a task in `diagram-is-the-surface`.
-5. **Task 3.5 has no owner** — nothing establishes core's local `core.hooksPath`
-   now that `install.sh` has actually stopped calling the hook installer. This
-   went from theoretical to live with `9b322fc`.
-6. **Machine-level *commands* unconfirmed.** Skills are confirmed; this repo's
+1. **§9 holds all ten review findings** with the reasoning. Highest-consequence:
+   9.4 (nothing enrols today's gated repos), 9.6 (binding activates every hook
+   type in the published directory, generalising 2.1a), 9.11 (the
+   `core-self-enforcement` contradiction), 9.13 (3.5 is live and collides with
+   the sweep — core's only possible binding value is exactly the value 3b.2
+   classifies as redundant, so the sweep would unset it).
+2. **`fleet-carries-only-current` still never reviewed** — seven sessions old,
+   flagged at every commit. Now demonstrably cheap: 420s and three vendors.
+3. **§18's version number** — still blocking a task in `diagram-is-the-surface`.
+4. **Machine-level *commands* unconfirmed.** Skills are confirmed; this repo's
    `.claude/commands/opsx/` shadows the global one. Test in a repo with no
    `.claude/`.
-7. **pi's opsx commands unreachable by symlink** — needs a pi package.
-8. **opencode timed out** at 180s last round and was not counted. Raise
-   `REVIEW_TIMEOUT` for a third opinion.
-9. **CodeRabbit still has not reviewed anything here.**
+5. **pi's opsx commands unreachable by symlink** — needs a pi package.
+6. **CodeRabbit still has not reviewed anything here.**
