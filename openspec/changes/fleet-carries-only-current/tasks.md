@@ -264,7 +264,31 @@ instruction-file work. One PR per repository.
       configs need a read-check, and `.planning/` as a *name* is doing two jobs.
       The full listing is committed as `planning-removal-inventory.md`; nothing
       was deleted. Third time this session that listing-before-removing changed
-      the answer
+      the answer.
+
+      **The owner was found, and the telemetry objection is withdrawn.** The
+      writer was `meta-observer`, a single `SessionEnd` hook in
+      `~/.claude/settings.json`:
+      `node .../agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`.
+      One run per session, writing `<session-start>--<session-uuid>.jsonl` of
+      every `PostToolUse` event plus an `.md` capturing the workflow commitment
+      — which is why the filenames are timestamp-plus-UUID, and why the `jsonl`
+      is mechanical while the `md` is prose.
+
+      **It is dead twice over.** Unregistered 2026-08-08 **10:01** by 2.7, with
+      `~/.claude/settings.json.pre-meta-observer-removal` as the evidence; and
+      its script is unreachable because `agenticapps-dashboard` has been
+      **deleted from disk**. The newest observation anywhere is `fbc-platform`
+      at **09:13** the same morning — 48 minutes before the unregistration.
+      Nothing has written since and nothing can. `skill-observations/` is
+      therefore inert residue and this row's telemetry half is cleared.
+
+      **The part worth keeping is what the retirement did not say.** The fleet's
+      observability lived inside the repository that was retired, so retiring it
+      silently removed a machine-wide mechanism six repositories fed, and the
+      only thing that noticed was leftover files looking alarming a week later.
+      A retirement ADR that lists what a repo *is* should also list what else
+      runs from it
 - [ ] 2.6 **`.planning/` in full, tracked and untracked**, in the six in-scope
       repositories: core, `cparx`, `fbc-platform`, `fx-signal-agent`, `stimmung`,
       `neuroflash/mcp-server`. **List every file before removing any** —
