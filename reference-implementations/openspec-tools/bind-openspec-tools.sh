@@ -44,11 +44,17 @@ BIND_HOME="$HOME"
 HOSTS=""
 rc=0
 
+# `set -u` is on, so an arm that shifts 2 without checking $# aborts on an unset
+# $2 with a shell error naming THIS file's line number instead of the operator's
+# mistake. install.sh:328 fixes the same defect on the same flag and carries a
+# regression test for it; this is that fix, on the script install.sh calls.
+need() { [ "$1" -ge 2 ] || { printf 'bind-openspec-tools: %s needs %s\n' "$2" "$3" >&2; exit 2; }; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --host)  HOSTS="$HOSTS $2"; shift 2 ;;
-    --store) STORE="$2"; shift 2 ;;
-    --home)  BIND_HOME="$2"; shift 2 ;;
+    --host)  need $# --host  "a host name";  HOSTS="$HOSTS $2"; shift 2 ;;
+    --store) need $# --store "a directory";  STORE="$2";        shift 2 ;;
+    --home)  need $# --home  "a directory";  BIND_HOME="$2";    shift 2 ;;
     *) printf 'bind-openspec-tools: unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -64,20 +70,33 @@ note() { printf '  %s\n' "$1"; }
 
 # link <src> <dst> — symlink, never copy. An existing link of ours is left as
 # is; anything else under our name belongs to somebody and is reported.
+#
+# THE RETURN VALUE IS THE CALLER'S COUNTER. Every path below used to return 0,
+# including the two that bind nothing, so `link … && n=$((n + 1))` scored a
+# refusal as a success: three colliding destinations reported `skills: 3 bound`
+# having created no symlink at all. A binder that reports binding what it
+# declined to bind is worse than one that fails, because nothing invites the
+# operator to look. Only a link that now exists returns 0.
 link() {
   local src="$1" dst="$2"
   if [ -L "$dst" ]; then
+    # Already ours, and already pointing where it should. Bound is bound.
     [ "$(readlink "$dst")" = "$src" ] && return 0
     note "collision: $dst already links elsewhere — left alone"
     rc=1
-    return 0
+    return 1
   fi
   if [ -e "$dst" ]; then
     note "collision: $dst exists and is not ours — left alone"
     rc=1
-    return 0
+    return 1
   fi
-  mkdir -p "$(dirname "$dst")" && ln -s "$src" "$dst"
+  mkdir -p "$(dirname "$dst")" && ln -s "$src" "$dst" && return 0
+  # A destination that cannot be written is a different failure from one that
+  # collided — an unwritable skills directory, a full disk — and it was silent.
+  note "could not link $dst"
+  rc=1
+  return 1
 }
 
 # generate <host> <tool> — into $STORE/<host>, once. The tool name is not always
@@ -109,13 +128,13 @@ for host in $HOSTS; do
 
   printf '%s\n' "$host"
 
-  # omp has no established directory of any kind. Creating one by symmetry with
-  # another host is the inference this workflow keeps paying for.
-  if [ -z "$skills" ]; then
-    note "skills: unverified — no established directory, nothing bound"
-    note "commands: unverified"
-    continue
-  fi
+  # There was a `[ -z "$skills" ]` branch here, reporting "no established
+  # directory, nothing bound". Every one of the five arms above sets a non-empty
+  # `skills`, and an unknown host has already `continue`d — so it could not run,
+  # and its comment described a state omp is not in. Dead text is read as a live
+  # guarantee, which is why install.sh:108 deletes its own dead consent rule
+  # rather than leaving it to be reassuring. The unverified case that IS real is
+  # the command directory, and `style=unverified` still carries it below.
 
   generate "$host" "$tool" || { note "generation failed"; rc=1; continue; }
 

@@ -242,3 +242,43 @@ putting behaviour in a repo, so it moves to the machine like everything else.
       start, so the session that did the binding cannot observe it. **Confirm in
       a new session** — and this change's own rule is why it stays open: the
       symlink existing is exactly what was true of pi for months
+
+## 10. What the Stage 2 code review found
+
+Stage 2 ran 2026-08-08 in a cleared session; the artifact is
+`../one-enforcement-floor/CODE-REVIEW.md`, filed there because most findings
+land on that change's code. These four are this change's.
+
+- [x] 10.1 `bind-openspec-tools.sh` reported binding what it had declined to
+      bind. `link()` returned 0 on both collision paths, so the caller's
+      `link … && n=$((n + 1))` scored a refusal as a success — reproduced with
+      three colliding destinations, which printed three `collision: … left
+      alone` lines and then `skills: 3 bound`, having created no symlink at all.
+      Only a link that now exists returns 0
+- [x] 10.2 A link that cannot be created — an unwritable skills directory, a
+      full disk — is now named. It was a different failure from a collision and
+      it was silent
+- [x] 10.3 A flag with no value is a usage error, not a shell error. `--host`,
+      `--store` and `--home` each shifted 2 without checking `$#`, so `set -u`
+      aborted with `line 49: $2: unbound variable` — an implementation line
+      number in place of the operator's mistake. `install.sh:328` fixes exactly
+      this and carries a regression test for it; the script it CALLS never got
+      the same fix
+- [x] 10.4 The `[ -z "$skills" ]` branch is removed as unreachable: all five
+      host arms set a non-empty `skills` and an unknown host has already
+      `continue`d. Its comment described a state omp is not in, and dead text is
+      read as a live guarantee
+- [x] 10.5 `init-project.sh` no longer removes `CLAUDE.md` before its
+      replacement exists. The collapse path ran `rm -f` then `ln -s`, so a
+      failing link left the repository with neither file while the message named
+      only the link. Built beside the destination and `mv -f`'d over it instead,
+      which also retires the `COLLAPSE` flag — it existed only to authorise the
+      `rm`. No content was ever at risk: `cmp -s` has already proved the two
+      byte-identical
+- [x] 10.6 RED before GREEN on all five, in `tools/bind-openspec-tools.test.sh`
+      (29 → 42 cases) and `tools/init-project.test.sh` (47 → 50). Two of the new
+      assertions first failed for the wrong reason and were corrected: one left
+      the previous run's links in place, so the binder found them already right
+      and was correct to say so; the other doubled `ln` to fail, which is the
+      only honest way to reach the branch, since every real filesystem condition
+      that breaks `ln -s` there also breaks the `rm` that used to precede it

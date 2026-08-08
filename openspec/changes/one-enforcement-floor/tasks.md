@@ -687,3 +687,31 @@ highest-consequence first:
 - [ ] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
       bind; acceptance by name allows it; a failed core-binding write aborts the
       global bind; core's hook still runs after a successful bind
+
+## 11. What the Stage 2 code review found in `install.sh`
+
+Stage 2 ran 2026-08-08 in a cleared session against the whole branch diff; the
+artifact is `CODE-REVIEW.md` beside this file. The Critical it found is C1, and
+it is not new — it is §10 not having landed yet, restated with the mechanism
+reproduced end to end. The two below are its own findings, fixed here.
+
+- [x] 11.1 A step reports its OWN outcome. The project-hook success line was
+      `[ -n "$out" ] && [ "$SKIPPED" = 0 ]`, so a run whose artifact publishing
+      failed said nothing at all about project hooks that had published and
+      attested cleanly — "it did not happen" and "something unrelated failed"
+      read identically. It also required the helper to have written to stdout,
+      which is a fact about the helper rather than about the step. Now keyed on
+      the helper's exit status alone
+- [x] 11.2 `--host auto` ADDS to the named set instead of replacing it.
+      `REQUESTED="$(detect)"` discarded every host the operator had named — and
+      naming a host is what you do precisely when detection will not find it, so
+      `--host auto --host codex` dropped the one request that needed making and
+      reported success. `auto` is stripped from the set rather than left in it,
+      because the "was any host requested" check one screen down would otherwise
+      count it
+- [x] 11.3 RED before GREEN on both, in `tools/install.test.sh`. The `--host
+      auto` case needed `hide_command codex`: every host this installer knows is
+      on the real PATH of the machine this was written on, and the case's PATH
+      ends in the real one, so the first version of the assertion passed while
+      proving nothing. **`install.sh` is back at exactly 217 executable lines**,
+      its budget — both fixes were written long, measured at 229, and compacted

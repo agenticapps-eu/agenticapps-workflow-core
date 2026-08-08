@@ -371,6 +371,47 @@ else
   ok "no network call in the source"
 fi
 
+# ---------------------------------------------------------------------------
+echo
+echo "J. The collapse never destroys CLAUDE.md before its replacement exists (code review M4)"
+# ---------------------------------------------------------------------------
+# The collapse path ran `rm -f CLAUDE.md` and then `ln -s`. A failing link left
+# the repository with NO CLAUDE.md at all, and the die message named the link it
+# could not create rather than the file it had just removed. No content is lost
+# — the preflight has already proved the two files byte-identical, so it all
+# survives in AGENTS.md — but a repository is left in a state the operator did
+# not ask for and is not told about.
+#
+# install.sh:190 handles the same ordering in sweep_vendored and says so out
+# loud: "a failed `ln` leaves the binding as nothing at all. Saying so is the
+# whole point." This is that argument applied one directory over.
+#
+# `ln` is doubled to fail, which is the only honest way to reach the branch:
+# every real filesystem condition that breaks `ln -s` here also breaks the `rm`
+# that precedes it, so the window cannot be opened with permissions alone.
+r="$(new_repo collapse-ln-fails)"
+printf 'shared rule\n' > "$r/AGENTS.md"
+printf 'shared rule\n' > "$r/CLAUDE.md"          # byte-identical: collapsible
+cat > "$FAKEBIN/ln" <<'EOF'
+#!/usr/bin/env bash
+echo "ln: simulated failure" >&2
+exit 1
+EOF
+chmod +x "$FAKEBIN/ln"
+run_init "$r"
+rm -f "$FAKEBIN/ln"
+
+[ "$RC" -ne 0 ] \
+  && ok "a failing link is a non-zero exit" \
+  || bad "a failing link is a non-zero exit" "exited 0 having not created the link"
+[ -e "$r/CLAUDE.md" ] \
+  && ok "CLAUDE.md survives a link that could not be created" \
+  || bad "CLAUDE.md survives a link that could not be created" \
+         "it was removed before the replacement existed, and is now gone"
+[ -f "$r/AGENTS.md" ] && grep -q 'shared rule' "$r/AGENTS.md" \
+  && ok "and AGENTS.md still carries the content" \
+  || bad "and AGENTS.md still carries the content" "the shared rule is gone"
+
 echo
 echo "  passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]

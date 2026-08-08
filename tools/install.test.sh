@@ -1463,5 +1463,82 @@ fi
 finish_case
 
 echo
+echo "install.sh — code review M1: a step reports its OWN outcome"
+# The success line was `[ -n "$out" ] && [ "$SKIPPED" = 0 ] && say ...`, so it
+# reported the project-hook set only when NOTHING ELSE in the run had skipped.
+# A run whose artifact publishing failed and whose project hooks published and
+# attested cleanly said nothing about the second — the operator reading the
+# output cannot tell "it did not happen" from "something unrelated failed".
+# It also required the helper to be chatty, which is a fact about the helper's
+# stdout rather than about whether the step succeeded.
+new_case "the project-hook set is reported published even when an earlier step skipped"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    1
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
+run_install
+if ! require_ran; then :
+elif ! printf '%s' "$RUN_OUT" | grep -qi 'published and attested'; then
+  bad "$CASE_NAME" "the project hooks published, and the run did not say so" \
+                   "$(printf '%s' "$RUN_OUT" | head -8)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+new_case "and it is NOT reported when the project-hook installer itself fails"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     1
+stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
+run_install
+if ! require_ran; then :
+# Anchored, because the SKIP line contains the success line's words as a
+# substring — "SKIPPED: project hooks were not published and attested". An
+# unanchored match called the correct refusal a false claim.
+elif printf '%s' "$RUN_OUT" | grep -q '^  published and attested'; then
+  bad "$CASE_NAME" "a failed project-hook install was reported as attested" \
+                   "$(printf '%s' "$RUN_OUT" | grep -i attested | head -2)"
+elif ! printf '%s' "$RUN_OUT" | grep -qi 'SKIPPED.*project hooks'; then
+  bad "$CASE_NAME" "the failure was not reported as a skipped step" \
+                   "$(printf '%s' "$RUN_OUT" | head -8)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
+echo "install.sh — code review M3: --host auto ADDS to the named set, never replaces it"
+# `REQUESTED="$(detect)"` threw away every host the operator had named. On a
+# machine where the named host is not installed — the exact case for naming it
+# rather than relying on detection — the request vanished silently and the run
+# reported success having not bound it.
+new_case "a host named alongside --host auto is bound even when detection cannot find it"
+new_core
+host_exec claude                 # detectable
+# EVERY host this installer knows is on the real PATH of the machine this was
+# written on, and the case's PATH ends in the real one — so `detect` found codex
+# by itself and the assertion passed while proving nothing. The host that must
+# be undetectable has to be made so explicitly.
+hide_command codex
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
+run_install --host auto --host codex
+if ! require_ran; then :
+elif [ ! -L "$CASE_HOME/.claude/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "the DETECTED host was not bound" "$(printf '%s' "$RUN_OUT" | head -6)"
+elif [ ! -L "$CASE_HOME/.codex/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "the explicitly named host was dropped by --host auto" \
+                   "$(printf '%s' "$RUN_OUT" | head -6)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
 echo "  passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]

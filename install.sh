@@ -279,8 +279,14 @@ publish() {
       *) skip "could not publish $name (exit $rc)" ;;
     esac
   done
-  out="$("$PROJHOOKS" 2>&1)" || { say "$out"; skip "project hooks were not published and attested"; }
-  [ -n "$out" ] && [ "$SKIPPED" = 0 ] && say "  published and attested the project-hook set"
+  # A STEP REPORTS ITS OWN OUTCOME. This line used to require `$SKIPPED = 0`,
+  # so a run whose artifact publishing failed said nothing at all about project
+  # hooks that had published and attested cleanly — and "it did not happen" is
+  # indistinguishable from "something unrelated failed" to whoever reads it. It
+  # also required the helper to have written something, which is a fact about
+  # the helper's stdout rather than about whether the step succeeded.
+  if out="$("$PROJHOOKS" 2>&1)"; then say "  published and attested the project-hook set"
+  else [ -n "$out" ] && say "$out"; skip "project hooks were not published and attested"; fi
   return 0
 }
 
@@ -338,7 +344,18 @@ have bash || { say "FAILED: bash is required and was not found. Nothing was publ
 
 if [ "$MODE" = check ]; then do_check; exit 0; fi
 
-case " $REQUESTED " in *" auto "*) REQUESTED="$(detect)"; say "detected hosts:${REQUESTED:- none}" ;; esac
+# `auto` ADDS the detected hosts to the named ones; it used to replace them.
+# Naming a host is what you do precisely when detection will not find it — an
+# uninstalled host, a wrapper not on PATH — so `--host auto --host codex` threw
+# away the only request that needed making, and reported success having not
+# bound it. Duplicates are harmless: install_hosts iterates HOSTS and matches
+# against REQUESTED, so a name appearing twice is still handled once.
+#
+# `auto` itself is stripped rather than left in place. It matches no entry in
+# HOSTS, so carrying it would bind nothing extra — but line 348 asks whether
+# ANY host was requested, and a leftover `auto` makes `--host auto` on a
+# machine with no hosts report that it bound some.
+case " $REQUESTED " in *" auto "*) detected="$(detect)"; REQUESTED="$(printf '%s' " $REQUESTED " | sed 's/ auto / /g')$detected"; say "detected hosts:${detected:- none}" ;; esac
 
 say "publishing to $BIN"
 publish

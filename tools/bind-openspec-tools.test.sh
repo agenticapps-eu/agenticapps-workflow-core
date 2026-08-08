@@ -228,6 +228,77 @@ printf '%s' "$OUT" | grep -qi 'openspec' \
 [ ! -e "$HOME_DIR/.claude/skills/openspec-propose" ] \
   && ok "binds nothing when it cannot generate" || bad "binds nothing when it cannot generate" "a link was made"
 
+# ---------------------------------------------------------------------------
+echo
+echo "I. The reported count is what was bound, not what was attempted (code review I1)"
+# ---------------------------------------------------------------------------
+# Section G proved a collision is REPORTED. It never read the count on the next
+# line, and the count was wrong: link() returned 0 on both collision paths, so
+# the caller's `&& n=$((n + 1))` scored every refusal as a success. Measured
+# before this was written — three colliding destinations printed three
+# `collision: ... left alone` lines and then `skills: 3 bound`, having created
+# no symlinks at all. A binder that reports binding what it declined to bind is
+# worse than one that fails, because the operator has no reason to look.
+fresh claude
+foreign_n=0
+for s in "$HOME_DIR"/.claude/skills/openspec-*; do
+  [ -e "$s" ] || continue
+  rm -rf "$s"; mkdir -p "$s"; printf 'foreign\n' > "$s/SKILL.md"
+  foreign_n=$((foreign_n + 1))
+done
+[ "$foreign_n" -gt 0 ] \
+  && ok "precondition: $foreign_n destinations made to collide" \
+  || bad "precondition: destinations made to collide" "the first run bound nothing to collide with"
+rerun claude
+printf '%s' "$OUT" | grep -q 'skills: 0 bound' \
+  && ok "a run that bound nothing reports zero, not the number it attempted" \
+  || bad "a run that bound nothing reports zero, not the number it attempted" \
+         "$(printf '%s' "$OUT" | grep 'skills:')"
+[ -z "$(find "$HOME_DIR/.claude/skills" -maxdepth 1 -type l 2>/dev/null)" ] \
+  && ok "and no symlink was in fact created" \
+  || bad "and no symlink was in fact created" "a link exists despite every destination colliding"
+
+# A link that cannot be created is a different failure from one that collided,
+# and it was silent: `mkdir -p ... && ln -s ...` returned non-zero, the caller
+# declined to count it, and nothing said why.
+#
+# The links must be ABSENT and the directory unwritable. Leaving the first run's
+# links in place tested nothing: link() found them already pointing where they
+# should and returned 0 on its own merits, so the run reported "6 bound" and was
+# right to. Caught by this assertion failing for the wrong reason.
+fresh claude
+rm -rf "$HOME_DIR"/.claude/skills/openspec-*
+chmod a-w "$HOME_DIR/.claude/skills" 2>/dev/null
+rerun claude
+chmod u+w "$HOME_DIR/.claude/skills" 2>/dev/null
+printf '%s' "$OUT" | grep -qi 'could not link\|failed' \
+  && ok "a link that cannot be created is named, not passed over in silence" \
+  || bad "a link that cannot be created is named, not passed over in silence" \
+         "$(printf '%s' "$OUT" | head -4)"
+
+# ---------------------------------------------------------------------------
+echo
+echo "J. A flag with no value is a usage error, not a shell error (code review I2)"
+# ---------------------------------------------------------------------------
+# install.sh:328 fixes exactly this and carries a regression test for it — "a
+# bare --host is a usage error, not a shell error". The sibling install.sh CALLS
+# never got the same fix: `set -u` is on and each arm shifts 2 without checking
+# $#, so `--host` alone aborted with `line 49: $2: unbound variable`. A shell
+# error names the implementation's line number rather than the operator's
+# mistake, and exits with a status the caller cannot tell apart from a crash.
+for flag in --host --store --home; do
+  OUT=$( "$BINDER" "$flag" 2>&1 ); RC=$?
+  [ "$RC" -ne 0 ] \
+    && ok "a bare $flag exits non-zero" \
+    || bad "a bare $flag exits non-zero" "it exited 0"
+  printf '%s' "$OUT" | grep -q 'unbound variable' \
+    && bad "a bare $flag is a usage error, not a shell error" "$(printf '%s' "$OUT" | head -1)" \
+    || ok "a bare $flag is a usage error, not a shell error"
+  printf '%s' "$OUT" | grep -q -- "$flag" \
+    && ok "a bare $flag names the flag that was incomplete" \
+    || bad "a bare $flag names the flag that was incomplete" "$(printf '%s' "$OUT" | head -1)"
+done
+
 echo
 echo "  passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]

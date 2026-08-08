@@ -51,12 +51,14 @@ fi
 # Both names as separate regular files. Identical content has no rule to choose
 # between, so it collapses; differing content is a decision about which rule
 # survives, and that is not this script's to make.
-COLLAPSE=no
+#
+# There is no COLLAPSE flag any more. It existed only to authorise an `rm -f
+# CLAUDE.md` before the link was made, and the write below replaces the file in
+# one step instead — so the refusal is all this block was ever for.
 if [ -f AGENTS.md ] && [ -f CLAUDE.md ] && [ ! -L CLAUDE.md ]; then
   cmp -s AGENTS.md CLAUDE.md \
     || die "AGENTS.md and CLAUDE.md differ. Reconcile them by hand — collapsing them
             would decide which rule survives, and that is yours to decide."
-  COLLAPSE=yes
 fi
 
 # --- Write ------------------------------------------------------------------
@@ -113,8 +115,16 @@ fi
 if [ -L CLAUDE.md ]; then
   say "CLAUDE.md    already links to AGENTS.md"
 else
-  [ "$COLLAPSE" = yes ] && { rm -f CLAUDE.md || die "could not replace CLAUDE.md"; }
-  ln -s AGENTS.md CLAUDE.md || die "could not link CLAUDE.md to AGENTS.md"
+  # BUILT BESIDE THE DESTINATION, THEN MOVED OVER IT. This was `rm -f
+  # CLAUDE.md` followed by `ln -s`, and a failing link left the repository with
+  # neither file while the message named only the link it could not create. No
+  # content was at risk — `cmp -s` above has already proved the two byte-
+  # identical, so it all survives in AGENTS.md — but the operator was left a
+  # repository they did not ask for and were not told about. `mv -f` replaces a
+  # regular file in one step, so CLAUDE.md is never absent.
+  tmp=".CLAUDE.md.init-project.$$"
+  ln -s AGENTS.md "$tmp" || die "could not create the CLAUDE.md link — CLAUDE.md is untouched"
+  mv -f "$tmp" CLAUDE.md || { rm -f "$tmp"; die "could not move the link into place — CLAUDE.md is untouched"; }
   say "CLAUDE.md    -> AGENTS.md"
 fi
 
