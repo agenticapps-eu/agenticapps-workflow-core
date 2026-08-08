@@ -632,7 +632,7 @@ highest-consequence first:
 - [ ] 9.12 **`--project`'s removal is not normative** — stated in proposal,
       design and an open task, but no scenario requires rejection without
       writes, so it does not survive archival and cannot be tested. codex
-- [ ] 9.13 **3.5's gap is live, and it collides with the sweep.** Measured
+- [x] 9.13 **3.5's gap is live, and it collides with the sweep.** Measured
       2026-08-07 after `9b322fc`: core has **no** local `core.hooksPath` and
       resolves the default `.git/hooks`, so the moment the global binding exists
       git prefers the published directory and core's own hook stops running
