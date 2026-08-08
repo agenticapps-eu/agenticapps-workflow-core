@@ -96,7 +96,26 @@ MARKER_KEY='global-floor-version'
 # of it".
 GATE_HOOK_MARKER='# managed-by: agenticapps-workflow-core tools/install-core-git-hooks.sh'
 
+# The local key a repository sets to adopt its own unmarked hook, and the value
+# is the hook's SHA-256 rather than a boolean. A boolean authorises deleting
+# whatever occupies that path whenever this next runs, including a hook written
+# after the operator adopted; a digest is an assertion about the file they read
+# and stops matching the moment it changes.
+ADOPT_KEY='agenticapps.hooksadopt'
+
 say() { printf 'global-floor: %s\n' "$*"; }
+
+# `shasum -a 256` on macOS, `sha256sum` on most GNU systems, and neither is
+# guaranteed. Empty output means no digest could be taken, which every caller
+# treats as "not adopted" rather than as a match — the failure mode of guessing
+# wrong here is a deletion.
+hook_digest() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" 2>/dev/null | cut -d' ' -f1
+  fi
+}
 
 # Raw equality first, then physical paths. On macOS a home directory reached
 # through a symlink spells the same directory two ways, and a binder that
@@ -261,11 +280,30 @@ fi
 planned=0
 refused=0
 
+# REFUSING A REPOSITORY DOES NOT ALWAYS LEAVE IT GATED, which is the whole of
+# the reason this is a function rather than an increment. A refusal leaves the
+# hook on disk, and that is protection only while `.git/hooks/` is still
+# consulted — a repository with no local core.hooksPath stops consulting it the
+# instant the global binding lands, and a refused repository is never enrolled,
+# because refusal happens before the enrolment pass. It would end the run with a
+# hook nothing runs, a dispatcher exiting 0 for want of a marker, and a report
+# saying it kept the hook it already had.
+#
+# So every refusal records whether the binding would displace it. This is the
+# displacement the enrolment pass already answers for the repositories the run
+# MIGRATES, asked about the ones it declines — the same instant, the other set.
+refuse_repo() {
+  refused=$((refused + 1))
+  [ -n "$(git -C "$1" config --local --get core.hooksPath 2>/dev/null)" ] && return 0
+  printf '%s\n' "$1" >> "$PLAN/displaced"
+}
+
 if [ $# -gt 0 ]; then
   PLAN="$(mktemp -d)" || { say "FAILED to create a working directory. Nothing was published."; exit 1; }
   trap 'rm -rf "$PLAN"' EXIT
   : > "$PLAN/report"
   : > "$PLAN/seen"
+  : > "$PLAN/displaced"
 
   for name in "$@"; do
     # A TYPED PATH IS NOT AN IDENTITY, and `rev-parse` inside a subdirectory
@@ -320,19 +358,55 @@ if [ $# -gt 0 ]; then
     if [ -L "$common/hooks" ]; then
       printf '  REFUSE %s — %s/hooks is a symlink, so what is removed is not what\n' "$top" "$common" >> "$PLAN/report"
       printf '    this report can name. Nothing in it is touched.\n' >> "$PLAN/report"
-      refused=$((refused + 1))
+      refuse_repo "$top"
       continue
     fi
     if [ ! -f "$hook" ]; then
       printf '  REFUSE %s — there is no pre-commit at %s to migrate\n' "$top" "$hook" >> "$PLAN/report"
-      refused=$((refused + 1))
+      refuse_repo "$top"
       continue
     fi
-    if [ -L "$hook" ] || ! grep -qxF "$GATE_HOOK_MARKER" "$hook" 2>/dev/null; then
-      printf '  REFUSE %s — %s carries no ownership marker, so it is not this\n' "$top" "$hook" >> "$PLAN/report"
-      printf '    workflow'"'"'s gate and will not be removed\n' >> "$PLAN/report"
-      refused=$((refused + 1))
+    # A SYMLINKED HOOK IS NOT AN OWNERSHIP QUESTION, so adoption does not reach
+    # it. It is refused for the reason a symlinked hooks directory is: what the
+    # delete reaches is not what the report named, and no assertion about who
+    # owns a file answers where removing it lands.
+    if [ -L "$hook" ]; then
+      printf '  REFUSE %s — %s is a symlink, so what is removed is not what\n' "$top" "$hook" >> "$PLAN/report"
+      printf '    this report can name. Nothing in it is touched.\n' >> "$PLAN/report"
+      refuse_repo "$top"
       continue
+    fi
+
+    # THE MARKER ANSWERS "WHO WROTE THIS" AND THE MIGRATION NEEDS "MAY THIS BE
+    # REMOVED". For a fleet installed by host repositories the file answers
+    # neither: measured 2026-08-08, all three repositories in the migration set
+    # carry a pre-commit byte-identical to a host's, predating the marker and
+    # absent from core's history — so the predicate that exists to keep this
+    # installer from deleting somebody else's hook had no true positives at all
+    # among the repositories the migration exists for.
+    #
+    # The operator supplies what the file cannot, in the repository the hook is
+    # in, naming the artifact by digest. Not a flag: an assertion that lives
+    # with its subject is scoped by where it lives, outlives the command that
+    # acted on it, and can be read back afterwards.
+    adopted=''
+    if ! grep -qxF "$GATE_HOOK_MARKER" "$hook" 2>/dev/null; then
+      digest="$(hook_digest "$hook")"
+      claim="$(git -C "$top" config --local --get "$ADOPT_KEY" 2>/dev/null)"
+      if [ -z "$digest" ]; then
+        printf '  REFUSE %s — %s carries no ownership marker and no SHA-256 tool\n' "$top" "$hook" >> "$PLAN/report"
+        printf '    was found, so its adoption cannot be checked. Install shasum or sha256sum.\n' >> "$PLAN/report"
+        refuse_repo "$top"
+        continue
+      elif [ "$claim" != "$digest" ]; then
+        printf '  REFUSE %s — %s carries no ownership marker, so it is not this\n' "$top" "$hook" >> "$PLAN/report"
+        printf '    workflow'"'"'s gate and will not be removed. Adopt it in the repository\n' >> "$PLAN/report"
+        printf '    itself if you have read it and want it gone:\n' >> "$PLAN/report"
+        printf '      git -C %s config --local %s %s\n' "$top" "$ADOPT_KEY" "$digest" >> "$PLAN/report"
+        refuse_repo "$top"
+        continue
+      fi
+      adopted="$digest"
     fi
 
     # A local core.hooksPath that names the directory git would resolve anyway
@@ -347,12 +421,12 @@ if [ $# -gt 0 ]; then
     if [ -n "$lhp" ] && [ "$ldeclared" = declared ]; then
       printf '  REFUSE %s — its local core.hooksPath is declared (%s), and a declared\n' "$top" "$lhp" >> "$PLAN/report"
       printf '    binding is excluded from the sweep whatever it points at\n' >> "$PLAN/report"
-      refused=$((refused + 1))
+      refuse_repo "$top"
       continue
     elif [ -n "$lhp" ] && ! same_dir "$lhp" "$common/hooks"; then
       printf '  REFUSE %s — its local core.hooksPath names %s, which git prefers over\n' "$top" "$lhp" >> "$PLAN/report"
       printf '    the floor. It is outside the floor by its own choice.\n' >> "$PLAN/report"
-      refused=$((refused + 1))
+      refuse_repo "$top"
       continue
     elif [ -n "$lhp" ]; then
       sweep="$lhp"
@@ -362,6 +436,13 @@ if [ $# -gt 0 ]; then
       printf '  migrate %s — enrol, sweep %s, verify, then remove %s\n' "$top" "$sweep" "$hook" >> "$PLAN/report"
     else
       printf '  migrate %s — enrol, verify, then remove %s\n' "$top" "$hook" >> "$PLAN/report"
+    fi
+    # SAID SEPARATELY BECAUSE IT IS A DIFFERENT ACT. Removing a hook this
+    # installer wrote and removing one it did not are the same line of output
+    # otherwise, and an operator who reads one sentence twice has consented once.
+    if [ -n "$adopted" ]; then
+      printf '    its pre-commit carries no ownership marker — this installer did not write\n' >> "$PLAN/report"
+      printf '    it, and it is removed on this repository'"'"'s own adoption of %s\n' "$adopted" >> "$PLAN/report"
     fi
 
     # LINKED WORKTREES SHARE ONE COMMON DIRECTORY, so they share one local
@@ -375,7 +456,7 @@ if [ $# -gt 0 ]; then
         printf '    this also affects the linked worktree at %s, which shares that configuration\n' "$wt" >> "$PLAN/report"
       done
 
-    printf '%s\n%s\n%s\n%s\n' "$top" "$common" "$hook" "$sweep" > "$PLAN/repo.$planned"
+    printf '%s\n%s\n%s\n%s\n%s\n' "$top" "$common" "$hook" "$sweep" "$adopted" > "$PLAN/repo.$planned"
     planned=$((planned + 1))
   done
 fi
@@ -427,6 +508,29 @@ if [ $# -gt 0 ]; then
   # false the first time somebody ran the initialiser.
   say "  note: repositories enrolled earlier are governed by this binding too. This"
   say "  run reports only what it will NEWLY enrol; --check is where they are listed."
+
+  # NOT ASKED, REFUSED — and before the prompt rather than after it, because
+  # there is no answer that makes this safe. Every repository named here was
+  # refused, so it is not enrolled, and it sets no local core.hooksPath, so the
+  # binding this run would set is exactly what stops its own hook running. It
+  # would end with neither surface while the run reported it as keeping the one
+  # it had.
+  #
+  # Acting at the preflight is what makes the refusal free: nothing has been
+  # published and nothing bound, so there is no partial state to describe. A
+  # refused repository that DOES carry a local binding is not displaced — git
+  # prefers it — and never reaches this list, which is why this is not "any
+  # refusal stops the run".
+  if [ -s "$PLAN/displaced" ]; then
+    say "REFUSED — the repositories below were refused above, so they are not enrolled,"
+    say "and they set no local core.hooksPath, so binding the floor would stop their own"
+    say "hooks being consulted. They would be left with no enforcement at all:"
+    while IFS= read -r d; do [ -n "$d" ] && say "  $d"; done < "$PLAN/displaced"
+    say "Nothing was published and core.hooksPath was NOT set. Resolve each one — adopt"
+    say "its hook, or drop it from the set — and re-run."
+    exit 1
+  fi
+
   if ! plan_accepted; then
     say "DECLINED — nothing was published, core.hooksPath was NOT set, and no named"
     say "repository was enrolled, swept or stripped of its hook."
@@ -640,7 +744,7 @@ fi
 # been reached yet.
 i=0
 while [ "$i" -lt "$planned" ]; do
-  { read -r m_top; read -r m_common; read -r m_hook; read -r m_sweep; } < "$PLAN/repo.$i"
+  { read -r m_top; read -r m_common; read -r m_hook; read -r m_sweep; read -r m_adopt; } < "$PLAN/repo.$i"
   # Already counted where it failed, above. Skipped rather than retried: the
   # repository is unenrolled, so sweeping it would hand it to a dispatcher that
   # exits 0 for want of the marker.
@@ -696,7 +800,27 @@ while [ "$i" -lt "$planned" ]; do
   # delete. The gap between them is a whole publish and bind, and the operator
   # accepted the removal of a file that was this workflow's gate at the time
   # they read the report.
-  if [ ! -f "$m_hook" ] || [ -L "$m_hook" ] || ! grep -qxF "$GATE_HOOK_MARKER" "$m_hook" 2>/dev/null; then
+  if [ ! -f "$m_hook" ] || [ -L "$m_hook" ]; then
+    say "$m_top: NOT MIGRATED — $m_hook is no longer recognisable as this workflow's"
+    say "  gate, so it is left alone. The repository is enrolled and the floor governs it."
+    failed=$((failed + 1))
+    continue
+  fi
+  if [ -n "$m_adopt" ]; then
+    # The adopted path owes the marked path's re-recognition, and the digest is
+    # what makes it checkable. Both halves are re-read: the file, because it can
+    # be replaced in the window a whole publish and bind occupy, and the
+    # adoption, because the operator can withdraw it in the same window. Either
+    # having moved means the delete is no longer the one that was authorised.
+    if [ "$(hook_digest "$m_hook")" != "$m_adopt" ] ||
+       [ "$(git -C "$m_top" config --local --get "$ADOPT_KEY" 2>/dev/null)" != "$m_adopt" ]; then
+      say "$m_top: NOT MIGRATED — $m_hook is not the file this run was authorised to"
+      say "  remove: its contents or its adoption changed since the preflight. It is left"
+      say "  alone. The repository is enrolled and the floor governs it."
+      failed=$((failed + 1))
+      continue
+    fi
+  elif ! grep -qxF "$GATE_HOOK_MARKER" "$m_hook" 2>/dev/null; then
     say "$m_top: NOT MIGRATED — $m_hook is no longer recognisable as this workflow's"
     say "  gate, so it is left alone. The repository is enrolled and the floor governs it."
     failed=$((failed + 1))

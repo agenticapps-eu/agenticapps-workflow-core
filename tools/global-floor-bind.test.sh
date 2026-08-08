@@ -1428,6 +1428,268 @@ fi
 
 # ---------------------------------------------------------------------------
 echo
+echo "floor binder — an unmarked gate copy is removed only where the repository adopts it (3.0a)"
+
+# THE FIXTURE IS `foreign` ON PURPOSE. The fleet's gate copies were written by a
+# host repository's installer and carry no ownership marker, and to the binder
+# that is indistinguishable from a hook a stranger wrote — same file, same
+# predicate, no way to tell. That indistinguishability is the whole reason the
+# consent has to come from the operator rather than from the file, so the cases
+# below are written against the shape the binder actually sees.
+digest_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+adopt()     { git -C "$1" config --local agenticapps.hooksadopt "$(digest_of "$1/.git/hooks/pre-commit")"; }
+
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant foreign)"
+adopt "$R"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -eq 0 ] && [ "$(enrolled "$R")" = true ] && [ -z "$(local_hp "$R")" ] && ! has_hook "$R"; then
+  ok "an adopted unmarked hook is enrolled, swept and removed"
+else
+  bad "an adopted unmarked hook is enrolled, swept and removed" \
+      "rc=$RC enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")' hook=$(has_hook "$R" && echo PRESENT || echo gone)" \
+      "$OUT"
+fi
+
+# The removal is only worth anything if the floor took over, and the commit is
+# the only witness that answers about git rather than about configuration.
+if ! has_hook "$R" && commit_refused "$R"; then
+  ok "and the floor gates it afterwards"
+else
+  bad "and the floor gates it afterwards" \
+      "hook=$(has_hook "$R" && echo PRESENT || echo gone) — the commit was not refused" "$OUT"
+fi
+
+# Accepting the removal of a marked hook and of an unmarked one must not be the
+# same sentence read twice: the second is a file this installer never wrote.
+if said adoption || said adopt; then
+  ok "and the preflight says the removal rests on the repository's adoption"
+else
+  bad "and the preflight says the removal rests on the repository's adoption" "$OUT"
+fi
+
+# The negative, which is the one that matters. Without adoption the refusal
+# stands — and it hands over the exact command, digest included, so the operator
+# is answering about the file the binder just read rather than about a path.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant foreign)"
+D="$(digest_of "$R/.git/hooks/pre-commit")"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && has_hook "$R" && [ -z "$(enrolled "$R")" ]; then
+  ok "an unmarked hook with no adoption is still refused"
+else
+  bad "an unmarked hook with no adoption is still refused" \
+      "rc=$RC enrolled='$(enrolled "$R")' hook=$(has_hook "$R" && echo present || echo GONE)" "$OUT"
+fi
+
+if said "agenticapps.hooksadopt" && said "$D"; then
+  ok "and the refusal prints the adopting command with the digest it just read"
+else
+  bad "and the refusal prints the adopting command with the digest it just read" \
+      "expected the digest $D" "$OUT"
+fi
+
+# A digest that does not match is not an opt-in. This is the case a boolean
+# could not express at all: `true` would have authorised deleting whatever
+# occupies the path, including a hook written after the operator adopted.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant foreign)"
+git -C "$R" config --local agenticapps.hooksadopt true
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && has_hook "$R" && [ -z "$(enrolled "$R")" ]; then
+  ok "a non-matching adoption value does not adopt"
+else
+  bad "a non-matching adoption value does not adopt" \
+      "rc=$RC enrolled='$(enrolled "$R")' hook=$(has_hook "$R" && echo present || echo GONE)" "$OUT"
+fi
+
+# Scoped by where it lives. An adoption in one repository says nothing about
+# another, and the pair is run together so the claim is about isolation rather
+# than about a run that happened to act on one repository.
+setup_case
+plant_gate
+A="$(gated_repo adopting redundant foreign)"
+B="$(gated_repo other    redundant foreign)"
+adopt "$A"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$A" "$B"
+if ! has_hook "$A" && has_hook "$B" && [ -z "$(enrolled "$B")" ]; then
+  ok "adoption does not travel to another named repository"
+else
+  bad "adoption does not travel to another named repository" \
+      "A hook=$(has_hook "$A" && echo PRESENT || echo gone) B hook=$(has_hook "$B" && echo present || echo GONE) B enrolled='$(enrolled "$B")'" \
+      "$OUT"
+fi
+
+# Adoption is a claim about ownership, and the symlink refusals are not about
+# ownership: they exist because the file the delete reaches is not the file the
+# report named. An assertion about who owns a hook answers neither.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant foreign)"
+mkdir -p "$CASE/other-hooks"
+printf '#!/bin/sh\nexit 1\n' > "$CASE/other-hooks/pre-commit"
+adopt "$R"
+rm -f "$R/.git/hooks/pre-commit" && ln -s "$CASE/other-hooks/pre-commit" "$R/.git/hooks/pre-commit"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && [ -f "$CASE/other-hooks/pre-commit" ] && [ -z "$(enrolled "$R")" ]; then
+  ok "adoption does not make a symlinked hook removable"
+else
+  bad "adoption does not make a symlinked hook removable" \
+      "rc=$RC enrolled='$(enrolled "$R")' target=$([ -f "$CASE/other-hooks/pre-commit" ] && echo present || echo DELETED)" "$OUT"
+fi
+
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant absent)"
+git -C "$R" config --local agenticapps.hooksadopt deadbeef
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && [ -z "$(enrolled "$R")" ]; then
+  ok "adoption with no hook at all still refuses"
+else
+  bad "adoption with no hook at all still refuses" \
+      "rc=$RC enrolled='$(enrolled "$R")'" "$OUT"
+fi
+
+# Adoption authorises a removal; it does not perform one. The single acceptance
+# still governs, which is what stops adoption becoming a way to migrate a
+# repository without the operator reading the report.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant foreign)"
+adopt "$R"
+run_binder_with "$R"
+if [ "$RC" -ne 0 ] && said DECLINED && has_hook "$R" && [ -z "$(enrolled "$R")" ] && [ -n "$(local_hp "$R")" ]; then
+  ok "a declined preflight leaves an adopting repository untouched"
+else
+  bad "a declined preflight leaves an adopting repository untouched" \
+      "rc=$RC enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")' hook=$(has_hook "$R" && echo present || echo GONE)" \
+      "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — a refusal that the binding would displace stops the run (3.0e)"
+
+# #91's blind spot, one set out. A refused repository is never enrolled, because
+# refusal happens before the enrolment pass — and if it carries no local
+# core.hooksPath, the global binding is exactly what stops its own hook being
+# consulted. It ends with a hook on disk that nothing runs, an unenrolled
+# dispatcher that exits 0 for it, and a run that reports it "keeping the hook it
+# already had".
+setup_case
+plant_gate
+R="$(gated_repo r1 none foreign)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && [ -z "$(bound)" ] && [ ! -f "$HOOKDIR/pre-commit" ]; then
+  ok "a refused repository with no local binding stops the run before publish and bind"
+else
+  bad "a refused repository with no local binding stops the run before publish and bind" \
+      "rc=$RC binding='$(bound)' published=$([ -f "$HOOKDIR/pre-commit" ] && echo YES || echo no)" "$OUT"
+fi
+
+# The point of stopping is that the repository is still gated afterwards. This
+# asserts it of git rather than of the configuration, which is the only form of
+# the claim that cannot be satisfied by a run that did nothing for other reasons.
+if has_hook "$R" && commit_refused "$R"; then
+  ok "and it is still gated by the hook the refusal left it"
+else
+  bad "and it is still gated by the hook the refusal left it" \
+      "hook=$(has_hook "$R" && echo present || echo GONE) — the commit was not refused" "$OUT"
+fi
+
+# A second named repository is not migrated either, because nothing was bound.
+# Without this the case above is satisfied by a binder that merely exits early.
+setup_case
+plant_gate
+BAD_R="$(gated_repo bad none foreign)"
+GOOD_R="$(gated_repo good redundant ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$BAD_R" "$GOOD_R"
+if [ -z "$(enrolled "$GOOD_R")" ] && has_hook "$GOOD_R" && [ -n "$(local_hp "$GOOD_R")" ]; then
+  ok "and no other named repository is enrolled, swept or stripped"
+else
+  bad "and no other named repository is enrolled, swept or stripped" \
+      "enrolled='$(enrolled "$GOOD_R")' hooksPath='$(local_hp "$GOOD_R")' hook=$(has_hook "$GOOD_R" && echo present || echo GONE)" \
+      "$OUT"
+fi
+
+# THE OTHER HALF, and it is what keeps this from being "any refusal aborts".
+# A refused repository carrying a local core.hooksPath is not displaced by the
+# global binding, because git prefers the local one. It keeps its hook in the
+# full sense, so the run continues and the machine is bound — which is the
+# behaviour 9.4h already asserts and this case pins to its actual reason.
+setup_case
+plant_gate
+BAD_R="$(gated_repo bad redundant foreign)"
+GOOD_R="$(gated_repo good redundant ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$BAD_R" "$GOOD_R"
+if [ "$(bound)" = "$HOOKDIR" ] && [ "$(enrolled "$GOOD_R")" = true ] && ! has_hook "$GOOD_R"; then
+  ok "a refused repository with a local binding does not stop the run"
+else
+  bad "a refused repository with a local binding does not stop the run" \
+      "binding='$(bound)' good enrolled='$(enrolled "$GOOD_R")' hook=$(has_hook "$GOOD_R" && echo PRESENT || echo gone)" \
+      "$OUT"
+fi
+
+# THE SUBSTITUTION WINDOW (3.0b). A whole publish and bind separate the report
+# the operator accepted from the delete it authorised, and nothing has held a
+# lock on that repository in between. The marked path already re-recognises its
+# marker immediately before removing; the adopted path owes the same, and the
+# digest is what makes it checkable.
+#
+# Same injection shape as run_binder_cut, passing the call through and then
+# running a command once instead of killing. The pattern is ONE WORD — a pattern
+# containing spaces is a syntax error inside the shim, which then fails every
+# git call while the harness reports only that nothing matched.
+run_binder_after() {
+  local pat="$1" cmd="$2"; shift 2
+  local realgit; realgit="$(command -v git)"
+  mkdir -p "$CASE/bin"
+  rm -f "$CASE/cut-fired"
+  cat > "$CASE/bin/git" <<WRAP
+#!/usr/bin/env bash
+case "\$*" in
+  $pat)
+    if [ ! -f "$CASE/cut-fired" ]; then
+      "$realgit" "\$@"; rc=\$?
+      : > "$CASE/cut-fired"
+      $cmd
+      exit \$rc
+    fi ;;
+esac
+exec "$realgit" "\$@"
+WRAP
+  chmod +x "$CASE/bin/git"
+  assert_isolated
+  ( cd "$REPO" && PATH="$CASE/bin:$PATH" "$CORE/$BINDER_REL" "$@" >"$CASE/out" 2>&1 </dev/null ); RC=$?
+  OUT="$(cat "$CASE/out")"
+  [ -f "$CASE/cut-fired" ] || {
+    echo "  FAIL  run_binder_after: '$pat' never matched, so nothing was substituted."
+    echo "        The assertion after this would describe an undisturbed migration."
+    exit 1
+  }
+}
+
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant foreign)"
+adopt "$R"
+# The verification resolves the repository's hooks directory immediately before
+# the removal, so replacing the file on that call lands the substitution in the
+# exact window this case is about.
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_after '*--path-format=absolute?--git-path?hooks*' \
+  "printf '#!/bin/sh\nsomething else entirely\n' > '$R/.git/hooks/pre-commit'" "$R"
+if [ "$RC" -ne 0 ] && has_hook "$R"; then
+  ok "a hook substituted after the preflight is not removed"
+else
+  bad "a hook substituted after the preflight is not removed" \
+      "rc=$RC hook=$(has_hook "$R" && echo present || echo DELETED)" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
 echo "----------------------------------------------------------------"
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

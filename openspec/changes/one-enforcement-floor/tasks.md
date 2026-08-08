@@ -300,7 +300,7 @@ ran, so this change starts from an installer that writes no host configuration.
 
 ## 3. Retire the per-repository copies
 
-- [ ] 3.0a **Adoption: the migration removes an unmarked `pre-commit` only from a
+- [x] 3.0a **Adoption: the migration removes an unmarked `pre-commit` only from a
       repository whose local `agenticapps.hooksadopt` equals that file's SHA-256
       digest.** Decision 8. Set in the subject repository, never as an argument
       — an assertion that lives with its subject is scoped by where it lives,
@@ -308,21 +308,21 @@ ran, so this change starts from an installer that writes no host configuration.
       digest, not `true`**, which is round 3's HIGH: a boolean authorises
       deleting whatever occupies that path later, and git's boolean truth set
       (`yes`, `on`, `1`) would have made "only `true`" ambiguous as well
-- [ ] 3.0b Re-read both the file's digest and the adoption value immediately
+- [x] 3.0b Re-read both the file's digest and the adoption value immediately
       before the removal, matching the re-recognition the marked path already
       performs there — a whole publish and bind separate the preflight from the
       delete it authorised
-- [ ] 3.0c The preflight SHALL distinguish the two removals, so accepting the
+- [x] 3.0c The preflight SHALL distinguish the two removals, so accepting the
       removal of a marked hook and of an unmarked one are not the same sentence
       read twice; and the refusal for an unmarked hook SHALL print the adopting
       command **including the digest of the file it just read**
-- [ ] 3.0d Adoption widens **one** predicate: it does not enrol, does not sweep,
+- [x] 3.0d Adoption widens **one** predicate: it does not enrol, does not sweep,
       does not stand in for the acceptance, does not travel between
       repositories, and does not relax the symlinked-hook, symlinked-hooks-
       directory or missing-file refusals — those are about the delete landing
       somewhere the report could not name, which no claim about ownership
       answers
-- [ ] 3.0e **A named repository refused at the preflight with no local
+- [x] 3.0e **A named repository refused at the preflight with no local
       `core.hooksPath` aborts the run before anything is published or bound.**
       Round 3's other HIGH, and it is #91's blind spot one set out: refusal
       happens before the enrolment pass, so a refused repository is never
@@ -330,11 +330,11 @@ ran, so this change starts from an installer that writes no host configuration.
       was keeping. Neither surface, reported as "keeping the hook it already
       had". A refused repository that carries a local binding is not displaced
       and does not abort the run
-- [ ] 3.0f Correct the delta's claim that an **unnamed** repository "remains
+- [x] 3.0f Correct the delta's claim that an **unnamed** repository "remains
       gated by the hook it already carries" — false for any that sets no local
       binding. Naming them needs the search Decision 7 removed, so the claim is
       corrected and `--check` is named as where that report belongs (9.10)
-- [ ] 3.0g **Tests, RED before GREEN**, for every branch above: unmarked with a
+- [x] 3.0g **Tests, RED before GREEN**, for every branch above: unmarked with a
       matching digest, unmarked with no adoption, unmarked with a non-matching
       digest, a hook substituted between preflight and removal, adoption in one
       repository not reaching another, adoption against a symlinked hook, a
