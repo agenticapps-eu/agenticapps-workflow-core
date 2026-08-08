@@ -652,7 +652,10 @@ highest-consequence first:
       and then kills the process group. By GROUP and not by `$PPID`, because
       bash may fork an intermediate subshell for `x="$(git ...)"` and killing
       that one lets the binder continue with an empty value, which would pass
-      the suite while proving nothing. Three cuts, one per step
+      the suite while proving nothing. Three cuts, one per step — **five as of
+      the stage-2 correction in 9.4d**, because the global binding is an
+      interruption point too, and for a repository with no local binding it is
+      the only one that displaces its hook
 - [x] 9.4d **Ordering, from the plan review — RED before GREEN.** The order is
       enrol → sweep → verify → remove. The test that matters asserts the
       negative: with the binder stopped immediately after the sweep, a commit in
@@ -663,7 +666,22 @@ highest-consequence first:
       **Demonstrated both ways 2026-08-08.** Against a variant of the binder
       with the sweep moved ahead of the enrolment, exactly three cases fail and
       the one that matters fails on the commit: swept, unenrolled, and gated by
-      nothing. Against the shipped order all 76 pass
+      nothing. Against the shipped order all 76 pass.
+      **Corrected 2026-08-08 by the stage-2 review, and this is the second time
+      the same window was closed against the wrong displacer.** All three cuts
+      were taken against a repository whose local `core.hooksPath` is what
+      displaces its hook — so all three were blind to the repository that has
+      none, which is the shape `tools/install-core-git-hooks.sh` actually leaves
+      behind and the shape one of the three measured repositories is in. For
+      that repository the sweep is not the displacer: setting `core.hooksPath`
+      globally stops `.git/hooks/` being consulted everywhere at once, and
+      enrolling inside the per-repository loop reopened the window one step
+      earlier and for every named repository together. Reproduced before the
+      fix — cut at the binding, the commit succeeded with the gate hook still on
+      disk. The enrolment now runs as its own pass immediately before the global
+      binding and after every refusal, so a run that refuses still writes
+      nothing into a named repository. Three cases added; two of them fail
+      against the previous binder and pass against this one. 79 pass
 - [x] 9.4e **Restore the swept binding when verification fails.** A repository
       enrolled and swept whose hooks directory then does not resolve to the
       floor is returned to the surface it had, rather than left holding a hook

@@ -55,6 +55,22 @@
 # state permanently with nothing reporting it. Both plan reviewers found this
 # independently in the draft that had sweep first.
 #
+# EVERY NAMED REPOSITORY IS ENROLLED BEFORE THE GLOBAL BINDING LANDS, not inside
+# its own sequence. The sweep is only one of the two things that can displace a
+# repository's own hook, and it is the smaller one: a repository with NO local
+# core.hooksPath — which is what tools/install-core-git-hooks.sh leaves behind,
+# since it writes into the directory git already resolves — stops consulting
+# `.git/hooks/` the instant `core.hooksPath` is set globally. There is no sweep
+# to order anything against. Enrolling inside the per-repository loop therefore
+# reopened exactly the window the loop's order was chosen to close, one step
+# earlier and for every named repository at once, and a cut in it leaves a
+# repository with its hook file still on disk and nothing running it.
+#
+# This is the argument the core-repair step below already makes about core's own
+# checkout — "setting the global binding IS the moment core's own hook stops
+# being preferred" — applied to the repositories the operator named. Same
+# displacement, same instant; it was only ever answered for one of them.
+#
 # Exit 0 = published and bound, or already so, and every named repository
 #          migrated.
 # Exit 1 = refused (a foreign binding, a declined preflight) or failed (publish,
@@ -572,6 +588,35 @@ else
   say "bound core's local core.hooksPath -> $CORE_HOOKS"
 fi
 
+# ── Enrolment, before the binding that displaces their hooks ───────────────
+# Last thing before the global binding and after every refusal above, so the two
+# properties hold together: a run that refuses — a foreign global binding, a
+# foreign local one in core — has still written nothing into a named repository,
+# and a run that proceeds has enrolled every one of them before the instant
+# their own hooks stop being consulted.
+#
+# Inert here in the strongest sense: with no global binding yet, the predicate
+# this writes has no reader at all. If the binding below then fails, the
+# repositories are enrolled, still gated by their own hooks, and re-running is
+# the whole of the repair.
+#
+# A repository that cannot be enrolled is dropped from the migration rather than
+# stopping it. Its hook is untouched and still gates it, which is the same
+# posture every later step takes toward the repository it fails on.
+failed=0
+i=0
+while [ "$i" -lt "$planned" ]; do
+  { read -r e_top; } < "$PLAN/repo.$i"
+  if git -C "$e_top" config --local agenticapps.workflow.enrolled true 2>/dev/null; then
+    say "$e_top: enrolled"
+  else
+    say "$e_top: FAILED to enrol — its hook is left in place and still gates it"
+    : > "$PLAN/skip.$i"
+    failed=$((failed + 1))
+  fi
+  i=$((i + 1))
+done
+
 # ── The global binding ─────────────────────────────────────────────────────
 if [ -z "$current" ]; then
   git config --global core.hooksPath "$HOOKS_DIR" || {
@@ -582,30 +627,28 @@ else
   say "satisfied — core.hooksPath already resolves to $HOOKS_DIR"
 fi
 
-# ── The migration: enrol → sweep → verify → remove, one repository at a time ─
+# ── The migration: sweep → verify → remove, one repository at a time ───────
 # After the binding, because the verification step asks whether the floor
 # governs the repository and there is no floor to be governed by until then.
+# The enrolment is the one step that cannot wait for it, and it already ran.
 #
 # One repository is carried to completion before the next begins, which is what
 # makes the interrupted-partway state describable: everything before the cut is
-# migrated, everything after it still carries its own hook, and the repository
-# the cut landed inside is gated at every instant of its own sequence.
-failed=0
+# migrated, everything after it still carries its own hook and is enrolled
+# behind it, and the repository the cut landed inside is gated at every instant
+# — by the floor it is already enrolled in, whether or not its own hook has
+# been reached yet.
 i=0
 while [ "$i" -lt "$planned" ]; do
   { read -r m_top; read -r m_common; read -r m_hook; read -r m_sweep; } < "$PLAN/repo.$i"
-  i=$((i + 1))
-
-  # FIRST, AND INERT UNTIL THE SWEEP. While the local binding stands the
-  # repository is gated by its own hook, which predates this predicate and never
-  # reads it — so the marker changes nothing until the sweep makes it
-  # load-bearing, and that is exactly what makes enrolling first free.
-  if ! git -C "$m_top" config --local agenticapps.workflow.enrolled true 2>/dev/null; then
-    say "$m_top: FAILED to enrol — its hook is left in place and still gates it"
-    failed=$((failed + 1))
+  # Already counted where it failed, above. Skipped rather than retried: the
+  # repository is unenrolled, so sweeping it would hand it to a dispatcher that
+  # exits 0 for want of the marker.
+  if [ -f "$PLAN/skip.$i" ]; then
+    i=$((i + 1))
     continue
   fi
-  say "$m_top: enrolled"
+  i=$((i + 1))
 
   if [ -n "$m_sweep" ]; then
     # Re-read rather than trust the preflight. The value classified as redundant

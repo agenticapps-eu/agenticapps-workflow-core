@@ -1156,6 +1156,61 @@ else
       "enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")'" "$OUT"
 fi
 
+# THE REPOSITORY WITH NO LOCAL BINDING, which is the shape
+# tools/install-core-git-hooks.sh actually leaves behind — it writes into the
+# directory git already resolves and sets nothing — and the shape one of the
+# three measured repositories is in. Every cut above is taken against a
+# repository whose local core.hooksPath is what displaces its hook, so all three
+# of them are blind to the displacement that needs no sweep at all: setting
+# core.hooksPath GLOBALLY stops `.git/hooks/` being consulted everywhere at
+# once. Reproduced against the enrol-inside-the-loop order — the commit below
+# succeeded, in a repository whose hook file was still sitting on disk.
+setup_case
+plant_gate
+R="$(gated_repo r1 none ours)"
+# `?` and not a space, because a case pattern is one WORD: a pattern written
+# with spaces in it is a syntax error inside the injected shim, which then fails
+# every git call and takes the run down somewhere unrelated. And `--global?core`
+# rather than `*--global*core.hooksPath*` because the loose form also matches the
+# READ of the current value — `--global --get --type=path core.hooksPath` — which
+# happens long before the enrolment and would cut the run before the instant
+# this case is about.
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_cut '*--global?core.hooksPath?*' "$R"
+if [ "$(enrolled "$R")" = true ] && [ "$(bound)" = "$HOOKDIR" ] && has_hook "$R" && commit_refused "$R"; then
+  ok "interrupted at the global binding, a repository with no local binding is gated"
+else
+  bad "interrupted at the global binding, a repository with no local binding is gated" \
+      "enrolled='$(enrolled "$R")' binding='$(bound)' hook=$(has_hook "$R" && echo present || echo GONE)" \
+      "— bound, unenrolled, and its own hook no longer consulted by anything" "$OUT"
+fi
+
+# The other side of that instant. Enrolling before the binding is only free if
+# nothing reads the marker yet, so the cut here must find a machine with no
+# floor on it — otherwise this case would pass for the wrong reason.
+setup_case
+plant_gate
+R="$(gated_repo r1 none ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_cut '*agenticapps.workflow.enrolled*' "$R"
+if [ "$(enrolled "$R")" = true ] && [ -z "$(bound)" ] && has_hook "$R" && commit_refused "$R"; then
+  ok "interrupted at the enrolment, the binding has not landed and its own hook still gates it"
+else
+  bad "interrupted at the enrolment, the binding has not landed and its own hook still gates it" \
+      "enrolled='$(enrolled "$R")' binding='$(bound)'" "$OUT"
+fi
+
+# And the completed run for the same shape, which no case covered either: the
+# whole migration for a repository that has nothing to sweep.
+setup_case
+plant_gate
+R="$(gated_repo r1 none ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -eq 0 ] && [ "$(enrolled "$R")" = true ] && ! has_hook "$R" && commit_refused "$R"; then
+  ok "a repository with nothing to sweep is migrated, and the floor gates it afterwards"
+else
+  bad "a repository with nothing to sweep is migrated, and the floor gates it afterwards" \
+      "rc=$RC enrolled='$(enrolled "$R")' hook=$(has_hook "$R" && echo present || echo gone)" "$OUT"
+fi
+
 # ---------------------------------------------------------------------------
 echo
 echo "floor binder — verification failure restores the swept binding (9.4e)"
