@@ -407,6 +407,48 @@ instruction-file work. One PR per repository.
       `~/.claude/settings.json.pre-meta-observer-removal`. 2.6 may now proceed
       without the directories regrowing
 
+- [x] 2.9 **`fx-signal-agent`'s two red security checks were not broken, and the
+      instruction to delete them rested on that premise.** Asked to remove
+      `gitleaks` and `pnpm-audit` from Actions because "they don't work anyway".
+      They work. Measured before touching anything:
+
+      - **gitleaks** scanned 707 commits and reported **2 real findings** — both
+        the same `curl-auth-header` rule in commit `a4a0898`, in two Phase 9
+        planning docs. Triaged as false positives on evidence rather than
+        assertion: the token is **20 characters with no dots**, so not a JWT,
+        and `09-04-PLAN.md` says in prose it is "an invalid 20-char token [that]
+        must return 401". A known-bad placeholder whose job is to be rejected.
+        Allowlisted with triage notes per `.gitleaksignore`'s own documented
+        convention, which already held 117 such entries.
+      - **pnpm audit** reported **13 genuine high advisories** across five
+        packages, including HIGH React Router CVEs. Fixed with five targeted
+        overrides — the mechanism this repo already used for three others.
+
+      Both were red because nobody had acted on the findings, which is how a
+      working gate becomes noise and then becomes something you delete.
+      Deleting them would also have stripped the only CI surface for a
+      **numbered spec requirement**, REQ-SEC01, leaving the spec asserting a
+      control the machine no longer checks — this change's own subject, arrived
+      at from the other direction. PR #131 merged; the workflow is untouched and
+      **green on `main` for the first time**.
+
+      **Two traps found on the way, both worth carrying:**
+
+      *A caret range is not a safety guarantee.* The first attempt fixed the
+      CVEs by resolving within the ranges `package.json` already declared, and
+      CI caught that it broke `cross-tenant`. Resolving within `^2.47.0` moved
+      `@supabase/supabase-js` 2.97.0 → 2.112.x, and `realtime-js` from 2.30
+      onward dropped its `ws` dependency for native WebSocket, which CI's Node
+      20 lacks. A package with **no advisory against it** moved and broke the
+      build. Redone as overrides: lockfile churn **+1118/-1101 → +30/-39**.
+
+      *A package manager will happily write a lockfile CI cannot read.* CI pins
+      `pnpm` 9; local pnpm is 11 and `packageManager` is unset in
+      `package.json`. Regenerating locally would have bumped the lockfile format
+      past what `--frozen-lockfile` on pnpm 9 accepts, breaking **every job in
+      the repository** to fix an audit warning. Used `corepack pnpm@9`. Pinning
+      `packageManager` there is unfinished work
+
 ## 3. Declare what each removed tool owned
 
 The invariant is not implementable without this, so it comes before the sweep it
