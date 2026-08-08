@@ -1,127 +1,156 @@
-# Session Handoff — 2026-08-08 (twenty-third session)
+# Session Handoff — 2026-08-08 (twenty-fourth session)
 
-**PR #91 merged** as `6fe5a56`, but not before stage 2 found a real window and
-closed it. `openspec validate --all` 14/14, all 14 suites in `tools/` green,
-`tools/global-floor-bind.test.sh` now 79 cases.
+**PR #92 is open** on `feat/run-the-global-floor-migration`. The migration was
+supposed to run this session and could not: the binder cannot act on a single
+repository in the migration set, and behind that sat a second defect that would
+have left one of them with no enforcement at all.
 
-Branch `feat/migration-acts-only-on-names` is deleted. **This file is
-uncommitted on `main`** — it needs to ride the next feature branch, because
-nothing is ever committed to `main` directly.
+Nothing on the machine was mutated. `core.hooksPath` is still unset globally and
+in core, the published hook is still the stale 2270-byte opencode copy, and all
+three repositories still carry their hooks and are unenrolled.
 
 ## Accomplished
 
-- **Stage 2 on #91, in this cleared session**, per §07. It found the thing the
-  last handoff pointed at: whether the sequence leaves an active surface at
-  *every* instant, not only at the three points the suite cuts. It does not.
-- **The window, reproduced before the fix.** All three interruption cuts were
-  taken against `gated_repo r1 redundant ours` — a repository whose local
-  `core.hooksPath` is what displaces its own hook. A repository with **no** local
-  binding is displaced by something else entirely: setting `core.hooksPath`
-  globally stops `.git/hooks/` being consulted everywhere at once. Cut the run at
-  the binding and a commit succeeded in a repository whose gate hook was still on
-  disk, enrolled by nothing.
-- **Fixed**: the enrolment is now its own pass, immediately before the global
-  binding and after every refusal the binder makes.
-- **Three cases added** (79 total). Two of them fail against the previous binder
-  and pass against this one; the third is coverage, not a guard.
-- **#91 merged** with a merge commit, matching #90.
+- **Ran the binder against the real three for the first time and declined the
+  preflight.** It refused all three: their `pre-commit` carries no ownership
+  marker. All three are byte-identical to
+  `claude-workflow/bin/git-hooks/pre-commit` (md5 `3c871ab3…`, 1201 bytes),
+  installed by a **host** repository's installer and absent from core's history.
+  `install-core-git-hooks.sh` refuses to overwrite them by the same rule, so no
+  tool this change ships could reach any repository it exists for.
+- **0.3a measured the wrong property.** It classified nine copies by byte size
+  and never asked about the predicate the code tests. The four sizes are four
+  installers — 1201 claude-workflow, 2270 opencode-workflow, 5844
+  codex-workflow, 1376 core — and only core's is marked.
+- **Decision 8: the repository adopts its own hook**, `agenticapps.hooksadopt`
+  set to the SHA-256 of the hook being adopted.
+- **Round 3 plan review** (gemini APPROVE, codex REQUEST-CHANGES), folded in.
+  Codex found the displacement below and the boolean-vs-digest hole.
+- **Built it: 79 → 94 cases, RED before GREEN.** All 12 suites green,
+  `openspec validate --all` 14/14.
 
 ## Decisions
 
-- **Enrolment moved out of the per-repository loop, not just re-ordered inside
-  it.** The loop's order was chosen to close a window that the binding reopens
-  one step earlier and for every named repository at once. Fixing it inside the
-  loop would have been fixing it in the wrong place.
-- **Placed after every refusal, not before the publish.** A foreign global
-  binding, or a foreign local one in core, still exits with nothing written into
-  a named repository. Enrolling earlier would have been simpler and would have
-  left marks in repositories on a run that refused.
-- **A repository that cannot be enrolled is dropped, not fatal.** Same posture
-  every later step already takes toward the repository it fails on: its hook is
-  untouched and still gates it, `$PLAN/skip.$i` carries that to the loop.
-- **Merged with CodeRabbit rate-limited.** Its check is green and means nothing
-  ("Review rate limited"). One real CodeRabbit round happened earlier on this
-  PR and its finding was folded in; the new commit is stage-2 work, reviewed by
-  the pass that produced it.
-- **The third new case is not a regression guard and says so.** A *completed*
-  run reaches the same end state under both orders — the same trap the
-  interruption harness fell into last session.
+- **The digest, not a boolean.** `hooksadopt=true` is a standing licence to
+  delete whatever occupies that path whenever the migration next runs, including
+  a hook written after the operator adopted. A digest asserts about the file they
+  read and expires when it changes — which also closes the substitution window
+  between the preflight and the delete. Both file and config are re-read
+  immediately before removal.
+- **In the repository, not a flag — and the first argument for that was wrong.**
+  The draft argued "a command line can be globbed"; codex correctly noted path
+  arguments are shell-expanded too and the `GLOBAL_FLOOR_ACCEPT='*'` incident was
+  unquoted expansion *inside* the script. The surviving argument is scope: an
+  assertion that lives with its subject outlives the command and can be audited
+  later by reading that repository.
+- **A refusal that the binding would displace stops the run.** Refusal happens
+  before the enrolment pass, so a refused repository is never enrolled — and one
+  with no local `core.hooksPath` has its own hook silenced the instant the
+  binding lands. It ended with neither surface while the run reported it as
+  keeping the hook it had. **This is #91's blind spot one set out**: that fix
+  answered the displacement for repositories the run migrates and never asked
+  about the ones it declines. A refusal *with* a local binding does not stop the
+  run, because git prefers it.
+- **The unnamed half is a corrected claim, not new behaviour.** The delta said an
+  unnamed repository "remains gated by the hook it already carries" — false for
+  any with no local binding. Enumerating them needs the search Decision 7
+  removed, so the claim is corrected and `--check` (9.10) is named as where that
+  report belongs.
+- **Adoption widens exactly one predicate.** It does not enrol, sweep, replace
+  the acceptance, travel between repositories, or relax the symlink and
+  missing-file refusals — those are about the delete landing where the report
+  could not name it.
 
 ## Files modified
 
-- `reference-implementations/global-floor/bind-global-floor.sh` — the enrolment
-  pass before `── The global binding ──`; the migration loop is now sweep →
-  verify → remove and skips `$PLAN/skip.$i`; header and section comments say
-  which displacement each step answers
-- `tools/global-floor-bind.test.sh` — three cases: cut at the global binding,
-  cut at the enrolment, and the completed run, all against `gated_repo r1 none
-  ours`. Note the cut pattern must be **one word** — `'*--global?core.hooksPath?*'`,
-  never a pattern with spaces, which is a syntax error inside the injected shim
-  and takes the run down somewhere unrelated
-- `.../one-enforcement-floor/specs/workflow-installation/spec.md` — "every named
-  repository SHALL be enrolled before the global binding is set", the
-  interruption scenario widened to the binding, and a scenario for the
-  repository with no local binding at all
-- `.../one-enforcement-floor/tasks.md` — 9.4b and 9.4d carry the correction
+- `reference-implementations/global-floor/bind-global-floor.sh` — `hook_digest`,
+  `ADOPT_KEY`, the adoption branch in classification (symlinked hook split out of
+  the marker test so adoption cannot reach it), `refuse_repo` recording which
+  refusals the binding would displace, the abort before publish/bind, the
+  distinct preflight line, and the digest re-check before removal. Plan record is
+  now five lines, not four
+- `tools/global-floor-bind.test.sh` — 15 new cases in two sections, plus
+  `run_binder_after` (pass through, then mutate once). **The fixture is
+  `foreign` on purpose**: an unmarked host copy and a stranger's hook are the
+  same file to the binder, which is why the consent has to come from the operator
+- `.../one-enforcement-floor/specs/workflow-installation/spec.md` — the adoption
+  requirement with six scenarios, the displacement paragraph in "No repository is
+  left with neither surface", and four scenarios around naming/refusal
+- `.../one-enforcement-floor/design.md` — Decision 8
+- `.../one-enforcement-floor/tasks.md` — 3.0a–3.0h; 0.3a and 3.1 annotated
+- `.../one-enforcement-floor/REVIEWS.md` — round 3
 
 ## Next session: start here
 
-**3.1 / 3b.1 / 3b.4 — actually running the migration** against
-`agents-task-viewer`, `callbot` and `fx-signal-agent`. This is the first time
-this code touches a repository that is not a fixture, and one of the three is
-the no-local-binding shape the fix above exists for. Run it as
-`reference-implementations/global-floor/bind-global-floor.sh <three paths>` from
-inside core's checkout, **read the preflight before answering y**, and expect it
-to name any linked worktrees. `install.sh` still must not be run: line 346 binds
-the floor unconditionally and nothing is enrolled. Recovery for a bad bind:
-`git config --global --unset core.hooksPath`.
+**Stage 2 on #92, in this cleared session, per §07** — read the diff, not this
+file's account of it. The thing to push on: `refuse_repo` decides displacement by
+reading `core.hooksPath` at *refusal* time, while the classification reads `lhp`
+later with `--type=path`; check the two cannot disagree, and check a repository
+refused for a *declared* binding is correctly treated as undisplaced. Then
+whether `hook_digest` returning empty on a machine with neither `shasum` nor
+`sha256sum` is refused everywhere it is consumed.
 
-Before that, take this file onto a feature branch and commit it.
+Then **3.0h**, the thing this session set out to do: adopt in the three, run the
+binder, read the preflight before answering y. The adopting commands are printed
+by the refusal itself — the digest is
+`9fb16d0eb9791e308b27c574731cedfc9fe89e1e0634df345b1095bc6722bca6` for all three,
+because the files are identical. **Capture the before-state first**: each
+repository's local `core.hooksPath`, its hook file, core's binding, the published
+hook. Recovery is not one command — `git config --global --unset core.hooksPath`
+recovers a bad *bind* only while no hook has been removed; after removal it takes
+away the only surface the migrated repositories have.
 
 ## Open questions
 
-1. **The census inconsistencies CodeRabbit found on #90 are still unfixed**:
-   `fleet-carries-only-current/proposal.md:71` says ten repositories and six
-   where it is eleven and seven (`callbot`), `planning-removal-inventory.md`
-   heads at 48 files / 6 tracked against 50 / 4 enumerated, and the GSD tree
-   counts in `proposal.md:27` and `tasks.md:206` disagree with the files they
-   list. Three inventory docs also want ```` ```text ```` fences (MD040).
-2. **`--check`'s half of 9.10 is still open**, and so are 9.5, 9.7, 9.8, 9.9,
-   9.12.
-3. **2.6a is still open**: `.planning/` was one name doing two jobs; the name is
-   gone and the split is unrecorded in the spec.
-4. **`fx-signal-agent` has no `packageManager` pin** — it is in the migration
-   set, so this lands next session.
-5. **Six `~/.claude/projects/*/memory/*gsd*` files** left alone — records about
-   GSD, not GSD.
-6. **The four host repos still carry `.planning/`** by 1.2, pending Phase 5b.
-7. **Three credentials outlived their file** — `agenticapps-roadmap`'s `.env`
+1. **Binding silences unnamed repositories too**, and this is now written down
+   rather than fixed. `codex-workflow` and `opencode-workflow` carry live
+   unmarked hooks with no local binding and are archived checkouts pending
+   Phase 5b — so the practical harm is small on *this* machine and the gap is
+   real on any other. It belongs to `--check`, 9.10, still open.
+2. **gemini's two findings are unaddressed and recorded**: Decision 1's "what is
+   actually lost" omits that the surviving hook is `--no-verify`-bypassable
+   (9.8 already says so); and whether the enrolment predicate precedes `hooks.d`
+   dispatch is an implementation accident rather than a guarantee (9.7).
+3. The census inconsistencies CodeRabbit found on #90 are still unfixed —
+   `fleet-carries-only-current/proposal.md:71` ten/six against eleven/seven,
+   `planning-removal-inventory.md` 48/6 against 50/4, GSD tree counts in
+   `proposal.md:27` and `tasks.md:206`. Three inventory docs want ` ```text `
+   fences (MD040).
+4. `--check`'s half of 9.10 is open, and so are 9.5, 9.7, 9.8, 9.9, 9.12.
+5. **2.6a**: `.planning/` was one name doing two jobs; the split is unrecorded.
+6. **`fx-signal-agent` has no `packageManager` pin** — it is in the migration
+   set, so it lands with 3.0h.
+7. Six `~/.claude/projects/*/memory/*gsd*` files left alone — records about GSD.
+8. The four host repos still carry `.planning/` by 1.2, pending Phase 5b.
+9. **Three credentials outlived their file** — `agenticapps-roadmap`'s `.env`
    held `CLOUDFLARE_API_TOKEN`, `GH_CROSS_REPO_TOKEN`, `LINEAR_API_KEY`.
    Operator action, still outstanding.
-8. **`claude-workflow` cannot be deleted safely** — 11 commits on no remote,
-   `plan/28-split-01` 9 ahead of `origin/main`, 1 stash.
-9. **`fleet-carries-only-current` task 0.1 is breached**: gated on
-   `projects-bind-not-copy` being archived, which has not happened, yet §1 and
-   §2 were worked.
-10. **Spec drift on `main`**: `openspec/specs/project-hook-binding/spec.md` names
+10. `claude-workflow` cannot be deleted safely — 11 commits on no remote,
+    `plan/28-split-01` 9 ahead of `origin/main`, 1 stash. **Note it is also the
+    provenance of every hook in the migration set**, so it is worth reading
+    before it goes.
+11. `fleet-carries-only-current` task 0.1 is breached: gated on
+    `projects-bind-not-copy` being archived, which has not happened.
+12. Spec drift on `main`: `openspec/specs/project-hook-binding/spec.md` names
     `normalize-claude-md` as a live shim in seven places; the implementation is
     gone. Planned in `diagram-is-the-surface`, 0/46.
-11. **Nothing routes named repositories through `install.sh`.** Deliberate, but
-    3.1 is the task that will feel it.
 
 ## Mistakes worth not repeating
 
-- **A fixture can be the whole blind spot.** Every one of the three interruption
-  cuts was correct, well-argued and taken against the same repository shape, and
-  that shape was the one where the sweep is the displacer. The suite grew teeth
-  in one direction and had none in the other. When a case turns on *what
-  displaces the hook*, vary the thing that displaces it, not the moment.
-- **The file already contained the argument it needed.** The core-repair step
-  says setting the global binding IS the moment core's own hook stops being
-  preferred — and then the same instant went unanswered for the repositories the
-  operator named. An argument made for one subject is worth checking against
-  every other subject in the same file.
-- **A case pattern is one word.** `run_binder_cut 'config --global core.hooksPath*'`
-  is a syntax error inside the shim, which then fails every git call, and the
-  harness reports "never matched" — which reads as "the run took a different
-  path" and is not.
+- **A measurement can be precise and about the wrong property.** 0.3a recorded
+  nine hook sizes to the byte, spotted that five were identical, and drew a
+  correct conclusion about drive-by installs — while never checking the one
+  attribute the removal code tests. Precision is not relevance. When a census
+  exists to decide whether code can act, measure *what the code branches on*.
+- **My own first check reproduced the error it was looking for.** I grepped for
+  the marker using `$(git -C "$p" rev-parse --git-common-dir)/hooks/pre-commit`
+  — and `--git-common-dir` returns a **relative** `.git`, so all three greps read
+  core's hook from the current directory and reported PRESENT three times. It
+  agreed with the census, which is what made it convincing. **Resolve paths
+  absolutely before asserting about files in another repository.**
+- **The fix for a displacement was scoped to the set that was in hand.** #91
+  moved enrolment ahead of the binding for the repositories the run migrates and
+  never asked the same question about the ones it refuses — even though the
+  refusal path is three lines away and leaves them equally unenrolled. When a
+  fix answers "at this instant, what is displaced", enumerate every set that
+  reaches the instant, not the one the bug arrived through.
