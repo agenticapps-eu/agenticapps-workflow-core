@@ -383,13 +383,20 @@ global binding exists, which is the state it was measured in.
       such rather than treating it as drift
 - [ ] 3b.4 Confirm after the sweep that the global binding governs each swept
       repository, by resolving its hooks directory rather than by inference
-- [ ] 3b.5 **Define the sweep's discovery and authorization boundary.** The
+- [x] 3b.5 **Define the sweep's discovery and authorization boundary.** The
       requirements read as a general sweep while 3b.1 hard-codes four named
       repositories, so nothing states what set is walked, who authorises writing
       to another repository's config, what happens on partial failure, or
       whether a dry-run exists. A sweep that mutates git configuration outside
       the repository it runs in needs all four stated before it runs, not after.
-      Raised by a reviewer
+      Raised by a reviewer.
+      **Closed 2026-08-08 as Decision 7.** All four answered in the delta, and
+      3b.1's hard-coded four stop being an embarrassment to explain away: naming
+      the set *is* the boundary, so the hard-coding was the right shape wearing
+      the wrong justification. The sweep does not walk anything, the operator
+      authorises by naming a repository and accepting one preflight that reports
+      every act first, and a repository that fails keeps its hook and is
+      reported while the run continues and exits non-zero
 
 ## 4. Drop `--project`
 
@@ -582,11 +589,69 @@ highest-consequence first:
 - [ ] 9.4a Implement it: fold the migration report into 2.9's preflight rather
       than building a second acceptance. What the binding will newly govern,
       what publishing will replace (2.1a) and what will be enrolled are one
-      report and one acceptance, not three that have to agree
+      report and one acceptance, not three that have to agree.
+      **Unblocked 2026-08-08 by Decision 7, which had to come first.** The
+      migration writes git config and deletes hooks in *other* repositories, and
+      9.10/3b.5 require that boundary stated before such a thing runs, not
+      after — so implementing this first would have built exactly what the open
+      finding forbids. The delta now carries "The migration acts only on
+      repositories the operator names" with five scenarios
+- [ ] 9.4c **The census corrected the per-repository ordering, so the code owes a
+      sweep step the tasks did not have.** Measured 2026-08-08 across all 61
+      repositories under `~/Sourcecode`: `callbot` and `fx-signal-agent` each
+      carry a local `core.hooksPath` naming their own default hooks directory,
+      so git prefers it and the global binding does not govern them. Two of the
+      three in the migration set therefore fail 3.1's verification step unless
+      the redundant binding is swept first. The order is sweep → enrol → verify
+      → remove, and §3b's sweep is a step *inside* the migration rather than a
+      pass running beside it. Second time in this change that treating the sweep
+      as cosmetic produced a wrong ordering; Decision 6 caught the first.
+      **Corrected the same day by the plan review, before any code**: the order
+      above is wrong and the right one is **enrol → sweep → verify → remove**.
+      gemini and codex found it independently. Sweeping an unenrolled repository
+      hands it to a dispatcher that exits 0 for want of the marker, so the gap
+      between sweep and enrolment is a window with a hook file, a global binding
+      and no enforcement — the very state this section forbids, reached through
+      the binding rather than through the file. Enrolment is inert until the
+      sweep, because the local hook predates the predicate and never reads it,
+      so enrolling first costs nothing and closes the window
 - [ ] 9.4b The interruption scenario needs a test that actually interrupts —
       kill the migration between two repositories and assert the invariant holds
       across the boundary, rather than asserting each repository in isolation
-      and calling the composition proven
+      and calling the composition proven.
+      **Widened 2026-08-08 by the plan review**: between repositories is the
+      easy boundary and not the dangerous one. Both reviewers located the real
+      hazard *inside* a repository, so the interruption test SHALL cut after
+      each of enrol, sweep and verify, not only between repositories
+- [ ] 9.4d **Ordering, from the plan review — RED before GREEN.** The order is
+      enrol → sweep → verify → remove. The test that matters asserts the
+      negative: with the binder stopped immediately after the sweep, a commit in
+      that repository is still gated. Under the rejected sweep-first order that
+      commit succeeds, so the case fails before the fix and passes after it,
+      which is the only thing that makes it a regression guard rather than a
+      description
+- [ ] 9.4e **Restore the swept binding when verification fails.** A repository
+      enrolled and swept whose hooks directory then does not resolve to the
+      floor is returned to the surface it had, rather than left holding a hook
+      git no longer consults
+- [ ] 9.4f **Identity, from the plan review.** Canonicalise each name; reject
+      without writes anything that is not the top of a repository; deduplicate
+      by `--git-common-dir` so a relative path and a symlink to one repository
+      are one entry. Cases for each, plus the linked-worktree report: naming one
+      checkout modifies configuration every sibling shares, and the preflight
+      names them or the "left entirely alone" guarantee is false for a worktree
+      nobody mentioned
+- [ ] 9.4g **Recognise the hook before removing it.** Naming a repository is the
+      operator's belief about what is there, never evidence about the file. An
+      absent, foreign or unrecognisable `pre-commit` refuses that repository
+      without writes. Same shape as 10.7 one level down, and the negative test
+      is the one that matters: a repository named by mistake keeps the hook its
+      operator wrote
+- [ ] 9.4h **Cases the review found missing outright**: an unnamed repository is
+      untouched; a repository enrolled earlier and not named is neither reported
+      as newly governed nor modified; declining writes nothing downstream of the
+      acceptance; one repository failing leaves the rest processed and the run
+      exiting non-zero
 - [ ] 9.5 **The unwind requirement contradicts its own ordering.** "Publish
       before bind" plus "SHALL unset a binding it created if publishing did not
       complete" — if publishing precedes binding and publishing fails, there is
@@ -628,7 +693,22 @@ highest-consequence first:
       Show the arithmetic for what remains, or invoke the escape clause now
 - [ ] 9.10 **Repository discovery is undefined** for both the sweep and
       `--check`'s "names any repository the floor cannot reach". Same finding as
-      3b.5, raised again independently — worth promoting out of a sub-task
+      3b.5, raised again independently — worth promoting out of a sub-task.
+      **The migration half is closed 2026-08-08 as Decision 7; the `--check`
+      half is deliberately still open.** Discovery turned out to be unnecessary
+      rather than hard: the floor governs only enrolled repositories and
+      enrolment has exactly two sources, so the installer already holds the set
+      a binding will newly govern and has nothing to search for. Measured across
+      61 repositories before deciding — seven carry a gate hook, none is
+      enrolled, and reducing seven to three takes four judgements that are not
+      properties of any file on disk. 3b.5's four questions are answered in the
+      delta: no set is walked, the operator authorises by naming and by
+      accepting one preflight, a failed repository keeps its hook and is
+      reported while the run continues, and the preflight is the dry-run.
+      `--check` is read-only and reports about a machine rather than acting on
+      one, so a declared root is defensible there and is not settled here —
+      answering half a finding and closing the whole thing is how the other half
+      disappears. Stays `[ ]` until that half lands
 - [x] 9.11 **The `core-self-enforcement` contradiction.** codex HIGH: the design
       removes the host `PreToolUse` hook while the unchanged durable requirement
       still mandates it. Either carry a core-only exception explicitly or amend

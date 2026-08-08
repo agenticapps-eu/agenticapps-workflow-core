@@ -53,6 +53,168 @@ VERDICT: REQUEST-CHANGES
 
 - **Minor: non-executable hooks.d entries are "reported" on every commit.** Per the fail-fast/skip contract that's stderr noise on every single commit for a permanent condition; consider reporting once via `--check` instead, or specify the reporting channel explicitly.
 
+---
+
+# Review record — round 2 (Decision 7)
+
+Scoped to Decision 7 and the migration requirements. Earlier decisions were
+supplied as context and explicitly not re-litigated.
+
+- requested: gemini codex
+- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES)
+- excluded:  claude (declared implementing host), opencode (not run this round —
+             two distinct vendors were already counted)
+- failed:    (none)
+- models:    codex resolved to `gpt-5.6-sol` (openai, reasoning effort high).
+             **gemini's model is unresolved** — gemini CLI 0.28.2 printed no
+             model line, so it is recorded as unknown rather than assumed. The
+             two-vendor rule still holds on the other arm being openai, but the
+             provenance rule is not satisfied for this one and should be on the
+             next round.
+- prompt sha256: 7a3fd62efa803c3c… (163369 bytes)
+
+## Reviewer: gemini (model unresolved)
+
+VERDICT: REQUEST-CHANGES
+
+[HIGH] spec delta, "No repository is left with neither surface" (and tasks 9.4c)
+— the `sweep → enrol → verify → remove` order creates a window in which the
+repository is silently ungated. Once the local `core.hooksPath` is swept, git
+falls back to the global dispatcher, whose first act is to exit 0 because the
+enrolment marker is not yet written. Between sweep and enrolment any commit is
+ungated. This is the same invariant violation the requirement already forbids for
+`remove → enrol`. — Fix: reorder to `enrol → sweep → verify → remove`. Enrolment
+is inert while the local binding stands, so the repository stays gated by its own
+hook until the sweep, and by the floor immediately after it.
+
+Assumptions: found none that pose a risk. Noted that continuing after a failed
+repository rather than rolling back the whole run is an implicit preference, but
+one the delta states explicitly as a design choice.
+
+## Reviewer: codex (gpt-5.6-sol)
+
+VERDICT: REQUEST-CHANGES
+
+[HIGH] spec delta, "No repository is left with neither surface" — same ordering
+defect, found independently. Adds: restore the swept binding if post-sweep
+verification fails, and test interruption at every mutation boundary *within* a
+repository, not only between repositories.
+
+[HIGH] design.md, Decision 7 "Discovery is unnecessary" — the claim that the
+named set is the complete set the binding will newly govern is false.
+`init-project.sh` is an independent enrolment source, so an already-enrolled
+repository becomes governed without being named or reported. The zero-enrolled
+census is not a durable invariant. — Fix: separate the mutation set from the
+binding's impact set, or obtain consent for the global effect without claiming
+everything has been named.
+
+[HIGH] spec delta, "The operator declines" and tasks 2.9/9.4a — the spec promises
+declining leaves the machine untouched and publishes nothing, but the preflight
+sits at the binder while `install.sh` publishes its payload beforehand. A
+binder-level prompt cannot deliver that transaction boundary. — Fix: move the
+preflight above every mutation, or narrow the normative guarantee.
+
+[HIGH] spec delta, "The migration acts only on repositories the operator names" —
+"given by name" has no implementable interface or identity rule. Relative paths,
+symlinks, duplicate aliases and non-repository paths can target something other
+than what the preflight displayed. — Fix: specify invocation syntax,
+canonicalisation, repository-root validation, deduplication, and revalidation
+between preflight and mutation.
+
+[MEDIUM] spec delta, named migration and hook removal — naming a repository does
+not prove its `pre-commit` is this workflow's gate, so a mistyped name can delete
+an unrelated operator-owned hook under a generic acceptance. — Fix: require
+content-based ownership verification; refuse without writes when absent, foreign
+or ambiguous.
+
+[MEDIUM] spec delta, "A repository was not named" — linked worktrees share local
+configuration and the hooks directory, so naming one checkout acts on unnamed
+siblings, contradicting "left entirely alone". — Fix: define migration identity
+as the git common repository and report every affected worktree.
+
+[MEDIUM] spec delta, "A repository scheduled for deletion is not migrated" —
+contradicts Decision 7. The decision says archived status is not on disk and
+nothing is discovered, while the scenario still requires the migration to detect
+and exclude such repositories. — Fix: make disposition explicit operator input.
+
+[MEDIUM] tasks.md 9.4a–9.4c and §6 — no RED tests for an unnamed repository, an
+already-enrolled unnamed repository, decline-before-any-write, foreign-hook
+preservation, linked worktrees, canonical aliases, or continue-and-exit-nonzero;
+the only interruption task kills between repositories and misses the dangerous
+within-repository boundaries.
+
+Assumes but does not state: nothing is enrolled before the first bind except via
+the migration arguments; nobody sets the marker by hand; "repository name" means
+a stable filesystem path; a named checkout uniquely owns its config and hooks;
+keeping a hook file means keeping an active surface (false once its local
+binding is swept); state cannot change between preflight and mutation; every
+named hook is ours to delete; forge access is available during migration; the
+three measured repositories are still the right population when the installer
+eventually runs.
+
+## Resolution — round 2
+
+Every HIGH and every MEDIUM was accepted. No finding was recorded and ignored.
+
+**The ordering defect (both vendors, HIGH).** Accepted outright — this was a real
+bug in the design, caught before a line of code existed. The order is now
+`enrol → sweep → verify → remove`, with the reasoning carried in the delta rather
+than only in the decision: enrolment is inert while the local binding stands,
+because the repository's own hook predates the enrolment predicate and never
+consults it. Two new scenarios: interruption after *any* step leaves an active
+surface, and a post-sweep verification failure restores the swept binding. Task
+9.4d makes the negative the test — stop after the sweep, assert the commit is
+still gated, which fails under the rejected order and passes under this one.
+9.4b widened from between-repositories to within-repository boundaries.
+
+**Decision 7's completeness claim (codex, HIGH).** Accepted; the draft
+overclaimed and the correction is recorded in the decision as a correction rather
+than quietly rewritten. The mutation set and the impact set are now distinguished
+by name. The surviving argument is stronger than the one it replaces: enrolment
+*is* the consent, so the binding owes no fresh acceptance for a repository that
+already enrolled, and the preflight speaks only to what this run will newly
+enrol. Enumeration of the full impact set belongs to `--check`, which is exactly
+the half of 9.10 left open — and it is not a coincidence that the half needing
+enumeration is the read-only one.
+
+**The decline guarantee (codex, HIGH).** Accepted by narrowing, not by
+restructuring the installer. "Leaves the machine untouched" is a promise the
+binder cannot keep, since `install.sh` publishes its payload before reaching it.
+The guarantee now names what it covers — nothing published into the hooks
+directory, no binding set, no repository touched — and the delta says explicitly
+that it must not be stated more broadly. Moving the preflight above every
+mutation was rejected as the larger change and the worse shape: it would ask an
+operator to consent to a hook migration before the installer has established
+there is an installer.
+
+**Identity, worktrees and hook recognition (codex, HIGH + two MEDIUM).** All
+accepted, and they are one mistake in three places — treating operator input as
+evidence about the disk. Names are canonicalised, rejected without writes if they
+are not a repository top, and deduplicated by `--git-common-dir`; linked
+worktrees are reported because they share the configuration being modified; and a
+`pre-commit` is recognised from the file before it is removed, refusing without
+writes when absent, foreign or ambiguous. That last is 10.7's finding one level
+down, which is the second time this change has had to learn that location proves
+who *could* have written a file and never who did. Tasks 9.4f and 9.4g.
+
+**The archived-repository contradiction (codex, MEDIUM).** Accepted. The scenario
+now excludes by not naming, and says why disposition is operator input: whether a
+checkout is archived lives on a forge and in a family instruction file, never in
+the repository, so detecting it would need network access at the moment the code
+is mutating git configuration.
+
+**Test coverage (codex, MEDIUM).** Accepted. Tasks 9.4d–9.4h enumerate the cases
+by name rather than leaving them to be inferred at implementation time.
+
+Of codex's nine unstated assumptions, seven are now stated in the delta. Two are
+left standing deliberately and are worth naming as accepted risk: that nobody
+sets the enrolment marker by hand, and that repository state cannot change
+between the preflight and the mutation. The first is a marker an operator can
+always set, and setting it is enrolment — the act, done directly. The second is a
+TOCTOU window that any preflight-then-act design has; closing it properly means
+revalidating each repository immediately before mutating it, which the per-step
+guards already do for the conditions that matter.
+
 <!-- openspec-review-trailer v1
 implementing-host: claude
 digest: sha256:414bcdd4c2335985636c20ad016de66699fcabd01a02f44019a061ee41cbde80

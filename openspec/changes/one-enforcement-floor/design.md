@@ -512,6 +512,176 @@ best-covered case, which is precisely why the sentence has to name what a
 repository *without* CI is left with — that is 9.8, and this is where the
 honest version of it goes.
 
+## Decision 7 — the migration set is named, and discovery is unnecessary
+
+Closes 9.10 and 3b.5, which are the same finding raised twice. Decided
+2026-08-08, after measuring the whole of `~/Sourcecode` rather than reasoning
+about it.
+
+Decision 6 left this open in as many words: "provably a no-op" was the argument
+that made writing to another repository's git config feel safe enough to need no
+authorization boundary. Take that argument away and the boundary is owed. This
+is it.
+
+### Discovery is not deferred, it is unnecessary
+
+The tempting reading of 9.10 is that repository discovery is a hard problem the
+change keeps postponing. It is not a hard problem. It is a problem the change
+already dissolved and did not notice.
+
+**Enrolment is itself the consent.** The floor governs only enrolled
+repositories, and enrolling is a deliberate act performed inside the repository
+it applies to. So the binding owes no separate consent for a repository that
+already enrolled — it delivers exactly what that repository asked for. What the
+preflight owes is the set this run will **newly** enrol, and that set is the one
+it was handed. Nothing needs to be searched for.
+
+A walk would therefore search the machine to reconstruct a list the binder has
+in a variable. That is not merely wasteful; it is the drifting-declared-list
+failure 2.8 rejected, arriving through the filesystem instead of through a file.
+
+**The first draft of this decision claimed more than that and was wrong.** It
+said the binder "already holds the complete set of repositories a new binding
+will newly govern". codex refuted it: `init-project.sh` is an independent
+enrolment source, so a repository enrolled last month becomes governed the moment
+the binding lands, without appearing in any report and without being named. The
+census showing zero enrolled repositories is a measurement of today, not an
+invariant, and a decision that rests on it expires silently the first time
+someone runs `init-project.sh`.
+
+The correction is to separate two sets the draft had merged. The **mutation
+set** is what this run will enrol, sweep and strip — named, reported, accepted.
+The **impact set** is every repository the binding governs, which is the mutation
+set plus everything enrolled earlier. The preflight speaks only to the first and
+says so. The second needs no acceptance precisely because enrolment already was
+one, and `--check` is where an operator goes to enumerate it — which is the half
+of 9.10 this decision deliberately leaves open, and it is no coincidence that the
+half needing enumeration is the read-only one.
+
+### The measurement is what settles it
+
+`~/Sourcecode` was walked on 2026-08-08: **61 repositories**, of which seven
+carry a gate `pre-commit` and **none is enrolled**. Reducing 61 to the migration
+set of three took four judgements, and not one of them is a property of any file
+on disk:
+
+| Judgement | Where the answer actually lives |
+|---|---|
+| archived vs live | GitHub's archived flag, and a family instruction file |
+| husky vs our gate | `fbc-platform`'s `.husky/_` is a deliberate opt-out |
+| deliberate binding vs drive-by install | nothing on disk separates them — the delta says so already |
+| retired checkout vs current | `fleet-carries-only-current`'s precedent |
+
+A walk can find seven hooks. It cannot make one of those four calls, so it would
+hand back seven candidates and require the operator to classify them anyway —
+having first read 61 repositories to do it. Naming three is the same act with
+the search removed.
+
+### What the census corrected in the ordering
+
+The delta's order is enrol → verify → remove. Measurement showed that is
+incomplete for two of the three: `callbot` and `fx-signal-agent` each carry a
+local `core.hooksPath` naming their own default hooks directory. Git prefers the
+local binding, so the verification step — resolve the repository's hooks
+directory and confirm the floor governs it — **fails for two of three** unless
+the redundant binding is swept first.
+
+So §3b's sweep is not a tidy-up running beside the migration but a step inside
+it. This is the second time in this change that treating the sweep as cosmetic
+produced a wrong ordering; Decision 6 caught the first.
+
+**Where the sweep goes in that order took a second correction, and both
+reviewers caught it independently.** The draft said sweep → enrol → verify →
+remove, reasoning that the verification cannot pass while a local binding still
+wins. True, and it built the exact window this requirement exists to forbid:
+sweeping an unenrolled repository hands it to the global dispatcher, whose first
+act is to exit 0 because the marker is absent. Between the sweep and the
+enrolment the repository has a hook file, a global binding, and no enforcement —
+and an interruption inside that window leaves it there permanently.
+
+The order is **enrol → sweep → verify → remove**. Enrolment is inert while the
+local binding stands, because the repository is still gated by its own hook and
+that hook predates the enrolment predicate and never consults it. So the marker
+costs nothing until the sweep makes it load-bearing, and the repository is gated
+at every instant: by its own hook before the sweep, by the floor after it.
+
+That the failure is the same one this requirement already forbids — reached
+through the binding instead of through the file — is the part worth keeping. The
+requirement was written against remove-before-enrol and the draft reintroduced it
+in a form the words did not literally cover. Two vendors found it independently
+before any code existed, which is the whole argument for step 2b in one example.
+
+Removal stays last. The state the delta forbids — removed-and-unenrolled, gating
+nothing — is unreachable when removal is the final act on a repository processed
+to completion before the next one begins.
+
+### The four questions 3b.5 asked, answered without inventing policy
+
+| 3b.5 asks | Answer |
+|---|---|
+| What set is walked? | None. The set is given by name. |
+| Who authorises writing to another repository's config? | The operator, twice: by naming the path, and by accepting a preflight that says what will happen to it |
+| What happens on partial failure? | That repository keeps its hook and is reported; the run continues to the next |
+| Is there a dry-run? | The preflight **is** the dry-run — every act is printed before the single acceptance |
+
+### One report, one acceptance
+
+This is 9.4a's substance. What the binding will newly govern, what publishing
+will replace (2.1a) and what will be migrated are one report under one
+acceptance, rather than three acceptances that have to agree with each other.
+Three prompts asking about the same act is how an operator learns to answer
+`y` without reading, which is the failure the per-entry inventory in 9.6 was
+written to avoid — and it would be undone by re-introducing it one level up.
+
+Refusing refuses everything downstream of it: nothing is published into the
+hooks directory, `core.hooksPath` is not set, and no repository is touched. The
+binder already takes exactly this posture for an unaccepted entry in the hooks
+directory.
+
+The guarantee is scoped rather than absolute, and codex was right to press on
+it. "Declining leaves the machine untouched" is a promise the binder cannot
+keep: `install.sh` publishes its payload before it ever reaches the binder, so a
+decline at the preflight leaves that payload published. Either the preflight
+moves to the top of the installer, ahead of every mutation, or the guarantee
+names what it actually covers. The second is the honest one and the smaller
+change, and it keeps the acceptance next to the acts it authorises instead of
+asking an operator to consent to a hook migration before the installer has
+established there is an installer.
+
+### What naming a repository does and does not establish
+
+Three consequences the draft left implicit, each of which is the same mistake in
+a different place: treating an operator's input as evidence about the disk.
+
+**A typed path is not an identity.** Names are canonicalised, rejected without
+writes if they do not resolve to the top of a repository, and deduplicated by git
+common directory — otherwise a relative path and a symlink to the same repository
+are two entries and it is processed twice.
+
+**A checkout is not a repository.** Linked worktrees share one common directory,
+so they share one local configuration and one hooks directory. Naming any of them
+acts on all of them, which makes "a repository it was not given is left entirely
+alone" false for an unnamed sibling unless the preflight reports the worktrees it
+touches. This change already resolves core's own hooks directory through
+`--git-common-dir` for the neighbouring reason; the migration owes the same care.
+
+**A path is not evidence about the hook at the end of it.** Naming a repository
+says the operator believes it carries our gate; it does not establish that the
+`pre-commit` there is ours rather than something they wrote. Removing it on the
+strength of a generic acceptance would delete an operator's own hook. So
+recognition comes from the file, and an absent, foreign or ambiguous hook refuses
+that repository without writes — which is 10.7's finding, one level down: a
+file's location proves who *could* have written it, never who did.
+
+### What is deliberately still open
+
+`--check`'s "names any repository the floor cannot reach" is the other half of
+9.10 and this does **not** close it. `--check` is read-only and reports about a
+machine rather than acting on one, so a declared root is defensible there in a
+way it is not here. It is called out rather than folded in, because answering
+half a finding and marking the whole thing closed is how the other half
+disappears.
+
 ## The question this change refuses to answer by implication
 
 `host-neutral-instruction-files` requires a project's `AGENTS.md` to carry
