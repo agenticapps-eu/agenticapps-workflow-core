@@ -21,11 +21,36 @@ across a fleet that still included `agenticapps-dashboard` and
       rather than absorbed
 - [ ] 1.2 Exclude the four host repositories from every count rather than mixing
       them in. They come off the disk at the end of the plan and nothing should
-      be fixed in them in the meantime
-- [ ] 1.3 Identify anything the 2026-08-07 sweep missed: another removed tool's
+      be fixed in them in the meantime.
+      **Corroborated 2026-08-08 from the forge, which is where this fleet keeps
+      recording retirements**: `agenticapps-eu/pi-agentic-apps-workflow` is
+      `archived=true`, last pushed 2026-08-05. `cparx`, `open-design` and
+      `callbot` are all `archived=false` and pushed within the last three days.
+      So the exclusion is not merely a plan-ordering convenience — one of the
+      four is retired on the record, and the family instruction file still lists
+      it under "Active repos". Same failure as `agenticapps-roadmap` in 0.3a of
+      `one-enforcement-floor`: the retirement was recorded on GitHub and the
+      census looked everywhere except there
+- [x] 1.3 Identify anything the 2026-08-07 sweep missed: another removed tool's
       artifacts, another command, another instruction fragment. The inventory was
       built by looking for what was known to be removed, which cannot find what
-      nobody remembered removing
+      nobody remembered removing.
+      **Run 2026-08-08 across all 61 repositories under `~/Sourcecode`. It found
+      the largest GSD artifact in the fleet, and the inventory had no row for
+      it.** See 2.1a. It also found that **`open-design` is not in this change's
+      inventory at all** — not in the artifact table, not in the `.planning/`
+      table, not in any count. The 2026-08-07 sweep enumerated repositories it
+      already associated with the workflow, so a repository carrying a retired
+      tool without carrying the workflow was structurally invisible to it. That
+      is 1.3's own premise landing on 1.3
+- [ ] 1.3a The predicate that missed it is worth stating, because it is the same
+      one that missed 21 skills behind symlinks and a 46-line `pre-commit` in
+      `~/.agenticapps/git-hooks/`. Each sweep so far has searched **where the
+      workflow is** and found only what the workflow put there. A removed tool
+      installs itself wherever it was run, which is not the same set. The
+      inventory in 3.1 should declare the search *space* — every repository on
+      the machine — separately from the search *terms*, or the next removed tool
+      hides in the next directory nobody associated with us
 - [x] 1.4 Two rows the 2026-08-07 inventory missed entirely, found on 2026-08-08
       and **already removed**, so 1.1 does not rediscover them as a surprise:
       core's own `.gitnexus` index (44M, gitignored, untracked — the only one in
@@ -45,7 +70,39 @@ instruction-file work. One PR per repository.
 
 - [ ] 2.1 `setup-gstack-gsd-superpowers-workflow.md` (`cparx`, 133 lines) and
       `gsd-plan.md` / `setup.md` (`callbot`) — commands offering a tool removed
-      on 2026-07-28
+      on 2026-07-28. Both confirmed **tracked** on 2026-08-08, so this row is
+      reversible and is an ordinary PR in each repository
+- [ ] 2.1a **GSD itself is still installed, and this is the row the inventory
+      never had.** Not a command *offering* the tool — the tool. Measured
+      2026-08-08:
+
+      | Repository | files | size | tracked | gitignored | forge |
+      |---|---:|---:|---:|---|---|
+      | `cparx` | 201 | 1.9M | 0 | yes | active |
+      | `open-design` | 147 | 1.7M | 0 | **no** | active |
+      | ~~`pi-agentic-apps-workflow`~~ | 201 | 1.9M | 0 | yes | **archived — out of scope by 1.2** |
+
+      All three are `.pi/gsd/`, all three report `VERSION` **1.30.0**, and each
+      carries 66 workflows and 16 references. A pi host opened in `cparx` or
+      `open-design` today loads `/gsd:*` and gets a tool this fleet retired on
+      2026-07-28 — which is the exact claim every instruction file makes and the
+      exact claim the disk contradicts. In scope: **two** repositories, 348
+      files, 3.6M.
+
+      **This row is not in §2's "reversible" half and must not be run as though
+      it were.** Every one of the 348 files is untracked, so `git` will not give
+      any of them back, and `open-design`'s tree is not even gitignored — it is
+      simply untracked, un-ignored content, which is the same category 2.6 flags
+      for `stimmung` and `mcp-server`. Apply 2.6's rule: **list every file before
+      removing any**, and keep the listing, because after the delete the listing
+      is the only record that these existed. Reinstallation is not a fallback —
+      the installer that wrote them was removed on 2026-07-28
+- [ ] 2.1b No symlinks this time, and that is worth recording rather than
+      assuming. Every `.pi/gsd` is a **real directory**, and a search of every
+      symlink under `~/Sourcecode` for a target matching `gsd`, `gitnexus` or
+      `get-shit-done` returned nothing. The fleet's standing lesson is that
+      sweeps scoped to symlinks miss directories; the inverse holds here and a
+      sweep scoped to directories would have found all of it
 - [ ] 2.2 `backend-foundation.md` (`callbot`) — establish whether it belongs to a
       removed tool or is that project's own. **Only the former is in scope**, and
       guessing is how a project loses a command it wrote

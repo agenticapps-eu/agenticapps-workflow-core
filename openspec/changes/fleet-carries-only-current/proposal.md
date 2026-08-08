@@ -24,6 +24,7 @@ Measured 2026-08-08, after both retired checkouts came off the machine:
 
 | What | Where |
 |---|---|
+| **GSD itself — `.pi/gsd/` 1.30.0, 66 workflows + 16 references, untracked** | `cparx`, `open-design` (+ `pi-agentic-apps-workflow`, out of scope) |
 | `setup-gstack-gsd-superpowers-workflow.md` — 133 lines offering to install GSD | `cparx` |
 | `gsd-plan.md`, `setup.md`, `backend-foundation.md` | `callbot` |
 | `.claude/workflow-config.md` — 101 lines of pre-OpenSpec workflow config | up to 7 repos, re-count pending |
@@ -35,6 +36,20 @@ Measured 2026-08-08, after both retired checkouts came off the machine:
 The four "up to" rows were counted on 2026-08-07 across a fleet that still
 included `agenticapps-dashboard` and `agenticapps-roadmap`. Each is an upper
 bound until task 1.1 re-runs it.
+
+**The top row was added on 2026-08-08 and it is the one that matters most.**
+Every other row is an artifact *about* a removed tool — a command that offers it,
+a config that predates it, a directory it used to write into. This row is the
+tool. GSD 1.30.0 is installed and loadable in two active repositories, so the
+retirement that every instruction file in this fleet asserts as complete is,
+on disk, not complete at all.
+
+It was missed because the 2026-08-07 sweep enumerated repositories already
+associated with the workflow, and a repository can carry a retired tool without
+carrying the workflow — `open-design` does, which is why it appears in no other
+row of this change. The lesson generalises past this row: each sweep so far has
+searched **where the workflow is**, and a removed tool lives wherever it was
+run. Task 1.3a carries it forward into the declaration.
 
 ## `.planning/` goes entirely
 
