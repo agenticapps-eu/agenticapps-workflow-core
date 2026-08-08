@@ -1,103 +1,99 @@
-# Session Handoff — 2026-08-08 (seventeenth session)
+# Session Handoff — 2026-08-08 (eighteenth session)
 
-**A cleanup session that turned into three closed findings.** Three commits on
-`feat/projects-bind-not-copy` (PR #89). Tree clean, `openspec validate --all`
-14/14 and `--strict` green. No code written — everything below is plan, spec or
-machine state.
+**Step 4's code review finally ran, and six of its seven findings are fixed.**
+Two commits on `feat/projects-bind-not-copy` (PR #89). Tree clean,
+`openspec validate --all` 14/14, 560 tests across 14 suites green.
 
-| Change | State |
-|---|---|
-| `one-enforcement-floor` | 9.6, 9.11, 9.13 **closed** as Decision 6; 9.14 new; §10 opens five implementation tasks |
-| `fleet-carries-only-current` | **all 14 findings folded**; Req 2 dropped; `.planning/` goes outright |
-| `fresh-clone-needs-nothing` | §3, §4, §9 built. §1, §2, §5, §6 open — untouched |
-| `projects-bind-not-copy` | reviewed ×2, no code — untouched |
-| `diagram-is-the-surface` | reviewed ×2, no code — untouched |
+The open question that had been sitting at the top of the last three handoffs —
+"Step 4's code review has still never run" — is closed.
 
 ## Accomplished
 
-- **The global `~/.claude/CLAUDE.md` is rewritten**, 107 → 60 lines. Three of its
-  claims were false and all three are corrected in place.
-- **`fleet-carries-only-current`: all fourteen review findings folded** across
-  four artifacts (`d63fa88`), then two tasks reconciled after doing them early
-  (`4b7306b`).
-- **`one-enforcement-floor`: Decision 6** closes 9.6, 9.11 and 9.13, and 9.14
-  fell out of the work (`530af27`).
-- **Machine cleanup**: `meta-observer` unregistered; ~56M of GSD and GitNexus
-  residue deleted.
-- **Memory saved**: `trim-fleet-instruction-files` — the fleet `CLAUDE.md` /
-  `AGENTS.md` sweep the operator asked for.
+- **Stage 2 ran** in this cleared session, per §07, with no implementation
+  context. Artifact: `openspec/changes/one-enforcement-floor/CODE-REVIEW.md`.
+  Verdict pass-with-followups: 1 Critical, 2 Important, 4 Minor, 1 spec drift.
+- **All six Important and Minor findings fixed**, RED before GREEN. Recorded as
+  §11 of `one-enforcement-floor/tasks.md` and §10 of `fresh-clone-needs-nothing`.
+  Suites grew 29→42, 47→50, 53→56.
+- **PR #89 retitled and rewritten.** The stale "no code yet" description is gone;
+  the C1 warning is now the first section a reviewer sees.
+- **Three things cleared as NOT defects** so they are not re-raised: `sort -V`
+  works here and the `semver.sh` removal is clean; `install-core-git-hooks.sh`
+  will not clobber the published floor hook (its whole-line marker check refuses
+  it); the surviving mentions of deleted scripts are prose, not live paths.
 
 ## Decisions
 
-- **`.planning/` is deleted outright, tracked and untracked** — operator's call,
-  "we are fully on OpenSpec now". Requirement 2 of `fleet-artifact-currency` is
-  dropped with it: it existed for `agenticapps-roadmap`'s 134 tracked files and
-  that checkout is gone, so it would now protect two files.
-- **The binder establishes core's local hooks binding** (Decision 6). Every other
-  candidate disclaims it in its own text — `install.sh` by Decision 4,
-  `init-project.sh` by "no hooks, no host configuration",
-  `fresh-clone-needs-nothing` by "nothing else", CI by being a detector. Four
-  correct boundaries meeting, not one oversight. Not Decision 4 returning: the
-  binder repairs the one known casualty of its own act, in the one repository it
-  runs from by construction.
-- **9.11 is amended, not excepted.** A core-only carve-out would exempt core from
-  the floor it publishes, which inverts what core is for.
-- **The global file's workflow section was deleted, not trimmed.** Its own note
-  said it stays "only until the rewritten trigger skill carries it" — skill 4.0.0
-  carries it, including §11. That is also the procedure `fleet-artifact-currency`
-  requires, performed once on the file with the most readers.
+- **C1 does not block merging, only running.** `install.sh:346` binds the floor
+  unconditionally while §10 and 9.4a are open. Both halves were reproduced end
+  to end: `core.hooksPath` displaces `.git/hooks/pre-commit` entirely, and the
+  floor dispatcher exits 0 *in silence* when the repository is not enrolled. The
+  composition silently ungates every locally-gated repository, core included.
+  Merging changes nothing; the first run does. Recovery is
+  `git config --global --unset core.hooksPath`.
+- **`--host auto` now ADDS to the named set.** It replaced it, and naming a host
+  is exactly what you do when detection will not find it — so the one request
+  that needed making was the one discarded.
+- **`install.sh` stays at exactly 217 executable lines.** Both fixes were
+  written long, measured at 229, and compacted. The budget is spec-enforced and
+  the suite checks it.
+- **The fixes are NOT covered by CODE-REVIEW.md.** §07 forbids the implementer
+  authoring Stage 2, and the reviewer wrote them. The artifact says so and names
+  four things a second pass should look at.
 
 ## Files modified
 
-- `~/.claude/CLAUDE.md` — rewritten (not in git)
-- `~/.claude/settings.json` — `meta-observer` `SessionEnd` entry removed; backup
-  at `settings.json.pre-meta-observer-removal`. `GEMINI_API_KEY` left in place
-- `openspec/changes/fleet-carries-only-current/` — all four artifacts rewritten
-- `openspec/changes/one-enforcement-floor/` — `design.md` (Decision 6),
-  both spec deltas, `tasks.md` (§10 added)
-- **Machine, deleted**: `~/.claude/get-shit-done/`, `gsd-pristine/`,
-  `gsd-local-patches/`, `gsd-migration-journal/`, `.gsd-profile`,
-  `gsd-file-manifest.json`, `gsd-install-state.json`; `core/.gitnexus` (44M)
+- `openspec/changes/one-enforcement-floor/CODE-REVIEW.md` — new; the Stage 2 artifact
+- `openspec/changes/one-enforcement-floor/tasks.md` — §11 added (install.sh M1, M3)
+- `openspec/changes/fresh-clone-needs-nothing/tasks.md` — §10 added (I1, I2, M2, M4)
+- `install.sh` — project-hook line keys on its own exit status; `--host auto` adds
+- `reference-implementations/openspec-tools/bind-openspec-tools.sh` — `link()`
+  returns 0 only for a link that exists; failed `ln` named; `$#` guarded on three
+  flags; unreachable `[ -z "$skills" ]` branch removed
+- `reference-implementations/init-project/init-project.sh` — CLAUDE.md replaced
+  atomically via temp+`mv -f`; `COLLAPSE` flag retired with the `rm` it authorised
+- `tools/{install,bind-openspec-tools,init-project}.test.sh` — 16 new cases
 
 ## Next session: start here
 
-**Implement `one-enforcement-floor` §10, RED before GREEN on every task.** Five
-tasks, and 10.2 is the one to write first because it is the ordering constraint:
-the binder sets core's local `core.hooksPath` plus
-`agenticapps.hooksbinding=declared` **before** the global binding, and does not
-set the global one if either write fails. Then 10.1, the pre-bind inventory that
-refuses an entry the installer did not publish until it is accepted by name.
-10.3 removes core's own `PreToolUse` registration from `.claude/settings.json`,
-which 9.11's amendment now permits — do it after 10.1 and 10.2, since it leaves
-`pre-commit` and CI as the only two surfaces. 10.4 is prose: reword 3b.1 and
-3b.2 so the sweep reads as the mechanism rather than a no-op.
+**Implement `one-enforcement-floor` §10, and 10.2 first** — unchanged from the
+last handoff, and now the only thing standing between this branch and a
+runnable installer. 10.2 is the ordering constraint: the binder sets core's
+local `core.hooksPath` plus `agenticapps.hooksbinding=declared` **before** the
+global binding, and does not set the global one if either write fails. Then
+10.1 (pre-bind inventory), then 10.3, then 10.4.
+
+After §10, do **9.4a** — nothing in the shipped code sets
+`agenticapps.workflow.enrolled` at all, so the floor governs nothing once bound.
+That is the other half of C1 and the two are only safe together.
 
 Tests go in `tools/global-floor-bind.test.sh` (18 cases today), per-case `HOME`
 **and** per-case git config — 6.8 exists because a test that sets a global
 `core.hooksPath` against the real home rebinds the operator's machine.
 
-Measured 2026-08-08 and true at handoff: global `core.hooksPath` **unset**,
-core's local **unset**, core's `<common-dir>/hooks` is `.git/hooks`, core's own
-hook is present. So the displacement 9.13 describes is still latent and fires on
-the first successful bind — 10.2 has to land before anyone runs the binder.
+Measured 2026-08-08 and still true: global `core.hooksPath` **unset**, core's
+local **unset**, `agenticapps.workflow.enrolled` **unset**, core's own hook
+present. The displacement is latent and fires on the first successful bind.
 
 ## Open questions
 
-1. **Step 4's code review has still never run**, and the branch is now 48
-   commits. §07 independence means a cleared session. This is the largest
-   accumulated risk on the branch and it only gets harder.
-2. **PR #89's title is stale** — "Four changes, planned and reviewed — no code
-   yet" — and there are three sessions of shipped code on it.
-3. **Three credentials outlived their file.** `agenticapps-roadmap`'s `.env` held
+1. **The six fixes need their own Stage 2** — a small, self-contained delta
+   (3 scripts, 2 suites, 16 cases). `CODE-REVIEW.md`'s last section names what
+   to look at, including the two-statement `if/else` compacted to fit the budget
+   and the `sed 's/ auto / /g'` word surgery.
+2. **Local `main` is 32 commits behind `origin/main`.** It made the review
+   report 84 commits when the PR is 53. Harmless this time — the stale base made
+   the review a superset — but `git fetch` before the next scope measurement.
+3. **Eight §9 findings still open** — 9.4a, 9.4b, 9.5, 9.7, 9.8, 9.9, 9.10, 9.12.
+4. **Spec drift on `main`, not on this branch**:
+   `openspec/specs/project-hook-binding/spec.md` names `normalize-claude-md` as a
+   live shim instance in seven places; the implementation is already gone.
+   Planned in `diagram-is-the-surface`, which is 0/46.
+5. **Three credentials outlived their file.** `agenticapps-roadmap`'s `.env` held
    `CLOUDFLARE_API_TOKEN`, `GH_CROSS_REPO_TOKEN`, `LINEAR_API_KEY`. Deleting the
-   checkout did not revoke them. Operator action.
-4. **`claude-workflow` cannot be deleted safely yet.** 11 commits on no remote,
+   checkout did not revoke them. Operator action, still outstanding.
+6. **`claude-workflow` cannot be deleted safely yet.** 11 commits on no remote,
    `plan/28-split-01` 9 ahead of `origin/main`, 1 stash.
-5. **§9 still holds eight open findings** — 9.4a, 9.4b, 9.5, 9.7, 9.8, 9.9,
-   9.10, 9.12. 9.8's honest version now lives inside the 9.11 amendment; the task is
-   still open.
-6. **The fleet trim the operator asked for is four steps downstream.** It is task
-   4.6 of `fleet-carries-only-current`, whose precondition is
-   `projects-bind-not-copy` archived — that change has 48 open tasks and no code.
-   Lifting it out and doing it standalone is a live option.
-7. **CodeRabbit still has not reviewed anything here.**
+7. **The fleet trim** is still task 4.6 of `fleet-carries-only-current`, gated on
+   `projects-bind-not-copy` archiving. Lifting it out standalone is still live.
+8. **CodeRabbit still has not reviewed anything here.**
