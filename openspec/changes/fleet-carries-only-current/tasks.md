@@ -234,6 +234,37 @@ instruction-file work. One PR per repository.
 - [ ] 2.4 `.claude/scheduled_tasks.lock`
 - [ ] 2.5 `.claude/claude-md/` — fragments of the modular instruction scheme;
       confirm nothing still assembles from them before deleting
+- [ ] 2.6a **STOP — 2.6's premise is false as measured 2026-08-08, and the
+      deletion was halted before it ran.** 2.6 justifies removing `.planning/`
+      because it "only ever collects stale copies of what `openspec/changes/`
+      already holds". Listing all 48 files first — which is 2.6's own rule, and
+      the only reason this was caught — shows it holds two things, neither of
+      which is that:
+
+      **`skill-observations/` is live telemetry.** 14 files written since
+      2026-08-07 across six of the seven in-scope repositories, the newest
+      2026-08-08 09:13 in `fbc-platform` — while this change was being written.
+      Deleting it destroys current data and does not even stick, because the
+      writer recreates the directory. The writer was **not identified**: it is
+      absent from `~/.claude/settings.json` hooks, from `~/.claude/plugins`,
+      from nyx and from superset. An unidentified process writing into every
+      repository on the machine is its own finding and wants an owner before it
+      wants a sweep.
+
+      **The four tracked files are this workflow's own config**, not a removed
+      tool's. `config.json` and `config.codex.json` in `callbot`,
+      `fbc-platform` and `fx-signal-agent` carry `implements_spec: 1.0.0`,
+      `host: claude|codex`, `front_end: openspec`, an `_enforcement_contract`
+      and a pointer at `.claude/skills/agentic-apps-workflow/SKILL.md`. They are
+      AgenticApps' own declarative config from an earlier era of this workflow,
+      which makes them a **migration** question — is anything still reading
+      them? — and not a residue question.
+
+      So 2.6 needs splitting before it runs: the telemetry needs an owner, the
+      configs need a read-check, and `.planning/` as a *name* is doing two jobs.
+      The full listing is committed as `planning-removal-inventory.md`; nothing
+      was deleted. Third time this session that listing-before-removing changed
+      the answer
 - [ ] 2.6 **`.planning/` in full, tracked and untracked**, in the six in-scope
       repositories: core, `cparx`, `fbc-platform`, `fx-signal-agent`, `stimmung`,
       `neuroflash/mcp-server`. **List every file before removing any** —
