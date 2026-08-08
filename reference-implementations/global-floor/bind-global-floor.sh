@@ -79,6 +79,100 @@ if [ -n "$(find "$HOOKS_DIR" -maxdepth 0 \( -perm -g+w -o -perm -o+w \) 2>/dev/n
   exit 1
 fi
 
+# ── Inventory, before anything is published or bound ───────────────────────
+# THE ASYMMETRY: PUBLISH IS FILE-SCOPED, BIND IS DIRECTORY-SCOPED.
+#
+# One file is published and a whole directory is bound. Git runs whatever it
+# finds there by name, so binding activates every entry — pre-push, commit-msg,
+# any of them — machine-wide, in every repository the floor governs. The two
+# guards above cannot close that. They establish that the directory is not a
+# symlink and that no OTHER account can write it, which together prove who
+# COULD have written a file and never that the operator meant it to run on
+# every commit. An entry the operator dropped there themselves passes both.
+#
+# Measured 2026-08-08: this directory held one file, a 46-line pre-commit
+# vendored from an archived host repository, unmarked, exporting
+# OPENSPEC_GATE_SELF=opencode and describing a rule retired at gate 2.0.0. At
+# `pre-commit` it self-heals, because publishing replaces it. Named `pre-push`
+# it would have become the machine's commit-time gate, unchallenged.
+#
+# Consent is PER ENTRY and NAMES IT. "The directory contains unexpected files,
+# proceed?" is the prompt everyone accepts, and it grants the same thing
+# whether the entry is a stale copy of our own hook or a pre-push nobody
+# remembers.
+ACCEPT="${GLOBAL_FLOOR_ACCEPT:-}"
+
+accepted() {
+  local a
+  for a in $ACCEPT; do [ "$a" = "$1" ] && return 0; done
+  return 1
+}
+
+# Asked only when there is somebody to ask. install.sh runs this with stdin
+# inherited, so an interactive install can decide in place; a scripted one
+# reports what it would have asked and refuses, which is the same posture
+# install.sh takes for every other acceptance it needs.
+confirm() {
+  [ -t 0 ] || return 1
+  printf 'global-floor: run %s on every commit, in every repository the floor governs? [y/N] ' "$1"
+  local a
+  read -r a || return 1
+  case "$a" in y | Y) return 0 ;; esac
+  return 1
+}
+
+unaccepted=''
+inventoried=0
+while IFS= read -r path; do
+  [ -n "$path" ] || continue
+  name="${path##*/}"
+  detail="$(wc -c < "$path" 2>/dev/null | tr -d ' ') bytes"
+  [ -d "$path" ] && detail='directory'
+  detail="$detail, $(date -r "$path" '+%Y-%m-%d' 2>/dev/null)"
+
+  case "$name" in
+    # Where the published dispatcher sends operator-owned hooks. Part of the
+    # design, so flagging it would fire the refusal on every correctly composed
+    # machine — which is how a guard comes to be switched off.
+    hooks.d) continue ;;
+    pre-commit)
+      grep -q "^# $MARKER_KEY: " "$path" 2>/dev/null && continue
+      # The one unrecognised entry that does not block, because it does not
+      # survive the run: an unmarked file reads as 0.0.0, so the publish below
+      # replaces it. Still reported — a hook replaced silently is
+      # indistinguishable from one that was never there, which is how the
+      # vendored copy sat here unnoticed.
+      inventoried=1
+      say "inventory: pre-commit is unrecognised — no $MARKER_KEY marker ($detail)."
+      say "  Version arbitration replaces it below; reporting it because a hook"
+      say "  replaced in silence looks exactly like one that was never there."
+      continue ;;
+  esac
+
+  inventoried=1
+  say "inventory: unrecognised entry — $name ($detail)"
+  if accepted "$name" || confirm "$name"; then
+    say "  accepted by name"
+  else
+    unaccepted="$unaccepted $name"
+  fi
+done <<INVENTORY
+$(find "$HOOKS_DIR" -mindepth 1 -maxdepth 1 2>/dev/null)
+INVENTORY
+
+# Reported even when it finds nothing, because silence and "nobody looked" read
+# identically — and nobody looking is the defect this closes.
+[ "$inventoried" = 0 ] && say "inventory: $HOOKS_DIR holds nothing this installer did not publish"
+
+if [ -n "$unaccepted" ]; then
+  say "REFUSED —$unaccepted would be activated by binding this directory, and"
+  say "this installer did not publish it. Every repository the floor governs would"
+  say "run it. Nothing was published and core.hooksPath was NOT set."
+  say "Accept it by name and re-run:"
+  say "  GLOBAL_FLOOR_ACCEPT=\"$(printf '%s' "${unaccepted# }")\" $0"
+  exit 1
+fi
+
 # ── Publish ────────────────────────────────────────────────────────────────
 
 "$SHARED" "$SRC" "$HOOKS_DIR/pre-commit" "$MARKER_KEY" >/dev/null 2>&1

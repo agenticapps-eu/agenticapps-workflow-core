@@ -672,9 +672,22 @@ highest-consequence first:
 
 ## 10. Implementation the Decision 6 findings create
 
-- [ ] 10.1 The binder inventories `~/.agenticapps/git-hooks/` before binding and
+- [x] 10.1 The binder inventories `~/.agenticapps/git-hooks/` before binding and
       refuses on an entry it did not publish, until accepted by name. Per entry,
-      naming it — never a blanket "unexpected files, proceed?"
+      naming it — never a blanket "unexpected files, proceed?" Acceptance is
+      `GLOBAL_FLOOR_ACCEPT="<name> <name>"`, plus a per-entry prompt when stdin
+      is a tty, which is the posture `install.sh` already takes for every other
+      acceptance. The inventory runs **before the publish**, because the entry
+      the publish replaces is the one that most needs reporting. Two carve-outs,
+      both drawn from the requirement rather than convenience: `hooks.d` is the
+      composition directory the dispatcher runs, so flagging it would fire the
+      refusal on every correctly composed machine; and an unmarked `pre-commit`
+      is reported but does **not** block, because it does not survive the run —
+      unmarked reads as 0.0.0 and arbitration replaces it before anything is
+      bound. Everything else refuses. Re-measured 2026-08-08: the vendored
+      46-line `opencode` `pre-commit` is still sitting in that directory,
+      unmarked and dated 2025-07-25, so the self-heal path is the one a real run
+      takes today
 - [x] 10.2 The binder establishes core's local binding and
       `agenticapps.hooksbinding=declared` **before** the global binding, and does
       not set the global one if either write fails. Two things the spec delta
@@ -695,17 +708,17 @@ highest-consequence first:
 - [ ] 10.4 Reword 3b.1 and 3b.2 so the sweep is described as the mechanism that
       extends the floor's reach, not as a no-op. The measurement stands; the
       conclusion drawn from it does not
-- [ ] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
+- [x] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
       bind; acceptance by name allows it; a failed core-binding write aborts the
-      global bind; core's hook still runs after a successful bind
-      - [x] the 10.2 half: `tools/global-floor-bind.test.sh` 18 → 29 cases, RED
-            first. Every one of the 29 fails under
-            `GLOBAL_FLOOR_BIND_BIN=/usr/bin/true`; two of the new ones passed
-            under it at first draft and were tightened — "core's hook still
-            runs" is satisfied by a binder that bound nothing, because with
-            nothing bound `.git/hooks/` runs by default, so the global binding
-            is asserted alongside the marker
-      - [ ] the 10.1 half
+      global bind; core's hook still runs after a successful bind.
+      `tools/global-floor-bind.test.sh` 18 → 43 cases, RED first in both halves,
+      and every one of the 43 fails under `GLOBAL_FLOOR_BIND_BIN=/usr/bin/true`.
+      Three drafted assertions passed under that wrong implementation and were
+      tightened: "core's hook still runs" is satisfied by a binder that bound
+      nothing, because with nothing bound `.git/hooks/` runs by default, so the
+      global binding is now asserted alongside the marker. `run_binder` also
+      reads stdin from `/dev/null`, or the tty prompt would hang the suite for
+      whoever ran it from a terminal
 
 - [x] 10.6 **The suite wrote into the repository it lives in, and only this
       change could surface it.** Three `install.test.sh` cases ran the real

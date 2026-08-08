@@ -147,9 +147,12 @@ STUB
   chmod +x "$CORE/reference-implementations/shared-install/install-shared-artifact.sh"
 }
 
+# stdin is /dev/null so the run is the same whether the suite was started from
+# a terminal or from CI. The binder prompts per unrecognised entry when stdin is
+# a tty, and a suite that inherited one would hang on the case that plants one.
 run_binder() {
   assert_isolated
-  ( cd "$REPO" && "$CORE/$BINDER_REL" >"$CASE/out" 2>&1 ); RC=$?
+  ( cd "$REPO" && "$CORE/$BINDER_REL" >"$CASE/out" 2>&1 </dev/null ); RC=$?
   OUT="$(cat "$CASE/out")"
 }
 
@@ -543,6 +546,178 @@ if ran && [ -z "$(core_bound)" ] && [ -z "$(core_declared)" ]; then
 else
   bad "a foreign global binding is refused without writing into core" \
       "local='$(core_bound)', declared='$(core_declared)'" "${OUT:-<no output>}"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — the directory is inventoried before it is bound (task 10.1)"
+
+# WHY AN INVENTORY AND NOT ANOTHER PERMISSION CHECK
+#
+# The installer publishes one FILE and binds a DIRECTORY. Git runs whatever it
+# finds there by name, so binding activates every entry — pre-push, commit-msg,
+# any of them — machine-wide, in every repository the floor governs. The two
+# guards above cannot close that: they prove no OTHER account could have written
+# the directory, never that the operator meant its contents to run on every
+# commit. An entry the operator dropped there themselves passes both.
+#
+# Measured 2026-08-08, and this is why the requirement exists: the directory on
+# this machine held one file, a 46-line pre-commit vendored from an archived
+# host repository, unmarked, exporting OPENSPEC_GATE_SELF=opencode and
+# describing a rule retired at gate 2.0.0. At `pre-commit` it self-heals,
+# because publishing replaces it. Named `pre-push` it would have become the
+# machine's commit-time gate, unchallenged.
+
+# A clean inventory is REPORTED, not merely silent. Silence and "nothing was
+# looked at" read identically, and the whole point of this task is that nobody
+# looked.
+setup_case
+run_binder
+if [ "$RC" -eq 0 ] && [ "$(bound)" = "$HOOKDIR" ] && said "inventor"; then
+  ok "a directory holding only what we publish binds, and the inventory is reported"
+else
+  bad "a directory holding only what we publish binds, and the inventory is reported" \
+      "rc=$RC, binding='$(bound)'" "$OUT"
+fi
+
+# The entry, its size and its date — because "an unexpected file is present" is
+# not enough to decide with, and deciding is what the operator is being asked
+# to do.
+setup_case
+mkdir -p "$HOOKDIR"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/pre-push"
+chmod +x "$HOOKDIR/pre-push"
+touch -t 202507250000 "$HOOKDIR/pre-push"
+PUSH_SIZE="$(wc -c < "$HOOKDIR/pre-push" | tr -d ' ')"
+run_binder
+if ran && [ "$RC" -ne 0 ] && [ -z "$(bound)" ]; then
+  ok "an entry we did not publish refuses the bind and leaves the binding unset"
+else
+  bad "an entry we did not publish refuses the bind and leaves the binding unset" \
+      "rc=$RC, binding='$(bound)'" "${OUT:-<no output>}"
+fi
+
+if said "pre-push" && said "$PUSH_SIZE" && said "2025-07-25"; then
+  ok "the refusal names the entry, its size and its modification date"
+else
+  bad "the refusal names the entry, its size and its modification date" \
+      "wanted the name, $PUSH_SIZE and 2025-07-25" "$OUT"
+fi
+
+# Refused before anything is published, so the worst state a refusal can leave
+# is the state it found.
+if ran && [ ! -e "$HOOKDIR/pre-commit" ]; then
+  ok "a refused inventory publishes nothing either"
+else
+  bad "a refused inventory publishes nothing either" "$HOOKDIR/pre-commit exists"
+fi
+
+# Acceptance is BY NAME. The refusal has to say the words that grant it, or the
+# operator's only route out is to delete a file they were asked to judge.
+if said "GLOBAL_FLOOR_ACCEPT"; then
+  ok "the refusal names the acceptance mechanism"
+else
+  bad "the refusal names the acceptance mechanism" "$OUT"
+fi
+
+setup_case
+mkdir -p "$HOOKDIR"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/pre-push"
+GLOBAL_FLOOR_ACCEPT=pre-push run_binder
+if [ "$RC" -eq 0 ] && [ "$(bound)" = "$HOOKDIR" ]; then
+  ok "accepting the entry by name binds"
+else
+  bad "accepting the entry by name binds" "rc=$RC, binding='$(bound)'" "$OUT"
+fi
+
+# The distinction the requirement turns on. "The directory contains unexpected
+# files, proceed?" is the prompt everyone accepts, and it grants the same thing
+# whether the entry is a stale copy of our own hook or a pre-push nobody
+# remembers. So an acceptance naming one entry must not cover another.
+setup_case
+mkdir -p "$HOOKDIR"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/pre-push"
+GLOBAL_FLOOR_ACCEPT=commit-msg run_binder
+if ran && [ "$RC" -ne 0 ] && [ -z "$(bound)" ] && said "pre-push"; then
+  ok "accepting a different entry does not accept this one"
+else
+  bad "accepting a different entry does not accept this one" \
+      "rc=$RC, binding='$(bound)'" "${OUT:-<no output>}"
+fi
+
+# Every unrecognised entry, not the first one found. A report that stops at one
+# makes the second acceptance a surprise on the next run.
+setup_case
+mkdir -p "$HOOKDIR"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/pre-push"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/commit-msg"
+run_binder
+if ran && said "pre-push" && said "commit-msg"; then
+  ok "every unrecognised entry is named, not just the first"
+else
+  bad "every unrecognised entry is named, not just the first" "${OUT:-<no output>}"
+fi
+
+if [ "$RC" -ne 0 ] && [ -z "$(bound)" ]; then
+  ok "and accepting neither of them still refuses"
+else
+  bad "and accepting neither of them still refuses" "rc=$RC, binding='$(bound)'"
+fi
+
+setup_case
+mkdir -p "$HOOKDIR"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/pre-push"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/commit-msg"
+GLOBAL_FLOOR_ACCEPT="pre-push commit-msg" run_binder
+if [ "$RC" -eq 0 ] && [ "$(bound)" = "$HOOKDIR" ]; then
+  ok "accepting both by name binds"
+else
+  bad "accepting both by name binds" "rc=$RC, binding='$(bound)'" "$OUT"
+fi
+
+# hooks.d is where the published dispatcher sends operator-owned hooks, so it is
+# part of the design rather than a finding. Flagging it would make the refusal
+# fire on every correctly composed machine, which is how a guard gets disabled.
+setup_case
+mkdir -p "$HOOKDIR/hooks.d"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/hooks.d/my-check"
+chmod +x "$HOOKDIR/hooks.d/my-check"
+run_binder
+if [ "$RC" -eq 0 ] && [ "$(bound)" = "$HOOKDIR" ]; then
+  ok "hooks.d and its contents are not findings"
+else
+  bad "hooks.d and its contents are not findings" "rc=$RC, binding='$(bound)'" "$OUT"
+fi
+
+# The one entry that does not block, and the reason is that it does not survive
+# the run: an unmarked file reads as 0.0.0, so publishing replaces it before
+# anything is bound. It is still REPORTED — a hook replaced silently is
+# indistinguishable from a hook that was never there, which is exactly how the
+# vendored one sat unnoticed for two weeks.
+setup_case
+mkdir -p "$HOOKDIR"
+printf '#!/bin/sh\n# vendored from somewhere else\nexit 0\n' > "$HOOKDIR/pre-commit"
+chmod +x "$HOOKDIR/pre-commit"
+run_binder
+if [ "$RC" -eq 0 ] && [ "$(bound)" = "$HOOKDIR" ]; then
+  ok "an unmarked pre-commit does not block: publishing replaces it"
+else
+  bad "an unmarked pre-commit does not block: publishing replaces it" \
+      "rc=$RC, binding='$(bound)'" "$OUT"
+fi
+
+if cmp -s "$ROOT/reference-implementations/global-floor/pre-commit" "$HOOKDIR/pre-commit"; then
+  ok "and it is replaced by the checkout's dispatcher"
+else
+  bad "and it is replaced by the checkout's dispatcher" "the unmarked file survived"
+fi
+
+# Reported means the inventory was taken BEFORE the publish. Afterwards there is
+# nothing left to report — our own bytes are sitting where the finding was.
+if said "pre-commit" && said "unrecognised"; then
+  ok "the replaced entry is still reported, so the inventory ran before the publish"
+else
+  bad "the replaced entry is still reported, so the inventory ran before the publish" "$OUT"
 fi
 
 # ---------------------------------------------------------------------------
