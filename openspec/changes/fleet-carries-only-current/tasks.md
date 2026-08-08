@@ -289,12 +289,54 @@ instruction-file work. One PR per repository.
       only thing that noticed was leftover files looking alarming a week later.
       A retirement ADR that lists what a repo *is* should also list what else
       runs from it
-- [ ] 2.6 **`.planning/` in full, tracked and untracked**, in the six in-scope
-      repositories: core, `cparx`, `fbc-platform`, `fx-signal-agent`, `stimmung`,
-      `neuroflash/mcp-server`. **List every file before removing any** —
-      `stimmung` (7) and `mcp-server` (5) hold untracked, un-ignored content
-      that exists nowhere else, so the listing is the only record that will
-      survive the deletion
+- [x] 2.6 **`.planning/` in full, tracked and untracked** — **done 2026-08-08**,
+      after 2.6a's objections were resolved rather than waived. All seven
+      in-scope repositories are clear; the four host repositories keep theirs by
+      1.2. 48 files: 44 untracked, removed directly, and 4 tracked, removed by
+      PR — callbot #103, fbc-platform #141, fx-signal-agent #130.
+
+      **The config half was checked, not assumed.** No executable in any of the
+      three repositories reads `.planning/config.json`; every surviving
+      reference is prose or `docs/legacy-planning/`, and the one hook template
+      that does read it — `observability-postphase-scan.sh` in the
+      `agenticapps-observability` skill — is not deployed in any in-scope
+      repository. fx-signal-agent's alarming 58 references were mostly its own
+      orphaned agent worktrees, which is 1.3b's finding in a second repository.
+
+      **Two consequences this leaves behind, neither of them silent:** 2.6b and
+      1.3d
+- [ ] 2.6b **Deleting `.planning/` made `commitment-reinject.sh` a permanent
+      no-op, and that hook is worth keeping.** It fires on `SessionStart
+      matcher: compact` and re-injects the commitment ritual and skill-routing
+      rules that compaction strips — its own header calls it "the single
+      highest-impact hook in the batch". Its guard is `[ -d .planning ] || exit
+      0`, so it now exits 0 in every repository on the machine.
+
+      Its second half was already dead before today: it reads
+      `.planning/phases/*/COMMITMENT.md`, and **no `COMMITMENT.md` exists
+      anywhere in the fleet** — the three `.planning/phases` directories that do
+      exist are all in host repositories. So what the deletion actually cost is
+      the first half, the CLAUDE.md re-injection.
+
+      The fix is a one-line predicate change from `.planning` to `openspec`,
+      which is the marker this fleet now uses for the same thing. **Not done
+      here**, because it widens the hook from AgenticApps-with-`.planning` to
+      every OpenSpec repository on the machine, and that is a behaviour decision
+      rather than a repair. Left with the reasoning attached so it is a choice
+      rather than an oversight
+- [ ] 1.3d **A second field of orphaned worktrees: `fx-signal-agent`, 22 trees,
+      6.4G.** Same signature as 1.3b — `.git` files pointing at
+      `~/Sourcecode/fx-signal-agent`, the pre-family-reorganisation path, so git
+      cannot read them and `git worktree list` does not know them. Found while
+      checking `.planning/config` references, which it inflated from a handful
+      to 58.
+
+      **Not removed.** 1.3b's removal was authorised for `cparx` after the
+      content comparison proved nothing unique survived there; that proof was
+      about `cparx` and does not transfer. The same hash-against-the-object-store
+      test should run here first. Combined with 1.3b this is **11.1G** of
+      orphaned agent worktrees across two repositories, from one directory move
+      nobody swept after
 - [x] 2.7 **Unregister `meta-observer`** from `~/.claude/settings.json`. Its
       `SessionEnd` entry ran
       `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, a
