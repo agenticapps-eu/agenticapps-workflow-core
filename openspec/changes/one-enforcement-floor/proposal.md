@@ -58,7 +58,9 @@ Linear issue: none yet.
 - **ADDED: the redundant local bindings are swept.** Six repositories already
   set a local `core.hooksPath`, which git prefers over the global one, so the
   new floor would not reach them. Five name the directory git would resolve
-  anyway and are unset — a no-op in each, which is what makes it safe.
+  anyway and are unset — which is how those five come under the floor, not a
+  tidy-up beside it. The unset changes nothing only while no global binding
+  exists; the moment one does, it is the act that hands the repository over.
   `fbc-platform`'s `.husky/_` is a real opt-out and is left alone.
 - **CHANGED: `--check` reports the global binding** — whether
   `core.hooksPath` is set, whether it points at the published directory, and

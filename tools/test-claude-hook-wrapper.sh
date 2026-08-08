@@ -27,7 +27,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 WRAPPER="$ROOT/.claude/hooks/openspec-change-gate.sh"
 SETTINGS="$ROOT/.claude/settings.json"
 [ -x "$WRAPPER" ] || { printf 'missing or non-executable: %s\n' "$WRAPPER" >&2; exit 1; }
-[ -f "$SETTINGS" ] || { printf 'missing: %s\n' "$SETTINGS" >&2; exit 1; }
+# SETTINGS is no longer required to exist. Core registers no PreToolUse hook, so
+# an absent settings file is the expected state and a present one is checked for
+# what it must NOT contain.
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/wrapper-test.XXXXXX")" || exit 1
 trap 'rm -rf "$WORK"' EXIT
@@ -149,31 +151,66 @@ check "wrapper forwards its arguments to the gate" 0 "$x"
 x=0; grep -q 'OPENSPEC_GATE_SELF=' "$WRAPPER" && x=1
 check "wrapper exports no dead OPENSPEC_GATE_SELF" 0 "$x"
 
-printf 'registration\n'
-if command -v python3 >/dev/null 2>&1; then
-  # REGRESSION: unquoted shell form. A repository path containing a space made
-  # the shell exec the wrong binary and exit 127 — which is not 2, so Claude
-  # treated it as non-blocking and the edit went through ungated.
-  reg="$(python3 - "$SETTINGS" <<'PY'
+printf "core's interposition points\n"
+
+# WHAT CHANGED HERE, AND WHY THE ASSERTION IS INVERTED
+#
+# This section used to check that the PreToolUse registration was well formed —
+# quoted command, matcher covering the four edit tools. The registration is
+# gone: core-self-enforcement is amended to two points core owns, `pre-commit`
+# and CI, with the machine-level floor for everything else. A per-host session
+# hook cannot gate the session that installs it and does not exist for a human
+# with an editor, which is why it went fleet-wide, and a core-only carve-out
+# would have exempted the one repository that should be first under the floor.
+#
+# So the assertion is now that core registers NO PreToolUse hook against the
+# gate. The requirement's own scenario says a hook found here is reported as a
+# surface the capability no longer requires — never as satisfying part of it.
+if [ ! -f "$SETTINGS" ]; then
+  check "core registers no PreToolUse hook against the gate" 0 0
+elif command -v python3 >/dev/null 2>&1; then
+  x="$(python3 - "$SETTINGS" <<'PY'
 import json,sys
-d=json.load(open(sys.argv[1]))
-e=d["hooks"]["PreToolUse"][0]
-c=e["hooks"][0]["command"]
-print("QUOTED" if c.startswith('"') and c.endswith('"') else "UNQUOTED")
-print(e["matcher"])
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    print(1); raise SystemExit
+for e in d.get("hooks", {}).get("PreToolUse", []):
+    for h in e.get("hooks", []):
+        if "openspec-change-gate" in h.get("command", ""):
+            print(1); raise SystemExit
+print(0)
 PY
-)" || reg=""
-  q="$(printf '%s' "$reg" | sed -n 1p)"; m="$(printf '%s' "$reg" | sed -n 2p)"
-  x=0; [ "$q" = "QUOTED" ] || x=1
-  check "hook command is quoted for paths with spaces" 0 "$x"
-  x=0
-  for t in Edit Write MultiEdit NotebookEdit; do
-    printf '%s' "$m" | grep -q "$t" || x=1
-  done
-  check "matcher covers the edit tools" 0 "$x"
+)"
+  check "core registers no PreToolUse hook against the gate" 0 "${x:-1}"
 else
-  printf '  SKIP registration checks (no python3)\n'
+  printf '  SKIP registration check (no python3)\n'
 fi
+
+# The wrapper itself STAYS, and this is the difference between a leftover and a
+# decision. It is core's own instance of the project-hook shim contract — two
+# suites read it as that, and `project-hook-binding` says in as many words that
+# a copy documenting IN-FILE that it is intentionally unregistered has that
+# decision preserved rather than reconciled away. A file that is merely
+# unregistered is drift; one that says why is the variant the capability
+# describes.
+x=0; grep -qi 'deliberately unregistered\|intentionally unregistered' "$WRAPPER" || x=1
+check "the wrapper documents in-file that it is deliberately unregistered" 0 "$x"
+
+# The two that remain carry what the third used to. Asserted here because this
+# is the moment they stop being defence in depth and become the whole defence.
+x=0
+grep -q '^on:' "$ROOT/.github/workflows/openspec-gate.yml" 2>/dev/null || x=1
+grep -q 'pull_request' "$ROOT/.github/workflows/openspec-gate.yml" 2>/dev/null || x=1
+grep -qE 'branches: \[ ?main' "$ROOT/.github/workflows/openspec-gate.yml" 2>/dev/null || x=1
+grep -q -- '--ci' "$ROOT/.github/workflows/openspec-gate.yml" 2>/dev/null || x=1
+check "CI runs the gate on pull requests and on pushes to main" 0 "$x"
+
+# "Provides and registers", not "runs": the hook is written by an installer and
+# is absent until that installer is run, so the obligation is on the installer
+# existing, which is what core controls.
+x=0; [ -x "$ROOT/tools/install-core-git-hooks.sh" ] || x=1
+check "an installer exists that writes core's pre-commit hook" 0 "$x"
 
 printf '\nTOTAL: %d passed, %d failed\n' "$pass" "$fail"
 if [ "$fail" -ne 0 ]; then printf 'failed:%s\n' "$failed_names" >&2; exit 1; fi

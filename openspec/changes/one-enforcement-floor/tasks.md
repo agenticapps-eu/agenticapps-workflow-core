@@ -344,10 +344,15 @@ ran, so this change starts from an installer that writes no host configuration.
 
 Six repositories set a local `core.hooksPath`, which git prefers over the global
 one, so the new floor reaches none of them. Five name the directory git would
-resolve anyway, so unsetting them changes nothing today and restores reach.
+resolve anyway. **The sweep is how those five come under the floor** — the unset
+is the mechanism, not a tidy-up beside it. It changes nothing only while no
+global binding exists, which is the state it was measured in.
 
 - [ ] 3b.1 Unset the local `core.hooksPath` in `callbot` and `fx-signal-agent`
-      — **two configs, two bindings**, re-measured 2026-08-08.
+      — **two configs, two bindings**, re-measured 2026-08-08. This is the act
+      that brings both under the floor: while their local binding stands, the
+      global one does not reach them, so the unset is what the floor's coverage
+      of these two consists of.
       This has now been wrong twice in two days, in the same direction each
       time, which is the argument for 1.1-style re-measurement rather than a
       list maintained by hand. It read "four configs, five bindings" while the
@@ -357,13 +362,22 @@ resolve anyway, so unsetting them changes nothing today and restores reach.
       repository scheduled for deletion — unsetting a binding in a directory
       that is about to be removed returns nothing
 - [x] 3b.2 Confirm each named its own default hooks directory before unsetting,
-      so the sweep is provably a no-op rather than assumed to be one.
-      **Done 2026-08-07**, and the obvious check would have been circular:
+      so the sweep is provably **redundant as a setting** rather than assumed to
+      be. **Done 2026-08-07**, and the obvious check would have been circular:
       `git rev-parse --git-path hooks` *honours* `core.hooksPath`, so resolving
       it while the binding is set proves only that the binding is set. The
       comparison is therefore against `--git-common-dir`, which does not honour
-      it. All five swept bindings equal `<common-dir>/hooks` exactly, so the
-      sweep is a proven no-op. `fbc-platform` is the only one that differs
+      it. All five swept bindings equal `<common-dir>/hooks` exactly.
+      `fbc-platform` is the only one that differs.
+      **The measurement stands; the conclusion drawn from it does not.** It read
+      "so the sweep is a proven no-op", and unsetting a redundant binding is a
+      no-op only *while no global binding exists* — the state it was measured
+      in, and still the state of this machine today. The instant the floor is
+      bound, those same unsets are what hand five repositories to it. That is
+      the intent and it is the opposite of a no-op. The correction is not
+      cosmetic: "provably a no-op" was the argument that made writing to another
+      repository's git config feel safe enough to need no authorization
+      boundary, which is 3b.5 arrived at from the other side (Decision 6)
 - [ ] 3b.3 Leave `fbc-platform`'s `.husky/_` binding untouched. It is a genuine
       opt-out protecting a real husky installation, and the change records it as
       such rather than treating it as drift
@@ -702,12 +716,31 @@ highest-consequence first:
       to protect it. `--git-common-dir` resolves the default directory, never
       `--git-path hooks`, which honours `core.hooksPath` and would let a wrong
       binding confirm itself
-- [ ] 10.3 Remove core's `PreToolUse` registration from `.claude/settings.json`,
+- [x] 10.3 Remove core's `PreToolUse` registration from `.claude/settings.json`,
       which 9.11's amendment now permits and 2.x requires. Confirm the
-      `pre-commit` hook and CI still gate, since they become the only two
-- [ ] 10.4 Reword 3b.1 and 3b.2 so the sweep is described as the mechanism that
+      `pre-commit` hook and CI still gate, since they become the only two.
+      `.claude/settings.json` held nothing but that registration, so it is
+      **deleted rather than emptied** — `{}` is dead text and dead text reads as
+      a live guarantee. The wrapper at `.claude/hooks/openspec-change-gate.sh`
+      **stays**: it is core's own instance of the shim contract, two suites read
+      its version marker and its self-hosting resolution order as the profile
+      they contrast against, and `project-hook-binding` provides for exactly
+      this — a copy documenting **in-file** that it is intentionally
+      unregistered has that decision preserved rather than reconciled away as
+      drift. That paragraph is now in the file and
+      `tools/test-claude-hook-wrapper.sh` asserts it. The suite's two
+      registration cases are inverted (the registration must be **absent**) and
+      two more added for the surfaces that now carry the whole load: CI runs the
+      gate on `pull_request` and on pushes to `main`, and the installer that
+      writes the `pre-commit` hook exists. 12 → 14 cases, RED first
+- [x] 10.4 Reword 3b.1 and 3b.2 so the sweep is described as the mechanism that
       extends the floor's reach, not as a no-op. The measurement stands; the
-      conclusion drawn from it does not
+      conclusion drawn from it does not. The §3b preamble and `proposal.md`
+      carried the same claim in the same words — "a no-op in each, which is what
+      makes it safe" — so all four are corrected together; a corrected task
+      contradicted by its own section heading is not corrected. `design.md`'s
+      "a no-op **setting**" is left alone: that describes the binding, which is
+      genuinely redundant, not the unset
 - [x] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
       bind; acceptance by name allows it; a failed core-binding write aborts the
       global bind; core's hook still runs after a successful bind.
