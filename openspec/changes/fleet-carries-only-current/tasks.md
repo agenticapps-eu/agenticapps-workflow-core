@@ -43,7 +43,7 @@ across a fleet that still included `agenticapps-dashboard` and
       already associated with the workflow, so a repository carrying a retired
       tool without carrying the workflow was structurally invisible to it. That
       is 1.3's own premise landing on 1.3
-- [ ] 1.3b **31 orphaned agent worktrees in `cparx`, 4.7G, and git cannot read
+- [x] 1.3b **31 orphaned agent worktrees in `cparx`, 4.7G, and git cannot read
       any of them.** Found 2026-08-08 by the verification pass *after* this
       session had already claimed GSD was gone from the live repositories — the
       claim was wrong, and the way it was wrong is the point.
@@ -66,7 +66,27 @@ across a fleet that still included `agenticapps-dashboard` and
       check that cannot fail is not evidence, and this one nearly retired 4.7G
       on the strength of it. Whether anything in those trees is worth keeping
       cannot be answered with git and needs content comparison against the
-      repository. **Operator call, and nothing was deleted**
+      repository.
+
+      **Removed 2026-08-08 on the operator's instruction, after the comparison
+      was actually done rather than assumed.** Every candidate file was hashed
+      and asked of `cparx`'s object store — has this repository ever held this
+      exact content? Of **19,873** candidates (excluding `node_modules`, build
+      output and logs), **19,816 were byte-identical to content already
+      committed**. The 57 remainder resolved to: 31 broken `.git` pointers, 11
+      `settings.local.json`, a 33M compiled Go binary, seven `.planning/` files
+      that 2.6 deletes anyway, two `.env` files, and three Go sources.
+
+      The last two groups were the only ones that could have been work, and
+      neither was. The repository's `frontend/.env` is a strict **superset** of
+      the worktree copies by variable name. `chat_test.go` and `processor.go`
+      have **zero** lines absent from the repository's current versions;
+      `chat.go` had nine, and every symbol in them — `IntentAutofillRequest`,
+      `runFieldStreamingLoop`, `chipIntent` — is live in `backend/` today at 17,
+      44 and 15 occurrences. The code was refactored past, not lost.
+
+      Verified after: `cparx` on the same branch with the same six dirty files,
+      `git fsck` clean, `git worktree list` one entry.
 - [ ] 1.3a The predicate that missed it is worth stating, because it is the same
       one that missed 21 skills behind symlinks and a 46-line `pre-commit` in
       `~/.agenticapps/git-hooks/`. Each sweep so far has searched **where the

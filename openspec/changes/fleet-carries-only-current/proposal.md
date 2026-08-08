@@ -68,8 +68,17 @@ run. Task 1.3a carries it forward into the declaration.
 | `stimmung` | 0 | 7 | **no** |
 | `neuroflash/mcp-server` | 0 | 5 | **no** |
 
-The first four are host repositories, out of scope below. **In the six that
-remain, `.planning/` is deleted outright — tracked and untracked alike.**
+**`callbot` is missing from this table, and the reason is that the count moves
+with the branch.** Re-measured 2026-08-08: `callbot` carries `.planning/` as
+**2 tracked files on `origin/main`** and has already deleted it on its working
+branch `chore/instruction-file-cleanup`. Whoever built this table had that
+branch checked out, so `git ls-files` reported nothing and the repository fell
+out of a census of what is on disk. That makes eleven repositories, not ten, and
+seven in scope rather than six. A count taken from a working tree is a fact about
+a checkout; this table wants a fact about the default branch.
+
+The first four are host repositories, out of scope below. **In the repositories
+that remain, `.planning/` is deleted outright — tracked and untracked alike.**
 Planning lives in `openspec/` now; there is no second home for it and no reason
 to keep a directory that only ever collects stale copies of what
 `openspec/changes/` already holds.
