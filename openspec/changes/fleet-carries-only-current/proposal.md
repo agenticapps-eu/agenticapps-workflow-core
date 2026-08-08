@@ -31,6 +31,16 @@ holds 134 tracked files**. That is a repository whose planning still lives there
 and deleting it is a migration decision, not a cleanup. Any change that treats
 the two the same destroys the second while tidying the first.
 
+**`agenticapps-roadmap` was retired on 2026-08-08, and that settles it rather
+than removing it from the change.** The repository is a *product built on*
+`.planning/` — `scripts/sync-gsd-linear.ts` walks sibling repositories'
+`.planning/` trees and upserts them into Linear, and `sync.config.json` names
+three. Those inputs were deleted fleet-wide on 2026-08-05, so the product reads
+directories that no longer exist; the retirement follows from that rather than
+arriving alongside it. Its own 134 tracked files are the retired product's
+development history, which resolves "migrate or keep" to **keep** — there is
+nothing left to migrate them to.
+
 ## What Changes
 
 - **BREAKING** for each repository swept: removed-tool artifacts are deleted —
@@ -40,9 +50,12 @@ the two the same destroys the second while tidying the first.
   trigger skill demonstrably carries the same rules. The skill absorbed §11
   precisely so the per-repo copies could go; a copy deleted before its
   replacement is verified to say the same thing is a rule deleted.
-- **`agenticapps-roadmap`'s 134 tracked planning files are migrated or kept,
-  never deleted as leftovers.** Which of the two is a decision this change makes
-  explicitly and records.
+- **`agenticapps-roadmap`'s 134 tracked planning files are kept, and the reason
+  is its retirement.** They are a retired product's development history, and
+  migrating planning into `openspec/` is for a repository someone will plan in
+  again. Decided 2026-08-08; it was previously open between migrate and keep,
+  and the change's own tracked-versus-untracked criterion already protects them
+  without a special case.
 - **A rule with a home**, so the next removal does not leave the same residue:
   a fleet repository carries no artifact of a tool the workflow has removed, and
   the removal of a tool includes the sweep.
@@ -69,14 +82,17 @@ else stale" would make a precise rule vague.
 
 ## Impact
 
-- **Nine repositories across two families**, plus a decision about a tenth
-  (`agenticapps-dashboard-add-agent-board`, a worktree of a retired repo).
+- **Nine repositories across two families.** The tenth this used to name —
+  `agenticapps-dashboard-add-agent-board`, a worktree of a retired repo — was
+  removed on 2026-08-07, so the decision it asked for no longer has a subject.
 - **Depends on `projects-bind-not-copy`.** That change establishes the sweep
   pattern, the declared-fleet check and the both-directions pass. This one reuses
   all three rather than inventing a second mechanism, so it cannot start first.
-- **`agenticapps-dashboard` is retired** and swept anyway, for the reason
-  `projects-bind-not-copy` gives: a repository people are told to read is a
-  repository an agent will open.
+- **Both retired repositories are swept anyway** — `agenticapps-dashboard` and
+  now `agenticapps-roadmap` — for the reason `projects-bind-not-copy` gives: a
+  repository people are told to read is a repository an agent will open. Retired
+  is not archived. The archived checkouts are excluded because Phase 5b deletes
+  them; these two stay on disk, so what is in them keeps being loadable.
 - **The `CLAUDE.md` edits are the risky part.** Deleting hook shims is
   mechanical; deleting instruction text is not, because the only evidence a rule
   still reaches an agent is that some file still says it.

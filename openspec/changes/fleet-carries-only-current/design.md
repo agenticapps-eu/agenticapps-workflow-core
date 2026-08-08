@@ -57,6 +57,33 @@ repository's planning, not to a fleet cleanup.
 it converts a decision into an omission. The next person reads a `FLEET` sweep
 that skips one member and cannot tell whether it was considered or missed.
 
+**Decided 2026-08-08: kept, and the reason is retirement.** This was the change's
+one open blocker and it is closed by a fact from outside the change rather than
+by the migration nobody had time for.
+
+`agenticapps-roadmap` is a **product built on `.planning/`**, not a repository
+that merely still has one: `scripts/sync-gsd-linear.ts` walks sibling
+repositories' `.planning/` trees and upserts them into Linear, wired as
+`pnpm sync:gsd` with a test beside it, and `sync.config.json` names three inputs.
+`.planning/` was removed fleet-wide on 2026-08-05, so the product's inputs are
+gone and it reads directories that do not exist. The retirement is a consequence
+of that, not a coincidence beside it.
+
+Its own 134 tracked files are therefore the development history of a retired
+product. "Migrate to `openspec/`" is what you do for a repository someone will
+plan in again, and nobody will plan in this one — so the disposition is **keep**,
+stated rather than defaulted. Nothing is deleted, which is what the criterion
+above required all along; the criterion was never the thing in doubt, the
+disposition was.
+
+**`sync-gsd-linear.ts` and `sync.config.json` stay too**, and the boundary is
+worth stating because they look like exactly what this change deletes. They are
+artifacts *of* a removed tool, but they are also the retired product's own source
+code, in the retired product's own repository. Sweeping them is not removing
+residue, it is gutting the thing being preserved. The same line the family
+instruction file already draws around `agenticapps-dashboard`: reading it is
+encouraged, so what is in it stays.
+
 ### Instruction text is deleted last, and only against a named replacement
 
 Eight repositories inline `## Coding Discipline` in `CLAUDE.md`, around eighty
@@ -75,17 +102,24 @@ authority.* Fastest, and it is exactly the move core refused to make on its own
 file. A rule that exists in eight places and then nowhere is a rule nobody
 decided to drop.
 
-### The retired repository is swept; the archived ones are not
+### The retired repositories are swept; the archived ones are not
 
 `agenticapps-dashboard` is retired and its `CLAUDE.md` actively encourages
 reading it as an example of the spec discipline. A repository people are told to
 read is a repository an agent will open, and an agent that opens it loads what is
 there. It is swept.
 
+`agenticapps-roadmap` joins it on 2026-08-08, on the same reasoning rather than a
+new one. Retired is not archived: it stays on disk, so whatever it carries stays
+loadable, and a repository nobody is working in is one whose stale artifacts have
+longer to sit there being read as current.
+
 `claude-workflow`, `codex-workflow` and `opencode-workflow` are archived and
 scheduled for deletion. They are not swept, and the difference is not
-inconsistency: one is a repository that stays and is read, the others are
-repositories that go.
+inconsistency: two are repositories that stay and are read, the others are
+repositories that go. **The line is deletion, not activity** — worth stating
+plainly, because "retired" and "archived" are close enough in ordinary use that
+the next reader will otherwise have to re-derive which side each lands on.
 
 ### No check of its own
 
@@ -101,10 +135,12 @@ a parallel one that resolves the same `FLEET` and reports in a different shape.
   reversible; deleting eighty lines of coding discipline from eight repositories
   is neither, because nothing else records what those lines said once they are
   gone. The tasks front-load the comparison for that reason.
-- **`agenticapps-roadmap` may block the change.** If its 134 tracked files need a
-  migration nobody has time for, this change either waits or ships with that
-  repository explicitly deferred and reported. Both are acceptable; silently
-  skipping it is not.
+- ~~**`agenticapps-roadmap` may block the change.**~~ **Closed 2026-08-08.** The
+  repository was retired, which resolves the disposition to *keep* without a
+  migration — so the change no longer waits on anything, and the deferral path it
+  reserved is unused. Left visible rather than deleted: this was the change's one
+  named blocker for seven sessions, and a risk that quietly disappears reads as a
+  risk nobody took seriously.
 - **Written before it is needed.** The inventory is measured on 2026-08-07 and the
   change executes later, so the counts will drift. Task 1 re-measures rather than
   trusting the table, and the table is dated for that reason.

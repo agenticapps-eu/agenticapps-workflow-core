@@ -40,14 +40,35 @@ repository.
 
 ## 3. `agenticapps-roadmap`, which is not a leftover
 
-- [ ] 3.1 134 tracked files under `.planning/`. Establish what they are and
+**Resolved 2026-08-08 by its retirement.** This section was the change's blocker
+for seven sessions and is now three closed decisions and one live task.
+
+- [x] 3.1 134 tracked files under `.planning/`. Establish what they are and
       whether that repository's planning has moved to `openspec/` or still lives
-      there
-- [ ] 3.2 Decide: migrate, or keep with a stated reason. **Do not delete.** Both
-      outcomes are recorded in this change; an omission is not an outcome
-- [ ] 3.3 If it blocks, defer that repository explicitly and report the deferral.
-      Skipping a `FLEET` member silently is the failure the declaration exists to
-      prevent
+      there. **Established 2026-08-08: it still lives there, and the repository
+      is a product built on `.planning/` rather than one that merely has one.**
+      `scripts/sync-gsd-linear.ts` (wired as `pnpm sync:gsd`, with a test beside
+      it) walks sibling repositories' `.planning/` trees and upserts them into
+      Linear; `sync.config.json` names `claude-workflow`, `cparx` and
+      `fx-signal-agent`. All three inputs were deleted on 2026-08-05, so the
+      product reads directories that no longer exist
+- [x] 3.2 Decide: migrate, or keep with a stated reason. **Decided: keep. The
+      reason is the retirement.** Migrating planning into `openspec/` is what you
+      do for a repository someone will plan in again; these 134 files are a
+      retired product's development history and there is nothing left to migrate
+      them to. Nothing is deleted, which is what 1.2's tracked-versus-untracked
+      criterion already required — the criterion was never in doubt, the
+      disposition was
+- [x] 3.3 If it blocks, defer that repository explicitly and report the deferral.
+      **Unused — it does not block.** The deferral path stays specified because
+      the requirement behind it is general, but this change exercises none of it
+- [ ] 3.4 `sync-gsd-linear.ts` and `sync.config.json` are **kept**, and the
+      boundary is recorded rather than assumed. They are artifacts of a removed
+      tool *and* the retired product's own source code in its own repository;
+      sweeping them is gutting the thing being preserved, not removing residue.
+      This is the one place in the change where the "artifact of a removed tool"
+      boundary has to be drawn by judgement, so it is stated where 7.1 will find
+      it
 
 ## 4. The risky half — instruction text
 
@@ -90,5 +111,7 @@ Last, because it is the only irreversible part.
 
 - [ ] 7.1 Record what was deliberately left: a stale README is not an artifact of
       a removed tool, and the boundary held or it did not. Say which
-- [ ] 7.2 If `agenticapps-roadmap` was deferred, it is the first thing the next
-      change picks up
+- [x] 7.2 If `agenticapps-roadmap` was deferred, it is the first thing the next
+      change picks up. **Not deferred — closed by 3.2, so the next change
+      inherits nothing here.** Recorded rather than deleted so that the handoff
+      says "resolved" instead of going silent, which reads the same as forgotten
