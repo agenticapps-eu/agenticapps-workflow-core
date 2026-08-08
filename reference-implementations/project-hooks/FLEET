@@ -33,10 +33,13 @@
 #
 # One repository name per line. Blank lines and # comments ignored.
 
-agenticapps-dashboard
-agenticapps-roadmap
 agents-task-viewer
 callbot
 cparx
 fbc-platform
 fx-signal-agent
+
+# agenticapps-dashboard and agenticapps-roadmap were removed on 2026-08-08:
+# both checkouts were deleted from this machine and both remotes are archived.
+# A declared repository that is not on disk is reported as MISSING REPO, which
+# is correct for one that should be there and noise for one that is retired.
