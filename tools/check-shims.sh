@@ -34,6 +34,23 @@ root="${1:-$HOME/Sourcecode}"
 decl() { sed 's/#.*//' "$1" 2>/dev/null | awk 'NF'; }
 [ -f "$TEMPLATE" ] || { echo "check-shims: no template at $TEMPLATE" >&2; exit 65; }
 
+# AN ABSENT DECLARATION IS A BROKEN INSTRUMENT; AN EMPTY ONE IS A CLEAN FLEET.
+#
+# `decl()` swallows the read error with `2>/dev/null`, so a file that is GONE
+# produces exactly what a file with no entries produces: nothing. Everything
+# downstream then loops zero times and reports success. Verified by running the
+# old code against both.
+#
+# The distinction cannot be drawn after the read, because after the read the two
+# are the same empty string. So it is drawn here, on the file.
+for d in SHIMMED-HOOKS FLEET; do
+  [ -f "$DECL/$d" ] || {
+    echo "check-shims: no declaration at $DECL/$d" >&2
+    echo "check-shims: this is the set the scan is measured against — without it" >&2
+    echo "check-shims: the scan has nothing to check and cannot report a clean fleet." >&2
+    exit 65; }
+done
+
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 bad=0
 
@@ -87,7 +104,19 @@ while IFS= read -r proj; do
 done <<<"$targets"
 
 echo
-if [ "$bad" -eq 0 ]; then
+if [ "$(decl "$DECL/SHIMMED-HOOKS" | wc -l | tr -d ' ')" -eq 0 ]; then
+  # THE CONFORMANCE SENTENCE IS A CLAIM ABOUT HOOKS THAT WERE EXAMINED, and over
+  # an empty declaration none were. Printing it here would be a vacuous truth
+  # published as a measurement — the exact failure this tool exists to prevent,
+  # committed by the tool itself.
+  #
+  # Not an error, though: an empty declaration is the intended end state once no
+  # project binds a fleet hook. Failing on it would make the fleet's correct
+  # condition unreportable, and a check that cannot express success gets removed.
+  echo "SHIMMED-HOOKS declares no hooks, so nothing was checked in any repository."
+  echo "That is the expected state once no project binds a fleet hook — but it is"
+  echo "not a statement that anything passed, because nothing was examined."
+elif [ "$bad" -eq 0 ]; then
   echo "Every declared hook is bound with the authority's bytes."
   echo "That is a statement about the trees checked out under $root right now."
 else

@@ -20,6 +20,21 @@
 # reads this file for the same reason.
 #
 # One hook name per line, without the .sh. Blank lines and # comments ignored.
-
-database-sentinel
-openspec-change-gate
+#
+# THE SET IS EMPTY, AND THAT IS THE END STATE RATHER THAN AN ACCIDENT.
+# Both entries left on 2026-08-08, for different reasons:
+#
+#   openspec-change-gate — its project binding is replaced by the machine-level
+#     git hook. core.hooksPath is bound globally, so one published pre-commit
+#     gates every enrolled repository and no project needs a shim to reach it.
+#
+#   database-sentinel — removed WITH the host-specific surface it lived on, not
+#     migrated off it. It was a Claude PreToolUse hook, so it only ever
+#     protected one of the provisioned hosts; centralising it machine-level
+#     would keep that same single-host blindness while making it look fleet-wide.
+#     What it intercepted is recorded as LOST in the projects-bind-not-copy
+#     change. It is not reassigned, and nothing here should say it was.
+#
+# An empty declaration is not an absent one. check-shims.sh distinguishes them:
+# absent is a broken instrument and exits non-zero; empty reports that nothing
+# was checked and refuses to print the conformance sentence.
