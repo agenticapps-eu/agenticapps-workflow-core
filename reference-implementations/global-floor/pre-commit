@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+# pre-commit — the machine-level enforcement floor (spec §18).
+#
+# global-floor-version: 1.1.0
+#
+#   1.1.0 — two defects the first plan-review round found, both reproduced
+#           before being written up, both in the guards this file exists to be:
+#           * the enrolment predicate read system and global scope, so ONE
+#             `git config --global agenticapps.workflow.enrolled true` enrolled
+#             every repository on the machine — the measured defect the
+#             predicate was built to remove, reintroduced machine-wide by the
+#             predicate. Now `--local`.
+#           * it also ignored the value, so `false` enrolled. Now `--type=bool`
+#             and an explicit comparison.
+#           * a hooks.d entry that is a symlink out of the directory was
+#             executed, which defeated the repository-controlled-code
+#             prohibition below with a single link while every other guard here
+#             still read as satisfied. Entries now resolve canonically and must
+#             land inside hooks.d.
+#
+# VERSION MARKER — read by the installer before writing this file to the
+# published hooks directory. Installers MUST refuse to overwrite a higher
+# version (treat an unmarked file as 0.0.0). Bump whenever behaviour changes.
+#
+# Published once per machine and bound with `git config --global core.hooksPath`.
+# One file governs every enrolled repository, so there is one copy to upgrade
+# rather than one per repository silently forking from the others.
+#
+# HOW THIS DIFFERS FROM THE PER-REPOSITORY HOOK, AND WHY IT MUST
+#
+# reference-implementations/openspec-change-gate/pre-commit resolves its gate as
+#
+#   [ -x "$GATE" ] || GATE="$(git rev-parse --show-toplevel)/bin/openspec-change-gate.sh"
+#
+# a fallback into the repository being committed to. That is reasonable for a
+# hook a repository installs for itself: the repository already trusts its own
+# contents. It is forbidden here. A global hook that falls back to
+# repository-controlled code makes every clone on the machine able to supply the
+# executable that runs at commit time — which is the property `core.hooksPath`
+# exists to remove. Cloning a repository must never be enough to run code.
+#
+# Nothing below resolves anything from inside a repository.
+set -uo pipefail
+
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOKS_D="$SELF_DIR/hooks.d"
+
+say() { printf 'global-floor: %s\n' "$*" >&2; }
+
+# ── Enrolment ──────────────────────────────────────────────────────────────
+# A global binding runs this file in EVERY repository on the machine, including
+# every repository that never opted into this workflow. So the first question is
+# not "is this commit valid" but "is this repository ours".
+#
+# Measured before it was specified: with no predicate, a repository containing
+# any `openspec/` tree that fails `openspec validate --all` had every commit
+# blocked — a test fixture, a vendored example, an abandoned experiment — while
+# a repository with no `openspec/` at all committed normally. The failure landed
+# precisely on repositories that touched OpenSpec once and never adopted this.
+#
+# Enrolment is an ACT, not an inference from the shape of a directory. A
+# predicate that guesses from shape makes the wrong outcome rarer without making
+# it impossible, and its failures are silent for the person hit by them.
+#
+# Silent on the way out, deliberately: this hook runs in unrelated repositories
+# all day and has nothing to say to them.
+#
+# `--local` AND `--type=bool`, both load-bearing, both added after two reviewers
+# raised them independently and both reproduced before being written up:
+#
+#   - a bare `git config --get` resolves across system, global and local, so one
+#     `git config --global agenticapps.workflow.enrolled true` — an operator
+#     slip, or a tool defaulting it — enrolled EVERY repository on the machine.
+#     That is the measured defect this predicate exists to remove, reintroduced
+#     machine-wide by the predicate itself.
+#   - `--get` exits 0 for any value, so `false` enrolled. An operator who writes
+#     `false` has said the opposite of enrolment and is entitled to have it mean
+#     that. A key whose value is ignored is not an opt-in, it is a tripwire.
+#
+# `--type=bool` normalises git's boolean spellings (yes/on/1) and yields nothing
+# for a malformed value, which the comparison then declines.
+[ "$(git config --local --type=bool --get agenticapps.workflow.enrolled 2>/dev/null)" = true ] || exit 0
+
+# ── hooks.d ownership ──────────────────────────────────────────────────────
+# Checked BEFORE any entry runs, and about the DIRECTORY rather than its
+# entries. Validating only the entries does not make the directory
+# operator-owned: repointing `hooks.d` redirects every entry at once, so a
+# per-entry check would inspect files that are no longer the ones about to run.
+if [ -L "$HOOKS_D" ]; then
+  say "REFUSED — $HOOKS_D is a symlink. Composition entries must live in a"
+  say "directory you own; a symlink redirects all of them at once."
+  exit 1
+fi
+
+if [ -d "$HOOKS_D" ]; then
+  if [ ! -O "$HOOKS_D" ]; then
+    say "REFUSED — $HOOKS_D is not owned by you."
+    exit 1
+  fi
+  # Group- or world-writable means another local account can drop in code that
+  # runs on every commit you make. `find -perm` rather than `stat`, whose
+  # format flags differ between macOS and GNU.
+  if [ -n "$(find "$HOOKS_D" -maxdepth 0 \( -perm -g+w -o -perm -o+w \) 2>/dev/null)" ]; then
+    say "REFUSED — $HOOKS_D is group- or world-writable, so another local"
+    say "user could install code that runs on every commit. chmod 755 it."
+    exit 1
+  fi
+fi
+
+# ── The gate ───────────────────────────────────────────────────────────────
+# OPENSPEC_CHANGE_GATE is accepted as an alias for OPENSPEC_GATE: the pi host
+# shipped that name first and its extension already resolves the gate through
+# it. Honouring both means pi vendors nothing and carries no divergence.
+#
+# There is no third fallback. See the header: the missing branch is the point.
+GATE="${OPENSPEC_GATE:-${OPENSPEC_CHANGE_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}}"
+
+if [ -x "$GATE" ]; then
+  "$GATE" --pre-commit
+  rc=$?
+  # Propagated verbatim rather than collapsed to 1. The gate distinguishes its
+  # own failure modes by status, and a dispatcher that flattens them throws away
+  # the only machine-readable thing it produces.
+  [ "$rc" -eq 0 ] || exit "$rc"
+else
+  # Fail OPEN on absent tooling, consistent with §18: a commit hook that
+  # hard-fails because a tool is missing trains people to pass --no-verify,
+  # which disables the floor permanently rather than momentarily.
+  say "WARNING — gate not found at $GATE; commit not gated."
+fi
+
+# ── Composition ────────────────────────────────────────────────────────────
+# The operator's own machine-level hooks, run after the gate. Two reviewers
+# disagreed about how this should compose: one asked that it exec the
+# repository's original .git/hooks/, the other objected that doing so re-enables
+# execution of repository-controlled code. Both were right about their own half,
+# and this is the resolution — composition for the operator, who is the party
+# that actually wanted it, without making a clone's contents executable.
+#
+# A repository that needs its own hooks has git's local `core.hooksPath`, which
+# is the supported answer and costs nothing to support.
+# Resolve $1 through any symlinks and print the physical directory holding it.
+# Bounded, because a symlink cycle here would hang every commit on the machine.
+# `readlink` without -f: BSD readlink only gained it recently and this file
+# cannot assume the operator's macOS is new enough.
+resolved_dir_of() {
+  local p="$1" t n=0
+  while [ -h "$p" ] && [ "$n" -lt 16 ]; do
+    t="$(readlink "$p")"
+    case "$t" in
+      /*) p="$t" ;;
+      *)  p="$(dirname "$p")/$t" ;;
+    esac
+    n=$((n + 1))
+  done
+  [ -h "$p" ] && return 1          # still a link after 16 hops: a cycle
+  (cd "$(dirname "$p")" 2>/dev/null && pwd -P)
+}
+
+if [ -d "$HOOKS_D" ]; then
+  HOOKS_D_P="$(cd "$HOOKS_D" && pwd -P)"
+  for entry in "$HOOKS_D"/*; do
+    # Debris — READMEs, .disabled files, directories, a non-executable draft —
+    # is skipped rather than run. `-f` and `-x` together, so a directory whose
+    # bit happens to be set is not executed.
+    [ -f "$entry" ] && [ -x "$entry" ] || continue
+
+    # AN ENTRY MUST RESOLVE INSIDE hooks.d. Without this the prohibition in the
+    # header is defeated by one symlink: a link from here into a clone re-enables
+    # repository-controlled execution at commit time while every other guard in
+    # this file still reads as satisfied. Demonstrated end to end before it was
+    # fixed — the linked script ran and the hook exited 0.
+    #
+    # Compared on the CANONICAL target, never the link text. A relative link
+    # (`../../../repo/evil.sh`) leaves the directory just as surely as an
+    # absolute one, and comparing strings would wave it through.
+    if [ -h "$entry" ]; then
+      entry_dir="$(resolved_dir_of "$entry")"
+      if [ -z "$entry_dir" ] || [ "$entry_dir" != "$HOOKS_D_P" ]; then
+        say "REFUSED — $entry resolves to ${entry_dir:-an unresolvable target}/$(basename "$(readlink "$entry")"),"
+        say "which is outside $HOOKS_D. Composition entries must live in the"
+        say "directory you own; a link out of it runs code you did not put there."
+        exit 1
+      fi
+    fi
+
+    "$entry"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      say "$entry exited $rc — commit stopped."
+      # Stop rather than continue. A later entry running after an earlier one
+      # refused would act on state the refusal was meant to prevent.
+      exit "$rc"
+    fi
+  done
+fi
+
+exit 0

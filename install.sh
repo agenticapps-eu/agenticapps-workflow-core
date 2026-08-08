@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — the one entry point that puts this workflow on a machine.
 #
-#   ./install.sh                          payload + core's git pre-commit hook
+#   ./install.sh                          payload + the machine-level git floor
 #   ./install.sh --host claude --host pi  ...plus skills for the named hosts
 #   ./install.sh --host auto              ...for whichever hosts are installed
 #   ./install.sh --check                  report state, change nothing
@@ -23,7 +23,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.agenticapps/bin"
 SHARED="$ROOT/reference-implementations/shared-install/install-shared-artifact.sh"
 PROJHOOKS="$ROOT/reference-implementations/shared-install/install-project-hooks.sh"
-COREHOOKS="$ROOT/tools/install-core-git-hooks.sh"
+FLOORBIND="$ROOT/reference-implementations/global-floor/bind-global-floor.sh"
+OPSXBIND="$ROOT/reference-implementations/openspec-tools/bind-openspec-tools.sh"
 
 # Published through the ARBITRATING helper, one call each, with the marker key
 # that makes its version comparison work. The project-hook set is NOT here: it
@@ -31,7 +32,8 @@ COREHOOKS="$ROOT/tools/install-core-git-hooks.sh"
 # project-hook-binding requires and that this helper does not.
 ARTIFACTS="openspec-change-gate/openspec-change-gate.sh:gate-version
 run-plan-review/run-plan-review.sh:run-plan-review-version
-reviewer-cli/reviewer-cli.sh:reviewer-cli-version"
+reviewer-cli/reviewer-cli.sh:reviewer-cli-version
+init-project/init-project.sh:init-project-version"
 
 # host : skill directory (under $HOME) : executable that proves it is installed
 HOSTS="claude:.claude/skills:claude
@@ -277,8 +279,14 @@ publish() {
       *) skip "could not publish $name (exit $rc)" ;;
     esac
   done
-  out="$("$PROJHOOKS" 2>&1)" || { say "$out"; skip "project hooks were not published and attested"; }
-  [ -n "$out" ] && [ "$SKIPPED" = 0 ] && say "  published and attested the project-hook set"
+  # A STEP REPORTS ITS OWN OUTCOME. This line used to require `$SKIPPED = 0`,
+  # so a run whose artifact publishing failed said nothing at all about project
+  # hooks that had published and attested cleanly — and "it did not happen" is
+  # indistinguishable from "something unrelated failed" to whoever reads it. It
+  # also required the helper to have written something, which is a fact about
+  # the helper's stdout rather than about whether the step succeeded.
+  if out="$("$PROJHOOKS" 2>&1)"; then say "  published and attested the project-hook set"
+  else [ -n "$out" ] && say "$out"; skip "project hooks were not published and attested"; fi
   return 0
 }
 
@@ -295,6 +303,21 @@ install_hosts() {
     seen="$seen $dir"
     bind_dir "$HOME/$dir" "$readers"
   done
+
+  # The openspec CLI's own skills and commands, bound once per machine so no
+  # repository has to carry them. ONE call naming every host: the per-host
+  # shapes differ wildly — claude nests its commands, opencode flattens them,
+  # codex has none and pi has no machine directory at all — and that knowledge
+  # belongs in the binder, not in a per-host branch here. A binder failure is
+  # reported and does not fail the install: it means openspec is missing or a
+  # name collided, neither of which is the workflow failing to install.
+  local hostargs="" n
+  for n in $REQUESTED; do hostargs="$hostargs --host $n"; done
+  # It reports itself; capturing its output here would only be this file
+  # reprinting another file's words, and the budget is spent better elsewhere.
+  # shellcheck disable=SC2086
+  "$OPSXBIND" $hostargs || say "  opsx tooling: not fully bound"
+
   say "  no host configuration was written — the gate runs at git commit and in CI"
 }
 
@@ -321,12 +344,23 @@ have bash || { say "FAILED: bash is required and was not found. Nothing was publ
 
 if [ "$MODE" = check ]; then do_check; exit 0; fi
 
-case " $REQUESTED " in *" auto "*) REQUESTED="$(detect)"; say "detected hosts:${REQUESTED:- none}" ;; esac
+# `auto` ADDS the detected hosts to the named ones; it used to replace them.
+# Naming a host is what you do precisely when detection will not find it — an
+# uninstalled host, a wrapper not on PATH — so `--host auto --host codex` threw
+# away the only request that needed making, and reported success having not
+# bound it. Duplicates are harmless: install_hosts iterates HOSTS and matches
+# against REQUESTED, so a name appearing twice is still handled once.
+#
+# `auto` itself is stripped rather than left in place. It matches no entry in
+# HOSTS, so carrying it would bind nothing extra — but line 348 asks whether
+# ANY host was requested, and a leftover `auto` makes `--host auto` on a
+# machine with no hosts report that it bound some.
+case " $REQUESTED " in *" auto "*) detected="$(detect)"; REQUESTED="$(printf '%s' " $REQUESTED " | sed 's/ auto / /g')$detected"; say "detected hosts:${detected:- none}" ;; esac
 
 say "publishing to $BIN"
 publish
-say "installing core's git pre-commit hook"
-"$COREHOOKS" >/dev/null 2>&1 || skip "core's git pre-commit hook was not installed"
+say "binding the machine-level enforcement floor"
+"$FLOORBIND" || skip "the machine-level enforcement floor was not bound"
 
 if [ -n "${REQUESTED// /}" ]; then
   say "binding hosts:$REQUESTED"

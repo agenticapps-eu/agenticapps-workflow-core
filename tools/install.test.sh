@@ -247,6 +247,13 @@ require_ran() {
 # binary (task 1.4 hides git, 1.5 hides jq) by dropping a directory in front
 # rather than by reconstructing a working PATH from nothing.
 #
+# GIT_CONFIG_GLOBAL is pinned per case because install.sh now writes GLOBAL git
+# configuration — it binds core.hooksPath machine-wide. HOME alone is not
+# enough to rely on: `git config --global` prefers $XDG_CONFIG_HOME/git/config
+# when that file exists, and XDG_CONFIG_HOME is inherited from whoever ran the
+# suite. A case that leaked would rebind the operator's real machine, at commit
+# time, in every repository on it.
+#
 # Captures stdout+stderr into RUN_OUT and the status into RUN_RC.
 RUN_OUT=""
 RUN_RC=0
@@ -263,6 +270,7 @@ run_install() {
   fi
   RUN_OUT="$(cd "$CASE_REPO" && HOME="$CASE_HOME" PATH="${PATH_OVERRIDE:-$CASE_BIN:$PATH}" \
              CALL_LOG="$CASE_HOME/calls.log" \
+             GIT_CONFIG_GLOBAL="$CASE_HOME/.gitconfig" GIT_CONFIG_SYSTEM=/dev/null \
              bash "$script" "$@" 2>&1)"
   RUN_RC=$?
 }
@@ -359,15 +367,24 @@ fi
 finish_case
 
 echo
-echo "install.sh — task 1.2: a bare run publishes the payload and core's hook"
-new_case "bare run publishes the payload and installs core's pre-commit hook"
+echo "install.sh — task 1.2: a bare run publishes the payload and binds the floor"
+new_case "bare run publishes the payload and binds the machine-level floor"
 run_install
+floor_dir="$CASE_HOME/.agenticapps/git-hooks"
+floor_bound="$(GIT_CONFIG_GLOBAL="$CASE_HOME/.gitconfig" GIT_CONFIG_SYSTEM=/dev/null \
+               git config --global --get core.hooksPath 2>/dev/null)"
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
 elif [ ! -x "$CASE_HOME/.agenticapps/bin/openspec-change-gate.sh" ]; then
   bad "$CASE_NAME" "gate was not published to \$HOME/.agenticapps/bin/"
-elif [ ! -f "$CASE_REPO/.git/hooks/pre-commit" ]; then
-  bad "$CASE_NAME" "core's pre-commit hook was not installed"
+# Executable, not merely present: git does not run a non-executable hook, so
+# correct bytes without the bit is a floor that reports itself as installed and
+# gates nothing.
+elif [ ! -x "$floor_dir/pre-commit" ]; then
+  bad "$CASE_NAME" "the dispatcher was not published to \$HOME/.agenticapps/git-hooks/"
+elif [ "$floor_bound" != "$floor_dir" ]; then
+  bad "$CASE_NAME" "core.hooksPath was not bound to the published directory" \
+      "got '$floor_bound', wanted '$floor_dir'"
 else
   ok "$CASE_NAME"
 fi
@@ -463,12 +480,12 @@ fi
 finish_case
 
 echo
-echo "install.sh — task 2.1: the three workflow executables go through the arbitrating helper"
+echo "install.sh — task 2.1: the four workflow executables go through the arbitrating helper"
 new_case "each workflow executable is published through install-shared-artifact.sh with its own marker key"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install
 missing=""
 # <src> <dst> <marker-key> — assert the marker key, because passing the wrong
@@ -476,6 +493,10 @@ missing=""
 calls | grep -q '^SHARED .*openspec-change-gate\.sh .* gate-version$'          || missing="$missing gate-version"
 calls | grep -q '^SHARED .*run-plan-review\.sh .* run-plan-review-version$'    || missing="$missing run-plan-review-version"
 calls | grep -q '^SHARED .*reviewer-cli\.sh .* reviewer-cli-version$'          || missing="$missing reviewer-cli-version"
+# fresh-clone-needs-nothing task 4.1a. The initializer is machine-installed and
+# repository-invoked, exactly like the three above, so it is published the same
+# way rather than becoming a subcommand or a file a repository carries.
+calls | grep -q '^SHARED .*init-project\.sh .* init-project-version$'          || missing="$missing init-project-version"
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
 elif [ -n "$missing" ]; then
@@ -492,7 +513,7 @@ echo "install.sh — task 2.2: the project-hook set goes through the attesting i
 new_case "project hooks are published through install-project-hooks.sh and the manifest is written"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper tools/install-core-git-hooks.sh GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 # install-project-hooks.sh is left REAL here: the assertion is about the
 # attestation it writes, and a stub cannot produce one.
 run_install
@@ -513,7 +534,7 @@ echo "install.sh — task 2.3: a declared hook missing from the source fails the
 new_case "a declared project hook missing from the source is reported, not silently skipped"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper tools/install-core-git-hooks.sh GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 # ARTIFACTS still declares database-sentinel; the implementation is removed. The
 # declared set is what makes this detectable — a glob would just publish less.
 rm -f "$CASE_CORE/reference-implementations/project-hooks/database-sentinel.sh"
@@ -536,7 +557,7 @@ new_core
 # report failure on a machine that is already in the intended state.
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 3
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0 — exit 3 is success — got $RUN_RC" \
@@ -552,12 +573,12 @@ echo
 echo "install.sh — task 2.5: what is published is executable"
 new_case "every published artifact is executable at its destination"
 new_core
-stub_helper tools/install-core-git-hooks.sh GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 # Both publishers left REAL — the executable bit is a property of what actually
 # lands, and a stub lands nothing.
 run_install
 notexec=""
-for a in openspec-change-gate.sh run-plan-review.sh reviewer-cli.sh database-sentinel.sh; do
+for a in openspec-change-gate.sh run-plan-review.sh reviewer-cli.sh database-sentinel.sh init-project.sh; do
   d="$CASE_HOME/.agenticapps/bin/$a"
   [ -f "$d" ] || { notexec="$notexec $a(absent)"; continue; }
   [ -x "$d" ] || notexec="$notexec $a"
@@ -572,41 +593,76 @@ fi
 finish_case
 
 echo
-echo "install.sh — task 2.6: core's hook is delegated, and a foreign hook is refused"
-new_case "core's pre-commit hook is installed through install-core-git-hooks.sh"
+echo "install.sh — task 2.6: the floor is bound, and a foreign binding is refused"
+new_case "the machine-level floor is bound through bind-global-floor.sh"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
-elif ! called GITHOOK; then
-  bad "$CASE_NAME" "install-core-git-hooks.sh was not called" "calls: $(calls | tr '\n' ';')"
+elif ! called FLOORBIND; then
+  bad "$CASE_NAME" "bind-global-floor.sh was not called" "calls: $(calls | tr '\n' ';')"
 else
   ok "$CASE_NAME"
 fi
 finish_case
 
-new_case "a foreign pre-commit hook is refused rather than replaced"
+# Decision 4. install-core-git-hooks.sh resolves its destination with
+# `git rev-parse --git-path hooks`, which HONOURS core.hooksPath — so once the
+# floor is bound globally, calling it from install.sh redirects a
+# per-repository hook into the machine-level directory, colliding with the
+# published one. It also wrote into whichever repository the operator's shell
+# happened to be sitting in, which is not a property of the machine.
+#
+# It is superseded, not deleted: it survives as core's own tool. This asserts
+# the machine installer no longer reaches it.
+new_case "install.sh no longer installs a per-repository hook"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-# The real hook installer here: refusing a hook it does not own is its contract,
-# and the assertion is that install.sh surfaces that refusal instead of forcing
-# past it.
-mkdir -p "$CASE_REPO/.git/hooks"
-printf '#!/bin/sh\n# somebody else was here first\nexit 0\n' > "$CASE_REPO/.git/hooks/pre-commit"
-chmod +x "$CASE_REPO/.git/hooks/pre-commit"
-foreign_before="$(shasum < "$CASE_REPO/.git/hooks/pre-commit")"
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
+stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
 run_install
-foreign_after="$(shasum < "$CASE_REPO/.git/hooks/pre-commit")"
 if ! require_ran; then
   :
-elif [ "$foreign_before" != "$foreign_after" ]; then
-  bad "$CASE_NAME" "the foreign hook was overwritten"
-elif [ "$RUN_RC" -eq 0 ] && ! printf '%s' "$RUN_OUT" | grep -qiE 'pre-commit|hook'; then
-  bad "$CASE_NAME" "the hook was left alone but the run said nothing about it"
+elif called GITHOOK; then
+  bad "$CASE_NAME" "install-core-git-hooks.sh was still called" "calls: $(calls | tr '\n' ';')"
+elif [ -e "$CASE_REPO/.git/hooks/pre-commit" ]; then
+  bad "$CASE_NAME" "a pre-commit landed in the repository the installer was run from"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+# The refusal moved up a level with the floor. It used to be about a foreign
+# pre-commit inside one repository; the machine installer no longer writes one,
+# so that assertion would now pass because nothing happened rather than because
+# something was refused. The equivalent question at the new level is a foreign
+# GLOBAL core.hooksPath, and the real binder runs here — refusing a binding it
+# does not own is its contract, and the assertion is that install.sh surfaces
+# that refusal instead of forcing past it.
+new_case "a foreign global core.hooksPath is refused rather than rebound"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
+foreign_dir="$CASE_DIR/somebody-elses-hooks"
+mkdir -p "$foreign_dir"
+GIT_CONFIG_GLOBAL="$CASE_HOME/.gitconfig" GIT_CONFIG_SYSTEM=/dev/null \
+  git config --global core.hooksPath "$foreign_dir"
+run_install
+bound_after="$(GIT_CONFIG_GLOBAL="$CASE_HOME/.gitconfig" GIT_CONFIG_SYSTEM=/dev/null \
+               git config --global --get core.hooksPath 2>/dev/null)"
+if ! require_ran; then
+  :
+elif [ "$bound_after" != "$foreign_dir" ]; then
+  bad "$CASE_NAME" "the foreign binding was overwritten" "now: $bound_after"
+elif [ "$RUN_RC" -eq 0 ]; then
+  bad "$CASE_NAME" "the binding was refused but the run exited 0" \
+      "a refused step is a skipped step, and a skipped step exits non-zero"
+elif ! printf '%s' "$RUN_OUT" | grep -qiE 'hookspath|floor'; then
+  bad "$CASE_NAME" "the binding was left alone but the run said nothing about it" "$RUN_OUT"
 else
   ok "$CASE_NAME"
 fi
@@ -623,7 +679,7 @@ bind_case() {
   new_core
   stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
   stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-  stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+  stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
   CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
   mkdir -p "$CLAUDE_SKILLS"
 }
@@ -1036,6 +1092,62 @@ fi
 finish_case
 
 echo
+echo "install.sh — fresh-clone-needs-nothing task 9: the openspec tooling is bound machine-level"
+new_case "the binder is delegated to, once, naming every requested host"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND 0
+run_install --host claude --host codex
+binder_calls="$(calls | grep -c '^OPSXBIND')"
+if [ "$RUN_RC" -ne 0 ]; then
+  bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
+elif [ "$binder_calls" -ne 1 ]; then
+  bad "$CASE_NAME" "expected exactly one binder call, saw $binder_calls" \
+                   "install.sh delegates; per-host knowledge belongs in the binder" \
+                   "calls: $(calls | tr '\n' ';')"
+elif ! calls | grep '^OPSXBIND' | grep -q -- '--host claude'; then
+  bad "$CASE_NAME" "claude was not named to the binder" "calls: $(calls | grep '^OPSXBIND')"
+elif ! calls | grep '^OPSXBIND' | grep -q -- '--host codex'; then
+  bad "$CASE_NAME" "codex was not named to the binder" "calls: $(calls | grep '^OPSXBIND')"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+new_case "a binder failure is reported and does not fail the whole install"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
+# 1 is what the binder returns when it could not generate, or when a name
+# collided. Neither means the workflow failed to install.
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND 1
+run_install --host claude
+if ! printf '%s' "$RUN_OUT" | grep -qiE 'opsx|openspec tooling|binder'; then
+  bad "$CASE_NAME" "a binder failure was silent" "$(printf '%s' "$RUN_OUT" | tail -4)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
+echo "install.sh — fresh-clone-needs-nothing task 4.1c: the initializer is reported like the others"
+new_case "--check names the initializer"
+new_core
+run_install --check
+if ! require_ran; then :
+elif ! printf '%s' "$RUN_OUT" | grep -q 'init-project'; then
+  bad "$CASE_NAME" "check mode does not report the initializer" \
+                   "an artifact that installs but never appears in --check is invisible state" \
+                   "$(printf '%s' "$RUN_OUT" | head -6)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
 echo "install.sh — task 5.2: an artifact behind the checkout is present and not current"
 new_case "--check names both versions and marks a stale artifact not current"
 new_core
@@ -1137,7 +1249,7 @@ new_case "two identical runs leave identical state and the second creates no new
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install --host claude --host pi
 first_state="$(case_state)"
 run_install --host claude --host pi
@@ -1167,7 +1279,7 @@ mkdir -p "$CASE_HOME/.claude/skills"
 CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"; printf 'first\n'  > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
 run_install --host claude --replace-unrecognised
 rm -rf "$CLAUDE_SKILLS/agentic-apps-workflow"
@@ -1198,7 +1310,7 @@ new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 mkdir -p "$CLAUDE_SKILLS/agenticapps-workflow/skill"
 printf 'name: agentic-apps-workflow\n' > "$CLAUDE_SKILLS/agenticapps-workflow/skill/SKILL.md"
 run_install --host claude --replace-unrecognised
@@ -1226,7 +1338,7 @@ new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 printf 'notes\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"; chmod 640 "$CLAUDE_SKILLS/agentic-apps-workflow"
 run_install --host claude --replace-unrecognised
 b="$(ls -d "$CASE_HOME/.agenticapps/pre-install/.claude/skills"/*pre-install* 2>/dev/null | head -1)"
@@ -1247,7 +1359,7 @@ new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 printf 'irreplaceable\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"
 # The directory the backup would be written into is read-only, so preserving is
 # impossible while replacing is not. Proceeding here would destroy the only copy.
@@ -1271,7 +1383,7 @@ new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"
 printf 'the thing to get back\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
 run_install --host claude --replace-unrecognised
@@ -1299,7 +1411,7 @@ new_case "a bare --host is a usage error, not a shell error"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
-stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 # `set -u` is on. Before the guard, a trailing `--host` expanded an unset $2 and
 # aborted with the shell's own message and the shell's own status — the one bad
 # argument in the parser that did not get the usage error every other one gets.
@@ -1345,6 +1457,83 @@ if ! require_ran; then :
 elif ! printf '%s' "$RUN_OUT" | grep -q 'restore: *rm -rf "'; then
   bad "$CASE_NAME" "the restore command names its paths unquoted" \
                    "$(printf '%s' "$RUN_OUT" | grep restore | head -2)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
+echo "install.sh — code review M1: a step reports its OWN outcome"
+# The success line was `[ -n "$out" ] && [ "$SKIPPED" = 0 ] && say ...`, so it
+# reported the project-hook set only when NOTHING ELSE in the run had skipped.
+# A run whose artifact publishing failed and whose project hooks published and
+# attested cleanly said nothing about the second — the operator reading the
+# output cannot tell "it did not happen" from "something unrelated failed".
+# It also required the helper to be chatty, which is a fact about the helper's
+# stdout rather than about whether the step succeeded.
+new_case "the project-hook set is reported published even when an earlier step skipped"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    1
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
+run_install
+if ! require_ran; then :
+elif ! printf '%s' "$RUN_OUT" | grep -qi 'published and attested'; then
+  bad "$CASE_NAME" "the project hooks published, and the run did not say so" \
+                   "$(printf '%s' "$RUN_OUT" | head -8)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+new_case "and it is NOT reported when the project-hook installer itself fails"
+new_core
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     1
+stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
+run_install
+if ! require_ran; then :
+# Anchored, because the SKIP line contains the success line's words as a
+# substring — "SKIPPED: project hooks were not published and attested". An
+# unanchored match called the correct refusal a false claim.
+elif printf '%s' "$RUN_OUT" | grep -q '^  published and attested'; then
+  bad "$CASE_NAME" "a failed project-hook install was reported as attested" \
+                   "$(printf '%s' "$RUN_OUT" | grep -i attested | head -2)"
+elif ! printf '%s' "$RUN_OUT" | grep -qi 'SKIPPED.*project hooks'; then
+  bad "$CASE_NAME" "the failure was not reported as a skipped step" \
+                   "$(printf '%s' "$RUN_OUT" | head -8)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
+echo "install.sh — code review M3: --host auto ADDS to the named set, never replaces it"
+# `REQUESTED="$(detect)"` threw away every host the operator had named. On a
+# machine where the named host is not installed — the exact case for naming it
+# rather than relying on detection — the request vanished silently and the run
+# reported success having not bound it.
+new_case "a host named alongside --host auto is bound even when detection cannot find it"
+new_core
+host_exec claude                 # detectable
+# EVERY host this installer knows is on the real PATH of the machine this was
+# written on, and the case's PATH ends in the real one — so `detect` found codex
+# by itself and the assertion passed while proving nothing. The host that must
+# be undetectable has to be made so explicitly.
+hide_command codex
+stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    0
+stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     0
+stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
+run_install --host auto --host codex
+if ! require_ran; then :
+elif [ ! -L "$CASE_HOME/.claude/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "the DETECTED host was not bound" "$(printf '%s' "$RUN_OUT" | head -6)"
+elif [ ! -L "$CASE_HOME/.codex/skills/agentic-apps-workflow" ]; then
+  bad "$CASE_NAME" "the explicitly named host was dropped by --host auto" \
+                   "$(printf '%s' "$RUN_OUT" | head -6)"
 else
   ok "$CASE_NAME"
 fi

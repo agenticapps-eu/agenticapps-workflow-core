@@ -1,0 +1,142 @@
+## Why
+
+There is no answer to *"I checked out a repo — how do I use the workflow with it?"*
+
+`install.sh` is the one entry point for a **machine**: it publishes the shared
+artifacts, binds `skills/` into each host's skill directory, and installs the git
+hook. `workflow-installation` carries thirteen requirements and every one of them
+is about the machine. **Not one describes what a repository needs.**
+
+What put the workflow into the seven fleet repositories was the host scaffolders'
+migration chains — `claude-workflow` and its siblings. All four of those repos are
+**archived on GitHub**, and `install.sh` names them in a tombstone list whose
+symlinks it sweeps. So the mechanism that answered the question is gone and
+nothing replaced it.
+
+The answer this change writes down: **the repository carries its truth, the
+machine carries the behaviour, and a fresh clone needs nothing.** `openspec/` and
+one instruction file are committed, so they arrive with the checkout. Skills and
+enforcement are machine-level, so they are already there if the workflow is
+installed. Nothing is generated per-repo per-machine, which is what made the old
+answer a 72-step chain.
+
+**pi breaks that claim today, so it is fixed here.** `install.sh` binds pi to
+`~/.agents/skills`; pi reads `~/.pi/agent/skills`, a real directory of per-skill
+symlinks that something other than core populated. Core's skill is not among them.
+"The machine carries the behaviour" is false for one of five hosts until that is
+corrected, which makes it a precondition of this change rather than a neighbour of
+it.
+
+## What Changes
+
+**A repository's workflow surface is defined, and it is two things**
+
+- `openspec/` — created by `openspec init`, committed. It is the repository's
+  durable truth, not scaffolding.
+- One instruction file — `AGENTS.md`, with `CLAUDE.md` a symlink to it, appended
+  to rather than overwritten when one already exists. `AGENTS.md` is the
+  cross-host surface: codex, opencode, pi and omp all read it; Claude reads
+  `CLAUDE.md`. One file, two names, so no host reads a different version.
+- **Nothing else.** No skills, no hooks, no shims, no `workflow-config.md`, no
+  `claude-md/` directory, no commands.
+
+**A project initializer**
+
+- `init-project.sh`, idempotent, creating the two above and doing nothing else.
+  Small enough to read before trusting, per the same rule `install.sh` follows.
+- **Published like every other executable** — `install.sh` puts it in
+  `~/.agenticapps/bin` through the arbitrating helper, one `ARTIFACTS` line, marker
+  key `init-project-version`. It is machine-installed and repository-invoked, the
+  shape the gate, `reviewer-cli.sh` and `run-plan-review.sh` already have.
+- Invoked by absolute path. That directory is not on `PATH` and `install.sh` will
+  not put it there, because that means writing shell configuration.
+- **It writes no CI workflow file.** A repository carries two artifacts, so the
+  claim in this proposal's title covers the two surfaces `install.sh` establishes —
+  skills and enforcement hooks. CI stays a separate, unowned choice.
+
+**pi is bound where pi reads**
+
+- The host mapping is corrected from `.agents/skills` to `.pi/agent/skills`.
+- **Corrected is not confirmed.** The evidence for the new path is that the
+  directory holds per-skill symlinks — which is directory presence, the thing this
+  change's own new requirement refuses as evidence. Until pi is observed resolving
+  the skill, the mapping is recorded **corrected but unconfirmed**. Calling it
+  fixed would apply to pi exactly the standard this change exists to stop applying
+  to omp.
+- The directory is populated by another tool, so a name collision is reported and
+  never overwritten.
+- **New requirement:** a host's skill directory is established by evidence that
+  the host reads it, not by assumption. This is the discipline already applied to
+  host *detection*; it was never applied to the *path*.
+- **omp turned out to be establishable, and its existing mapping is correct.**
+  `@oh-my-pi/pi-coding-agent`'s own `dist` names the directories it loads:
+  `~/.omp/agent/skills`, and `.agents/skills` from user home. So
+  `omp:.agents/skills` has been right all along and
+  `~/.agents/skills/agentic-apps-workflow` has been resolving for omp since
+  6 August. **pi and omp shared one mapping and only one of them was a defect.**
+
+  An earlier revision of this proposal recorded omp unverified. That verdict came
+  from looking for a *directory* and finding none — absence of a directory read as
+  absence of evidence, while the evidence sat in the binary. Worth keeping as a
+  caution: "unverified" is a claim about what was looked at, not about the host.
+
+**The installer declares the prerequisites it actually has**
+
+- `install.sh` declares **only git and bash**. `openspec` is a hard dependency —
+  the gate cannot answer its one blocking question without it — and is never
+  named. `installer-prerequisite-consent` names `openspec` as its worked example
+  of a declared prerequisite; the installer that has the dependency does not
+  declare it.
+- `superpowers` is likewise depended on — core's skills invoke it — and likewise
+  undeclared. It is a **Claude plugin** here and is installed per host in each
+  host's own idiom, so it SHALL be declared and reported, never installed.
+- Neither is a repository concern. `superpowers` needs no project init:
+  `.superpowers/` is gitignored runtime state created on demand, and
+  `docs/superpowers/` is work product rather than scaffolding.
+
+**The seven existing repositories are swept once**
+
+- Remove what the archived scaffolders installed; keep `openspec/`; write the
+  instruction file. One migration, not a chain — there are no versions to walk.
+- No `.archive/` copy. The files are committed, so git is already the rollback,
+  and a second copy is the thing this effort deletes.
+
+## Capabilities
+
+### New Capabilities
+
+- `project-onboarding`: what a repository carries to use this workflow, what it
+  does not carry, and the one command that establishes it.
+
+### Modified Capabilities
+
+- `workflow-installation`: a host's skill directory is established by evidence
+  rather than assumed, and pi's mapping is corrected accordingly.
+- `installer-prerequisite-consent`: `openspec` and `superpowers` are declared
+  prerequisites of `install.sh`, and a prerequisite owned by a host is reported
+  rather than offered.
+- `host-neutral-instruction-files`: **required, not optional.** That capability
+  exempts `CLAUDE.md` from its marker and frontmatter rules because "Claude is its
+  only reader, so there is nothing to deduplicate". A symlink inverts that
+  premise — Claude then reads the shared bytes — so the exemption is narrowed to a
+  `CLAUDE.md` that is a separate regular file, and the initializer is bound to the
+  markers that capability already makes normative instead of inventing a second
+  provenance convention.
+
+## Impact
+
+- **`install.sh`** — the `HOSTS` mapping, one line; the evidence obligation; and
+  one new `ARTIFACTS` line publishing the initializer.
+- **New `init-project.sh`** — core's first repository-writing surface, published
+  by the same path as the four artifacts already in `~/.agenticapps/bin`.
+- **Seven fleet repositories** — `.claude/skills/`, `.claude/hooks/`,
+  `claude-md/`, `workflow-config.md`, `commands/` removed; `openspec/` kept;
+  instruction file written.
+- **`spec/08-migration-format.md` and PR #78** — this change settles their fate.
+  If onboarding is `openspec init` plus one file, there is no chain to migrate and
+  no consumer for an executable migration format. Named here, decided there.
+
+**Sequencing.** The sweep depends on `projects-bind-not-copy` (skills) and
+`one-enforcement-floor` (hooks) having landed — until both do, removing a repo's
+skills and hooks removes protection with nothing bound in its place. Stated as a
+hard precondition in tasks, not an ordering preference.

@@ -1,0 +1,284 @@
+## 1. Bind pi where pi reads
+
+A defect against the existing requirement that skills are bound into "a host's
+skill directory". `~/.agents/skills` is not pi's.
+
+- [ ] 1.1 Record the evidence before changing the mapping: pi reads
+      `~/.pi/agent/skills` (a real directory holding 25 per-skill symlinks into
+      `../../../.agents/skills/`, written 16 July by something other than core),
+      and `agentic-apps-workflow` is absent from it while present in
+      `~/.agents/skills`
+- [ ] 1.2 RED: a check asserting pi resolves the workflow skill. It fails today
+- [ ] 1.3 Correct `install.sh`'s `HOSTS` entry from `pi:.agents/skills:pi` to
+      `pi:.pi/agent/skills:pi`
+- [ ] 1.4 GREEN: pi resolves `agentic-apps-workflow`. **Confirm by resolution,
+      not by the symlink existing** — the symlink existed all along, in the wrong
+      directory, which is why this went unnoticed
+- [ ] 1.5 Record the co-tenancy: core now writes symlinks alongside another
+      tool's 25. Check the existing binding-state requirements cover it; they
+      should, but say so rather than assume
+- [x] 1.6 **omp: established, and its existing mapping is correct.** Measured
+      2026-08-07 from `@oh-my-pi/pi-coding-agent`'s own `dist/cli.js`, which names
+      both `~/.omp/agent/skills` and `.agents/skills` (user home) as directories
+      it loads. So `omp:.agents/skills` needs no change and
+      `~/.agents/skills/agentic-apps-workflow` has been resolving for omp since
+      6 August — **pi and omp shared one mapping and only pi was a defect.**
+      The earlier "unverified" verdict came from looking for a directory and
+      finding none; the evidence was in the binary all along
+- [ ] 1.7 Implement the evidence obligation: the installer reports a binding as
+      unconfirmed when nothing establishes the host's skill directory, and does
+      not count it toward success
+
+## 2. Declare the prerequisites the installer actually has
+
+- [ ] 2.1 `install.sh` declares only `git` and `bash`. That is the tier-1
+      hard-fail rule, not the declaration set. Add `openspec` and `superpowers`
+      as declared prerequisites
+- [ ] 2.2 Report `openspec` when absent, stating that the gate's one blocking
+      condition cannot be evaluated without it. Offering it through npm is
+      permitted by the existing consent rules — it is the
+      `@fission-ai/openspec` case the capability already names
+- [ ] 2.3 Report `superpowers` when absent, per detected host, with that host's
+      own install command. **Never install it**, opt-in flag or not: it is a
+      Claude plugin here, a git install on pi, and something else elsewhere
+- [ ] 2.4 Do not report a single presence for `superpowers` across hosts — per-host
+      installs succeed and fail per host
+
+## 3. RED: the initializer
+
+- [x] 3.1 RED: running the initializer in a bare repository produces `openspec/`
+      and `AGENTS.md`, with `CLAUDE.md` a symlink to it, and nothing else
+- [x] 3.2 RED: running it twice changes nothing the second time — no duplicated
+      section, no re-created symlink, no re-initialized `openspec/`
+- [x] 3.3 RED: an existing `CLAUDE.md` with content keeps every line, and the
+      workflow section is appended behind a provenance marker
+- [x] 3.4 RED: both files existing independently with different content is
+      reported and refused, not silently collapsed
+- [x] 3.5 RED: it writes no host configuration, no hook, no skill, no CI workflow
+      file, and makes no network call
+- [x] 3.6 A test suite against a scratch repository — no case touches a real one
+- [x] 3.7 RED: only `CLAUDE.md` exists as a regular file → its content becomes
+      `AGENTS.md` and `CLAUDE.md` becomes a symlink. **Assert the negative too:**
+      no run ever leaves two regular instruction files, which is what appending to
+      `CLAUDE.md` and creating `AGENTS.md` separately would do
+- [x] 3.8 RED: both exist byte-identical → collapse to the symlink; `CLAUDE.md` is
+      a symlink elsewhere → refuse without following it; either name is a
+      directory or a dangling link → refuse
+- [x] 3.9 RED: the section is written behind the markers
+      `host-neutral-instruction-files` makes normative, and their presence is what
+      makes a second run a no-op. No marker of this change's own
+- [x] 3.10 RED: `openspec` absent → refuse before writing anything. Reachable by
+      design, since this change makes `openspec` a reported, non-blocking
+      prerequisite
+- [x] 3.11 RED: invoked from a subdirectory → resolves the repository root; no
+      second `openspec/` beside the first; every target preflighted before the
+      first write
+
+## 4. Build the initializer
+
+- [x] 4.1 Write it at `reference-implementations/init-project/init-project.sh`,
+      carrying an `init-project-version:` marker line — decided; it is published
+      like the gate rather than added as an `install.sh` subcommand
+- [x] 4.1a Publish it from `install.sh`: one `ARTIFACTS` line,
+      `init-project/init-project.sh:init-project-version`. Through the arbitrating
+      helper, never by copy — `workflow-installation` already requires this of any
+      published executable that is not a project hook
+- [x] 4.1b Do **not** add `~/.agenticapps/bin` to `PATH`. It is not on it today and
+      putting it there means writing shell configuration, which `install.sh`
+      refuses. Onboarding documents the absolute path
+- [x] 4.1c Confirm `--check` reports the initializer like the other artifacts, and
+      that installing twice leaves one copy at one version
+- [x] 4.2 Implement to pass §3, and no further
+- [x] 4.3 Short enough to read before trusting. It runs inside someone's
+      repository against files they already own, which is a higher-trust surface
+      than the machine installer
+- [x] 4.4 Write the workflow section it appends. It is a pointer to the trigger
+      skill plus whatever is genuinely repository-specific — not a copy of
+      behaviour, which is the drift this whole effort removes
+
+## 5. Verify a fresh clone needs nothing
+
+- [ ] 5.1 On a machine where `install.sh` has run: clone a repository carrying
+      `openspec/` and its instruction file, and confirm the workflow is usable
+      with no per-repository step
+- [ ] 5.2 Confirm per host, not once. Claude, codex, opencode and pi — the
+      measurement on 2026-08-07 proved hosts differ, and one loader validates one
+      host
+- [ ] 5.3 Confirm the negative: `openspec/` remains readable as the repository's
+      specification on a machine *without* the workflow, and the missing
+      enforcement is reported as the machine's condition
+
+## 6. Sweep the seven existing repositories
+
+- [ ] 6.0 **The sweeper is its own artifact, not a mode of the initializer.** The
+      initializer writes two files and removes nothing; folding removal into it
+      breaks its "does only what this capability names" requirement
+- [ ] 6.1 **Hard precondition, checked by effect:** the skill resolves for the
+      host in use and the enforcement floor is active *for the repository being
+      swept*. Do not check whether `projects-bind-not-copy` or
+      `one-enforcement-floor` is merged — that is a fact about core's history, not
+      about the machine the sweep is running on
+- [ ] 6.1a Refuse on a repository whose worktree is not clean. `git revert`
+      restores committed files and nothing else, so an unclean sweep is an
+      irreversible one
+- [ ] 6.1b Remove only from an **exact manifest** of artifacts this workflow
+      published. Anything else in a scheduled path is a refusal, not a deletion
+- [ ] 6.1c Act on the enumerated seven. **No directory glob** — a glob over the
+      family directory reaches the stray worktree in 6.8
+- [ ] 6.2 Remove `.claude/skills/` (core-published names only), `.claude/hooks/`,
+      `claude-md/`, `workflow-config.md`, `commands/`
+- [ ] 6.3 **Keep `openspec/`.** It is the repository's truth, and the one thing
+      here that no other machine can supply
+- [ ] 6.4 **Remove the six `openspec-*` skills and the `opsx` command files too** —
+      reversed once they are bound machine-level (§9). Keeping them would leave
+      new repositories, which never get them, and swept repositories, which kept
+      them, in two different shapes
+- [ ] 6.5 Write the instruction file per §3–§4
+- [ ] 6.6 **No `.archive/` copy.** The files are committed, so git is the
+      rollback. A retained copy is the duplication this change removes
+- [ ] 6.7 One commit per repository, so `git revert` restores it cleanly
+- [ ] 6.8 **`agenticapps-dashboard-add-agent-board` is a stray worktree** carrying
+      its own gate and conformance harness. A naive fleet loop would sweep it.
+      Exclude it explicitly and record why
+
+## 7. Settle what this makes decidable
+
+- [ ] 7.1 Record that onboarding is `openspec init` plus one instruction file, so
+      there is no chain to migrate and no consumer for an executable migration
+      format. `spec/08` and PR #78 are decided against this, not here
+- [ ] 7.2 Correct the claim — in this repository and in the global instruction
+      file — that the workflow section "reaches one of five hosts". Measured
+      2026-08-07: **five of five hosts support a global instruction file**
+      (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+      `~/.config/opencode/AGENTS.md`, `~/.pi/agent/AGENTS.md`,
+      `~/.omp/agent/AGENTS.md`); one of five is populated. The conclusion stands
+      on the one-copy argument, but not on the stated reason
+- [ ] 7.3 Record that superpowers needs no project init: `.superpowers/` is
+      gitignored runtime state and `docs/superpowers/` is work product
+
+## 8. Verify
+
+- [ ] 8.1 `openspec validate --all --strict` green
+- [ ] 8.2 The installer's own test suite passes with the corrected pi mapping
+- [ ] 8.2a **Observe pi resolving the skill**, and record the observation. Until
+      that exists, pi is *corrected but unconfirmed* — the current evidence is that
+      `~/.pi/agent/skills` holds symlinks, which is directory presence, the thing
+      this change's new requirement refuses as evidence
+- [ ] 8.2b Confirm a name collision in pi's shared directory is reported and the
+      other tool's entry is left intact
+- [ ] 8.3 A swept repository contains exactly `openspec/` and the instruction
+      file — and `/opsx:*` still resolves in it, from the machine-level binding
+- [ ] 8.4 `git revert` of a sweep commit restores a repository, with no archived
+      copy consulted
+
+## 9. Bind the openspec tooling machine-level
+
+The `openspec` CLI is a per-project agent installer: `openspec init --tools <host>`
+writes command and skill files into the repository. That is the last thing still
+putting behaviour in a repo, so it moves to the machine like everything else.
+`init-project.sh` therefore runs `--tools none`, which is already implemented.
+
+- [x] 9.1 **Measured 2026-08-07 — the shapes differ per host, so one pattern will
+      not do.** Skills are uniform (`<host>/skills/openspec-*/SKILL.md`, six of
+      them); the command surface is not:
+
+      | host | command surface |
+      |---|---|
+      | claude | `.claude/commands/opsx/*.md` — nested directory |
+      | codex | **none at all** — skills only |
+      | opencode | `.opencode/commands/opsx-*.md` — flat, hyphenated |
+      | pi | `.pi/prompts/opsx-*.md` — *prompts*, not commands |
+
+- [x] 9.2 Establish each host's machine-level command directory **by evidence**,
+      exactly as §1 requires of skill directories. **Measured — see
+      `MEASUREMENT-opsx.md`.** Commands bind for **two hosts only**:
+      `~/.claude/commands` and `~/.config/opencode/commands`. `~/.codex/prompts`
+      exists but the CLI generates no codex commands to put in it. **pi has no
+      bindable command directory at all** — no `~/.pi/agent/prompts`, no prompt
+      path in its `settings.json`; it installs extensions as *packages*. Reaching
+      pi means publishing a pi package, which is a different mechanism and a
+      separate decision
+- [x] 9.2a Record pi's and omp's command surfaces **unverified**. Do not create
+      `~/.pi/agent/prompts` on the strength of pi's *project-level* `.pi/prompts/`
+      — that inference is the exact shape of the defect §1 is fixing
+- [x] 9.3 Generate, never hand-copy. Only the CLI knows the file contents, so
+      generate into a scratch directory with `--tools <host>` and bind the result
+- [x] 9.4 Bind by symlink, never copy — the same rule core's own skills follow
+- [x] 9.5 A host with no command surface is a **recorded state, not a failure**.
+      codex has none, and reporting it as a partial install would make a correct
+      install look broken
+- [ ] 9.7 **`scan_archived` cannot see command directories.** It walks
+      `$HOME/<host skill dir>` only, so the two links in
+      `~/.config/opencode/commands/` pointing into the archived
+      `opencode-workflow` survived every install — and they were not dangling, so
+      `setup-agenticapps-workflow` still *ran* the retired scaffolder that writes
+      per-repo files. Removed by hand 2026-08-07; the scan still has the gap, and
+      §9 has just given this workflow command directories of its own to keep clean.
+      **`install.sh` is at exactly its 217-line budget**, so this belongs in a
+      helper or in the binder, not inline
+- [x] 9.8 **Machine cleaned 2026-08-07.** Removed 19 `gsd-*.md` from
+      `~/.codex/prompts`, 88 files under `~/.config/opencode/commands/gsd/`,
+      `~/.gitnexus`, and the orphaned `~/.agenticapps/bin/normalize-claude-md.sh`
+      (retired by #87, source gone from core, installed copy outlived it).
+      Also removed the **gitnexus MCP server** from `~/.codex/config.toml` and
+      `~/.config/opencode/opencode.json` — gitnexus was declared removed on
+      2026-07-28, but its binary is still on `PATH`, so those registrations were
+      live rather than dangling. And dropped `npm:pi-gsd` and the archived
+      `git:…/pi-agentic-apps-workflow` from `~/.pi/agent/settings.json`.
+      `database-sentinel.sh` was left alone: it is still a live project hook with
+      a source in core, and `diagram-is-the-surface` has not landed
+- [ ] 9.6 Verify `/opsx:propose` resolves in a repository that carries no
+      `.claude/` at all. That is the whole point, and it is the assertion that
+      fails if the binding is wrong.
+
+      **Half-done, and deliberately not ticked.** Run 2026-08-07:
+      `./install.sh --host auto` bound 6 skills + `commands/opsx` for claude, 6+6
+      for opencode, 6 skills for codex, 6 skills for pi; omp recorded unverified;
+      no collisions; `aristotle.md` and opencode's existing links untouched. A
+      fresh repository initialized by the *published* `init-project.sh` carries
+      `openspec/`, `AGENTS.md` and `CLAUDE.md` and nothing else.
+
+      What is NOT confirmed is resolution. A host loads its commands at session
+      start, so the session that did the binding cannot observe it. **Confirm in
+      a new session** — and this change's own rule is why it stays open: the
+      symlink existing is exactly what was true of pi for months
+
+## 10. What the Stage 2 code review found
+
+Stage 2 ran 2026-08-08 in a cleared session; the artifact is
+`../one-enforcement-floor/CODE-REVIEW.md`, filed there because most findings
+land on that change's code. These four are this change's.
+
+- [x] 10.1 `bind-openspec-tools.sh` reported binding what it had declined to
+      bind. `link()` returned 0 on both collision paths, so the caller's
+      `link … && n=$((n + 1))` scored a refusal as a success — reproduced with
+      three colliding destinations, which printed three `collision: … left
+      alone` lines and then `skills: 3 bound`, having created no symlink at all.
+      Only a link that now exists returns 0
+- [x] 10.2 A link that cannot be created — an unwritable skills directory, a
+      full disk — is now named. It was a different failure from a collision and
+      it was silent
+- [x] 10.3 A flag with no value is a usage error, not a shell error. `--host`,
+      `--store` and `--home` each shifted 2 without checking `$#`, so `set -u`
+      aborted with `line 49: $2: unbound variable` — an implementation line
+      number in place of the operator's mistake. `install.sh:328` fixes exactly
+      this and carries a regression test for it; the script it CALLS never got
+      the same fix
+- [x] 10.4 The `[ -z "$skills" ]` branch is removed as unreachable: all five
+      host arms set a non-empty `skills` and an unknown host has already
+      `continue`d. Its comment described a state omp is not in, and dead text is
+      read as a live guarantee
+- [x] 10.5 `init-project.sh` no longer removes `CLAUDE.md` before its
+      replacement exists. The collapse path ran `rm -f` then `ln -s`, so a
+      failing link left the repository with neither file while the message named
+      only the link. Built beside the destination and `mv -f`'d over it instead,
+      which also retires the `COLLAPSE` flag — it existed only to authorise the
+      `rm`. No content was ever at risk: `cmp -s` has already proved the two
+      byte-identical
+- [x] 10.6 RED before GREEN on all five, in `tools/bind-openspec-tools.test.sh`
+      (29 → 42 cases) and `tools/init-project.test.sh` (47 → 50). Two of the new
+      assertions first failed for the wrong reason and were corrected: one left
+      the previous run's links in place, so the binder found them already right
+      and was correct to say so; the other doubled `ln` to fail, which is the
+      only honest way to reach the branch, since every real filesystem condition
+      that breaks `ln -s` there also breaks the `rm` that used to precede it

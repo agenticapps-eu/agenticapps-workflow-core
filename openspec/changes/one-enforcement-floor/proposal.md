@@ -29,9 +29,18 @@ floor should move: with the host hook gone, the git hook is no longer one
 surface among three, it is the surface.
 
 Separately, the per-repository git hook has already produced the divergence it
-exists to prevent. Nine repositories on this machine carry a `pre-commit` hook.
-All nine are this gate. They exist in **four different sizes** — 883, 1201, 2270
-and 5844 bytes. One authority, nine copies, four versions.
+exists to prevent. Measured 2026-08-07: eleven repositories carry a `pre-commit`,
+over ten distinct hooks directories. Nine of those are this gate, in **four
+different sizes** — 1201, 1376, 2270 and 5844 bytes. One authority, nine copies,
+four versions, and nothing on the machine reports the divergence.
+
+The tenth is `fbc-platform`'s husky installation, which matters to the design
+rather than to this argument and is treated in `design.md`.
+
+And the divergence is not the worst of it. `cparx` carries **no `pre-commit` at
+all**, `core.hooksPath` unset both globally and locally — so the repository the
+fleet work is measured against has no git floor whatsoever. A per-repository
+install does not merely diverge; it silently omits.
 
 Linear issue: none yet.
 
@@ -46,6 +55,11 @@ Linear issue: none yet.
   built. With behaviour in the trigger skill and the floor global, what
   remained for it to install was a per-repository copy of a hook that is now
   machine-level.
+- **ADDED: the redundant local bindings are swept.** Six repositories already
+  set a local `core.hooksPath`, which git prefers over the global one, so the
+  new floor would not reach them. Five name the directory git would resolve
+  anyway and are unset — a no-op in each, which is what makes it safe.
+  `fbc-platform`'s `.husky/_` is a real opt-out and is left alone.
 - **CHANGED: `--check` reports the global binding** — whether
   `core.hooksPath` is set, whether it points at the published directory, and
   whether the published `pre-commit` is current by content.
@@ -75,12 +89,18 @@ answering it by implication is how a requirement gets repealed without anyone
 deciding to repeal it. Recorded in `design.md` as the change this one most
 likely spawns.
 
-## Sequencing — this change cannot be applied first
+## Sequencing — the blocker is cleared
 
-`workflow-installation` does not exist in `openspec/specs/`. It is created by
-`core-installer-one-entry-point`, which is in flight. A `MODIFIED` delta against
-a requirement that has not been archived yet has nothing to modify, so this
-change is **blocked on that one being archived**.
+`workflow-installation` did not exist in `openspec/specs/` when this change was
+written, so a `MODIFIED` delta had nothing to modify and this change was blocked
+on `core-installer-one-entry-point` being archived.
+
+**That happened on 2026-08-06.** The predecessor is in
+`openspec/changes/archive/2026-08-06-core-installer-one-entry-point/` and
+`openspec/specs/workflow-installation/spec.md` is durable truth. The delta here
+now has something to modify, and this change is first in the chain — it must
+land before `projects-bind-not-copy`, which removes `cparx`'s `PreToolUse`
+entry and would otherwise leave it with no gate at all rather than a better one.
 
 **The host wiring is no longer this change's to remove.** It was going to be —
 and the plan was to run the installer first, wire three hosts, then delete the
@@ -94,8 +114,21 @@ What remains sequenced is ordinary: archive the predecessor, then apply this.
 
 ## Impact
 
-- Affected capabilities: `workflow-installation` (delta here);
-  `change-gate-enforcement` and `project-hook-binding` are read but not
+- Affected capabilities: `workflow-installation` (delta here) and
+  **`core-self-enforcement`, which this change modifies and must carry its own
+  delta**. ADR-0028 has core's interposition points resolve the *working-tree*
+  gate and states the shared install "SHALL NOT be consulted"; one hook
+  published machine-wide cannot satisfy that. Worse, `tools/install-core-git-hooks.sh`
+  resolves its destination with `git rev-parse --git-path hooks`, which honors
+  `core.hooksPath` — so once the binding is global that installer writes into
+  the machine-level directory, and either refuses permanently on a foreign
+  marker or publishes core's working-tree-resolving hook to every repository on
+  the machine. **That delta now exists** at
+  `specs/core-self-enforcement/spec.md`: the inversion is kept, core sets a
+  local `core.hooksPath` that git prefers over the global binding, the
+  installer refuses when the resolver returns the machine-level directory, and
+  core's binding is declared so the sweep cannot mistake it for redundant.
+- `change-gate-enforcement` and `project-hook-binding` are read but not
   modified — see `design.md` for why each survives untouched.
 - Affected code: `install.sh`, `tools/install.test.sh`,
   `tools/install-core-git-hooks.sh`, `reference-implementations/openspec-change-gate/pre-commit`.
