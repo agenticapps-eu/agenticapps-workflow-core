@@ -26,6 +26,17 @@ across a fleet that still included `agenticapps-dashboard` and
       artifacts, another command, another instruction fragment. The inventory was
       built by looking for what was known to be removed, which cannot find what
       nobody remembered removing
+- [x] 1.4 Two rows the 2026-08-07 inventory missed entirely, found on 2026-08-08
+      and **already removed**, so 1.1 does not rediscover them as a surprise:
+      core's own `.gitnexus` index (44M, gitignored, untracked — the only one in
+      the fleet), and GSD's installer state in `~/.claude/` (`get-shit-done/`,
+      `gsd-pristine/`, `gsd-local-patches/`, `gsd-migration-journal/`,
+      `.gsd-profile`, `gsd-file-manifest.json`, `gsd-install-state.json` —
+      ~12M, all of it the 2026-06-05 install snapshot). Both are exactly what
+      this change is about and neither was in the table: the inventory looked at
+      repositories for *checked-in* artifacts, and these are machine-level and
+      gitignored. The declaration in 3.1 must own paths outside a repository's
+      tracked set, or the same class goes on being invisible
 
 ## 2. The safe half — removed-tool artifacts and `.planning/`
 
@@ -48,13 +59,17 @@ instruction-file work. One PR per repository.
       `stimmung` (7) and `mcp-server` (5) hold untracked, un-ignored content
       that exists nowhere else, so the listing is the only record that will
       survive the deletion
-- [ ] 2.7 **Unregister `meta-observer`** from `~/.claude/settings.json`. Its
-      `SessionEnd` entry runs
+- [x] 2.7 **Unregister `meta-observer`** from `~/.claude/settings.json`. Its
+      `SessionEnd` entry ran
       `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, a
-      path deleted on 2026-08-07; it fires on every session end with a 30s
+      path deleted on 2026-08-07; it fired on every session end with a 30s
       timeout and it is the reason `.planning/skill-observations/` regrew in
       every repository opened. Deleting the directories without this is
-      housekeeping that undoes itself
+      housekeeping that undoes itself. **Done 2026-08-08, ahead of the change** —
+      the hook was firing at a missing path every session, which is not worth
+      preserving until a precondition clears. Backup at
+      `~/.claude/settings.json.pre-meta-observer-removal`. 2.6 may now proceed
+      without the directories regrowing
 
 ## 3. Declare what each removed tool owned
 
