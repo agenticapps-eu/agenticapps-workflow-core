@@ -1,15 +1,27 @@
 # Code review — `feat/projects-bind-not-copy` (PR #89)
 
 Stage 2 under §07, run 2026-08-08 in a cleared session with no implementation
-context. Scope is the whole branch diff, `main...HEAD`: 84 commits, 158 files.
-It is filed here because every finding lands on `one-enforcement-floor`'s code,
-but the diff also carries `fresh-clone-needs-nothing`'s `init-project.sh`.
+context. It is filed here because every finding lands on
+`one-enforcement-floor`'s code, but the diff also carries
+`fresh-clone-needs-nothing`'s `init-project.sh`.
 
-The review surface is smaller than the file count suggests. 94 `.md` are plan
-and spec artifacts, 39 `.jsonl` are the deleted `.planning/` residue. The code
-is ~3,900 lines of shell against ~1,700 deleted: five new scripts, five new test
-suites, and the removal of `provisioning-check.sh`, `normalize-claude-md.sh` and
-`tools/lib/semver.sh`.
+**Scope, corrected after the fact.** The review was run against `main...HEAD`
+with a local `main` that was 32 commits behind `origin/main`, which framed it as
+84 commits and 158 files. The real PR is `origin/main...HEAD`: **53 commits, 50
+files, +9,675/−232** — 36 `.md`, 9 `.sh`, 4 `.yaml`, and the floor's
+`pre-commit`. The stale base made the review a **superset** of the PR, never a
+subset, so nothing went uncovered; and all five reviewed scripts were confirmed
+to sit inside the true diff, so every finding below still lands.
+
+What the superset wrongly swept in was the deletions — `provisioning-check.sh`,
+`normalize-claude-md.sh`, `tools/lib/semver.sh` and `.planning/` are all already
+on `origin/main`, merged by earlier PRs. **This PR is additive**: five new
+scripts, five new test suites, and the plan artifacts. The judgements recorded
+about those deletions below are still true; they are simply about `main`, not
+about this PR.
+
+The review surface is the ~1,000 lines of new shell in those five scripts, and
+the ~2,900 lines of suite that exercise them.
 
 ## Stage 1 — Spec compliance
 
