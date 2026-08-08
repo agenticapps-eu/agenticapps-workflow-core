@@ -412,6 +412,66 @@ rm -f "$FAKEBIN/ln"
   && ok "and AGENTS.md still carries the content" \
   || bad "and AGENTS.md still carries the content" "the shared rule is gone"
 
+# ---------------------------------------------------------------------------
+echo
+echo "K. The initializer enrols the repository in the floor (task 2.8b)"
+# ---------------------------------------------------------------------------
+# WITHOUT THIS THE ARTIFACTS ARE INERT. The published pre-commit runs in every
+# repository on a bound machine and exits 0 for want of this key, so a project
+# that has openspec/ and the instruction file and is NOT enrolled is ungated
+# while looking, from every file on disk, exactly like one that is.
+#
+# Measured 2026-08-08, which is why this exists: five repositories carried live
+# openspec changes and none of them was enrolled, because the only thing that
+# ever wrote the key was somebody remembering to.
+r=$(new_repo enrol)
+run_init "$r"
+
+[ "$(git -C "$r" config --local --get agenticapps.workflow.enrolled)" = true ] \
+  && ok "a fresh init enrols the repository" \
+  || bad "a fresh init enrols the repository" \
+         "got '$(git -C "$r" config --local --get agenticapps.workflow.enrolled)'"
+
+# LOCAL, NEVER GLOBAL, and the dispatcher's own header records why: a stray
+# `--global agenticapps.workflow.enrolled true` enrolled every repository on
+# the machine. The initializer must not be the thing that does that.
+#
+# Asserted against the repository's config FILE rather than through `git config
+# --local`, which would agree with itself. Note git stores this as a subsection
+# — `[agenticapps "workflow"]` with `enrolled = true` — so the dotted name never
+# appears literally, and grepping for it passes on an implementation that wrote
+# nothing at all.
+git -C "$r" config --local --list --show-origin 2>/dev/null \
+  | grep 'agenticapps.workflow.enrolled=true' | grep -q '\.git/config' \
+  && ok "and the key lives in the repository's own config file" \
+  || bad "and the key lives in the repository's own config file" \
+         "origin: $(git -C "$r" config --local --list --show-origin 2>/dev/null | grep enrolled)"
+
+# The complement, and it is the assertion that actually forbids the defect:
+# nothing about this run may have reached the operator's global configuration.
+git config --global --get agenticapps.workflow.enrolled >/dev/null 2>&1 \
+  && bad "and no global enrolment key was written" \
+         "the machine now has a global agenticapps.workflow.enrolled — every repository is enrolled" \
+  || ok "and no global enrolment key was written"
+
+# Re-running is the common case: the script is idempotent everywhere else and
+# an operator re-runs it after adding a host. A second run must not report a
+# fresh enrolment it did not perform.
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && [ "$(git -C "$r" config --local --get agenticapps.workflow.enrolled)" = true ] \
+  && ok "re-running leaves it enrolled and still exits zero" \
+  || bad "re-running leaves it enrolled and still exits zero" \
+         "rc=$RC enrolled='$(git -C "$r" config --local --get agenticapps.workflow.enrolled)'"
+
+# The value is asserted, not merely the key's presence. `--type=bool` in the
+# dispatcher means `false` does not enrol, so writing anything but true here
+# would produce a repository that reads as configured and is not gated.
+[ "$(git -C "$r" config --local --type=bool --get agenticapps.workflow.enrolled)" = true ] \
+  && ok "and it reads as true under the dispatcher's own --type=bool" \
+  || bad "and it reads as true under the dispatcher's own --type=bool" \
+         "the dispatcher would not treat this repository as enrolled"
+
 echo
 echo "  passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]
