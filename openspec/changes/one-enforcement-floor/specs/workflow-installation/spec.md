@@ -192,6 +192,31 @@ govern it. Enrolment SHALL precede removal, and the verification SHALL resolve
 the repository's hooks directory rather than infer coverage from the global
 configuration.
 
+A repository carrying a redundant local `core.hooksPath` SHALL have that binding
+swept as part of its migration, because git prefers a local binding over the
+global one and the verification would otherwise fail for a repository the
+migration is in the middle of adopting. Measured 2026-08-08: two of the three
+repositories in the migration set carry exactly this. The sweep is therefore a
+step inside the migration, not a separate pass that runs beside it, and the
+distinction between a redundant binding and a real one is the one the sweep
+requirement below already draws.
+
+**The full order is enrol → sweep → verify → remove, and every step of it is
+load-bearing.** Enrolment is inert while the local binding still stands: the
+repository is gated by its own hook, which predates the enrolment predicate and
+does not consult it, so writing the marker changes nothing until the sweep. That
+is exactly what makes enrolling first safe, and sweeping first unsafe. Sweeping
+an unenrolled repository hands it to the global dispatcher, whose first act is to
+exit 0 because the marker is absent — so the window between sweep and enrolment
+is one in which the repository has a hook file, a global binding, and **no
+enforcement**, and an interruption inside it leaves that state permanently with
+nothing reporting it. It is the same failure as removing before enrolling,
+reached through the binding rather than through the file, and this requirement
+already forbids it by name.
+
+If verification fails after the sweep, the swept binding SHALL be restored, so a
+repository that cannot be handed to the floor is returned to the surface it had.
+
 Composed carelessly, three of this change's own parts destroy the floor they
 build: the sweep removes the per-repository copies, the published hook exits 0
 without `agenticapps.workflow.enrolled`, and enrolment is only wired for *new*
@@ -216,9 +241,35 @@ policy, at the moment this change is asserting that enrolment is an act.
 - **WHEN** the migration processes a repository carrying a gate hook and the
   operator has accepted
 - **THEN** it is enrolled first
+- **AND** any redundant local `core.hooksPath` is swept next
 - **AND** the global binding is confirmed to govern it by resolving its hooks
   directory
 - **AND** only then is the local hook removed
+
+#### Scenario: The migration is interrupted inside a repository
+
+- **WHEN** the migration is interrupted after any single step of a repository's
+  enrol → sweep → verify → remove sequence
+- **THEN** that repository SHALL still have an active enforcement surface —
+  its own hook while the local binding stands, and the floor once it does not
+- **AND** no interruption point SHALL leave it swept but unenrolled
+
+#### Scenario: Verification fails after the binding was swept
+
+- **WHEN** a repository is enrolled and swept, and resolving its hooks directory
+  then shows the global binding does not govern it
+- **THEN** the swept local binding SHALL be restored
+- **AND** its local hook SHALL remain in place
+- **AND** the repository is reported as not migrated
+
+#### Scenario: A named repository holds a local binding that is not redundant
+
+- **WHEN** a repository in the migration set carries a local `core.hooksPath`
+  naming a directory other than the one git would resolve anyway, or carries the
+  `declared` marker
+- **THEN** the binding SHALL NOT be swept
+- **AND** the repository SHALL NOT be enrolled or have its hook removed
+- **AND** it is reported, naming the binding that keeps it outside the floor
 
 #### Scenario: Enrolment fails
 
@@ -244,8 +295,140 @@ policy, at the moment this change is asserting that enrolment is an act.
 #### Scenario: A repository scheduled for deletion is not migrated
 
 - **WHEN** a repository carrying a gate hook is an archived or retired checkout
-- **THEN** it is excluded from the migration set and reported as excluded
+- **THEN** it SHALL be excluded by not being named
 - **AND** its hook is left alone rather than removed
+
+Disposition is operator input, not a runtime lookup. Whether a checkout is
+archived lives on the forge and in a family instruction file, never in the
+repository, so a migration that tried to detect it would need network access and
+an authoritative record at exactly the moment it is mutating git configuration.
+Under a named set the exclusion needs no mechanism at all: an archived checkout
+is excluded by the same act that includes a live one, and the reporting
+obligation falls on the census that produced the names rather than on the code
+that consumes them.
+
+### Requirement: The migration acts only on repositories the operator names
+
+The migration SHALL act only on repositories given to it by name. It SHALL NOT
+search the filesystem for candidates, and a repository it was not given SHALL be
+left entirely alone — not enrolled, not swept, and its hook not removed.
+
+**Discovery is unnecessary rather than deferred, and the reason is that
+enrolment is itself the consent.** A repository is governed by the floor only if
+it enrolled, and enrolling is a deliberate act performed in that repository. So
+the binding needs no separate consent for a repository that already enrolled: it
+delivers what that repository asked for. What the preflight owes an operator is
+therefore the set of repositories **this run will newly enrol**, which is the set
+it was given by name and is holding in hand — not an enumeration of every
+repository already enrolled, which would require the search this requirement
+forbids and would re-ask a question already answered.
+
+The distinction is load-bearing and the weaker claim is the true one. The
+migration's mutation set and the binding's total impact set are **not** the same
+set: a repository enrolled earlier by project initialisation becomes governed
+when the binding lands without appearing in any report, and the census showing
+zero enrolled repositories today is a measurement, not an invariant. The
+preflight SHALL therefore describe what it will newly enrol and SHALL NOT claim
+to enumerate every repository the binding governs.
+
+**A search also cannot make the judgements the set requires.** Measured across
+61 repositories on 2026-08-08, seven carry a gate hook and three belong in the
+migration set. Separating them takes four calls — archived versus live, a husky
+installation versus this workflow's gate, deliberate adoption versus a drive-by
+install, and a retired checkout versus a current one — and not one is a property
+of a file on disk. A search would surface seven candidates and require the
+operator to classify them anyway, having read 61 repositories first.
+
+**A named repository is identified by its git common directory, not by the path
+typed.** Each name SHALL be canonicalised, SHALL be rejected without writes if it
+does not resolve to the top of a git repository, and SHALL be deduplicated by
+resolved common directory so two spellings of one repository — a relative path, a
+symlink, a second alias — cannot be processed twice. Linked worktrees share one
+common directory, and therefore one local configuration and one hooks directory,
+so naming any checkout acts on all of them: the preflight SHALL report every
+worktree it affects, or the claim that an unnamed repository is left entirely
+alone is false for a sibling nobody mentioned.
+
+**Naming a repository is not evidence about the hook inside it.** Before removing
+any `pre-commit`, the migration SHALL establish that the file is this workflow's
+gate rather than an operator's own, and SHALL refuse that repository without
+writes when the hook is absent, foreign, or ambiguous. This is the lesson the
+hooks-directory inventory already learned one level up: a file's location proves
+who could have written it and never who did, so recognition has to come from the
+file rather than from the fact that somebody typed a path.
+
+Everything the run will do SHALL be reported before anything is done, under a
+**single** acceptance covering what will be published into the hooks directory,
+what this run will newly enrol, and what will be migrated. Separate acceptances
+for the same act teach an operator to answer without reading, which is the
+failure the per-entry inventory of the hooks directory exists to prevent.
+
+Declining SHALL leave untouched everything downstream of the acceptance: nothing
+published into the hooks directory, no global binding set, and no repository
+enrolled, swept, or stripped of its hook. The guarantee is scoped to the acts
+this requirement governs and SHALL NOT be stated as leaving the machine
+untouched — the installer publishes its payload before reaching this point, so a
+promise about the whole install is one the preflight cannot keep.
+
+#### Scenario: The preflight reports before it acts
+
+- **WHEN** the migration runs with repositories named
+- **THEN** it SHALL report each named repository and the acts it will perform on
+  it, together with what will be published and what the binding will newly govern
+- **AND** SHALL require one acceptance covering all of it
+- **AND** SHALL perform none of it before that acceptance
+
+#### Scenario: The operator declines
+
+- **WHEN** the operator declines the preflight
+- **THEN** nothing SHALL be published into the hooks directory
+- **AND** the global binding SHALL NOT be set
+- **AND** no named repository SHALL be enrolled, swept, or have its hook removed
+
+#### Scenario: A name does not resolve to a repository
+
+- **WHEN** a given name does not canonicalise to the top of a git repository
+- **THEN** it SHALL be rejected before any repository is modified
+- **AND** the run SHALL report the name it could not resolve
+
+#### Scenario: One repository is named twice
+
+- **WHEN** two given names resolve to the same git common directory
+- **THEN** the repository SHALL be processed once
+
+#### Scenario: A named repository has linked worktrees
+
+- **WHEN** a named checkout shares its git common directory with other worktrees
+- **THEN** the preflight SHALL report every worktree the migration affects
+- **AND** the acceptance SHALL cover them before the configuration they share is
+  modified
+
+#### Scenario: The hook in a named repository is not this workflow's gate
+
+- **WHEN** a named repository's `pre-commit` is absent, foreign, or cannot be
+  recognised as this workflow's gate
+- **THEN** the migration SHALL refuse that repository without writing to it
+- **AND** SHALL report why, naming the file it declined to remove
+
+#### Scenario: A repository was not named
+
+- **WHEN** a repository on the machine carries a gate hook and was not named
+- **THEN** the migration SHALL NOT enrol it, sweep it, or remove its hook
+- **AND** it remains gated by the hook it already carries
+
+#### Scenario: The filesystem is not searched
+
+- **WHEN** the migration determines its set
+- **THEN** it SHALL take the set from the names it was given
+- **AND** SHALL NOT walk the filesystem for repositories
+
+#### Scenario: One repository fails and the rest continue
+
+- **WHEN** a named repository cannot be swept, enrolled, or verified
+- **THEN** that repository SHALL keep its hook and be reported
+- **AND** the migration SHALL continue with the repositories still to process
+- **AND** the run SHALL exit non-zero so a partial migration is never reported as
+  a complete one
 
 ### Requirement: A local binding that is redundant is swept; one that is real is kept
 

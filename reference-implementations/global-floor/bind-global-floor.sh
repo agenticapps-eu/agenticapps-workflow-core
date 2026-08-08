@@ -79,21 +79,167 @@ if [ -n "$(find "$HOOKS_DIR" -maxdepth 0 \( -perm -g+w -o -perm -o+w \) 2>/dev/n
   exit 1
 fi
 
+# ── Inventory, before anything is published or bound ───────────────────────
+# THE ASYMMETRY: PUBLISH IS FILE-SCOPED, BIND IS DIRECTORY-SCOPED.
+#
+# One file is published and a whole directory is bound. Git runs whatever it
+# finds there by name, so binding activates every entry — pre-push, commit-msg,
+# any of them — machine-wide, in every repository the floor governs. The two
+# guards above cannot close that. They establish that the directory is not a
+# symlink and that no OTHER account can write it, which together prove who
+# COULD have written a file and never that the operator meant it to run on
+# every commit. An entry the operator dropped there themselves passes both.
+#
+# Measured 2026-08-08: this directory held one file, a 46-line pre-commit
+# vendored from an archived host repository, unmarked, exporting
+# OPENSPEC_GATE_SELF=opencode and describing a rule retired at gate 2.0.0. At
+# `pre-commit` it self-heals, because publishing replaces it. Named `pre-push`
+# it would have become the machine's commit-time gate, unchallenged.
+#
+# Consent is PER ENTRY and NAMES IT. "The directory contains unexpected files,
+# proceed?" is the prompt everyone accepts, and it grants the same thing
+# whether the entry is a stale copy of our own hook or a pre-push nobody
+# remembers.
+ACCEPT="${GLOBAL_FLOOR_ACCEPT:-}"
+
+# `$ACCEPT` is unquoted so the list splits on whitespace — and unquoted
+# expansion also does PATHNAME expansion, so globbing is disabled around it.
+# Without `set -f`, GLOBAL_FLOOR_ACCEPT='*' expanded against the working
+# directory the binder happened to be run from: reproduced, with a file named
+# `pre-push` in that directory, `*` matched the entry and the machine bound.
+# That is the blanket acceptance this requirement forbids, arriving through the
+# shell rather than the design, and it accepts different entries depending on
+# where the command was run.
+accepted() {
+  local a rc=1
+  set -f
+  for a in $ACCEPT; do [ "$a" = "$1" ] && { rc=0; break; }; done
+  set +f
+  return "$rc"
+}
+
+# Asked only when there is somebody to ask. install.sh runs this with stdin
+# inherited, so an interactive install can decide in place; a scripted one
+# reports what it would have asked and refuses, which is the same posture
+# install.sh takes for every other acceptance it needs.
+confirm() {
+  [ -t 0 ] || return 1
+  printf 'global-floor: run %s on every commit, in every repository the floor governs? [y/N] ' "$1"
+  local a
+  read -r a || return 1
+  case "$a" in y | Y) return 0 ;; esac
+  return 1
+}
+
+unaccepted=''
+inventoried=0
+pre_commit_detail=''
+pre_commit_marked=0
+while IFS= read -r path; do
+  [ -n "$path" ] || continue
+  name="${path##*/}"
+  detail="$(wc -c < "$path" 2>/dev/null | tr -d ' ') bytes"
+  [ -d "$path" ] && detail='directory'
+  detail="$detail, $(date -r "$path" '+%Y-%m-%d' 2>/dev/null)"
+
+  case "$name" in
+    # Where the published dispatcher sends operator-owned hooks. Part of the
+    # design, so flagging it would fire the refusal on every correctly composed
+    # machine — which is how a guard comes to be switched off.
+    hooks.d) continue ;;
+    # THE VERDICT ON pre-commit IS DEFERRED TO THE PUBLISHER, and the security
+    # pass is why. This used to exempt the entry whenever it carried a version
+    # marker — but a marker is a comment, so its presence cannot establish that
+    # this installer wrote the file. Reproduced: a pre-commit carrying
+    # `# global-floor-version: 9.9.9` was newer than the checkout's, so
+    # arbitration correctly declined to publish, the file survived, and the run
+    # bound the directory it sits in while printing "holds nothing this
+    # installer did not publish".
+    #
+    # The carve-out was justified by "publishing replaces it". Where the publish
+    # does not replace it, the justification goes with it — so what settles the
+    # question is the publisher's own exit status, below.
+    pre-commit)
+      pre_commit_detail="$detail"
+      grep -q "^# $MARKER_KEY: " "$path" 2>/dev/null && pre_commit_marked=1
+      continue ;;
+  esac
+
+  inventoried=1
+  say "inventory: unrecognised entry — $name ($detail)"
+  if accepted "$name" || confirm "$name"; then
+    say "  accepted by name"
+  else
+    unaccepted="$unaccepted $name"
+  fi
+done <<INVENTORY
+$(find "$HOOKS_DIR" -mindepth 1 -maxdepth 1 2>/dev/null)
+INVENTORY
+
+if [ -n "$unaccepted" ]; then
+  say "REFUSED —$unaccepted would be activated by binding this directory, and"
+  say "this installer did not publish it. Every repository the floor governs would"
+  say "run it. Nothing was published and core.hooksPath was NOT set."
+  say "Accept it by name and re-run:"
+  say "  GLOBAL_FLOOR_ACCEPT=\"$(printf '%s' "${unaccepted# }")\" $0"
+  exit 1
+fi
+
 # ── Publish ────────────────────────────────────────────────────────────────
 
 "$SHARED" "$SRC" "$HOOKS_DIR/pre-commit" "$MARKER_KEY" >/dev/null 2>&1
 rc=$?
 case $rc in
-  0) say "published pre-commit to $HOOKS_DIR" ;;
+  0) say "published pre-commit to $HOOKS_DIR"
+     # It is ours now. Worth reporting only if it was not before: a hook
+     # replaced in silence looks exactly like one that was never there, which
+     # is how the vendored copy sat in this directory unnoticed.
+     if [ -n "$pre_commit_detail" ] && [ "$pre_commit_marked" = 0 ]; then
+       inventoried=1
+       say "inventory: unrecognised entry — pre-commit ($pre_commit_detail), no $MARKER_KEY marker."
+       say "  It has been replaced by the publish above, which is why it does not refuse."
+     fi ;;
   # Exit 3 is the helper's documented SUCCESS: the destination already holds a
   # strictly newer version, so "at least as new as the source" holds either
-  # way. Calling it a failure would refuse to bind a machine that is more
+  # way. Calling it a PUBLISH failure would refuse a machine that is more
   # current than this checkout — correct state, reported as broken.
-  3) say "satisfied pre-commit — destination already newer" ;;
+  #
+  # It is not a bind decision, though, and conflating the two is the hole the
+  # security pass found. The publish succeeded and the file in place is still
+  # not one this run wrote, so the entry goes back through the same consent the
+  # inventory applies to every other entry it did not publish.
+  3) say "satisfied pre-commit — destination already newer"
+     # Gated on the inventory having actually SEEN a file. "Already newer" with
+     # nothing there is contradictory state, and there is no entry to consent
+     # to — asking about a file that is not present is a prompt nobody can
+     # answer.
+     if [ -n "$pre_commit_detail" ]; then
+       inventoried=1
+       say "inventory: unrecognised entry — pre-commit ($pre_commit_detail)"
+       say "  Newer than this checkout's, so the publish left it in place: this run did"
+       say "  not write the hook it is about to bind to every repository on the machine."
+       if accepted pre-commit || confirm pre-commit; then
+         say "  accepted by name"
+       else
+         say "REFUSED — binding this directory would run a pre-commit this run neither"
+         say "published nor replaced, on every commit in every repository the floor"
+         say "governs. core.hooksPath was NOT set and the file was not touched."
+         say "Accept it by name and re-run:"
+         say "  GLOBAL_FLOOR_ACCEPT=\"pre-commit\" $0"
+         exit 1
+       fi
+     fi ;;
   *) say "FAILED to publish pre-commit to $HOOKS_DIR (exit $rc)."
      say "core.hooksPath was NOT set: a binding with no hook behind it commits silently."
      exit 1 ;;
 esac
+
+# Reported even when it finds nothing, because silence and "nobody looked" read
+# identically — and nobody looking is the defect this closes. Printed after the
+# publish rather than before it, because before the publish this claim can be
+# false: the entry the arbitration declines to replace is exactly the one the
+# claim would be covering up.
+[ "$inventoried" = 0 ] && say "inventory: $HOOKS_DIR holds nothing this installer did not publish"
 
 # ── Bind ───────────────────────────────────────────────────────────────────
 # `--type=path` so git expands a `~` the operator wrote by hand; `--get`
@@ -111,20 +257,105 @@ same_dir() {
   [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
+# A foreign binding is settled before core is touched, and the order is load
+# bearing. Refusing means the global binding is never set, so core's hook is
+# never displaced, so there is no casualty to repair — and writing into a
+# repository with nothing to repair is the category error Decision 4 removed.
+#
+# Reported, never overwritten. An operator who has bound a hooks directory did
+# so deliberately, and a tool that silently rebinds it retakes a decision that
+# was already made — machine-wide, at commit time. This is the posture the
+# git-hook installer already takes toward a foreign hook, one level up.
+if [ -n "$current" ] && ! same_dir "$current" "$HOOKS_DIR"; then
+  say "REFUSED — core.hooksPath is already set to $current"
+  say "This workflow would have set $HOOKS_DIR. The global configuration is unchanged."
+  say "Composition belongs in $HOOKS_DIR/hooks.d, which the published hook runs."
+  exit 1
+fi
+
+# ── Core's own binding, before the global one ──────────────────────────────
+# Setting the global binding IS the moment core's own hook stops being
+# preferred: with core.hooksPath set, `.git/hooks/` is not consulted at all.
+# Four candidate owners for this repair were searched for and every one
+# excludes it in its own text — install.sh by Decision 4, init-project.sh and
+# fresh-clone-needs-nothing by "no hooks", core's CI by being a detector rather
+# than an establisher. So the binder takes it: it is the only artifact that
+# knows both facts at once, and it runs from inside core's checkout by
+# construction. The displacement and the repair are one act, for the same
+# reason publish and bind are one act.
+CORE_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
+
+# The checkout must be the repository itself, not merely inside one. Without
+# this, a binder unpacked below some unrelated repository would write a local
+# binding into THAT repository — which is precisely the arbitrary-repository
+# write Decision 4 removed, arrived at by accident instead of by design.
+core_top="$(git -C "$CORE_ROOT" rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$core_top" ] || ! same_dir "$core_top" "$CORE_ROOT"; then
+  say "FAILED — core's local core.hooksPath cannot be established: $CORE_ROOT"
+  say "is not the top of a git repository. This script runs from inside core's"
+  say "checkout by construction, and binding the global path from anywhere else"
+  say "would displace a hook it cannot repair. Nothing was bound."
+  exit 1
+fi
+
+# `--git-common-dir`, never `--git-path hooks`: the latter HONORS core.hooksPath
+# and would return whatever is already set, so a wrong binding would confirm
+# itself. `--git-common-dir` also resolves a linked worktree to the main
+# checkout, which is the directory git actually reads hooks from.
+core_common="$(git -C "$CORE_ROOT" rev-parse --git-common-dir 2>/dev/null)"
+case "$core_common" in
+  '') say "FAILED to resolve core's git directory. Nothing was bound."; exit 1 ;;
+  /*) ;;
+  *)  core_common="$CORE_ROOT/$core_common" ;;
+esac
+CORE_HOOKS="$core_common/hooks"
+
+core_local="$(git -C "$CORE_ROOT" config --local --get --type=path core.hooksPath 2>/dev/null)"
+core_declared="$(git -C "$CORE_ROOT" config --local --get agenticapps.hooksbinding 2>/dev/null)"
+
+declare_core() {
+  git -C "$CORE_ROOT" config --local agenticapps.hooksbinding declared && return 0
+  # The sweep unsets every local binding that names the default directory,
+  # because five of the six on the machine measured were redundant. The
+  # declaration is the only thing distinguishing core's deliberate one from
+  # those, so a binding without it is a repair the next installer run undoes.
+  say "FAILED to declare core's local core.hooksPath. The global binding was NOT set."
+  return 1
+}
+
+if [ -n "$core_local" ] && ! same_dir "$core_local" "$CORE_HOOKS"; then
+  # Same posture as the global refusal above, one level down. husky sets exactly
+  # this, and retaking that decision at commit time is what this change refuses
+  # to do — including by leaving a declaration that would tell the sweep to
+  # protect somebody else's hooks directory.
+  say "REFUSED — core's local core.hooksPath is already set to $core_local"
+  say "This workflow would have set $CORE_HOOKS. Core's configuration is unchanged"
+  say "and the global binding was NOT set: it would displace a hook this run"
+  say "cannot account for."
+  exit 1
+elif [ -n "$core_local" ] && [ "$core_declared" = declared ]; then
+  say "satisfied — core's local core.hooksPath already declares $CORE_HOOKS"
+elif [ -n "$core_local" ]; then
+  # The right directory with no declaration is the interrupted repair, not an
+  # operator decision. Completing it takes nothing back.
+  declare_core || exit 1
+  say "declared core's local core.hooksPath -> $CORE_HOOKS"
+else
+  git -C "$CORE_ROOT" config --local core.hooksPath "$CORE_HOOKS" || {
+    say "FAILED to set core's local core.hooksPath. The global binding was NOT set:"
+    say "it would leave core gated by a floor dispatcher that exits 0 in silence"
+    say "for a repository the floor does not govern."
+    exit 1; }
+  declare_core || exit 1
+  say "bound core's local core.hooksPath -> $CORE_HOOKS"
+fi
+
+# ── The global binding ─────────────────────────────────────────────────────
 if [ -z "$current" ]; then
   git config --global core.hooksPath "$HOOKS_DIR" || {
     say "FAILED to set core.hooksPath. The hook is published but the machine is UNBOUND."
     exit 1; }
   say "bound core.hooksPath -> $HOOKS_DIR"
-elif same_dir "$current" "$HOOKS_DIR"; then
-  say "satisfied — core.hooksPath already resolves to $HOOKS_DIR"
 else
-  # Reported, never overwritten. An operator who has bound a hooks directory
-  # did so deliberately, and a tool that silently rebinds it retakes a decision
-  # that was already made — machine-wide, at commit time. This is the posture
-  # the git-hook installer already takes toward a foreign hook, one level up.
-  say "REFUSED — core.hooksPath is already set to $current"
-  say "This workflow would have set $HOOKS_DIR. The global configuration is unchanged."
-  say "Composition belongs in $HOOKS_DIR/hooks.d, which the published hook runs."
-  exit 1
+  say "satisfied — core.hooksPath already resolves to $HOOKS_DIR"
 fi

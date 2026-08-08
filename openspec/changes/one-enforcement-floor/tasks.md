@@ -344,10 +344,15 @@ ran, so this change starts from an installer that writes no host configuration.
 
 Six repositories set a local `core.hooksPath`, which git prefers over the global
 one, so the new floor reaches none of them. Five name the directory git would
-resolve anyway, so unsetting them changes nothing today and restores reach.
+resolve anyway. **The sweep is how those five come under the floor** — the unset
+is the mechanism, not a tidy-up beside it. It changes nothing only while no
+global binding exists, which is the state it was measured in.
 
 - [ ] 3b.1 Unset the local `core.hooksPath` in `callbot` and `fx-signal-agent`
-      — **two configs, two bindings**, re-measured 2026-08-08.
+      — **two configs, two bindings**, re-measured 2026-08-08. This is the act
+      that brings both under the floor: while their local binding stands, the
+      global one does not reach them, so the unset is what the floor's coverage
+      of these two consists of.
       This has now been wrong twice in two days, in the same direction each
       time, which is the argument for 1.1-style re-measurement rather than a
       list maintained by hand. It read "four configs, five bindings" while the
@@ -357,25 +362,41 @@ resolve anyway, so unsetting them changes nothing today and restores reach.
       repository scheduled for deletion — unsetting a binding in a directory
       that is about to be removed returns nothing
 - [x] 3b.2 Confirm each named its own default hooks directory before unsetting,
-      so the sweep is provably a no-op rather than assumed to be one.
-      **Done 2026-08-07**, and the obvious check would have been circular:
+      so the sweep is provably **redundant as a setting** rather than assumed to
+      be. **Done 2026-08-07**, and the obvious check would have been circular:
       `git rev-parse --git-path hooks` *honours* `core.hooksPath`, so resolving
       it while the binding is set proves only that the binding is set. The
       comparison is therefore against `--git-common-dir`, which does not honour
-      it. All five swept bindings equal `<common-dir>/hooks` exactly, so the
-      sweep is a proven no-op. `fbc-platform` is the only one that differs
+      it. All five swept bindings equal `<common-dir>/hooks` exactly.
+      `fbc-platform` is the only one that differs.
+      **The measurement stands; the conclusion drawn from it does not.** It read
+      "so the sweep is a proven no-op", and unsetting a redundant binding is a
+      no-op only *while no global binding exists* — the state it was measured
+      in, and still the state of this machine today. The instant the floor is
+      bound, those same unsets are what hand five repositories to it. That is
+      the intent and it is the opposite of a no-op. The correction is not
+      cosmetic: "provably a no-op" was the argument that made writing to another
+      repository's git config feel safe enough to need no authorization
+      boundary, which is 3b.5 arrived at from the other side (Decision 6)
 - [ ] 3b.3 Leave `fbc-platform`'s `.husky/_` binding untouched. It is a genuine
       opt-out protecting a real husky installation, and the change records it as
       such rather than treating it as drift
 - [ ] 3b.4 Confirm after the sweep that the global binding governs each swept
       repository, by resolving its hooks directory rather than by inference
-- [ ] 3b.5 **Define the sweep's discovery and authorization boundary.** The
+- [x] 3b.5 **Define the sweep's discovery and authorization boundary.** The
       requirements read as a general sweep while 3b.1 hard-codes four named
       repositories, so nothing states what set is walked, who authorises writing
       to another repository's config, what happens on partial failure, or
       whether a dry-run exists. A sweep that mutates git configuration outside
       the repository it runs in needs all four stated before it runs, not after.
-      Raised by a reviewer
+      Raised by a reviewer.
+      **Closed 2026-08-08 as Decision 7.** All four answered in the delta, and
+      3b.1's hard-coded four stop being an embarrassment to explain away: naming
+      the set *is* the boundary, so the hard-coding was the right shape wearing
+      the wrong justification. The sweep does not walk anything, the operator
+      authorises by naming a repository and accepting one preflight that reports
+      every act first, and a repository that fails keeps its hook and is
+      reported while the run continues and exits non-zero
 
 ## 4. Drop `--project`
 
@@ -568,11 +589,69 @@ highest-consequence first:
 - [ ] 9.4a Implement it: fold the migration report into 2.9's preflight rather
       than building a second acceptance. What the binding will newly govern,
       what publishing will replace (2.1a) and what will be enrolled are one
-      report and one acceptance, not three that have to agree
+      report and one acceptance, not three that have to agree.
+      **Unblocked 2026-08-08 by Decision 7, which had to come first.** The
+      migration writes git config and deletes hooks in *other* repositories, and
+      9.10/3b.5 require that boundary stated before such a thing runs, not
+      after — so implementing this first would have built exactly what the open
+      finding forbids. The delta now carries "The migration acts only on
+      repositories the operator names" with five scenarios
+- [ ] 9.4c **The census corrected the per-repository ordering, so the code owes a
+      sweep step the tasks did not have.** Measured 2026-08-08 across all 61
+      repositories under `~/Sourcecode`: `callbot` and `fx-signal-agent` each
+      carry a local `core.hooksPath` naming their own default hooks directory,
+      so git prefers it and the global binding does not govern them. Two of the
+      three in the migration set therefore fail 3.1's verification step unless
+      the redundant binding is swept first. The order is sweep → enrol → verify
+      → remove, and §3b's sweep is a step *inside* the migration rather than a
+      pass running beside it. Second time in this change that treating the sweep
+      as cosmetic produced a wrong ordering; Decision 6 caught the first.
+      **Corrected the same day by the plan review, before any code**: the order
+      above is wrong and the right one is **enrol → sweep → verify → remove**.
+      gemini and codex found it independently. Sweeping an unenrolled repository
+      hands it to a dispatcher that exits 0 for want of the marker, so the gap
+      between sweep and enrolment is a window with a hook file, a global binding
+      and no enforcement — the very state this section forbids, reached through
+      the binding rather than through the file. Enrolment is inert until the
+      sweep, because the local hook predates the predicate and never reads it,
+      so enrolling first costs nothing and closes the window
 - [ ] 9.4b The interruption scenario needs a test that actually interrupts —
       kill the migration between two repositories and assert the invariant holds
       across the boundary, rather than asserting each repository in isolation
-      and calling the composition proven
+      and calling the composition proven.
+      **Widened 2026-08-08 by the plan review**: between repositories is the
+      easy boundary and not the dangerous one. Both reviewers located the real
+      hazard *inside* a repository, so the interruption test SHALL cut after
+      each of enrol, sweep and verify, not only between repositories
+- [ ] 9.4d **Ordering, from the plan review — RED before GREEN.** The order is
+      enrol → sweep → verify → remove. The test that matters asserts the
+      negative: with the binder stopped immediately after the sweep, a commit in
+      that repository is still gated. Under the rejected sweep-first order that
+      commit succeeds, so the case fails before the fix and passes after it,
+      which is the only thing that makes it a regression guard rather than a
+      description
+- [ ] 9.4e **Restore the swept binding when verification fails.** A repository
+      enrolled and swept whose hooks directory then does not resolve to the
+      floor is returned to the surface it had, rather than left holding a hook
+      git no longer consults
+- [ ] 9.4f **Identity, from the plan review.** Canonicalise each name; reject
+      without writes anything that is not the top of a repository; deduplicate
+      by `--git-common-dir` so a relative path and a symlink to one repository
+      are one entry. Cases for each, plus the linked-worktree report: naming one
+      checkout modifies configuration every sibling shares, and the preflight
+      names them or the "left entirely alone" guarantee is false for a worktree
+      nobody mentioned
+- [ ] 9.4g **Recognise the hook before removing it.** Naming a repository is the
+      operator's belief about what is there, never evidence about the file. An
+      absent, foreign or unrecognisable `pre-commit` refuses that repository
+      without writes. Same shape as 10.7 one level down, and the negative test
+      is the one that matters: a repository named by mistake keeps the hook its
+      operator wrote
+- [ ] 9.4h **Cases the review found missing outright**: an unnamed repository is
+      untouched; a repository enrolled earlier and not named is neither reported
+      as newly governed nor modified; declining writes nothing downstream of the
+      acceptance; one repository failing leaves the rest processed and the run
+      exiting non-zero
 - [ ] 9.5 **The unwind requirement contradicts its own ordering.** "Publish
       before bind" plus "SHALL unset a binding it created if publishing did not
       complete" — if publishing precedes binding and publishing fails, there is
@@ -614,7 +693,22 @@ highest-consequence first:
       Show the arithmetic for what remains, or invoke the escape clause now
 - [ ] 9.10 **Repository discovery is undefined** for both the sweep and
       `--check`'s "names any repository the floor cannot reach". Same finding as
-      3b.5, raised again independently — worth promoting out of a sub-task
+      3b.5, raised again independently — worth promoting out of a sub-task.
+      **The migration half is closed 2026-08-08 as Decision 7; the `--check`
+      half is deliberately still open.** Discovery turned out to be unnecessary
+      rather than hard: the floor governs only enrolled repositories and
+      enrolment has exactly two sources, so the installer already holds the set
+      a binding will newly govern and has nothing to search for. Measured across
+      61 repositories before deciding — seven carry a gate hook, none is
+      enrolled, and reducing seven to three takes four judgements that are not
+      properties of any file on disk. 3b.5's four questions are answered in the
+      delta: no set is walked, the operator authorises by naming and by
+      accepting one preflight, a failed repository keeps its hook and is
+      reported while the run continues, and the preflight is the dry-run.
+      `--check` is read-only and reports about a machine rather than acting on
+      one, so a declared root is defensible there and is not settled here —
+      answering half a finding and closing the whole thing is how the other half
+      disappears. Stays `[ ]` until that half lands
 - [x] 9.11 **The `core-self-enforcement` contradiction.** codex HIGH: the design
       removes the host `PreToolUse` hook while the unchanged durable requirement
       still mandates it. Either carry a core-only exception explicitly or amend
@@ -672,21 +766,121 @@ highest-consequence first:
 
 ## 10. Implementation the Decision 6 findings create
 
-- [ ] 10.1 The binder inventories `~/.agenticapps/git-hooks/` before binding and
+- [x] 10.1 The binder inventories `~/.agenticapps/git-hooks/` before binding and
       refuses on an entry it did not publish, until accepted by name. Per entry,
-      naming it — never a blanket "unexpected files, proceed?"
-- [ ] 10.2 The binder establishes core's local binding and
+      naming it — never a blanket "unexpected files, proceed?" Acceptance is
+      `GLOBAL_FLOOR_ACCEPT="<name> <name>"`, plus a per-entry prompt when stdin
+      is a tty, which is the posture `install.sh` already takes for every other
+      acceptance. The inventory runs **before the publish**, because the entry
+      the publish replaces is the one that most needs reporting. Two carve-outs,
+      both drawn from the requirement rather than convenience: `hooks.d` is the
+      composition directory the dispatcher runs, so flagging it would fire the
+      refusal on every correctly composed machine; and an unmarked `pre-commit`
+      is reported but does **not** block, because it does not survive the run —
+      unmarked reads as 0.0.0 and arbitration replaces it before anything is
+      bound. Everything else refuses. Re-measured 2026-08-08: the vendored
+      46-line `opencode` `pre-commit` is still sitting in that directory,
+      unmarked and dated 2025-07-25, so the self-heal path is the one a real run
+      takes today
+- [x] 10.2 The binder establishes core's local binding and
       `agenticapps.hooksbinding=declared` **before** the global binding, and does
-      not set the global one if either write fails
-- [ ] 10.3 Remove core's `PreToolUse` registration from `.claude/settings.json`,
+      not set the global one if either write fails. Two things the spec delta
+      left open were settled by placement rather than by prose. A **foreign
+      global binding is refused first**, before core is touched: refusing means
+      the global binding is never set, so core's hook is never displaced, so
+      there is no casualty to repair — and writing into a repository with
+      nothing to repair is the shape Decision 4 removed. A **foreign LOCAL
+      binding in core is reported, never overwritten**, the same posture the
+      binder already takes one level up; husky sets exactly that, and a
+      declaration left on somebody else's hooks directory would tell the sweep
+      to protect it. `--git-common-dir` resolves the default directory, never
+      `--git-path hooks`, which honours `core.hooksPath` and would let a wrong
+      binding confirm itself
+- [x] 10.3 Remove core's `PreToolUse` registration from `.claude/settings.json`,
       which 9.11's amendment now permits and 2.x requires. Confirm the
-      `pre-commit` hook and CI still gate, since they become the only two
-- [ ] 10.4 Reword 3b.1 and 3b.2 so the sweep is described as the mechanism that
+      `pre-commit` hook and CI still gate, since they become the only two.
+      `.claude/settings.json` held nothing but that registration, so it is
+      **deleted rather than emptied** — `{}` is dead text and dead text reads as
+      a live guarantee. The wrapper at `.claude/hooks/openspec-change-gate.sh`
+      **stays**: it is core's own instance of the shim contract, two suites read
+      its version marker and its self-hosting resolution order as the profile
+      they contrast against, and `project-hook-binding` provides for exactly
+      this — a copy documenting **in-file** that it is intentionally
+      unregistered has that decision preserved rather than reconciled away as
+      drift. That paragraph is now in the file and
+      `tools/test-claude-hook-wrapper.sh` asserts it. The suite's two
+      registration cases are inverted (the registration must be **absent**) and
+      two more added for the surfaces that now carry the whole load: CI runs the
+      gate on `pull_request` and on pushes to `main`, and the installer that
+      writes the `pre-commit` hook exists. 12 → 14 cases, RED first
+- [x] 10.4 Reword 3b.1 and 3b.2 so the sweep is described as the mechanism that
       extends the floor's reach, not as a no-op. The measurement stands; the
-      conclusion drawn from it does not
-- [ ] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
+      conclusion drawn from it does not. The §3b preamble and `proposal.md`
+      carried the same claim in the same words — "a no-op in each, which is what
+      makes it safe" — so all four are corrected together; a corrected task
+      contradicted by its own section heading is not corrected. `design.md`'s
+      "a no-op **setting**" is left alone: that describes the binding, which is
+      genuinely redundant, not the unset
+- [x] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
       bind; acceptance by name allows it; a failed core-binding write aborts the
-      global bind; core's hook still runs after a successful bind
+      global bind; core's hook still runs after a successful bind.
+      `tools/global-floor-bind.test.sh` 18 → 43 cases, RED first in both halves,
+      and every one of the 43 fails under `GLOBAL_FLOOR_BIND_BIN=/usr/bin/true`.
+      Three drafted assertions passed under that wrong implementation and were
+      tightened: "core's hook still runs" is satisfied by a binder that bound
+      nothing, because with nothing bound `.git/hooks/` runs by default, so the
+      global binding is now asserted alongside the marker. `run_binder` also
+      reads stdin from `/dev/null`, or the tty prompt would hang the suite for
+      whoever ran it from a terminal
+
+- [x] 10.6 **The suite wrote into the repository it lives in, and only this
+      change could surface it.** Three `install.test.sh` cases ran the real
+      checkout's `install.sh`, which resolves the real binder, whose checkout is
+      this one — so the first green run left core's own `core.hooksPath` and
+      declaration set on the operator's machine. `GIT_CONFIG_GLOBAL` was pinned
+      per case for exactly this class of leak and cannot cover it: a
+      repository's local config path is fixed by the repository. Fixed at both
+      ends — `new_core()` makes the copied checkout a real repository so those
+      cases isolate, and `run_install` records the real repo's binding around
+      every run, failing by case name and restoring what it found. Verified by
+      removing one `new_core` and watching the guard fire
+
+- [x] 10.7 **What the security pass found in the consent gate 10.1 had just
+      built.** Both were reproduced end to end before being fixed, and both are
+      the same shape: a gate that reported consent it had not obtained.
+      - [x] **The acceptance list globbed.** `for a in $ACCEPT` is unquoted so
+            the list splits on whitespace, and unquoted expansion also does
+            *pathname* expansion. `GLOBAL_FLOOR_ACCEPT='*'` — what an operator
+            types meaning "accept whatever is there" — expanded against the
+            working directory the binder happened to run from; with a file named
+            `pre-push` in it, the wildcard matched the entry and the machine
+            bound. That is the blanket acceptance this requirement forbids in as
+            many words, arriving through the shell rather than the design, and
+            it accepts different entries depending on where the command was run.
+            Fixed with `set -f` around the loop
+      - [x] **A marked `pre-commit` was exempt, and the marker is a comment.**
+            The inventory skipped `pre-commit` whenever it carried a version
+            marker — but a marker cannot establish who wrote a file. A
+            `pre-commit` carrying `9.9.9` is newer than the checkout's, so
+            arbitration correctly declines to publish, the file survives, and
+            the run bound the directory it sits in **while printing "holds
+            nothing this installer did not publish"**. The false positive claim
+            is the finding: a clean-inventory line exists so that a clean result
+            is evidence rather than silence, and evidence that is sometimes
+            false is worse than the silence it replaced. The carve-out was
+            justified by "publishing replaces it", so where the publish does not
+            replace it the justification goes too. The recognition test is now
+            **the publisher's own exit status** rather than the presence of a
+            comment — exit 3 means the file in place is not ours, and it goes
+            through the same per-entry consent as any other entry. Exit 3 is
+            still not a publish failure; it is no longer a bind decision either,
+            and conflating the two was the hole
+      - [x] The clean-inventory line moved to **after** the publish. Before it,
+            the claim can be false, and the entry the arbitration declines to
+            replace is exactly the one it would be covering up
+      - [x] 43 → 48 cases, RED first on all five. No `.gstack/security-reports/`
+            directory was created: this repo carries what the diagram requires,
+            and the findings belong beside the tasks that produced them
 
 ## 11. What the Stage 2 code review found in `install.sh`
 

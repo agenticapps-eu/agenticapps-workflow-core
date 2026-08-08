@@ -27,7 +27,24 @@
 # running the working-tree copy is what makes core's own pull request the
 # earliest place gate drift can be detected. See ADR-0028 and docs/WORKFLOW.md.
 #
-# Fires on PreToolUse matcher: Edit|Write|MultiEdit|NotebookEdit
+# DELIBERATELY UNREGISTERED. Nothing in core's `.claude/` registers this file
+# any more; there is no `settings.json` here to do it. `core-self-enforcement`
+# is amended to two interposition points core owns — the `pre-commit` hook and
+# CI — with the machine-level floor for everything else. A per-host session hook
+# cannot gate the session that installs it and does not exist for a human with
+# an editor, so it went fleet-wide, and a core-only carve-out would have exempted
+# the one repository that should be first under the floor rather than last.
+#
+# The file stays because it is core's own instance of the shim contract above:
+# the version marker is compared against the template and the project shim, and
+# the self-hosting resolution order is what the two profiles are contrasted
+# against. `project-hook-binding` provides for exactly this — a copy that
+# documents in-file that it is intentionally unregistered has that decision
+# preserved rather than reconciled away as drift. This paragraph is that
+# documentation, and `tools/test-claude-hook-wrapper.sh` asserts it is here.
+#
+# If it were registered it would fire on PreToolUse matcher
+# Edit|Write|MultiEdit|NotebookEdit.
 # Exit 2 = BLOCK; Exit 0 = ALLOW; Exit 1 = gate unresolvable — allow and report.
 #
 # LIMITS, because three interposition points are not complete coverage:

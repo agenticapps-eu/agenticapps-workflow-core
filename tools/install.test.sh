@@ -192,6 +192,15 @@ new_case() {
 new_core() {
   CASE_CORE="$CASE_DIR/core"
   mkdir -p "$CASE_CORE/tools"
+  # The copy is a repository, not just a directory, because the floor binder
+  # establishes the local hooks binding of the checkout it runs from. Against a
+  # bare directory it refuses — correctly, since binding the global path from
+  # somewhere that is not a checkout would displace a hook it cannot repair —
+  # and every full-run case would fail on a refusal that says nothing about
+  # what the case is testing.
+  git -C "$CASE_CORE" init -q
+  git -C "$CASE_CORE" config user.email test@example.invalid
+  git -C "$CASE_CORE" config user.name  test
   cp -R "$ROOT/reference-implementations" "$CASE_CORE/reference-implementations"
   cp -R "$ROOT/skills"                    "$CASE_CORE/skills"
   [ -d "$ROOT/hosts" ] && cp -R "$ROOT/hosts" "$CASE_CORE/hosts"
@@ -217,6 +226,31 @@ STUB
 }
 
 is_absolute() { case "$1" in /*) return 0;; *) return 1;; esac; }
+
+# ── The other half of isolation ────────────────────────────────────────────
+#
+# GIT_CONFIG_GLOBAL sandboxes the machine-wide write and nothing sandboxes a
+# LOCAL one: a repository's config path is fixed by the repository. The floor
+# binder establishes the local binding of the checkout it runs from, so any
+# case that runs the real install.sh writes into the repository this suite
+# lives in — measured, and it did, before new_core became a repository.
+#
+# Recorded per case rather than once at the end, because the case that escaped
+# is the one whose name has to appear next to the failure.
+core_local_binding() {
+  printf '%s|%s' \
+    "$(git -C "$ROOT" config --local --get core.hooksPath 2>/dev/null)" \
+    "$(git -C "$ROOT" config --local --get agenticapps.hooksbinding 2>/dev/null)"
+}
+
+restore_core_local_binding() {
+  local want="$1" path="${1%%|*}" flag="${1##*|}"
+  [ "$(core_local_binding)" = "$want" ] && return 0
+  if [ -n "$path" ]; then git -C "$ROOT" config --local core.hooksPath "$path"
+  else git -C "$ROOT" config --local --unset core.hooksPath 2>/dev/null; fi
+  if [ -n "$flag" ]; then git -C "$ROOT" config --local agenticapps.hooksbinding "$flag"
+  else git -C "$ROOT" config --local --unset agenticapps.hooksbinding 2>/dev/null; fi
+}
 
 calls() { cat "$CASE_HOME/calls.log" 2>/dev/null; }
 called() { calls | grep -q "^$1"; }
@@ -268,11 +302,19 @@ run_install() {
     RUN_MISSING=1
     return
   fi
+  local before; before="$(core_local_binding)"
   RUN_OUT="$(cd "$CASE_REPO" && HOME="$CASE_HOME" PATH="${PATH_OVERRIDE:-$CASE_BIN:$PATH}" \
              CALL_LOG="$CASE_HOME/calls.log" \
              GIT_CONFIG_GLOBAL="$CASE_HOME/.gitconfig" GIT_CONFIG_SYSTEM=/dev/null \
              bash "$script" "$@" 2>&1)"
   RUN_RC=$?
+  if [ "$(core_local_binding)" != "$before" ]; then
+    bad "$CASE_NAME" \
+        "isolation: the run wrote this repository's own local git config" \
+        "core.hooksPath|agenticapps.hooksbinding was '$before', is now '$(core_local_binding)'" \
+        "give the case its own core with new_core — the copy is a repository"
+    restore_core_local_binding "$before"
+  fi
 }
 
 # Making a command ABSENT, which is harder than it looks.
@@ -369,6 +411,7 @@ finish_case
 echo
 echo "install.sh — task 1.2: a bare run publishes the payload and binds the floor"
 new_case "bare run publishes the payload and binds the machine-level floor"
+new_core
 run_install
 floor_dir="$CASE_HOME/.agenticapps/git-hooks"
 floor_bound="$(GIT_CONFIG_GLOBAL="$CASE_HOME/.gitconfig" GIT_CONFIG_SYSTEM=/dev/null \
@@ -393,6 +436,7 @@ finish_case
 echo
 echo "install.sh — task 1.3: no host installed is success, and says so"
 new_case "exits 0 with no host present and reports that none was wired"
+new_core
 run_install
 if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
@@ -427,6 +471,7 @@ echo "install.sh — task 1.5: the installer needs nothing beyond Tier 1"
 # case that proves it is a full run with jq hidden — not a run that reports its
 # absence politely.
 new_case "a full run with jq absent completes and mentions it nowhere"
+new_core
 hide_command jq
 host_exec claude
 run_install --host claude
