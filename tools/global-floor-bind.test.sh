@@ -936,15 +936,25 @@ run_binder_with() {
 # others — and killing the subshell lets the binder sail on with an empty
 # value, which would pass this suite while proving nothing. `set -m` puts the
 # run in its own group so the group is exactly the binder and its children.
+#
+# AND THE CUT ITSELF IS ASSERTED. Coupling to an exact invocation means the
+# pattern can stop matching — a reworded git call, a step moved — and nothing
+# would say so: the shim never fires, the binder runs to completion, and a
+# COMPLETED run satisfies all three cut assertions (enrolled, swept, gated by
+# the floor). The cases would report ok while proving nothing about
+# interruption at all. So the shim records that it fired and the helper refuses
+# to return without it.
 run_binder_cut() {
   local pat="$1"; shift
   local realgit; realgit="$(command -v git)"
   mkdir -p "$CASE/bin"
+  rm -f "$CASE/cut-fired"
   cat > "$CASE/bin/git" <<WRAP
 #!/usr/bin/env bash
 case "\$*" in
   $pat)
     "$realgit" "\$@"; rc=\$?
+    : > "$CASE/cut-fired"
     kill -9 -"\$(ps -o pgid= -p \$\$ | tr -d ' ')" 2>/dev/null
     exit \$rc ;;
 esac
@@ -957,6 +967,11 @@ WRAP
   wait $!; RC=$?
   set +m
   OUT="$(cat "$CASE/out")"
+  [ -f "$CASE/cut-fired" ] || {
+    echo "  FAIL  run_binder_cut: '$pat' never matched, so the run was never cut."
+    echo "        Every assertion after this would describe a completed migration."
+    exit 1
+  }
 }
 
 # The same injection, answering a matching call instead of killing on it. Used
@@ -968,10 +983,11 @@ run_binder_answering() {
   local pat="$1" answer="$2"; shift 2
   local realgit; realgit="$(command -v git)"
   mkdir -p "$CASE/bin"
+  rm -f "$CASE/cut-fired"
   cat > "$CASE/bin/git" <<WRAP
 #!/usr/bin/env bash
 case "\$*" in
-  $pat) printf '%s\n' "$answer"; exit 0 ;;
+  $pat) : > "$CASE/cut-fired"; printf '%s\n' "$answer"; exit 0 ;;
 esac
 exec "$realgit" "\$@"
 WRAP
@@ -979,6 +995,13 @@ WRAP
   assert_isolated
   ( cd "$REPO" && PATH="$CASE/bin:$PATH" "$CORE/$BINDER_REL" "$@" >"$CASE/out" 2>&1 </dev/null ); RC=$?
   OUT="$(cat "$CASE/out")"
+  # An unmatched pattern here fails loudly rather than silently — a completed
+  # migration contradicts the assertions this helper exists for. Guarded anyway,
+  # so the message names the cause instead of leaving it to be worked out.
+  [ -f "$CASE/cut-fired" ] || {
+    echo "  FAIL  run_binder_answering: '$pat' never matched, so nothing was answered."
+    exit 1
+  }
 }
 
 # ---------------------------------------------------------------------------
