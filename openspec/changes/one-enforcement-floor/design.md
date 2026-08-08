@@ -682,6 +682,163 @@ way it is not here. It is called out rather than folded in, because answering
 half a finding and marking the whole thing closed is how the other half
 disappears.
 
+## Decision 8 — the fleet's gate copies are unmarked, so the repository adopts its own
+
+Found 2026-08-08 by running the binder against the migration set for the first
+time and declining its preflight. It refused all three, and every earlier
+measurement in this change had missed why.
+
+### The measurement that was taken, and the one that mattered
+
+Task 0.3a classified nine gate copies by **byte size**, noted "five
+byte-identical 1201-byte copies", and drew the right conclusion about drive-by
+installs from it. What it never asked is whether any of them carries the
+ownership marker the removal predicate actually tests. None of the live three
+does. All three are byte-identical to `claude-workflow/bin/git-hooks/pre-commit`
+— md5 `3c871ab36f01f6fed650417fcecec23a` — whose own header documents its
+installation as `install -m 0755 bin/git-hooks/pre-commit`, a **host** repository
+path. Core's history has never contained that file.
+
+So the four sizes are not one installer drifting. They are four installers:
+1201 from `claude-workflow`, 2270 from `opencode-workflow`, 5844 from
+`codex-workflow`, 1376 from core. Core's is the only one carrying core's marker,
+and core's is the only one excluded from the migration set by ADR-0028.
+
+The consequence is total rather than partial. `install-core-git-hooks.sh`
+refuses an existing unmarked hook at line 219, and the migration refuses to
+remove one; the two refusals share a rule, so a repository in this shape can
+neither be brought up to a marked hook nor migrated off the one it has. **Every
+repository this change exists to migrate is unreachable by every tool this
+change ships.** The census could not have caught it, because it was measuring
+files and the predicate is about provenance.
+
+### Both refusals are right, which is what makes this a design gap
+
+The tempting fix is to loosen recognition — accept a hook that "looks like the
+gate", or hash-pin the three host vintages. Decision 5 already rejected the first
+and the security pass already rejected the reasoning behind the second: a
+comment cannot establish who wrote a file, and a file's location proves who could
+have written it and never who did. Nothing about these hooks changed those
+arguments. What changed is the discovery that the predicate has no true positives
+in the fleet — it answers *who wrote this*, the migration needs *may this be
+removed*, and for a host-installed fleet the file cannot answer either.
+
+The evidence the file cannot supply is the operator's. Decision 5 already said
+so in the general case — "carrying a hook is good evidence for proposing
+enrolment and is not itself the act" — and left the act as a single acceptance of
+the preflight. This decision says where the act is written down for a hook whose
+provenance is unrecorded.
+
+### The decision
+
+The repository adopts its own hook, by carrying `agenticapps.hooksadopt` in its
+local git configuration **set to the SHA-256 digest of the hook being adopted**.
+The migration removes an unmarked `pre-commit` only from a repository whose
+adoption matches the file in front of it.
+
+**The digest, rather than a boolean, because a boolean is a standing licence.**
+`hooksadopt=true` authorises deleting whatever occupies that path whenever the
+migration next runs — including a hook written after the operator adopted, by
+somebody else, for another purpose. The requirement's title says "a gate copy
+this workflow did not write" and a boolean predicate cannot mean that; it means
+"an unmarked regular file, plus a key". The digest makes the assertion be about
+the artifact the operator actually read, and expires it by construction: change
+the file and the adoption stops matching. It is also what closes the substitution
+window between the preflight and the delete, which the marked path already closes
+by re-recognising the marker there.
+
+This is not alternative B arriving through the back door. B has core recognise
+other repositories' files by a checksum list core maintains; here the checksum is
+supplied by the operator, for one repository, about a file they read — the
+difference between core deciding what counts as its own and an operator saying
+what they consent to lose.
+
+**Not a command-line flag, and the honest reason is scope rather than quoting.**
+An earlier draft argued that a flag "cannot be made safe because a list is
+shell-expanded", and a reviewer correctly pointed out that path arguments are
+shell-expanded too and that the `GLOBAL_FLOOR_ACCEPT='*'` incident was unquoted
+expansion inside the script rather than a property of command lines. The
+argument that survives is different: an assertion written into the subject
+repository is scoped to one repository by where it lives, outlives the command
+that acted on it, and can be audited later by reading that repository. A list
+passed to one invocation has none of those properties, and the value of this
+particular consent is precisely that it persists and can be checked afterwards.
+The `GLOBAL_FLOOR_ACCEPT` incident is still worth remembering here, as a reason
+to distrust acceptance lists that arrive through a shell — not as proof that a
+flag could not have been written correctly.
+
+It also inverts a mechanism this change already has. `agenticapps.hooksbinding=
+declared` protects a repository's local binding from the sweep; adoption exposes
+one repository's hook to removal. Same placement, same strictness about the
+value, opposite direction — which is a good sign the placement is the natural
+one rather than a convenience.
+
+**Adoption widens one predicate.** It does not enrol, does not sweep, does not
+replace the preflight or its acceptance, and does not relax the refusals that
+exist because the report cannot name what the delete would reach — a symlinked
+hook, a symlinked hooks directory, a missing file. Those are about the operator
+accepting a path and the removal landing elsewhere, and an assertion about
+ownership says nothing about that.
+
+### Alternatives considered
+
+**B. Hash-pin the three known host vintages.** Rejected. It works today and the
+list is closed only because the host repos are scheduled for deletion, so its
+correctness rests on a schedule rather than on an argument. A fourth vintage on
+any other machine — or a host repo that ships one more revision before it goes —
+walks into the same wall with nothing to say. It also puts core in the business
+of recognising other repositories' files by checksum, which is the "translate the
+hook unasked" move Decision 5 refused, reached by a different road.
+
+**C. Remove the three hooks by hand and bind with no arguments.** Rejected as
+the change's own subject matter: an act performed outside the tool built for it,
+leaving no artifact and no repeatable path, at the moment the change is asserting
+that enforcement should stop depending on somebody remembering.
+
+**D. Drop the three from the migration set.** Rejected. They are not host
+repositories and no deletion schedule covers them; excluding them would leave the
+change with an empty migration set and the fleet on per-repository copies, which
+is the state it was written to end.
+
+### The refusal that displaces what it protects
+
+Found in the same review round, and it is #91's blind spot one set out. A
+repository refused at the preflight is never enrolled, because refusal happens
+before the enrolment pass. The run then publishes, binds, and exits reporting
+that each refused repository "keeps the hook it already had" — which is true only
+while `.git/hooks/` is still consulted. For a refused repository with no local
+`core.hooksPath`, the binding is exactly what stops it being consulted, and the
+dispatcher exits 0 for want of an enrolment marker. **Neither surface, and a
+report that says the opposite.**
+
+#91 closed this displacement for the repositories the run migrates. It never
+asked about the ones the run declines, and the answer is not the same: a migrated
+repository is enrolled before the binding lands, and a refused one is enrolled
+never.
+
+So a preflight refusal for a repository with no local binding stops the run
+before anything is published or bound. Acting at the preflight costs nothing —
+that is what a preflight is — and the alternative is binding a machine while
+knowing that a repository the operator named goes silently ungated as a result.
+A refused repository that carries a local binding is not displaced and does not
+stop anything.
+
+The same reasoning applies to repositories nobody named, and there the answer has
+to be different: naming them needs the search Decision 7 removed. What was
+actually wrong there was a claim rather than a behaviour — the delta said an
+unnamed repository "remains gated by the hook it already carries", which is false
+for any that sets no local binding. The claim is corrected and `--check` is named
+as where the machine-wide report belongs. A false reassurance is worse than an
+acknowledged gap, and this change had written one down.
+
+### What this costs
+
+One predicate, one preflight line that distinguishes the two removals, one abort
+path, and a setup step the operator performs once per repository. The migration
+set is three, so the cost is three commands, each of which is the operator saying
+the thing the file cannot — and the binder's own refusal prints each one,
+digest included, for the repository it just read.
+
 ## The question this change refuses to answer by implication
 
 `host-neutral-instruction-files` requires a project's `AGENTS.md` to carry

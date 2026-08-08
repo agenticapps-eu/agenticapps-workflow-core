@@ -73,6 +73,17 @@ the chain and must land before `projects-bind-not-copy`.
       population mixes deliberate adoption with drive-by installs and nothing on
       disk separates them. It is the evidence for Decision 5 refusing to
       translate the hook into a marker unasked
+      **The table measures the wrong property, found 2026-08-08 by running the
+      binder.** Size was recorded; the removal predicate tests core's ownership
+      marker, and **not one of the live three carries it**. All three are
+      byte-identical to `claude-workflow/bin/git-hooks/pre-commit`
+      (`3c871ab36f01f6fed650417fcecec23a`), installed by a host repository's
+      installer and absent from core's history. The four sizes are four
+      installers, not one drifting: 1201 `claude-workflow`, 2270
+      `opencode-workflow`, 5844 `codex-workflow`, 1376 core — and core's is the
+      only marked one. The migration set is still three and still correct; what
+      was wrong is the assumption that naming it made it reachable. Decision 8
+      and 3.0a–3.0d are the answer
 - [ ] 0.3b **A census SHALL ask the forge whether a repository is archived, not
       only the disk.** Rewritten 2026-08-08 after the original version of this
       task — "record roadmap's retirement in the family instruction file" —
@@ -289,6 +300,55 @@ ran, so this change starts from an installer that writes no host configuration.
 
 ## 3. Retire the per-repository copies
 
+- [ ] 3.0a **Adoption: the migration removes an unmarked `pre-commit` only from a
+      repository whose local `agenticapps.hooksadopt` equals that file's SHA-256
+      digest.** Decision 8. Set in the subject repository, never as an argument
+      — an assertion that lives with its subject is scoped by where it lives,
+      outlives the command, and can be audited afterwards. **The value is a
+      digest, not `true`**, which is round 3's HIGH: a boolean authorises
+      deleting whatever occupies that path later, and git's boolean truth set
+      (`yes`, `on`, `1`) would have made "only `true`" ambiguous as well
+- [ ] 3.0b Re-read both the file's digest and the adoption value immediately
+      before the removal, matching the re-recognition the marked path already
+      performs there — a whole publish and bind separate the preflight from the
+      delete it authorised
+- [ ] 3.0c The preflight SHALL distinguish the two removals, so accepting the
+      removal of a marked hook and of an unmarked one are not the same sentence
+      read twice; and the refusal for an unmarked hook SHALL print the adopting
+      command **including the digest of the file it just read**
+- [ ] 3.0d Adoption widens **one** predicate: it does not enrol, does not sweep,
+      does not stand in for the acceptance, does not travel between
+      repositories, and does not relax the symlinked-hook, symlinked-hooks-
+      directory or missing-file refusals — those are about the delete landing
+      somewhere the report could not name, which no claim about ownership
+      answers
+- [ ] 3.0e **A named repository refused at the preflight with no local
+      `core.hooksPath` aborts the run before anything is published or bound.**
+      Round 3's other HIGH, and it is #91's blind spot one set out: refusal
+      happens before the enrolment pass, so a refused repository is never
+      enrolled, and the binding then displaces the hook the refusal told it it
+      was keeping. Neither surface, reported as "keeping the hook it already
+      had". A refused repository that carries a local binding is not displaced
+      and does not abort the run
+- [ ] 3.0f Correct the delta's claim that an **unnamed** repository "remains
+      gated by the hook it already carries" — false for any that sets no local
+      binding. Naming them needs the search Decision 7 removed, so the claim is
+      corrected and `--check` is named as where that report belongs (9.10)
+- [ ] 3.0g **Tests, RED before GREEN**, for every branch above: unmarked with a
+      matching digest, unmarked with no adoption, unmarked with a non-matching
+      digest, a hook substituted between preflight and removal, adoption in one
+      repository not reaching another, adoption against a symlinked hook, a
+      symlinked hooks directory and a missing file, a declined preflight leaving
+      an adopting repository untouched, and a refused repository with no local
+      binding aborting the run while one with a local binding does not
+- [ ] 3.0h **Then run 3.1 / 3b.1 / 3b.4 for real.** Adopt in the three, run the
+      binder from inside core's checkout, read the preflight before answering y.
+      **Recovery is not one command.** `git config --global --unset
+      core.hooksPath` recovers a bad *bind* only while no hook has been removed;
+      after removal it takes away the only surface the migrated repositories
+      have. Capture the before-state — each repository's local `core.hooksPath`,
+      its hook file, core's binding, and the published hook — before running, so
+      the rollback is ordered rather than improvised
 - [ ] 3.1 Remove the gate `pre-commit` from each repository in the **migration
       set**, and only after that repository is enrolled and the global binding
       is verified to govern it by resolving its hooks directory.
@@ -301,6 +361,11 @@ ran, so this change starts from an installer that writes no host configuration.
       different facts in five repositories today.
       **The migration set is three, not nine** — see the corrected population in
       0.3a. Archived and retired checkouts are excluded and reported as excluded
+      **Blocked on 3.0a until 2026-08-08.** Run for the first time against the
+      real three, the binder refused all three: their hooks carry no ownership
+      marker, so it declined to remove them and `install-core-git-hooks.sh`
+      declined to overwrite them by the same rule. Nothing was published, bound
+      or written. Adoption unblocks it
 - [x] 3.2 `tools/install-core-git-hooks.sh` — **superseded. Decided 2026-08-07,
       recorded as design Decision 4.** It resolves its destination with
       `git rev-parse --git-path hooks` (line 54), which honors `core.hooksPath`

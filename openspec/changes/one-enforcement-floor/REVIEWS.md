@@ -221,3 +221,136 @@ digest: sha256:414bcdd4c2335985636c20ad016de66699fcabd01a02f44019a061ee41cbde80
 producer-version: 1.2.0
 tasks-digest: sha256:8414baa41c49413d6d3d16e0acf183d17496185396b0287cbdb842b6d442ec6b
 -->
+
+# Review record — round 3 (Decision 8, the adoption predicate)
+
+- requested: gemini codex
+- counted:   gemini (APPROVE) codex (REQUEST-CHANGES)
+- excluded:  claude (declared implementing host)
+- failed:    (none)
+- prompt sha256: 7dc37280577dd0c9…
+
+Scoped to Decision 8, the requirement "A gate copy this workflow did not write is
+removed only where the repository adopts it", and tasks 3.0a–3.0d. Earlier
+decisions were reviewed in rounds 1 and 2 and were in the prompt as context.
+
+## Reviewer: gemini (model not emitted by the CLI)
+
+VERDICT: APPROVE
+
+[MEDIUM] design.md Decision 1 / 9.11 — "What is actually lost" claims only
+in-session latency is lost by removing the host hook; the surviving `pre-commit`
+is bypassable with `--no-verify`, which 9.8 already says. Update it for honesty.
+
+[LOW] Decision 8 / 9.7 — the interaction between the enrolment predicate and
+`hooks.d` composition is undefined; the dispatcher's enrolment check appears to
+precede both the gate and `hooks.d`, which is probably right but is an
+implementation accident rather than a guarantee.
+
+Assumed but not stated:
+1. That the three migration-set hooks carry no operator-added repository-specific
+   logic. Removal deletes the file whole; if any exists it is lost silently.
+2. That the operator can write local git config in all three.
+3. That 0.3b's census assumes `gh` is installed and authenticated.
+
+## Reviewer: codex (gpt-5.6-sol)
+
+VERDICT: REQUEST-CHANGES
+
+[HIGH] spec delta — a repository refused at preflight is not enrolled, yet the
+run continues and sets the global binding. For a refused repository with no local
+`core.hooksPath`, the binding displaces the very hook it was told it is keeping,
+and the unenrolled dispatcher exits 0 — neither surface, violating the central
+invariant. Abort the bind, or narrow "one repository fails and the rest continue"
+to failures that cannot leave the repository displaced.
+
+[HIGH] the adoption requirement — the predicate establishes "unmarked regular
+`pre-commit` plus a persistent boolean", not "gate copy". Adoption therefore
+authorises deleting any unmarked hook at that path, including one written after
+the adoption was set. Bind adoption to the artifact — its digest — and give it
+one-shot semantics.
+
+[MEDIUM] the adoption requirement / preflight — nothing binds the accepted
+preflight entry to the file later deleted; an adopted hook can be substituted
+between the two and the predicate still passes. Snapshot the digest at preflight
+and re-read it immediately before the delete.
+
+[HIGH] tasks.md 3.0d — `git config --global --unset core.hooksPath` is not
+recovery once 3.1 has removed local hooks: it removes the floor after the local
+surfaces are gone, leaving migrated repositories ungated, and restores neither
+swept bindings nor enrolment nor core's binding nor the replaced published hook.
+
+[MEDIUM] tasks.md 3.0a–3.0d — no RED-before-GREEN coverage for a new destructive
+predicate, and "only `true`" is ambiguous between the literal string and git's
+boolean truth set (`yes`, `on`, `1`).
+
+[LOW] design.md Decision 8 — the case against a command-line mechanism is
+argued from "cannot glob", which is wrong: the `GLOBAL_FLOOR_ACCEPT='*'` incident
+was unquoted expansion inside the script, and path arguments are shell-expanded
+too. The local key may still be right, but for durable repository scope and
+independent auditability.
+
+Assumed but not stated: that a per-repository refusal cannot coincide with a
+global binding that displaces it; that adoption refers to the hook observed
+rather than every future one at that path; that neither the adoption value nor
+the hook changes between preflight and deletion; that unsetting the binding is
+sufficient recovery after removal; that repository scope means the git common
+directory, so linked worktrees share one adoption decision.
+
+## Resolution — round 3
+
+**codex HIGH, the refused-repository displacement — accepted, and it is the same
+blind spot as #91 one step out.** Verified by reading the binder: refused
+repositories never reach `$PLAN/repo.$i`, so the enrolment pass skips them, and
+the run publishes, binds and exits 1 saying "each keeping the hook it already
+had" — false for a repository with no local `core.hooksPath`, whose hook stops
+being consulted the instant the binding lands. This is exactly the displacement
+#91 closed for the *planned* set and never asked about the *refused* set.
+Narrowed as codex suggests, because a preflight refusal is free to act on:
+**a named repository refused at preflight with no local `core.hooksPath` aborts
+the run before anything is published or bound.** Run-time failures still continue
+— by then the repository is enrolled, so the floor governs it and it is not
+displaced.
+
+**The unnamed half of the same finding — the spec was making a claim it cannot
+keep.** "A repository was not named … it remains gated by the hook it already
+carries" is false for any unnamed repository with no local binding. Enumerating
+them needs the search Decision 7 removed, so the claim is corrected rather than
+the search reinstated, and `--check` (9.10, open) is named as where the
+machine-wide report belongs.
+
+**codex HIGH, the predicate does not establish "gate copy" — accepted, and the
+fix improves the mechanism.** Adoption becomes the **sha256 of the hook being
+adopted**, not `true`. The operator names the exact artifact they read; a hook
+substituted afterwards no longer matches, which makes it one-shot by
+construction. This is not the vintage allowlist rejected as alternative B: the
+digest is supplied per repository by the operator, never recognised by core.
+
+**codex MEDIUM, substitution between preflight and delete — closed by the same
+change**, plus re-reading the digest and the adoption value immediately before
+the removal, matching the re-recognition the marked path already performs there.
+
+**codex MEDIUM, git's boolean truth set — dissolved by the digest.** A digest is
+compared exactly and has no boolean normalisation. The test tasks it asks for are
+added as 3.0e.
+
+**codex HIGH, the recovery claim — accepted.** It was written for the state the
+machine is in *before* any removal and is wrong as a general claim. 3.0d now
+scopes it and says what recovery after removal actually is.
+
+**codex LOW, the anti-command-line argument — accepted, the reasoning was
+overstated.** Path arguments are shell-expanded too. Decision 8 now argues from
+durable repository scope and auditability, and keeps the `GLOBAL_FLOOR_ACCEPT`
+incident as the reason to distrust shell-supplied acceptance lists generally
+rather than as proof a flag cannot work.
+
+**gemini's assumption 1 — recorded, and measured rather than assumed.** All three
+hooks are byte-identical to each other and to
+`claude-workflow/bin/git-hooks/pre-commit`, so none carries repository-specific
+logic. The digest-valued adoption makes this the operator's explicit assertion
+about a specific file rather than the change's assumption, which is the stronger
+answer.
+
+**gemini MEDIUM (Decision 1) and LOW (`hooks.d` ordering) — out of this round's
+scope and recorded as open.** Both concern already-reviewed decisions; the
+`hooks.d` ordering point is real and belongs with 9.7.

@@ -229,6 +229,25 @@ binding is inert in the strongest sense — with no binding yet, the predicate h
 no reader at all — and it SHALL still follow every refusal the binder makes, so
 a run that refuses has written nothing into a named repository.
 
+**A repository refused at the preflight is not enrolled, so the binding displaces
+it too.** Refusal leaves its hook in place — which is the whole of the protection
+while `.git/hooks/` is still consulted, and none of it once the floor is bound.
+The refused repository is never enrolled, so the published dispatcher exits 0 for
+it, and the run that refused it reports that it keeps the hook it already had:
+neither surface, and a report saying otherwise. This is the displacement above,
+asked about the set the previous answer did not cover.
+
+So **a named repository refused at the preflight with no local `core.hooksPath`
+SHALL abort the run before anything is published or bound.** The refusal costs
+nothing at that point — nothing has been done yet, which is what the preflight is
+for — and the alternative is binding a machine in the knowledge that one of the
+repositories the operator named will be silently ungated by the act. A refused
+repository that carries a local binding is not displaced, because git prefers it,
+and does not abort the run. This narrows the rule that one repository's failure
+does not stop the rest: it holds for failures during the migration, where the
+repository is already enrolled and therefore governed, and not for refusals
+before the binding, where it is neither.
+
 If verification fails after the sweep, the swept binding SHALL be restored, so a
 repository that cannot be handed to the floor is returned to the surface it had.
 
@@ -443,6 +462,8 @@ promise about the whole install is one the preflight cannot keep.
   recognised as this workflow's gate
 - **THEN** the migration SHALL refuse that repository without writing to it
 - **AND** SHALL report why, naming the file it declined to remove
+- **AND** where the file is present and unmarked, SHALL name adoption as the way
+  to proceed
 
 #### Scenario: A named repository's hooks directory is a symlink
 
@@ -455,7 +476,30 @@ promise about the whole install is one the preflight cannot keep.
 
 - **WHEN** a repository on the machine carries a gate hook and was not named
 - **THEN** the migration SHALL NOT enrol it, sweep it, or remove its hook
-- **AND** it remains gated by the hook it already carries
+- **AND** its hook file SHALL be left exactly as it was
+
+#### Scenario: An unnamed repository has no local binding of its own
+
+- **WHEN** an unnamed repository carries a gate hook and no local
+  `core.hooksPath`
+- **THEN** the global binding stops `.git/hooks/` being consulted there, so the
+  hook the migration left alone no longer runs
+- **AND** the change SHALL NOT claim such a repository remains gated by it
+- **AND** reporting the repositories in this state SHALL be the check mode's, not
+  the migration's, because naming them requires the search this change removed
+
+#### Scenario: A named repository is refused and has no local binding
+
+- **WHEN** the preflight refuses a named repository and that repository sets no
+  local `core.hooksPath`
+- **THEN** the run SHALL stop before anything is published or bound
+- **AND** SHALL report that binding would displace the hook the refusal leaves it
+
+#### Scenario: A named repository is refused but carries a local binding
+
+- **WHEN** the preflight refuses a named repository that sets a local
+  `core.hooksPath` git prefers over the global one
+- **THEN** the run SHALL continue, because the binding does not displace it
 
 #### Scenario: The filesystem is not searched
 
@@ -470,6 +514,114 @@ promise about the whole install is one the preflight cannot keep.
 - **AND** the migration SHALL continue with the repositories still to process
 - **AND** the run SHALL exit non-zero so a partial migration is never reported as
   a complete one
+
+### Requirement: A gate copy this workflow did not write is removed only where the repository adopts it
+
+Recognition comes from core's ownership marker, and the marker is written by
+core's own hook installer. **The fleet's gate copies were not written by it.**
+Measured 2026-08-08 against the live migration set: all three carry a
+`pre-commit` byte-identical to `claude-workflow/bin/git-hooks/pre-commit` — 1201
+bytes, md5 `3c871ab36f01f6fed650417fcecec23a` — installed by a host repository's
+installer, predating the marker, and absent from core's history entirely. Core's
+installer refuses to overwrite them by the same rule that makes the migration
+refuse to remove them, so **no path through the existing tooling touches any
+repository in the migration set.** The four hook sizes the census recorded are
+not drift within one installer's output; they are four different installers.
+
+Both refusals are correct and neither is the defect. The defect is that the
+predicate answers *who wrote this file* and is being asked *may this be removed*,
+and for a fleet installed by hosts the file cannot answer either question. The
+operator can, and SHALL be able to say so.
+
+**Adoption is set in the repository whose hook is to be removed**, as
+`agenticapps.hooksadopt` in its local git configuration, and SHALL NOT be
+expressible as an argument to the migration. An assertion written into the
+subject repository is scoped to one repository by where it lives, survives
+independently of the command that acted on it, and can be audited afterwards by
+reading that repository; an acceptance list supplied through a shell is none of
+those, and this installer has already had one such list accept an entry nobody
+named. It is the same shape as the `declared` binding one level up, inverted:
+that one protects a repository from the sweep, this one exposes one hook to
+removal.
+
+**Adoption names the artifact, not the path.** Its value SHALL be the SHA-256
+digest of the `pre-commit` being adopted, and the migration SHALL remove an
+unmarked hook only when the file's digest equals it. A boolean would authorise
+the deletion of whatever occupies that path at removal time, including a hook
+written after the operator adopted — which is a standing licence to delete,
+granted on the strength of a file nobody has looked at since. A digest expires by
+construction: change the file and the adoption no longer matches.
+
+This is not the vintage allowlist rejected in this change's alternatives. There,
+core recognises other repositories' files by checksum and the list is core's;
+here the digest is supplied by the operator, for one repository, about a file
+they read.
+
+The digest SHALL be re-read from the file, and the adoption value re-read from
+the repository, immediately before the removal — the same re-recognition the
+marked path already performs there, and for the same reason: a whole publish and
+bind separate the preflight the operator accepted from the delete it authorised.
+
+**Adoption widens exactly one predicate and nothing else.** It SHALL NOT enrol a
+repository, SHALL NOT sweep a local binding, SHALL NOT substitute for the
+preflight or its single acceptance, and SHALL NOT reach any repository other than
+the one it is set in. The refusals that exist because the report cannot name what
+would be removed — a symlinked hook, a symlinked hooks directory, no `pre-commit`
+at all — SHALL stand regardless of adoption, because they are about the delete
+landing somewhere the operator did not read, which no assertion about ownership
+answers.
+
+The preflight SHALL distinguish the two removals it can perform, so that
+accepting the removal of a marked hook and accepting the removal of an unmarked
+one are not the same sentence read twice.
+
+#### Scenario: An unmarked gate copy in a repository that adopts it
+
+- **WHEN** a named repository's `pre-commit` carries no ownership marker
+- **AND** that repository's local `agenticapps.hooksadopt` equals the file's
+  SHA-256 digest
+- **THEN** the preflight SHALL report that the hook is unmarked and is being
+  removed on the repository's own adoption
+- **AND** on acceptance the migration SHALL proceed for it as for a marked hook
+
+#### Scenario: An unmarked gate copy in a repository that does not adopt it
+
+- **WHEN** a named repository's `pre-commit` carries no ownership marker
+- **AND** that repository sets no local `agenticapps.hooksadopt`
+- **THEN** the migration SHALL refuse that repository without writing to it
+- **AND** SHALL report the command that would adopt it, including the digest of
+  the file it just read
+
+#### Scenario: The adopted digest does not match the file
+
+- **WHEN** a named repository's local `agenticapps.hooksadopt` is set to any
+  value other than its `pre-commit`'s current SHA-256 digest
+- **THEN** the repository SHALL NOT be treated as adopting
+- **AND** its unmarked hook SHALL be refused
+
+#### Scenario: The hook is replaced between the preflight and the removal
+
+- **WHEN** an adopted repository's `pre-commit` no longer matches the adopted
+  digest at the moment of removal
+- **THEN** the migration SHALL NOT remove it
+- **AND** SHALL report that what it was authorised to delete is not what is there
+
+#### Scenario: Adoption does not travel between repositories
+
+- **WHEN** one named repository adopts and another named repository does not
+- **THEN** the adoption SHALL apply only to the repository it is set in
+- **AND** the other SHALL be refused if its hook is unmarked
+
+#### Scenario: Adoption does not relax what the report cannot name
+
+- **WHEN** a repository adopts and its hook is a symlink, or its hooks directory
+  is a symlink, or it has no `pre-commit`
+- **THEN** the migration SHALL refuse it exactly as it would without adoption
+
+#### Scenario: Adoption does not stand in for the acceptance
+
+- **WHEN** a repository adopts and the preflight is declined
+- **THEN** that repository SHALL NOT be enrolled, swept, or stripped of its hook
 
 ### Requirement: A local binding that is redundant is swept; one that is real is kept
 
