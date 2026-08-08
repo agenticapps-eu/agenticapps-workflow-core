@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 # init-project.sh — establish what a repository carries to use this workflow.
 #
-# init-project-version: 1.0.0
+# init-project-version: 1.1.0
 #
 #   cd <your repo> && ~/.agenticapps/bin/init-project.sh
 #
-# It writes exactly two things: `openspec/`, and one instruction file —
-# `AGENTS.md` real, `CLAUDE.md` a symlink to it. No skills, no hooks, no host
+# It writes exactly three things: `openspec/`, one instruction file — `AGENTS.md`
+# real, `CLAUDE.md` a symlink to it — and one local git config key enrolling the
+# repository in the machine's enforcement floor. No skills, no hooks, no host
 # configuration, no CI workflow, no network. Those are the machine's business
 # and `install.sh` establishes them.
+#
+# THE THIRD WRITE IS NOT A FILE, AND LEAVING IT OUT MADE THE OTHER TWO INERT.
+# The published pre-commit runs in every repository on a bound machine and exits
+# 0 unless `agenticapps.workflow.enrolled` is set locally, so a repository with
+# `openspec/` and an instruction file and no key is ungated while being
+# indistinguishable, from every file on disk, from one that is gated. Measured
+# 2026-08-08: five repositories carried live OpenSpec changes and not one was
+# enrolled, because the only thing that had ever written the key was somebody
+# remembering to run a git command.
 #
 # WHY IT IS THIS SHORT
 #
@@ -126,6 +136,29 @@ else
   ln -s AGENTS.md "$tmp" || die "could not create the CLAUDE.md link — CLAUDE.md is untouched"
   mv -f "$tmp" CLAUDE.md || { rm -f "$tmp"; die "could not move the link into place — CLAUDE.md is untouched"; }
   say "CLAUDE.md    -> AGENTS.md"
+fi
+
+# ENROLMENT — the write that makes the two above mean anything.
+#
+# `--local`, never `--global`: the dispatcher's own header records a run where a
+# global key of this name enrolled every repository on the machine, and an
+# initializer that reached for global would be that defect with a tool behind it.
+#
+# Written unconditionally rather than only when absent. `git config` is idempotent
+# for a value that is already set, and the case worth handling is the opposite
+# one — a repository whose key says `false`, which reads as configured and gates
+# nothing, because the dispatcher resolves it with `--type=bool`.
+if git config --local agenticapps.workflow.enrolled true 2>/dev/null; then
+  say "enrolled     this repository in the machine's enforcement floor"
+else
+  # Not fatal. The two artifacts are written and correct, and a repository that
+  # cannot be enrolled is one the floor does not gate — which is worth saying
+  # loudly and is not worth discarding the rest of the run over.
+  say ""
+  say "WARNING: could not write agenticapps.workflow.enrolled to this repository's"
+  say "         git config. openspec/ and the instruction file are in place, but the"
+  say "         machine's pre-commit floor will NOT gate this repository until it is"
+  say "         set: git config --local agenticapps.workflow.enrolled true"
 fi
 
 if [ "$DISCLOSE" = yes ]; then

@@ -264,7 +264,7 @@ ran, so this change starts from an installer that writes no host configuration.
       in the new requirement are therefore demonstrated, not assumed. What
       remains is landing it in the published hook and adding the case to the
       suite — the prototype is evidence, not the implementation
-- [ ] 2.8b Amend `init-project.sh` to set the marker, and **amend its header
+- [x] 2.8b Amend `init-project.sh` to set the marker, and **amend its header
       contract in the same diff**. It currently promises it writes "exactly two
       things: `openspec/`, and one instruction file ... No skills, no hooks, no
       host configuration." Enrolment is a third write. Restate the contract as
