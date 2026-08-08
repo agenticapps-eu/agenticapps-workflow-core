@@ -175,9 +175,10 @@ instruction-file work. One PR per repository.
       `gsd-plan.md` ~~/ `setup.md`~~ (`callbot`) — commands offering a tool
       removed on 2026-07-28. Both confirmed **tracked** on 2026-08-08, so this
       row is reversible and is an ordinary PR in each repository.
-      **Done 2026-08-08** — cparx PR #129, callbot PR #102. callbot's branched
-      from `origin/main` rather than its in-flight `chore/instruction-file-cleanup`,
-      so each PR carries one deletion and nothing else.
+      **Done 2026-08-08 and merged** — cparx #129, callbot #102, both squashed
+      to `main` with their branches deleted. callbot's branched from
+      `origin/main` rather than its in-flight `chore/instruction-file-cleanup`,
+      so each PR carried one deletion and nothing else.
       **`setup.md` was struck from this task, and the reason is the one 2.2
       already warned about.** It is not GSD's. It is callbot's own
       infrastructure-provisioning command — Twilio DID purchase, `wrangler
@@ -293,7 +294,17 @@ instruction-file work. One PR per repository.
       after 2.6a's objections were resolved rather than waived. All seven
       in-scope repositories are clear; the four host repositories keep theirs by
       1.2. 48 files: 44 untracked, removed directly, and 4 tracked, removed by
-      PR — callbot #103, fbc-platform #141, fx-signal-agent #130.
+      PR — callbot #103, fbc-platform #141, fx-signal-agent #130. **All five of
+      this change's PRs are merged**, verified by `ls-tree` against each
+      `origin/main`: none of the six tracked files survives anywhere.
+
+      Two CI facts worth keeping rather than working around. `fbc-platform`
+      requires conventional-commit PR titles and its CI does not re-run on a
+      title edit, so the fix was to rename the PR *and* re-run the job, not to
+      merge past the check. `fx-signal-agent` merged `UNSTABLE`: `gitleaks` and
+      `pnpm-audit` fail there **on `main` as well**, confirmed before merging, so
+      a one-file deletion could not have caused them. Neither merge used
+      `--admin`.
 
       **The config half was checked, not assumed.** No executable in any of the
       three repositories reads `.planning/config.json`; every surviving
