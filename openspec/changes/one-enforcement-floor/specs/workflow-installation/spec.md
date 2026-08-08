@@ -214,6 +214,21 @@ nothing reporting it. It is the same failure as removing before enrolling,
 reached through the binding rather than through the file, and this requirement
 already forbids it by name.
 
+**Every named repository SHALL be enrolled before the global binding is set**,
+not merely before its own sweep. The sweep is one of two things that displace a
+repository's own hook and it is the smaller one: a repository with **no** local
+`core.hooksPath` — the state `tools/install-core-git-hooks.sh` leaves behind,
+since it writes into the directory git already resolves and sets nothing — stops
+consulting `.git/hooks/` the instant `core.hooksPath` is set globally, with no
+sweep involved anywhere. Enrolling inside each repository's own sequence
+therefore reopens this same window one step earlier and for every named
+repository at once. Reproduced 2026-08-08 against an implementation that
+enrolled inside the loop: the run was cut at the binding and a commit in a
+repository whose gate hook was still on disk succeeded. Enrolment before the
+binding is inert in the strongest sense — with no binding yet, the predicate has
+no reader at all — and it SHALL still follow every refusal the binder makes, so
+a run that refuses has written nothing into a named repository.
+
 If verification fails after the sweep, the swept binding SHALL be restored, so a
 repository that cannot be handed to the floor is returned to the surface it had.
 
@@ -249,10 +264,19 @@ policy, at the moment this change is asserting that enrolment is an act.
 #### Scenario: The migration is interrupted inside a repository
 
 - **WHEN** the migration is interrupted after any single step of a repository's
-  enrol → sweep → verify → remove sequence
+  enrol → sweep → verify → remove sequence, or at the global binding itself
 - **THEN** that repository SHALL still have an active enforcement surface —
-  its own hook while the local binding stands, and the floor once it does not
+  its own hook while git still resolves it, and the floor once git does not
 - **AND** no interruption point SHALL leave it swept but unenrolled
+- **AND** no interruption point SHALL leave it bound but unenrolled
+
+#### Scenario: A named repository holds no local binding at all
+
+- **WHEN** a named repository carries a gate hook and no local `core.hooksPath`,
+  so nothing is swept and the global binding alone displaces its hook
+- **THEN** it SHALL be enrolled before that binding is set
+- **AND** an interruption at the binding SHALL leave the floor governing it
+- **AND** its migration SHALL otherwise proceed as verify → remove
 
 #### Scenario: Verification fails after the binding was swept
 
@@ -357,6 +381,16 @@ hooks-directory inventory already learned one level up: a file's location proves
 who could have written it and never who did, so recognition has to come from the
 file rather than from the fact that somebody typed a path.
 
+**And what is removed SHALL be what the report named.** A repository describes
+where its own hooks live — a `.git` file names another directory, a hooks
+directory may be a symlink — so the path the preflight prints and the file the
+removal reaches are not the same thing by construction. A symlinked hooks
+directory SHALL refuse the repository, because unlike a symlinked hook it is
+invisible in the report: the operator accepts a path inside the repository they
+named and the delete lands somewhere else. Demonstrated before this was written,
+against a hooks directory linked out of the repository: the file outside it was
+removed and the run exited 0.
+
 Everything the run will do SHALL be reported before anything is done, under a
 **single** acceptance covering what will be published into the hooks directory,
 what this run will newly enrol, and what will be migrated. Separate acceptances
@@ -409,6 +443,13 @@ promise about the whole install is one the preflight cannot keep.
   recognised as this workflow's gate
 - **THEN** the migration SHALL refuse that repository without writing to it
 - **AND** SHALL report why, naming the file it declined to remove
+
+#### Scenario: A named repository's hooks directory is a symlink
+
+- **WHEN** a named repository's resolved hooks directory is a symlink
+- **THEN** the migration SHALL refuse that repository without writing to it
+- **AND** SHALL report that what would be removed is not what the preflight can
+  name
 
 #### Scenario: A repository was not named
 

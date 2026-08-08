@@ -273,11 +273,19 @@ ran, so this change starts from an installer that writes no host configuration.
 - [ ] 2.8c `--check` SHALL name a repository that carries `openspec/` but is not
       enrolled. Without this the marker degrades into the drifting declared-list
       option that was rejected for exactly that failure
-- [ ] 2.9 Preflight before binding: report every repository the new binding will
+- [x] 2.9 Preflight before binding: report every repository the new binding will
       newly govern, and require acceptance before `git config --global` is
       written. The census in `design.md` covers `~/Sourcecode` only, and the
       binding's reach is the whole machine — so the evidence gathered is
-      narrower than the act performed
+      narrower than the act performed.
+      **Built 2026-08-08 with 9.4a, and Decision 7 changed what it reports.**
+      Not "every repository the binding will newly govern" — that is the impact
+      set, it includes everything `init-project.sh` enrolled earlier, and
+      enumerating it needs the search Decision 7 removed. The preflight reports
+      the MUTATION set, says in one line that it is not the impact set, and
+      points at `--check` for the rest. A run with no names has an empty
+      mutation set and asks nothing: an acceptance covering nothing is a prompt
+      nobody can answer, and it would block every unattended install
 
 ## 3. Retire the per-repository copies
 
@@ -586,7 +594,7 @@ highest-consequence first:
       (0.3a), and 3.1's "having confirmed the global binding is live" was the
       wrong predicate — that is a fact about the machine, and what matters is a
       fact about the repository
-- [ ] 9.4a Implement it: fold the migration report into 2.9's preflight rather
+- [x] 9.4a Implement it: fold the migration report into 2.9's preflight rather
       than building a second acceptance. What the binding will newly govern,
       what publishing will replace (2.1a) and what will be enrolled are one
       report and one acceptance, not three that have to agree.
@@ -595,8 +603,18 @@ highest-consequence first:
       9.10/3b.5 require that boundary stated before such a thing runs, not
       after — so implementing this first would have built exactly what the open
       finding forbids. The delta now carries "The migration acts only on
-      repositories the operator names" with five scenarios
-- [ ] 9.4c **The census corrected the per-repository ordering, so the code owes a
+      repositories the operator names" with five scenarios.
+      **Built 2026-08-08**, in `bind-global-floor.sh`, with 9.4b–9.4h in the
+      same diff because each of them says what this code owes rather than
+      naming separate work. The named set is POSITIONAL ARGUMENTS and
+      `install.sh` passes none, which is what makes "acts only on repositories
+      the operator names" true of the unattended path by construction rather
+      than by a flag defaulting correctly. One preflight prints the publish, the
+      binding and every act on every named repository, under one acceptance
+      (`GLOBAL_FLOOR_ACCEPT_PLAN`, or `y` on a tty); declining publishes
+      nothing, binds nothing and touches no repository. 28 cases in
+      `tools/global-floor-bind.test.sh`, 76 in the suite
+- [x] 9.4c **The census corrected the per-repository ordering, so the code owes a
       sweep step the tasks did not have.** Measured 2026-08-08 across all 61
       repositories under `~/Sourcecode`: `callbot` and `fx-signal-agent` each
       carry a local `core.hooksPath` naming their own default hooks directory,
@@ -614,44 +632,107 @@ highest-consequence first:
       and no enforcement — the very state this section forbids, reached through
       the binding rather than through the file. Enrolment is inert until the
       sweep, because the local hook predates the predicate and never reads it,
-      so enrolling first costs nothing and closes the window
-- [ ] 9.4b The interruption scenario needs a test that actually interrupts —
+      so enrolling first costs nothing and closes the window.
+      **Built in that order 2026-08-08**, and the order is asserted rather than
+      the end state: the two orders leave the same disk and a different set of
+      survivable interruptions, so a suite checking only the end state passes
+      under both
+- [x] 9.4b The interruption scenario needs a test that actually interrupts —
       kill the migration between two repositories and assert the invariant holds
       across the boundary, rather than asserting each repository in isolation
       and calling the composition proven.
       **Widened 2026-08-08 by the plan review**: between repositories is the
       easy boundary and not the dangerous one. Both reviewers located the real
       hazard *inside* a repository, so the interruption test SHALL cut after
-      each of enrol, sweep and verify, not only between repositories
-- [ ] 9.4d **Ordering, from the plan review — RED before GREEN.** The order is
+      each of enrol, sweep and verify, not only between repositories.
+      **Done 2026-08-08, and it interrupts for real.** A test-only seam in the
+      binder was rejected — a production script carrying a branch that exists
+      only for its tests has a branch that can be wrong in production — so the
+      cut comes from outside: a `git` earlier on PATH passes the call through
+      and then kills the process group. By GROUP and not by `$PPID`, because
+      bash may fork an intermediate subshell for `x="$(git ...)"` and killing
+      that one lets the binder continue with an empty value, which would pass
+      the suite while proving nothing. Three cuts, one per step — **five as of
+      the stage-2 correction in 9.4d**, because the global binding is an
+      interruption point too, and for a repository with no local binding it is
+      the only one that displaces its hook
+- [x] 9.4d **Ordering, from the plan review — RED before GREEN.** The order is
       enrol → sweep → verify → remove. The test that matters asserts the
       negative: with the binder stopped immediately after the sweep, a commit in
       that repository is still gated. Under the rejected sweep-first order that
       commit succeeds, so the case fails before the fix and passes after it,
       which is the only thing that makes it a regression guard rather than a
-      description
-- [ ] 9.4e **Restore the swept binding when verification fails.** A repository
+      description.
+      **Demonstrated both ways 2026-08-08.** Against a variant of the binder
+      with the sweep moved ahead of the enrolment, exactly three cases fail and
+      the one that matters fails on the commit: swept, unenrolled, and gated by
+      nothing. Against the shipped order all 76 pass.
+      **Corrected 2026-08-08 by the stage-2 review, and this is the second time
+      the same window was closed against the wrong displacer.** All three cuts
+      were taken against a repository whose local `core.hooksPath` is what
+      displaces its hook — so all three were blind to the repository that has
+      none, which is the shape `tools/install-core-git-hooks.sh` actually leaves
+      behind and the shape one of the three measured repositories is in. For
+      that repository the sweep is not the displacer: setting `core.hooksPath`
+      globally stops `.git/hooks/` being consulted everywhere at once, and
+      enrolling inside the per-repository loop reopened the window one step
+      earlier and for every named repository together. Reproduced before the
+      fix — cut at the binding, the commit succeeded with the gate hook still on
+      disk. The enrolment now runs as its own pass immediately before the global
+      binding and after every refusal, so a run that refuses still writes
+      nothing into a named repository. Three cases added; two of them fail
+      against the previous binder and pass against this one. 79 pass
+- [x] 9.4e **Restore the swept binding when verification fails.** A repository
       enrolled and swept whose hooks directory then does not resolve to the
       floor is returned to the surface it had, rather than left holding a hook
-      git no longer consults
-- [ ] 9.4f **Identity, from the plan review.** Canonicalise each name; reject
+      git no longer consults.
+      **Built and tested 2026-08-08.** The enrolment is deliberately NOT rolled
+      back with the binding: it is inert while the local binding stands, so
+      unwinding it would be undoing something that is doing nothing. Forced at
+      the point of observation rather than by fixture — on a correctly bound
+      machine this state cannot arise, which is how the restore path would
+      otherwise go untested until the day it mattered
+- [x] 9.4f **Identity, from the plan review.** Canonicalise each name; reject
       without writes anything that is not the top of a repository; deduplicate
       by `--git-common-dir` so a relative path and a symlink to one repository
       are one entry. Cases for each, plus the linked-worktree report: naming one
       checkout modifies configuration every sibling shares, and the preflight
       names them or the "left entirely alone" guarantee is false for a worktree
-      nobody mentioned
-- [ ] 9.4g **Recognise the hook before removing it.** Naming a repository is the
+      nobody mentioned.
+      **Built 2026-08-08.** A name that is not the top of a repository stops the
+      whole run rather than being skipped: a set that cannot be stated correctly
+      cannot be accepted correctly either, and "rejected before any repository
+      is modified" reads as the stronger thing. A subdirectory is rejected on
+      the same test, because `rev-parse` inside one answers about the repository
+      containing it and would migrate a repository nobody named
+- [x] 9.4g **Recognise the hook before removing it.** Naming a repository is the
       operator's belief about what is there, never evidence about the file. An
       absent, foreign or unrecognisable `pre-commit` refuses that repository
       without writes. Same shape as 10.7 one level down, and the negative test
       is the one that matters: a repository named by mistake keeps the hook its
-      operator wrote
-- [ ] 9.4h **Cases the review found missing outright**: an unnamed repository is
+      operator wrote.
+      **Built 2026-08-08, recognised twice** — once at the preflight and again
+      immediately before the delete, because a whole publish and bind separate
+      them and the operator accepted the removal of a file that was this
+      workflow's gate at the time they read the report.
+      **The security pass on this diff found the gap the marker leaves open.**
+      Recognition narrows the delete to files this workflow WROTE, which is not
+      the same as files inside the repository that was NAMED: a repository
+      describes where its own hooks live, so a symlinked hooks directory sends
+      the removal elsewhere while the preflight still prints a path inside the
+      repository. Unlike a symlinked hook, it is invisible in the report.
+      Reproduced before the guard was written — the file outside the repository
+      was deleted and the run exited 0. Now refused, with a scenario in the
+      delta
+- [x] 9.4h **Cases the review found missing outright**: an unnamed repository is
       untouched; a repository enrolled earlier and not named is neither reported
       as newly governed nor modified; declining writes nothing downstream of the
       acceptance; one repository failing leaves the rest processed and the run
-      exiting non-zero
+      exiting non-zero.
+      **All four built and tested 2026-08-08.** The machine is bound even when a
+      named repository fails: the failure is local to a repository, and refusing
+      to bind a machine because one named path was wrong would be the larger act
+      taken for the smaller reason
 - [ ] 9.5 **The unwind requirement contradicts its own ordering.** "Publish
       before bind" plus "SHALL unset a binding it created if publishing did not
       complete" — if publishing precedes binding and publishing fails, there is
