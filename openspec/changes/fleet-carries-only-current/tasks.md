@@ -87,7 +87,7 @@ across a fleet that still included `agenticapps-dashboard` and
 
       Verified after: `cparx` on the same branch with the same six dirty files,
       `git fsck` clean, `git worktree list` one entry.
-- [ ] 1.3c **GSD was never uninstalled, and 1.4 says otherwise.** Measured
+- [x] 1.3c **GSD was never uninstalled, and 1.4 says otherwise.** Measured
       2026-08-08, after this change had already reported GSD "removed from the
       two live repositories". What was removed on 2026-07-28 was GSD's state in
       `~/.claude/` — and nothing else on the machine:
@@ -115,8 +115,30 @@ across a fleet that still included `agenticapps-dashboard` and
       had been. The operational form is: **a tool is uninstalled when its
       package, its per-host config directories and its project copies are all
       gone** — check all three and never infer two from one.
-      Nothing removed. Operator call, and it spans three hosts plus a package
-      manager
+      **Uninstalled 2026-08-08 on the operator's instruction.** 231 paths,
+      inventoried into `gsd-machine-uninstall-inventory.md` before removal.
+      Verified after against every `PATH` prefix plus every agent, config and
+      cache root: nothing matches, no executable answers, `npm ls -g` reports
+      none.
+
+      **`npm rm -g pi-gsd` alone would have left most of it**, and the misses
+      are the reusable part:
+
+      - **Three npm installs, not one.** fnm's current node (removed by
+        `npm rm -g`), `~/.pi/agent/npm/node_modules/pi-gsd`, and
+        `/opt/homebrew/lib/node_modules/pi-gsd`. The last was found only by the
+        post-removal verification — `pi-gsd --version` still answered `v2.1.4`
+        after the uninstall was reported complete.
+      - **Bins under a node version that is no longer active.**
+        `fnm/node-versions/v24.15.0/installation/bin/` still held `pi-gsd` and
+        `pi-gsd-tools`; a package manager only tidies the runtime it is pointed at.
+      - **Two update caches**, `~/.pi/cache/` and `~/.cache/gsd/`, and a
+        `~/.config/gsd-patches` nobody had listed.
+
+      So the check has a third leg beyond 1.3a's: search space, search terms,
+      **and then search again after removing**, because an uninstall is a claim
+      like any other. Six `~/.claude/projects/*/memory/*gsd*` files were left
+      alone — they are records about the tool, not the tool
 - [ ] 1.3a The predicate that missed it is worth stating, because it is the same
       one that missed 21 skills behind symlinks and a 46-line `pre-commit` in
       `~/.agenticapps/git-hooks/`. Each sweep so far has searched **where the
