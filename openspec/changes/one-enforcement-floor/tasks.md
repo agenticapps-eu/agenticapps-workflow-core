@@ -765,6 +765,43 @@ highest-consequence first:
       every run, failing by case name and restoring what it found. Verified by
       removing one `new_core` and watching the guard fire
 
+- [x] 10.7 **What the security pass found in the consent gate 10.1 had just
+      built.** Both were reproduced end to end before being fixed, and both are
+      the same shape: a gate that reported consent it had not obtained.
+      - [x] **The acceptance list globbed.** `for a in $ACCEPT` is unquoted so
+            the list splits on whitespace, and unquoted expansion also does
+            *pathname* expansion. `GLOBAL_FLOOR_ACCEPT='*'` — what an operator
+            types meaning "accept whatever is there" — expanded against the
+            working directory the binder happened to run from; with a file named
+            `pre-push` in it, the wildcard matched the entry and the machine
+            bound. That is the blanket acceptance this requirement forbids in as
+            many words, arriving through the shell rather than the design, and
+            it accepts different entries depending on where the command was run.
+            Fixed with `set -f` around the loop
+      - [x] **A marked `pre-commit` was exempt, and the marker is a comment.**
+            The inventory skipped `pre-commit` whenever it carried a version
+            marker — but a marker cannot establish who wrote a file. A
+            `pre-commit` carrying `9.9.9` is newer than the checkout's, so
+            arbitration correctly declines to publish, the file survives, and
+            the run bound the directory it sits in **while printing "holds
+            nothing this installer did not publish"**. The false positive claim
+            is the finding: a clean-inventory line exists so that a clean result
+            is evidence rather than silence, and evidence that is sometimes
+            false is worse than the silence it replaced. The carve-out was
+            justified by "publishing replaces it", so where the publish does not
+            replace it the justification goes too. The recognition test is now
+            **the publisher's own exit status** rather than the presence of a
+            comment — exit 3 means the file in place is not ours, and it goes
+            through the same per-entry consent as any other entry. Exit 3 is
+            still not a publish failure; it is no longer a bind decision either,
+            and conflating the two was the hole
+      - [x] The clean-inventory line moved to **after** the publish. Before it,
+            the claim can be false, and the entry the arbitration declines to
+            replace is exactly the one it would be covering up
+      - [x] 43 → 48 cases, RED first on all five. No `.gstack/security-reports/`
+            directory was created: this repo carries what the diagram requires,
+            and the findings belong beside the tasks that produced them
+
 ## 11. What the Stage 2 code review found in `install.sh`
 
 Stage 2 ran 2026-08-08 in a cleared session against the whole branch diff; the

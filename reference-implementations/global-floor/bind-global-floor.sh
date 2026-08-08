@@ -102,10 +102,20 @@ fi
 # remembers.
 ACCEPT="${GLOBAL_FLOOR_ACCEPT:-}"
 
+# `$ACCEPT` is unquoted so the list splits on whitespace — and unquoted
+# expansion also does PATHNAME expansion, so globbing is disabled around it.
+# Without `set -f`, GLOBAL_FLOOR_ACCEPT='*' expanded against the working
+# directory the binder happened to be run from: reproduced, with a file named
+# `pre-push` in that directory, `*` matched the entry and the machine bound.
+# That is the blanket acceptance this requirement forbids, arriving through the
+# shell rather than the design, and it accepts different entries depending on
+# where the command was run.
 accepted() {
-  local a
-  for a in $ACCEPT; do [ "$a" = "$1" ] && return 0; done
-  return 1
+  local a rc=1
+  set -f
+  for a in $ACCEPT; do [ "$a" = "$1" ] && { rc=0; break; }; done
+  set +f
+  return "$rc"
 }
 
 # Asked only when there is somebody to ask. install.sh runs this with stdin
@@ -123,6 +133,8 @@ confirm() {
 
 unaccepted=''
 inventoried=0
+pre_commit_detail=''
+pre_commit_marked=0
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   name="${path##*/}"
@@ -135,17 +147,21 @@ while IFS= read -r path; do
     # design, so flagging it would fire the refusal on every correctly composed
     # machine — which is how a guard comes to be switched off.
     hooks.d) continue ;;
+    # THE VERDICT ON pre-commit IS DEFERRED TO THE PUBLISHER, and the security
+    # pass is why. This used to exempt the entry whenever it carried a version
+    # marker — but a marker is a comment, so its presence cannot establish that
+    # this installer wrote the file. Reproduced: a pre-commit carrying
+    # `# global-floor-version: 9.9.9` was newer than the checkout's, so
+    # arbitration correctly declined to publish, the file survived, and the run
+    # bound the directory it sits in while printing "holds nothing this
+    # installer did not publish".
+    #
+    # The carve-out was justified by "publishing replaces it". Where the publish
+    # does not replace it, the justification goes with it — so what settles the
+    # question is the publisher's own exit status, below.
     pre-commit)
-      grep -q "^# $MARKER_KEY: " "$path" 2>/dev/null && continue
-      # The one unrecognised entry that does not block, because it does not
-      # survive the run: an unmarked file reads as 0.0.0, so the publish below
-      # replaces it. Still reported — a hook replaced silently is
-      # indistinguishable from one that was never there, which is how the
-      # vendored copy sat here unnoticed.
-      inventoried=1
-      say "inventory: pre-commit is unrecognised — no $MARKER_KEY marker ($detail)."
-      say "  Version arbitration replaces it below; reporting it because a hook"
-      say "  replaced in silence looks exactly like one that was never there."
+      pre_commit_detail="$detail"
+      grep -q "^# $MARKER_KEY: " "$path" 2>/dev/null && pre_commit_marked=1
       continue ;;
   esac
 
@@ -159,10 +175,6 @@ while IFS= read -r path; do
 done <<INVENTORY
 $(find "$HOOKS_DIR" -mindepth 1 -maxdepth 1 2>/dev/null)
 INVENTORY
-
-# Reported even when it finds nothing, because silence and "nobody looked" read
-# identically — and nobody looking is the defect this closes.
-[ "$inventoried" = 0 ] && say "inventory: $HOOKS_DIR holds nothing this installer did not publish"
 
 if [ -n "$unaccepted" ]; then
   say "REFUSED —$unaccepted would be activated by binding this directory, and"
@@ -178,16 +190,56 @@ fi
 "$SHARED" "$SRC" "$HOOKS_DIR/pre-commit" "$MARKER_KEY" >/dev/null 2>&1
 rc=$?
 case $rc in
-  0) say "published pre-commit to $HOOKS_DIR" ;;
+  0) say "published pre-commit to $HOOKS_DIR"
+     # It is ours now. Worth reporting only if it was not before: a hook
+     # replaced in silence looks exactly like one that was never there, which
+     # is how the vendored copy sat in this directory unnoticed.
+     if [ -n "$pre_commit_detail" ] && [ "$pre_commit_marked" = 0 ]; then
+       inventoried=1
+       say "inventory: unrecognised entry — pre-commit ($pre_commit_detail), no $MARKER_KEY marker."
+       say "  It has been replaced by the publish above, which is why it does not refuse."
+     fi ;;
   # Exit 3 is the helper's documented SUCCESS: the destination already holds a
   # strictly newer version, so "at least as new as the source" holds either
-  # way. Calling it a failure would refuse to bind a machine that is more
+  # way. Calling it a PUBLISH failure would refuse a machine that is more
   # current than this checkout — correct state, reported as broken.
-  3) say "satisfied pre-commit — destination already newer" ;;
+  #
+  # It is not a bind decision, though, and conflating the two is the hole the
+  # security pass found. The publish succeeded and the file in place is still
+  # not one this run wrote, so the entry goes back through the same consent the
+  # inventory applies to every other entry it did not publish.
+  3) say "satisfied pre-commit — destination already newer"
+     # Gated on the inventory having actually SEEN a file. "Already newer" with
+     # nothing there is contradictory state, and there is no entry to consent
+     # to — asking about a file that is not present is a prompt nobody can
+     # answer.
+     if [ -n "$pre_commit_detail" ]; then
+       inventoried=1
+       say "inventory: unrecognised entry — pre-commit ($pre_commit_detail)"
+       say "  Newer than this checkout's, so the publish left it in place: this run did"
+       say "  not write the hook it is about to bind to every repository on the machine."
+       if accepted pre-commit || confirm pre-commit; then
+         say "  accepted by name"
+       else
+         say "REFUSED — binding this directory would run a pre-commit this run neither"
+         say "published nor replaced, on every commit in every repository the floor"
+         say "governs. core.hooksPath was NOT set and the file was not touched."
+         say "Accept it by name and re-run:"
+         say "  GLOBAL_FLOOR_ACCEPT=\"pre-commit\" $0"
+         exit 1
+       fi
+     fi ;;
   *) say "FAILED to publish pre-commit to $HOOKS_DIR (exit $rc)."
      say "core.hooksPath was NOT set: a binding with no hook behind it commits silently."
      exit 1 ;;
 esac
+
+# Reported even when it finds nothing, because silence and "nobody looked" read
+# identically — and nobody looking is the defect this closes. Printed after the
+# publish rather than before it, because before the publish this claim can be
+# false: the entry the arbitration declines to replace is exactly the one the
+# claim would be covering up.
+[ "$inventoried" = 0 ] && say "inventory: $HOOKS_DIR holds nothing this installer did not publish"
 
 # ── Bind ───────────────────────────────────────────────────────────────────
 # `--type=path` so git expands a `~` the operator wrote by hand; `--get`

@@ -150,9 +150,15 @@ STUB
 # stdin is /dev/null so the run is the same whether the suite was started from
 # a terminal or from CI. The binder prompts per unrecognised entry when stdin is
 # a tty, and a suite that inherited one would hang on the case that plants one.
-run_binder() {
+run_binder() { run_binder_in "$REPO"; }
+
+# The directory the binder is RUN from is a parameter, not a constant, because
+# one case below turns on it: an unquoted acceptance list globs against the
+# working directory, so proving that it does not needs a cwd whose contents
+# would match.
+run_binder_in() {
   assert_isolated
-  ( cd "$REPO" && "$CORE/$BINDER_REL" >"$CASE/out" 2>&1 </dev/null ); RC=$?
+  ( cd "$1" && "$CORE/$BINDER_REL" >"$CASE/out" 2>&1 </dev/null ); RC=$?
   OUT="$(cat "$CASE/out")"
 }
 
@@ -718,6 +724,109 @@ if said "pre-commit" && said "unrecognised"; then
   ok "the replaced entry is still reported, so the inventory ran before the publish"
 else
   bad "the replaced entry is still reported, so the inventory ran before the publish" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — what the security pass found in the consent gate"
+
+# FINDING 1 — the acceptance list globbed.
+#
+# `for a in $ACCEPT` is unquoted for word splitting, and unquoted expansion in
+# the shell also does PATHNAME expansion. So GLOBAL_FLOOR_ACCEPT='*' — which is
+# what an operator types when they mean "accept whatever is there" — expanded
+# against the working directory the binder happened to be run from. Reproduced:
+# with a file named `pre-push` in that directory, `*` matched the entry and the
+# machine bound.
+#
+# That is the blanket acceptance the requirement forbids in as many words,
+# arriving through the shell rather than through the design, and it is
+# NON-DETERMINISTIC: the same command accepts different entries depending on
+# where it was run.
+setup_case
+mkdir -p "$HOOKDIR"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/pre-push"
+mkdir -p "$REPO/decoy" && : > "$REPO/decoy/pre-push"
+GLOBAL_FLOOR_ACCEPT='*' run_binder_in "$REPO/decoy"
+if ran && [ "$RC" -ne 0 ] && [ -z "$(bound)" ]; then
+  ok "a wildcard does not accept an entry by globbing the working directory"
+else
+  bad "a wildcard does not accept an entry by globbing the working directory" \
+      "rc=$RC, binding='$(bound)'" \
+      "GLOBAL_FLOOR_ACCEPT='*' matched a file in the cwd and granted consent" \
+      "${OUT:-<no output>}"
+fi
+
+# FINDING 2 — a marked pre-commit this run did not publish was bound, under an
+# inventory line that said the opposite.
+#
+# The inventory exempted `pre-commit` whenever it carried a version marker, and
+# the marker is just a comment: any file in that directory can carry one. When
+# the marked version is NEWER than the checkout's, arbitration correctly
+# declines to publish — so the file survives, and the binder then binds the
+# directory it sits in. Reproduced: the run printed "holds nothing this
+# installer did not publish" and bound a pre-commit that this installer did not
+# publish and did not replace.
+#
+# The carve-out was justified by "publishing replaces it". Where the publish
+# does NOT replace it, the justification is gone with it. The recognition test
+# is therefore the PUBLISHER'S OWN VERDICT rather than the presence of a
+# comment — exit 3 means the file in place is not ours.
+setup_case
+mkdir -p "$HOOKDIR"
+cat > "$HOOKDIR/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+# global-floor-version: 9.9.9
+exit 0
+HOOK
+chmod +x "$HOOKDIR/pre-commit"
+touch -t 202507250000 "$HOOKDIR/pre-commit"
+FOREIGN_SIZE="$(wc -c < "$HOOKDIR/pre-commit" | tr -d ' ')"
+run_binder
+if ran && [ "$RC" -ne 0 ] && [ -z "$(bound)" ]; then
+  ok "a marked pre-commit the publish will not replace refuses the bind"
+else
+  bad "a marked pre-commit the publish will not replace refuses the bind" \
+      "rc=$RC, binding='$(bound)'" \
+      "the directory was bound with a gate this run neither published nor replaced" \
+      "${OUT:-<no output>}"
+fi
+
+if said "pre-commit" && said "$FOREIGN_SIZE" && said "2025-07-25"; then
+  ok "and it is named with its size and date, like any other finding"
+else
+  bad "and it is named with its size and date, like any other finding" "$OUT"
+fi
+
+# The false claim is the finding. "Holds nothing this installer did not publish"
+# is the line the requirement asked for so that a clean result is evidence
+# rather than silence — evidence that is sometimes false is worse than the
+# silence it replaced.
+if ran && ! said "holds nothing this installer did not publish"; then
+  ok "and the clean-inventory line is not printed when the inventory is not clean"
+else
+  bad "and the clean-inventory line is not printed when the inventory is not clean" \
+      "the run claimed a clean directory while binding a foreign gate" "$OUT"
+fi
+
+# Still acceptable by name, because a machine genuinely more current than the
+# checkout is correct state rather than an attack, and refusing it forever
+# would be the "correct state reported as broken" failure the publish step
+# already avoids.
+setup_case
+mkdir -p "$HOOKDIR"
+cat > "$HOOKDIR/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+# global-floor-version: 9.9.9
+exit 0
+HOOK
+chmod +x "$HOOKDIR/pre-commit"
+GLOBAL_FLOOR_ACCEPT=pre-commit run_binder
+if [ "$RC" -eq 0 ] && [ "$(bound)" = "$HOOKDIR" ]; then
+  ok "accepting the newer pre-commit by name binds, and leaves it in place"
+else
+  bad "accepting the newer pre-commit by name binds, and leaves it in place" \
+      "rc=$RC, binding='$(bound)'" "$OUT"
 fi
 
 # ---------------------------------------------------------------------------
