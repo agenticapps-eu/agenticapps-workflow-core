@@ -68,13 +68,30 @@ across a fleet that still included `agenticapps-dashboard` and
 Mechanical, reversible except where noted, and independent of the
 instruction-file work. One PR per repository.
 
-- [ ] 2.1 `setup-gstack-gsd-superpowers-workflow.md` (`cparx`, 133 lines) and
-      `gsd-plan.md` / `setup.md` (`callbot`) — commands offering a tool removed
-      on 2026-07-28. Both confirmed **tracked** on 2026-08-08, so this row is
-      reversible and is an ordinary PR in each repository
-- [ ] 2.1a **GSD itself is still installed, and this is the row the inventory
-      never had.** Not a command *offering* the tool — the tool. Measured
-      2026-08-08:
+- [x] 2.1 `setup-gstack-gsd-superpowers-workflow.md` (`cparx`, 133 lines) and
+      `gsd-plan.md` ~~/ `setup.md`~~ (`callbot`) — commands offering a tool
+      removed on 2026-07-28. Both confirmed **tracked** on 2026-08-08, so this
+      row is reversible and is an ordinary PR in each repository.
+      **Done 2026-08-08** — cparx PR #129, callbot PR #102. callbot's branched
+      from `origin/main` rather than its in-flight `chore/instruction-file-cleanup`,
+      so each PR carries one deletion and nothing else.
+      **`setup.md` was struck from this task, and the reason is the one 2.2
+      already warned about.** It is not GSD's. It is callbot's own
+      infrastructure-provisioning command — Twilio DID purchase, `wrangler
+      secret put`, a setup log — and it mentions GSD **zero** times, against 10
+      in `gsd-plan.md`. This task would have deleted a command the project
+      wrote, and the only thing that caught it was reading the file instead of
+      trusting the row. The row was built from filenames, and `setup.md` sitting
+      beside `gsd-plan.md` in one repository is not evidence about what is in it
+
+- [x] 2.1a **GSD itself is still installed, and this is the row the inventory
+      never had.** **Removed 2026-08-08** — `cparx` and `open-design`, 348 files
+      and 3.6M, verified absent afterwards; `pi-agentic-apps-workflow`'s copy
+      left in place, out of scope by 1.2. Neither removal appears in either PR,
+      because untracked files are in no diff — which is the whole reason nothing
+      reported them for three months.
+
+      Not a command *offering* the tool — the tool. Measured 2026-08-08:
 
       | Repository | files | size | tracked | gitignored | forge |
       |---|---:|---:|---:|---|---|
@@ -103,9 +120,13 @@ instruction-file work. One PR per repository.
       `get-shit-done` returned nothing. The fleet's standing lesson is that
       sweeps scoped to symlinks miss directories; the inverse holds here and a
       sweep scoped to directories would have found all of it
-- [ ] 2.2 `backend-foundation.md` (`callbot`) — establish whether it belongs to a
+- [x] 2.2 `backend-foundation.md` (`callbot`) — establish whether it belongs to a
       removed tool or is that project's own. **Only the former is in scope**, and
-      guessing is how a project loses a command it wrote
+      guessing is how a project loses a command it wrote.
+      **Established 2026-08-08: it is callbot's own and stays.** `/backend-foundation`
+      runs that project's backend MVP sprint against its Linear plan and mentions
+      GSD zero times. Left in place, and 2.1's identical error on `setup.md`
+      is why this task was right to demand the check rather than assume
 - [ ] 2.3 `.claude/workflow-config.md` — pre-OpenSpec workflow config
 - [ ] 2.4 `.claude/scheduled_tasks.lock`
 - [ ] 2.5 `.claude/claude-md/` — fragments of the modular instruction scheme;
