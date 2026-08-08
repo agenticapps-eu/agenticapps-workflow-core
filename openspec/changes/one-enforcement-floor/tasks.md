@@ -675,9 +675,20 @@ highest-consequence first:
 - [ ] 10.1 The binder inventories `~/.agenticapps/git-hooks/` before binding and
       refuses on an entry it did not publish, until accepted by name. Per entry,
       naming it — never a blanket "unexpected files, proceed?"
-- [ ] 10.2 The binder establishes core's local binding and
+- [x] 10.2 The binder establishes core's local binding and
       `agenticapps.hooksbinding=declared` **before** the global binding, and does
-      not set the global one if either write fails
+      not set the global one if either write fails. Two things the spec delta
+      left open were settled by placement rather than by prose. A **foreign
+      global binding is refused first**, before core is touched: refusing means
+      the global binding is never set, so core's hook is never displaced, so
+      there is no casualty to repair — and writing into a repository with
+      nothing to repair is the shape Decision 4 removed. A **foreign LOCAL
+      binding in core is reported, never overwritten**, the same posture the
+      binder already takes one level up; husky sets exactly that, and a
+      declaration left on somebody else's hooks directory would tell the sweep
+      to protect it. `--git-common-dir` resolves the default directory, never
+      `--git-path hooks`, which honours `core.hooksPath` and would let a wrong
+      binding confirm itself
 - [ ] 10.3 Remove core's `PreToolUse` registration from `.claude/settings.json`,
       which 9.11's amendment now permits and 2.x requires. Confirm the
       `pre-commit` hook and CI still gate, since they become the only two
@@ -687,6 +698,26 @@ highest-consequence first:
 - [ ] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
       bind; acceptance by name allows it; a failed core-binding write aborts the
       global bind; core's hook still runs after a successful bind
+      - [x] the 10.2 half: `tools/global-floor-bind.test.sh` 18 → 29 cases, RED
+            first. Every one of the 29 fails under
+            `GLOBAL_FLOOR_BIND_BIN=/usr/bin/true`; two of the new ones passed
+            under it at first draft and were tightened — "core's hook still
+            runs" is satisfied by a binder that bound nothing, because with
+            nothing bound `.git/hooks/` runs by default, so the global binding
+            is asserted alongside the marker
+      - [ ] the 10.1 half
+
+- [x] 10.6 **The suite wrote into the repository it lives in, and only this
+      change could surface it.** Three `install.test.sh` cases ran the real
+      checkout's `install.sh`, which resolves the real binder, whose checkout is
+      this one — so the first green run left core's own `core.hooksPath` and
+      declaration set on the operator's machine. `GIT_CONFIG_GLOBAL` was pinned
+      per case for exactly this class of leak and cannot cover it: a
+      repository's local config path is fixed by the repository. Fixed at both
+      ends — `new_core()` makes the copied checkout a real repository so those
+      cases isolate, and `run_install` records the real repo's binding around
+      every run, failing by case name and restoring what it found. Verified by
+      removing one `new_core` and watching the guard fire
 
 ## 11. What the Stage 2 code review found in `install.sh`
 

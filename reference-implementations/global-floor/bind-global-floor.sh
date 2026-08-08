@@ -111,20 +111,105 @@ same_dir() {
   [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
+# A foreign binding is settled before core is touched, and the order is load
+# bearing. Refusing means the global binding is never set, so core's hook is
+# never displaced, so there is no casualty to repair — and writing into a
+# repository with nothing to repair is the category error Decision 4 removed.
+#
+# Reported, never overwritten. An operator who has bound a hooks directory did
+# so deliberately, and a tool that silently rebinds it retakes a decision that
+# was already made — machine-wide, at commit time. This is the posture the
+# git-hook installer already takes toward a foreign hook, one level up.
+if [ -n "$current" ] && ! same_dir "$current" "$HOOKS_DIR"; then
+  say "REFUSED — core.hooksPath is already set to $current"
+  say "This workflow would have set $HOOKS_DIR. The global configuration is unchanged."
+  say "Composition belongs in $HOOKS_DIR/hooks.d, which the published hook runs."
+  exit 1
+fi
+
+# ── Core's own binding, before the global one ──────────────────────────────
+# Setting the global binding IS the moment core's own hook stops being
+# preferred: with core.hooksPath set, `.git/hooks/` is not consulted at all.
+# Four candidate owners for this repair were searched for and every one
+# excludes it in its own text — install.sh by Decision 4, init-project.sh and
+# fresh-clone-needs-nothing by "no hooks", core's CI by being a detector rather
+# than an establisher. So the binder takes it: it is the only artifact that
+# knows both facts at once, and it runs from inside core's checkout by
+# construction. The displacement and the repair are one act, for the same
+# reason publish and bind are one act.
+CORE_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
+
+# The checkout must be the repository itself, not merely inside one. Without
+# this, a binder unpacked below some unrelated repository would write a local
+# binding into THAT repository — which is precisely the arbitrary-repository
+# write Decision 4 removed, arrived at by accident instead of by design.
+core_top="$(git -C "$CORE_ROOT" rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$core_top" ] || ! same_dir "$core_top" "$CORE_ROOT"; then
+  say "FAILED — core's local core.hooksPath cannot be established: $CORE_ROOT"
+  say "is not the top of a git repository. This script runs from inside core's"
+  say "checkout by construction, and binding the global path from anywhere else"
+  say "would displace a hook it cannot repair. Nothing was bound."
+  exit 1
+fi
+
+# `--git-common-dir`, never `--git-path hooks`: the latter HONORS core.hooksPath
+# and would return whatever is already set, so a wrong binding would confirm
+# itself. `--git-common-dir` also resolves a linked worktree to the main
+# checkout, which is the directory git actually reads hooks from.
+core_common="$(git -C "$CORE_ROOT" rev-parse --git-common-dir 2>/dev/null)"
+case "$core_common" in
+  '') say "FAILED to resolve core's git directory. Nothing was bound."; exit 1 ;;
+  /*) ;;
+  *)  core_common="$CORE_ROOT/$core_common" ;;
+esac
+CORE_HOOKS="$core_common/hooks"
+
+core_local="$(git -C "$CORE_ROOT" config --local --get --type=path core.hooksPath 2>/dev/null)"
+core_declared="$(git -C "$CORE_ROOT" config --local --get agenticapps.hooksbinding 2>/dev/null)"
+
+declare_core() {
+  git -C "$CORE_ROOT" config --local agenticapps.hooksbinding declared && return 0
+  # The sweep unsets every local binding that names the default directory,
+  # because five of the six on the machine measured were redundant. The
+  # declaration is the only thing distinguishing core's deliberate one from
+  # those, so a binding without it is a repair the next installer run undoes.
+  say "FAILED to declare core's local core.hooksPath. The global binding was NOT set."
+  return 1
+}
+
+if [ -n "$core_local" ] && ! same_dir "$core_local" "$CORE_HOOKS"; then
+  # Same posture as the global refusal above, one level down. husky sets exactly
+  # this, and retaking that decision at commit time is what this change refuses
+  # to do — including by leaving a declaration that would tell the sweep to
+  # protect somebody else's hooks directory.
+  say "REFUSED — core's local core.hooksPath is already set to $core_local"
+  say "This workflow would have set $CORE_HOOKS. Core's configuration is unchanged"
+  say "and the global binding was NOT set: it would displace a hook this run"
+  say "cannot account for."
+  exit 1
+elif [ -n "$core_local" ] && [ "$core_declared" = declared ]; then
+  say "satisfied — core's local core.hooksPath already declares $CORE_HOOKS"
+elif [ -n "$core_local" ]; then
+  # The right directory with no declaration is the interrupted repair, not an
+  # operator decision. Completing it takes nothing back.
+  declare_core || exit 1
+  say "declared core's local core.hooksPath -> $CORE_HOOKS"
+else
+  git -C "$CORE_ROOT" config --local core.hooksPath "$CORE_HOOKS" || {
+    say "FAILED to set core's local core.hooksPath. The global binding was NOT set:"
+    say "it would leave core gated by a floor dispatcher that exits 0 in silence"
+    say "for a repository the floor does not govern."
+    exit 1; }
+  declare_core || exit 1
+  say "bound core's local core.hooksPath -> $CORE_HOOKS"
+fi
+
+# ── The global binding ─────────────────────────────────────────────────────
 if [ -z "$current" ]; then
   git config --global core.hooksPath "$HOOKS_DIR" || {
     say "FAILED to set core.hooksPath. The hook is published but the machine is UNBOUND."
     exit 1; }
   say "bound core.hooksPath -> $HOOKS_DIR"
-elif same_dir "$current" "$HOOKS_DIR"; then
-  say "satisfied — core.hooksPath already resolves to $HOOKS_DIR"
 else
-  # Reported, never overwritten. An operator who has bound a hooks directory
-  # did so deliberately, and a tool that silently rebinds it retakes a decision
-  # that was already made — machine-wide, at commit time. This is the posture
-  # the git-hook installer already takes toward a foreign hook, one level up.
-  say "REFUSED — core.hooksPath is already set to $current"
-  say "This workflow would have set $HOOKS_DIR. The global configuration is unchanged."
-  say "Composition belongs in $HOOKS_DIR/hooks.d, which the published hook runs."
-  exit 1
+  say "satisfied — core.hooksPath already resolves to $HOOKS_DIR"
 fi

@@ -100,6 +100,16 @@ setup_case() {
   cp "$BINDER" "$CORE/$BINDER_REL"
   chmod +x "$CORE/$BINDER_REL"
 
+  # Core's checkout is a real repository, because the binder repairs the one
+  # repository it is by construction running from — SELF_DIR is
+  # <core>/reference-implementations/global-floor — and a local git config
+  # write needs somewhere to land. Before task 10.2 the fixture was a bare
+  # directory and no case could tell the repair from its absence.
+  git -C "$CORE" init -q .
+  git -C "$CORE" config user.email t@t
+  git -C "$CORE" config user.name t
+  CORE_HOOKS="$CORE/.git/hooks"
+
   # A repository to run from. The binder writes GLOBAL configuration, so where
   # it is run from must not matter — and one case below asserts exactly that.
   REPO="$CASE/repo"
@@ -146,6 +156,10 @@ run_binder() {
 bound()   { git config --global --get --type=path core.hooksPath 2>/dev/null; }
 said()    { grep -qF "$1" "$CASE/out" 2>/dev/null; }
 calls()   { cat "$CALL_LOG" 2>/dev/null; }
+
+# Core's own local binding and the declaration that exempts it from the sweep.
+core_bound()    { git -C "$CORE" config --local --get --type=path core.hooksPath 2>/dev/null; }
+core_declared() { git -C "$CORE" config --local --get agenticapps.hooksbinding 2>/dev/null; }
 
 # The second vacuous-pass guard, and it is a different one from the
 # precondition above. That guard proves the FILE exists; this proves the run
@@ -368,6 +382,167 @@ if ran && [ "$RC" -ne 0 ] && [ ! -e "$HOOKDIR/pre-commit" ] && [ -z "$(bound)" ]
 else
   bad "a world-writable published directory is refused, and nothing is published or bound" \
       "rc=$RC, binding='$(bound)'" "${OUT:-<no output>}"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — core's own binding (task 10.2)"
+
+# WHY THE BINDER OWNS THIS
+#
+# Setting the global binding IS the moment core's own hook stops being
+# preferred: with core.hooksPath set globally, .git/hooks/ is not consulted at
+# all. Four candidate owners were searched for and every one excludes this in
+# its own text, so the binder takes it — it is the only artifact that knows
+# both facts at once, and it runs from inside core's checkout by construction.
+# The displacement and the repair are one act, for the same reason publish and
+# bind are one act.
+
+setup_case
+run_binder
+if [ "$(core_bound)" = "$CORE_HOOKS" ]; then
+  ok "core's local core.hooksPath is set to its own default hooks directory"
+else
+  bad "core's local core.hooksPath is set to its own default hooks directory" \
+      "got '$(core_bound)', wanted '$CORE_HOOKS'" "rc=$RC" "$OUT"
+fi
+
+# Without the declaration the sweep cannot tell core's deliberate binding from
+# the five redundant ones it exists to unset — both name the default directory
+# and both look identical by value. The sweep would then undo the repair on the
+# next installer run.
+if [ "$(core_declared)" = "declared" ]; then
+  ok "the binding carries agenticapps.hooksbinding=declared"
+else
+  bad "the binding carries agenticapps.hooksbinding=declared" \
+      "got '$(core_declared)'" "$OUT"
+fi
+
+# The end state above is not the point on its own — this is. A local binding
+# that git does not prefer would satisfy both assertions and still leave core
+# gated by the floor dispatcher, which exits 0 in silence for a repository the
+# floor does not govern. So commit under the finished binding and assert that
+# core's OWN hook is what ran.
+setup_case
+mkdir -p "$CORE_HOOKS"
+cat > "$CORE_HOOKS/pre-commit" <<HOOK
+#!/usr/bin/env bash
+: > "$CASE/core-gate-ran"
+HOOK
+chmod +x "$CORE_HOOKS/pre-commit"
+run_binder
+( cd "$CORE" && git add -A >/dev/null 2>&1 && git commit -qm probe >/dev/null 2>&1 )
+# The global binding is asserted alongside the marker, and it is not decoration.
+# With nothing bound at all, `.git/hooks/pre-commit` runs by default — so the
+# marker alone is satisfied by a binder that did nothing, and was: this case
+# passed under GLOBAL_FLOOR_BIND_BIN=/usr/bin/true until the second clause.
+if [ -f "$CASE/core-gate-ran" ] && [ "$(bound)" = "$HOOKDIR" ]; then
+  ok "a commit in core after the bind still runs core's working-tree gate"
+else
+  bad "a commit in core after the bind still runs core's working-tree gate" \
+      "core's hook did not run; the global binding displaced it" \
+      "core.hooksPath local='$(core_bound)' global='$(bound)'" "$OUT"
+fi
+
+# The ordering requirement, and the reason it is asserted rather than inferred:
+# a global binding written before core's repair leaves core ungated for as long
+# as the repair takes to fail. .git is made unwritable so the config lock cannot
+# be taken, which is how a local write fails without the test reaching into the
+# binder.
+setup_case
+chmod 555 "$CORE/.git"
+run_binder
+chmod 755 "$CORE/.git"
+if ran && [ -z "$(bound)" ] && [ "$RC" -ne 0 ]; then
+  ok "core's binding fails: the global binding is not set and the run exits non-zero"
+else
+  bad "core's binding fails: the global binding is not set and the run exits non-zero" \
+      "rc=$RC, global binding='$(bound)'" \
+      "a global binding without core's repair silently ungates core itself" \
+      "${OUT:-<no output>}"
+fi
+
+# Matched on "core's local", not on "core" — every line this binder prints
+# contains the string core.hooksPath, so the looser match passed before the
+# implementation existed.
+if said "core's local"; then
+  ok "the failure report names core's binding as what failed"
+else
+  bad "the failure report names core's binding as what failed" "${OUT:-<no output>}"
+fi
+
+# Re-running the installer is routine, so the repair has to be idempotent and
+# has to SAY it was already there. "Bound" on every run is how a no-op comes to
+# look like work.
+setup_case
+run_binder
+run_binder
+if [ "$RC" -eq 0 ] && [ "$(core_bound)" = "$CORE_HOOKS" ] && [ "$(core_declared)" = "declared" ]; then
+  ok "a second run leaves core's binding and declaration in place and exits 0"
+else
+  bad "a second run leaves core's binding and declaration in place and exits 0" \
+      "rc=$RC, local='$(core_bound)', declared='$(core_declared)'" "$OUT"
+fi
+
+if said "satisfied — core's local"; then
+  ok "the second run reports core's binding as satisfied rather than freshly set"
+else
+  bad "the second run reports core's binding as satisfied rather than freshly set" "$OUT"
+fi
+
+# A binding that names the right directory but carries no declaration is the
+# interrupted repair — and it is exactly what the sweep unsets. Completing it is
+# a repair; there is no operator decision here to retake.
+setup_case
+git -C "$CORE" config --local core.hooksPath "$CORE_HOOKS"
+run_binder
+if [ "$RC" -eq 0 ] && [ "$(core_declared)" = "declared" ]; then
+  ok "an undeclared binding on the right directory gains the declaration"
+else
+  bad "an undeclared binding on the right directory gains the declaration" \
+      "rc=$RC, declared='$(core_declared)'" "$OUT"
+fi
+
+# The same posture the binder already takes toward a foreign GLOBAL binding,
+# one level down. A local core.hooksPath pointing elsewhere is a decision
+# somebody made — husky sets exactly this — and silently retaking it at commit
+# time is the thing this whole change refuses to do.
+setup_case
+ELSEWHERE="$CASE/core-elsewhere-hooks"
+mkdir -p "$ELSEWHERE"
+git -C "$CORE" config --local core.hooksPath "$ELSEWHERE"
+run_binder
+if ran && [ "$(core_bound)" = "$ELSEWHERE" ] && [ "$RC" -ne 0 ] && [ -z "$(bound)" ]; then
+  ok "a foreign local binding in core is reported, never overwritten, and nothing is bound"
+else
+  bad "a foreign local binding in core is reported, never overwritten, and nothing is bound" \
+      "rc=$RC, local='$(core_bound)', global='$(bound)'" "${OUT:-<no output>}"
+fi
+
+# The refusal above happens before the global write, so it must not leave the
+# declaration behind either — a declared binding pointing at a foreign
+# directory would tell the sweep to protect somebody else's hooks.
+if ran && [ -z "$(core_declared)" ]; then
+  ok "the refused case leaves no declaration behind"
+else
+  bad "the refused case leaves no declaration behind" "declared='$(core_declared)'" \
+      "${OUT:-<no output>}"
+fi
+
+# A foreign GLOBAL binding is refused, and the binder is then not about to set
+# the global one at all — so there is no displacement of core's hook to repair.
+# Writing into core anyway would be a change to a repository with no cause,
+# which is the shape Decision 4 removed.
+setup_case
+FOREIGN="$CASE/somewhere-else/hooks"
+mkdir -p "$FOREIGN"
+git config --global core.hooksPath "$FOREIGN"
+run_binder
+if ran && [ -z "$(core_bound)" ] && [ -z "$(core_declared)" ]; then
+  ok "a foreign global binding is refused without writing into core"
+else
+  bad "a foreign global binding is refused without writing into core" \
+      "local='$(core_bound)', declared='$(core_declared)'" "${OUT:-<no output>}"
 fi
 
 # ---------------------------------------------------------------------------
