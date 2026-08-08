@@ -24,10 +24,43 @@
 # concurrency. A `cp` here would produce the same bytes on a clean machine and
 # silently overwrite a newer published hook on any other.
 #
-# Exit 0 = published and bound, or already so.
-# Exit 1 = refused (a foreign binding) or failed (publish or bind). In both
-#          cases the caller reports the step as skipped, so the run exits
-#          non-zero rather than claiming a floor the machine does not have.
+# THE MIGRATION SET IS NAMED, NEVER DISCOVERED.
+#
+#   bind-global-floor.sh [repository ...]
+#
+# Each argument is a repository to migrate off its own pre-commit and onto the
+# floor. With no arguments nothing is migrated, which is how install.sh calls
+# it: "acts only on repositories the operator names" is then true of the
+# unattended path by construction rather than by a flag defaulting correctly.
+#
+# The floor governs only repositories that enrolled, and enrolling is an act
+# performed inside the repository it applies to — so ENROLMENT IS ITSELF THE
+# CONSENT and the binding owes no separate one for a repository that already
+# enrolled. What is owed is the set this run will NEWLY enrol, which is the set
+# it was handed. Nothing needs searching for. A walk would search the machine to
+# rebuild a list already in a variable, and could not make any of the four
+# judgements that reduced 61 measured repositories to three: archived vs live,
+# husky vs our gate, deliberate adoption vs drive-by install, retired checkout
+# vs current. Not one is a property of a file on disk.
+#
+# ENROL → SWEEP → VERIFY → REMOVE, and every step is load-bearing.
+#
+# Enrolment is inert while a local core.hooksPath still stands: the repository
+# is gated by its own hook, which predates the enrolment predicate and never
+# reads it. That is exactly what makes enrolling first free and sweeping first
+# unsafe — sweeping an unenrolled repository hands it to the published
+# dispatcher, whose first act is to exit 0 for want of the marker. The window
+# between sweep and enrolment is one in which the repository has a hook file, a
+# global binding and NO ENFORCEMENT, and an interruption inside it leaves that
+# state permanently with nothing reporting it. Both plan reviewers found this
+# independently in the draft that had sweep first.
+#
+# Exit 0 = published and bound, or already so, and every named repository
+#          migrated.
+# Exit 1 = refused (a foreign binding, a declined preflight) or failed (publish,
+#          bind, or any named repository). In every case the caller reports the
+#          step as skipped, so the run exits non-zero rather than claiming a
+#          floor the machine does not have.
 set -uo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,7 +73,27 @@ SHARED="$SELF_DIR/../shared-install/install-shared-artifact.sh"
 HOOKS_DIR="$HOME/.agenticapps/git-hooks"
 MARKER_KEY='global-floor-version'
 
+# The ownership claim tools/install-core-git-hooks.sh writes into every hook it
+# installs. Matched as a WHOLE LINE: a file that merely mentions the marker in
+# passing has not claimed it. This is the only thing standing between "the
+# operator typed this path" and "this installer may delete the file at the end
+# of it".
+GATE_HOOK_MARKER='# managed-by: agenticapps-workflow-core tools/install-core-git-hooks.sh'
+
 say() { printf 'global-floor: %s\n' "$*"; }
+
+# Raw equality first, then physical paths. On macOS a home directory reached
+# through a symlink spells the same directory two ways, and a binder that
+# reported its own binding as foreign would refuse permanently. Defined up here
+# rather than beside its first use because the migration's resolution step needs
+# it before anything is published.
+same_dir() {
+  [ "$1" = "$2" ] && return 0
+  local a b
+  a="$(cd "$1" 2>/dev/null && pwd -P)" || return 1
+  b="$(cd "$2" 2>/dev/null && pwd -P)" || return 1
+  [ -n "$a" ] && [ "$a" = "$b" ]
+}
 
 # DECLARED PREREQUISITE (§21). Reported by name, and never offered: git is a
 # system runtime. Without the check the failure arrives as git's own "command
@@ -185,6 +238,186 @@ if [ -n "$unaccepted" ]; then
   exit 1
 fi
 
+# ── The named set: resolved and classified before anything is done ─────────
+# Everything here is READ-ONLY. It runs before the publish so that the report
+# below can be the dry-run the operator accepts, and so that a name that cannot
+# be resolved is rejected while there is still nothing to undo.
+planned=0
+refused=0
+
+if [ $# -gt 0 ]; then
+  PLAN="$(mktemp -d)" || { say "FAILED to create a working directory. Nothing was published."; exit 1; }
+  trap 'rm -rf "$PLAN"' EXIT
+  : > "$PLAN/report"
+  : > "$PLAN/seen"
+
+  for name in "$@"; do
+    # A TYPED PATH IS NOT AN IDENTITY, and `rev-parse` inside a subdirectory
+    # answers about the repository containing it. Without the equality test a
+    # named subdirectory would migrate a repository nobody named — the same
+    # arbitrary-repository write Decision 4 removed, arrived at by accident.
+    top="$(git -C "$name" rev-parse --show-toplevel 2>/dev/null)"
+    if [ -z "$top" ] || ! same_dir "$name" "$top"; then
+      say "REFUSED — $name is not the top of a git repository."
+      say "Nothing was published and core.hooksPath was NOT set. A set that cannot be"
+      say "stated correctly cannot be accepted correctly either, so the whole run stops"
+      say "rather than proceeding with the names that happened to parse."
+      exit 1
+    fi
+
+    # `--git-common-dir`, never `--git-path hooks`: the latter HONORS
+    # core.hooksPath, so the value under examination would confirm itself. It
+    # also resolves a linked worktree to the main checkout, which is both the
+    # directory git reads hooks from and the identity two checkouts share.
+    common="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+    if [ -z "$common" ]; then
+      common="$(git -C "$top" rev-parse --git-common-dir 2>/dev/null)"
+      case "$common" in '' | /*) ;; *) common="$top/$common" ;; esac
+    fi
+    if [ -z "$common" ]; then
+      say "REFUSED — cannot resolve the git directory of $name. Nothing was published."
+      exit 1
+    fi
+
+    key="$(cd "$common" 2>/dev/null && pwd -P)" || key="$common"
+    [ -n "$key" ] || key="$common"
+    if grep -qxF "$key" "$PLAN/seen" 2>/dev/null; then
+      printf '  %s names a repository already in this set — it is processed once\n' "$name" >> "$PLAN/report"
+      continue
+    fi
+    printf '%s\n' "$key" >> "$PLAN/seen"
+
+    # NAMING A REPOSITORY IS NOT EVIDENCE ABOUT THE HOOK INSIDE IT. It is the
+    # operator's belief about what is there. Recognition therefore comes from
+    # the file, and the case that matters is the negative one: a repository
+    # named by mistake keeps the hook its operator wrote. Same shape as the
+    # inventory above, one level down — a file's location proves who COULD have
+    # written it and never who did.
+    hook="$common/hooks/pre-commit"
+    # THE FILE THIS DELETES MUST BE THE ONE THE REPORT NAMED. A symlinked hooks
+    # directory redirects the removal to a file somewhere else entirely, and
+    # unlike a symlinked hook — refused below — it does so invisibly: the
+    # preflight prints `<common>/hooks/pre-commit`, and the operator accepts a
+    # path that is not where the delete lands. Refused for the reason the
+    # published directory and hooks.d are both refused when symlinked, one
+    # level further down.
+    if [ -L "$common/hooks" ]; then
+      printf '  REFUSE %s — %s/hooks is a symlink, so what is removed is not what\n' "$top" "$common" >> "$PLAN/report"
+      printf '    this report can name. Nothing in it is touched.\n' >> "$PLAN/report"
+      refused=$((refused + 1))
+      continue
+    fi
+    if [ ! -f "$hook" ]; then
+      printf '  REFUSE %s — there is no pre-commit at %s to migrate\n' "$top" "$hook" >> "$PLAN/report"
+      refused=$((refused + 1))
+      continue
+    fi
+    if [ -L "$hook" ] || ! grep -qxF "$GATE_HOOK_MARKER" "$hook" 2>/dev/null; then
+      printf '  REFUSE %s — %s carries no ownership marker, so it is not this\n' "$top" "$hook" >> "$PLAN/report"
+      printf '    workflow'"'"'s gate and will not be removed\n' >> "$PLAN/report"
+      refused=$((refused + 1))
+      continue
+    fi
+
+    # A local core.hooksPath that names the directory git would resolve anyway
+    # grants no behaviour, so unsetting it changes nothing except restoring the
+    # floor's reach. Anything else is a deliberate act. And a binding may be
+    # REDUNDANT BY VALUE AND STILL LOAD-BEARING — core's own is exactly that —
+    # so a declaration excludes it from the sweep without inspecting where it
+    # points.
+    lhp="$(git -C "$top" config --local --get --type=path core.hooksPath 2>/dev/null)"
+    ldeclared="$(git -C "$top" config --local --get agenticapps.hooksbinding 2>/dev/null)"
+    sweep=''
+    if [ -n "$lhp" ] && [ "$ldeclared" = declared ]; then
+      printf '  REFUSE %s — its local core.hooksPath is declared (%s), and a declared\n' "$top" "$lhp" >> "$PLAN/report"
+      printf '    binding is excluded from the sweep whatever it points at\n' >> "$PLAN/report"
+      refused=$((refused + 1))
+      continue
+    elif [ -n "$lhp" ] && ! same_dir "$lhp" "$common/hooks"; then
+      printf '  REFUSE %s — its local core.hooksPath names %s, which git prefers over\n' "$top" "$lhp" >> "$PLAN/report"
+      printf '    the floor. It is outside the floor by its own choice.\n' >> "$PLAN/report"
+      refused=$((refused + 1))
+      continue
+    elif [ -n "$lhp" ]; then
+      sweep="$lhp"
+    fi
+
+    if [ -n "$sweep" ]; then
+      printf '  migrate %s — enrol, sweep %s, verify, then remove %s\n' "$top" "$sweep" "$hook" >> "$PLAN/report"
+    else
+      printf '  migrate %s — enrol, verify, then remove %s\n' "$top" "$hook" >> "$PLAN/report"
+    fi
+
+    # LINKED WORKTREES SHARE ONE COMMON DIRECTORY, so they share one local
+    # configuration and one hooks directory. Naming any checkout acts on all of
+    # them — which makes "a repository it was not given is left entirely alone"
+    # false for a sibling nobody mentioned, unless the preflight says its name.
+    git -C "$top" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' |
+      while IFS= read -r wt; do
+        [ -n "$wt" ] || continue
+        same_dir "$wt" "$top" && continue
+        printf '    this also affects the linked worktree at %s, which shares that configuration\n' "$wt" >> "$PLAN/report"
+      done
+
+    printf '%s\n%s\n%s\n%s\n' "$top" "$common" "$hook" "$sweep" > "$PLAN/repo.$planned"
+    planned=$((planned + 1))
+  done
+fi
+
+# ── One report, one acceptance ─────────────────────────────────────────────
+# What will be published, what this run will newly enrol, and what will be done
+# to each named repository, under a SINGLE acceptance. Three prompts asking
+# about one act is how an operator learns to answer y without reading, which is
+# the failure the per-entry inventory above exists to prevent — reintroducing it
+# one level up would undo it.
+#
+# The guarantee below is scoped rather than absolute, deliberately. install.sh
+# publishes its payload before it ever reaches this script, so "declining leaves
+# the machine untouched" is a promise this file cannot keep. It names what it
+# actually covers instead.
+PLAN_ACCEPT="${GLOBAL_FLOOR_ACCEPT_PLAN:-}"
+
+plan_accepted() {
+  case "$PLAN_ACCEPT" in
+    1 | y | Y | yes | true) return 0 ;;
+    # Empty is "not answered" and falls through to the prompt. Any other value
+    # IS an answer and it is not yes: GLOBAL_FLOOR_ACCEPT_PLAN=0 must not
+    # accept. The enrolment predicate learned this one level down — a key whose
+    # value is ignored is not an opt-in, it is a tripwire.
+    '') ;;
+    *) return 1 ;;
+  esac
+  [ -t 0 ] || return 1
+  printf 'global-floor: proceed with all of the above? [y/N] '
+  local a
+  read -r a || return 1
+  case "$a" in y | Y) return 0 ;; esac
+  return 1
+}
+
+if [ $# -gt 0 ]; then
+  say "preflight — nothing below has been done yet"
+  if [ -n "$pre_commit_detail" ]; then
+    say "  publish pre-commit -> $HOOKS_DIR, replacing what is there now ($pre_commit_detail)"
+  else
+    say "  publish pre-commit -> $HOOKS_DIR"
+  fi
+  say "  bind core.hooksPath -> $HOOKS_DIR"
+  while IFS= read -r line; do say "$line"; done < "$PLAN/report"
+  # THE MUTATION SET IS NOT THE IMPACT SET. A repository enrolled earlier by
+  # init-project.sh becomes governed the moment the binding lands, without
+  # appearing here and without being named. Claiming to enumerate what the
+  # binding governs would require the search this design removed, and would be
+  # false the first time somebody ran the initialiser.
+  say "  note: repositories enrolled earlier are governed by this binding too. This"
+  say "  run reports only what it will NEWLY enrol; --check is where they are listed."
+  if ! plan_accepted; then
+    say "DECLINED — nothing was published, core.hooksPath was NOT set, and no named"
+    say "repository was enrolled, swept or stripped of its hook."
+    exit 1
+  fi
+fi
+
 # ── Publish ────────────────────────────────────────────────────────────────
 
 "$SHARED" "$SRC" "$HOOKS_DIR/pre-commit" "$MARKER_KEY" >/dev/null 2>&1
@@ -245,17 +478,6 @@ esac
 # `--type=path` so git expands a `~` the operator wrote by hand; `--get`
 # returns the raw string otherwise and the comparison below would miss.
 current="$(git config --global --get --type=path core.hooksPath 2>/dev/null)"
-
-# Raw equality first, then physical paths. On macOS a home directory reached
-# through a symlink spells the same directory two ways, and a binder that
-# reported its own binding as foreign would refuse permanently.
-same_dir() {
-  [ "$1" = "$2" ] && return 0
-  local a b
-  a="$(cd "$1" 2>/dev/null && pwd -P)" || return 1
-  b="$(cd "$2" 2>/dev/null && pwd -P)" || return 1
-  [ -n "$a" ] && [ "$a" = "$b" ]
-}
 
 # A foreign binding is settled before core is touched, and the order is load
 # bearing. Refusing means the global binding is never set, so core's hook is
@@ -358,4 +580,100 @@ if [ -z "$current" ]; then
   say "bound core.hooksPath -> $HOOKS_DIR"
 else
   say "satisfied — core.hooksPath already resolves to $HOOKS_DIR"
+fi
+
+# ── The migration: enrol → sweep → verify → remove, one repository at a time ─
+# After the binding, because the verification step asks whether the floor
+# governs the repository and there is no floor to be governed by until then.
+#
+# One repository is carried to completion before the next begins, which is what
+# makes the interrupted-partway state describable: everything before the cut is
+# migrated, everything after it still carries its own hook, and the repository
+# the cut landed inside is gated at every instant of its own sequence.
+failed=0
+i=0
+while [ "$i" -lt "$planned" ]; do
+  { read -r m_top; read -r m_common; read -r m_hook; read -r m_sweep; } < "$PLAN/repo.$i"
+  i=$((i + 1))
+
+  # FIRST, AND INERT UNTIL THE SWEEP. While the local binding stands the
+  # repository is gated by its own hook, which predates this predicate and never
+  # reads it — so the marker changes nothing until the sweep makes it
+  # load-bearing, and that is exactly what makes enrolling first free.
+  if ! git -C "$m_top" config --local agenticapps.workflow.enrolled true 2>/dev/null; then
+    say "$m_top: FAILED to enrol — its hook is left in place and still gates it"
+    failed=$((failed + 1))
+    continue
+  fi
+  say "$m_top: enrolled"
+
+  if [ -n "$m_sweep" ]; then
+    # Re-read rather than trust the preflight. The value classified as redundant
+    # minutes ago is the value about to be deleted, and nothing has held a lock
+    # on that repository in between.
+    now="$(git -C "$m_top" config --local --get --type=path core.hooksPath 2>/dev/null)"
+    if [ "$now" != "$m_sweep" ]; then
+      say "$m_top: NOT MIGRATED — its local core.hooksPath is now '${now:-unset}', not the"
+      say "  '$m_sweep' the preflight classified. Its hook is left in place."
+      failed=$((failed + 1))
+      continue
+    fi
+    if ! git -C "$m_top" config --local --unset core.hooksPath 2>/dev/null; then
+      say "$m_top: FAILED to sweep its local core.hooksPath — its hook is left in place"
+      failed=$((failed + 1))
+      continue
+    fi
+    say "$m_top: swept local core.hooksPath (was $m_sweep)"
+  fi
+
+  # THE VERIFICATION RESOLVES THE REPOSITORY'S HOOKS DIRECTORY rather than
+  # reading the global configuration back. "The binding is live" is a fact about
+  # the machine; "the binding governs this repository" is a fact about the
+  # repository, and a local binding anywhere in the stack makes them different
+  # facts. Here `--git-path hooks` is the right call precisely because it HONORS
+  # core.hooksPath: the question is what git will actually do.
+  resolved="$(git -C "$m_top" rev-parse --path-format=absolute --git-path hooks 2>/dev/null)"
+  if [ -z "$resolved" ] || ! same_dir "$resolved" "$HOOKS_DIR"; then
+    if [ -n "$m_sweep" ]; then
+      if git -C "$m_top" config --local core.hooksPath "$m_sweep" 2>/dev/null; then
+        say "$m_top: restored local core.hooksPath -> $m_sweep"
+      else
+        say "$m_top: FAILED to restore local core.hooksPath '$m_sweep' — it is now unset"
+        say "  and its own hook is no longer consulted. Restore it by hand."
+      fi
+    fi
+    say "$m_top: NOT MIGRATED — its hooks resolve to '${resolved:-nothing}', not to the"
+    say "  floor at $HOOKS_DIR. Its hook is left in place."
+    failed=$((failed + 1))
+    continue
+  fi
+  say "$m_top: verified — the floor governs it"
+
+  # Recognised once at the preflight and again here, immediately before the
+  # delete. The gap between them is a whole publish and bind, and the operator
+  # accepted the removal of a file that was this workflow's gate at the time
+  # they read the report.
+  if [ ! -f "$m_hook" ] || [ -L "$m_hook" ] || ! grep -qxF "$GATE_HOOK_MARKER" "$m_hook" 2>/dev/null; then
+    say "$m_top: NOT MIGRATED — $m_hook is no longer recognisable as this workflow's"
+    say "  gate, so it is left alone. The repository is enrolled and the floor governs it."
+    failed=$((failed + 1))
+    continue
+  fi
+  if ! rm -f "$m_hook"; then
+    say "$m_top: FAILED to remove $m_hook — the repository is now gated twice"
+    failed=$((failed + 1))
+    continue
+  fi
+  say "$m_top: removed $m_hook"
+  say "$m_top: MIGRATED"
+done
+
+# A partial migration is never reported as a complete one. The machine keeps its
+# binding either way: the failure is local to a repository, and refusing to bind
+# a machine because one named path was wrong would be the larger act taken for
+# the smaller reason.
+if [ "$((failed + refused))" -gt 0 ]; then
+  say "migration incomplete — $((failed + refused)) named repositories were not migrated,"
+  say "each keeping the hook it already had. The machine is bound."
+  exit 1
 fi

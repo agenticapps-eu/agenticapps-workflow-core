@@ -830,6 +830,525 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# THE MIGRATION (tasks 9.4a–9.4h)
+#
+# The binder writes git configuration into, and deletes files from, repositories
+# OTHER than the one it runs in. Every case below exists because that is a
+# different kind of act from binding a machine, and the delta spends a
+# requirement and a half saying what may authorise it.
+#
+# The order is enrol → sweep → verify → remove and it is asserted as an ORDER,
+# not as an end state, for the same reason publish-then-bind is: the two wrong
+# orders produce the same final disk and a different set of survivable
+# interruptions. A suite that only checks the end state passes under both.
+# ---------------------------------------------------------------------------
+
+# Spelled out rather than read from tools/install-core-git-hooks.sh, for the
+# reason HOOKS_REL and MARKER_KEY are: a test that sourced the marker from the
+# thing that writes it would agree with whatever it said. This is the WHOLE
+# line, because a hook that merely mentions the marker has not claimed it.
+GATE_MARKER='# managed-by: agenticapps-workflow-core tools/install-core-git-hooks.sh'
+
+# The floor dispatcher FAILS OPEN when the gate is missing (§18), so a commit in
+# an enrolled repository with no gate on the machine succeeds — which reads
+# exactly like an ungated one. Every case that asks "is this repository still
+# gated" plants a refusing gate first, or it would be asserting the fail-open
+# path and calling it enforcement.
+plant_gate() {
+  mkdir -p "$HOME/.agenticapps/bin"
+  printf '#!/bin/sh\nexit 1\n' > "$HOME/.agenticapps/bin/openspec-change-gate.sh"
+  chmod +x "$HOME/.agenticapps/bin/openspec-change-gate.sh"
+  # The dispatcher prefers these two over the planted path, and they are read
+  # from the operator's environment. A suite that inherited one would assert
+  # against whatever gate that machine happens to have.
+  unset OPENSPEC_GATE OPENSPEC_CHANGE_GATE
+}
+
+# A repository in the state the migration set is actually in: a gate pre-commit
+# in its own hooks directory, and — for two of the three measured — a local
+# core.hooksPath naming that same directory.
+#
+#   $1 name   $2 binding: none|redundant|real|declared   $3 hook: ours|foreign|absent
+gated_repo() {
+  local d="$CASE/$1"
+  mkdir -p "$d"
+  git -C "$d" init -q .
+  git -C "$d" config user.email t@t
+  git -C "$d" config user.name t
+  case "${3:-ours}" in
+    ours)    printf '#!/bin/sh\n%s\nexit 1\n' "$GATE_MARKER" > "$d/.git/hooks/pre-commit"
+             chmod +x "$d/.git/hooks/pre-commit" ;;
+    foreign) printf '#!/bin/sh\n# somebody else wrote this\nexit 1\n' > "$d/.git/hooks/pre-commit"
+             chmod +x "$d/.git/hooks/pre-commit" ;;
+    absent)  ;;
+  esac
+  case "${2:-none}" in
+    redundant) git -C "$d" config --local core.hooksPath "$d/.git/hooks" ;;
+    real)      mkdir -p "$CASE/elsewhere"
+               git -C "$d" config --local core.hooksPath "$CASE/elsewhere" ;;
+    declared)  git -C "$d" config --local core.hooksPath "$d/.git/hooks"
+               git -C "$d" config --local agenticapps.hooksbinding declared ;;
+  esac
+  printf '%s' "$d"
+}
+
+enrolled()   { git -C "$1" config --local --type=bool --get agenticapps.workflow.enrolled 2>/dev/null; }
+local_hp()   { git -C "$1" config --local --get --type=path core.hooksPath 2>/dev/null; }
+has_hook()   { [ -f "$1/.git/hooks/pre-commit" ]; }
+
+# The only question that matters about a repository mid-migration, and it is
+# asked of git rather than of the configuration: make a commit and see whether
+# anything refused it. Both surfaces in play refuse — the repository's own hook
+# and the planted gate behind the floor — so a commit that SUCCEEDS means no
+# surface ran, which is the state the delta forbids at every interruption point.
+COMMIT_N=0
+commit_refused() {
+  COMMIT_N=$((COMMIT_N + 1))
+  : > "$1/f$COMMIT_N"
+  git -C "$1" add -A >/dev/null 2>&1
+  git -C "$1" commit -q -m "c$COMMIT_N" >/dev/null 2>&1 && return 1
+  return 0
+}
+
+# Named repositories are positional arguments. install.sh calls the binder with
+# none, which is what makes "acts only on repositories the operator names" true
+# of the unattended path by construction rather than by a flag defaulting right.
+run_binder_with() {
+  assert_isolated
+  ( cd "$REPO" && "$CORE/$BINDER_REL" "$@" >"$CASE/out" 2>&1 </dev/null ); RC=$?
+  OUT="$(cat "$CASE/out")"
+}
+
+# INTERRUPTION, FOR REAL. The delta requires that no cut inside a repository's
+# sequence leaves it unenforced, and the only honest way to assert that is to
+# stop the process at the cut rather than to reason about it.
+#
+# A test-only seam in the binder was rejected: a production script carrying a
+# branch that exists only for its tests has a branch that can be wrong in
+# production. So the interruption comes from outside — a `git` earlier on PATH
+# that passes the call through and then kills the process group. That couples
+# these cases to the exact git invocation each step makes, which is a real cost
+# and the smaller one: the alternative couples the binder to the test.
+#
+# The kill is by PROCESS GROUP, not by $PPID. Bash may or may not fork an
+# intermediate subshell for `x="$(git ...)"` depending on the optimisation it
+# picks, so $PPID is the binder in some steps and a short-lived subshell in
+# others — and killing the subshell lets the binder sail on with an empty
+# value, which would pass this suite while proving nothing. `set -m` puts the
+# run in its own group so the group is exactly the binder and its children.
+run_binder_cut() {
+  local pat="$1"; shift
+  local realgit; realgit="$(command -v git)"
+  mkdir -p "$CASE/bin"
+  cat > "$CASE/bin/git" <<WRAP
+#!/usr/bin/env bash
+case "\$*" in
+  $pat)
+    "$realgit" "\$@"; rc=\$?
+    kill -9 -"\$(ps -o pgid= -p \$\$ | tr -d ' ')" 2>/dev/null
+    exit \$rc ;;
+esac
+exec "$realgit" "\$@"
+WRAP
+  chmod +x "$CASE/bin/git"
+  assert_isolated
+  set -m
+  ( cd "$REPO" && PATH="$CASE/bin:$PATH" "$CORE/$BINDER_REL" "$@" >"$CASE/out" 2>&1 </dev/null ) &
+  wait $!; RC=$?
+  set +m
+  OUT="$(cat "$CASE/out")"
+}
+
+# The same injection, answering a matching call instead of killing on it. Used
+# for the one condition no fixture can produce honestly: a repository that
+# resolves to something other than the floor AFTER its redundant binding has
+# been swept. On a correctly bound machine that cannot happen, which is why the
+# restore path would otherwise go untested until the day it mattered.
+run_binder_answering() {
+  local pat="$1" answer="$2"; shift 2
+  local realgit; realgit="$(command -v git)"
+  mkdir -p "$CASE/bin"
+  cat > "$CASE/bin/git" <<WRAP
+#!/usr/bin/env bash
+case "\$*" in
+  $pat) printf '%s\n' "$answer"; exit 0 ;;
+esac
+exec "$realgit" "\$@"
+WRAP
+  chmod +x "$CASE/bin/git"
+  assert_isolated
+  ( cd "$REPO" && PATH="$CASE/bin:$PATH" "$CORE/$BINDER_REL" "$@" >"$CASE/out" 2>&1 </dev/null ); RC=$?
+  OUT="$(cat "$CASE/out")"
+}
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — the migration acts only on repositories the operator names (9.4a)"
+
+# The unattended path first, because install.sh takes it on every run and a
+# preflight that fired with nothing named would block every install.
+setup_case
+run_binder_with
+if [ "$RC" -eq 0 ] && [ "$(bound)" = "$HOOKDIR" ] && ! said "preflight"; then
+  ok "no names means no migration, no preflight and no prompt"
+else
+  bad "no names means no migration, no preflight and no prompt" \
+      "rc=$RC, binding='$(bound)'" "$OUT"
+fi
+
+# A repository on the machine that nobody named. The delta's words are "left
+# entirely alone" — not enrolled, not swept, hook not removed — and the reason
+# the case exists is that a migration which discovered its own set would find
+# this one and act on it.
+setup_case
+plant_gate
+UNNAMED="$(gated_repo unnamed redundant ours)"
+NAMED="$(gated_repo named redundant ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$NAMED"
+# `said "$NAMED"` is the vacuity guard, and it is not decoration: every clause
+# after it is a negative, and a binder that ignored its arguments entirely would
+# satisfy all three by doing nothing at all.
+if said "$NAMED" && [ -z "$(enrolled "$UNNAMED")" ] && [ -n "$(local_hp "$UNNAMED")" ] && has_hook "$UNNAMED"; then
+  ok "a repository that was not named is not enrolled, swept or stripped"
+else
+  bad "a repository that was not named is not enrolled, swept or stripped" \
+      "enrolled='$(enrolled "$UNNAMED")' hooksPath='$(local_hp "$UNNAMED")' hook=$(has_hook "$UNNAMED" && echo present || echo GONE)" \
+      "$OUT"
+fi
+
+if [ "$(enrolled "$NAMED")" = true ] && [ -z "$(local_hp "$NAMED")" ] && ! has_hook "$NAMED"; then
+  ok "a named repository is enrolled, swept and its hook removed"
+else
+  bad "a named repository is enrolled, swept and its hook removed" \
+      "rc=$RC enrolled='$(enrolled "$NAMED")' hooksPath='$(local_hp "$NAMED")' hook=$(has_hook "$NAMED" && echo PRESENT || echo gone)" \
+      "$OUT"
+fi
+
+# `! has_hook` belongs in this assertion rather than only in the one above it:
+# with the hook still in place a refused commit proves the OLD surface works,
+# which is what the migration is replacing.
+if [ "$RC" -eq 0 ] && ! has_hook "$NAMED" && commit_refused "$NAMED"; then
+  ok "and the floor gates it afterwards, with its own hook gone"
+else
+  bad "and the floor gates it afterwards, with its own hook gone" \
+      "rc=$RC hook=$(has_hook "$NAMED" && echo PRESENT || echo gone) — the commit was not refused" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — one report, one acceptance (9.4a)"
+
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+run_binder_with "$R"
+if ran && [ "$RC" -ne 0 ] && [ -z "$(bound)" ] && [ ! -f "$HOOKDIR/pre-commit" ]; then
+  ok "an unaccepted preflight publishes nothing and binds nothing"
+else
+  bad "an unaccepted preflight publishes nothing and binds nothing" \
+      "rc=$RC binding='$(bound)' published=$([ -f "$HOOKDIR/pre-commit" ] && echo yes || echo no)" "$OUT"
+fi
+
+if said DECLINED && [ -z "$(enrolled "$R")" ] && [ -n "$(local_hp "$R")" ] && has_hook "$R"; then
+  ok "and no named repository is enrolled, swept or stripped"
+else
+  bad "and no named repository is enrolled, swept or stripped" \
+      "enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")'" "$OUT"
+fi
+
+# The report is the dry-run, so it owes the three things the acceptance covers:
+# what will be published, what will be newly enrolled, and what will be done to
+# each repository. Three separate prompts is how an operator learns to answer
+# without reading, which is the failure the per-entry inventory above exists to
+# prevent — reintroducing it one level up would undo it.
+if said "preflight" && said "$R" && said "$HOOKDIR"; then
+  ok "the preflight names the repository and the directory before asking"
+else
+  bad "the preflight names the repository and the directory before asking" "$OUT"
+fi
+
+# The mutation set is not the impact set. A repository enrolled earlier by
+# init-project.sh becomes governed the moment the binding lands, without being
+# named and without appearing here — so a preflight claiming to enumerate what
+# the binding governs would be making a promise the binder cannot keep.
+if said "enrolled earlier"; then
+  ok "and it says what it does not enumerate, rather than overclaiming"
+else
+  bad "and it says what it does not enumerate, rather than overclaiming" \
+      "no line distinguishing this run's mutation set from the binding's impact set" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — the order is enrol → sweep → verify → remove (9.4c, 9.4d)"
+
+# THE CASE THAT MATTERS. Cut the run immediately after the sweep and the
+# repository must still be gated. Under the rejected sweep-first order it is
+# not: the sweep hands it to the global dispatcher, whose first act is to exit 0
+# because the enrolment marker is not there yet. The commit then succeeds, and
+# an interruption in that window leaves the repository permanently ungated with
+# nothing reporting it. That is what makes this a regression guard and not a
+# description of the code.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_cut '*--unset*core.hooksPath*' "$R"
+if [ "$(enrolled "$R")" = true ]; then
+  ok "interrupted at the sweep, the repository is already enrolled"
+else
+  bad "interrupted at the sweep, the repository is already enrolled" \
+      "enrolled='$(enrolled "$R")' — the sweep ran before the enrolment" "$OUT"
+fi
+
+# The binding must actually be gone at this cut, or the commit was refused by
+# the repository's own hook and the case proved nothing about the floor.
+if [ -z "$(local_hp "$R")" ] && commit_refused "$R"; then
+  ok "and a commit in it is still gated, which sweep-first would not be"
+else
+  bad "and a commit in it is still gated, which sweep-first would not be" \
+      "hooksPath='$(local_hp "$R")' — swept, unenrolled, and gated by nothing" "$OUT"
+fi
+
+# The other two cuts inside the sequence. Between repositories is the easy
+# boundary; both plan reviewers located the hazard inside one.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_cut '*agenticapps.workflow.enrolled*' "$R"
+if [ "$(enrolled "$R")" = true ] && [ -n "$(local_hp "$R")" ] && has_hook "$R" && commit_refused "$R"; then
+  ok "interrupted at the enrolment, its own hook still gates it"
+else
+  bad "interrupted at the enrolment, its own hook still gates it" \
+      "enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")' hook=$(has_hook "$R" && echo present || echo GONE)" "$OUT"
+fi
+
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_cut '*--git-path*hooks*' "$R"
+if [ "$(enrolled "$R")" = true ] && [ -z "$(local_hp "$R")" ] && commit_refused "$R"; then
+  ok "interrupted at the verification, the floor already gates it"
+else
+  bad "interrupted at the verification, the floor already gates it" \
+      "enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")'" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — verification failure restores the swept binding (9.4e)"
+
+# A repository handed to a floor that turns out not to govern it is returned to
+# the surface it had. The failure is forced by making the global binding land
+# somewhere the repository does not resolve to — here, a local binding the
+# sweep is not entitled to touch reappears underneath it.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+# The failure is forced where it is observed, with the same PATH-injected git
+# the interruption cases use: the verification asks git which hooks directory
+# this repository resolves to, and here it answers with one that is not the
+# floor. No seam in the binder, and no fixture contortion pretending to be a
+# machine state that produces the same answer.
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_answering '*--git-path*hooks*' "$CASE/not-the-floor" "$R"
+if [ "$RC" -ne 0 ] && has_hook "$R"; then
+  ok "a repository the floor does not reach keeps its hook"
+else
+  bad "a repository the floor does not reach keeps its hook" \
+      "rc=$RC hook=$(has_hook "$R" && echo present || echo GONE)" "$OUT"
+fi
+
+# The enrolment is deliberately NOT rolled back with the binding. It is inert
+# while the local binding stands — the repository is gated by its own hook,
+# which predates the predicate and never reads it — so unwinding it would be
+# undoing something that is doing nothing.
+if [ "$(enrolled "$R")" = true ] && [ -n "$(local_hp "$R")" ]; then
+  ok "and the swept binding is restored rather than left unset"
+else
+  bad "and the swept binding is restored rather than left unset" \
+      "enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")' — a hook git no longer consults" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — a binding that is not redundant stops the repository (9.4c)"
+
+setup_case
+plant_gate
+R="$(gated_repo r1 real ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && [ "$(local_hp "$R")" = "$CASE/elsewhere" ] && has_hook "$R" && [ -z "$(enrolled "$R")" ]; then
+  ok "a real local binding is preserved, and the repository is not migrated"
+else
+  bad "a real local binding is preserved, and the repository is not migrated" \
+      "rc=$RC hooksPath='$(local_hp "$R")' enrolled='$(enrolled "$R")'" "$OUT"
+fi
+
+setup_case
+plant_gate
+R="$(gated_repo r1 declared ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && [ -n "$(local_hp "$R")" ] && has_hook "$R"; then
+  ok "a declared binding is redundant by value and is still not swept"
+else
+  bad "a declared binding is redundant by value and is still not swept" \
+      "rc=$RC hooksPath='$(local_hp "$R")'" "$OUT"
+fi
+
+if said declared; then
+  ok "and it is reported as declared rather than as somebody's opt-out"
+else
+  bad "and it is reported as declared rather than as somebody's opt-out" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — a name is not an identity (9.4f)"
+
+setup_case
+plant_gate
+mkdir -p "$CASE/not-a-repo"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$CASE/not-a-repo"
+if ran && [ "$RC" -ne 0 ] && [ -z "$(bound)" ] && [ ! -f "$HOOKDIR/pre-commit" ]; then
+  ok "a name that is not the top of a repository is rejected before any write"
+else
+  bad "a name that is not the top of a repository is rejected before any write" \
+      "rc=$RC binding='$(bound)'" "$OUT"
+fi
+
+# A subdirectory of a repository resolves to that repository under rev-parse,
+# so accepting it would migrate a repository the operator did not name.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+mkdir -p "$R/sub"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R/sub"
+if [ "$RC" -ne 0 ] && has_hook "$R" && [ -z "$(enrolled "$R")" ]; then
+  ok "a subdirectory is not the repository, and is rejected as a name"
+else
+  bad "a subdirectory is not the repository, and is rejected as a name" \
+      "rc=$RC enrolled='$(enrolled "$R")'" "$OUT"
+fi
+
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+ln -s "$R" "$CASE/alias"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R" "$CASE/alias"
+if [ "$RC" -eq 0 ] && [ "$(grep -c ': enrolled' "$CASE/out")" = 1 ]; then
+  ok "two names for one common directory are processed once"
+else
+  bad "two names for one common directory are processed once" \
+      "rc=$RC, ': enrolled' appeared $(grep -c ': enrolled' "$CASE/out") times" "$OUT"
+fi
+
+# Linked worktrees share one common directory, so they share one local
+# configuration and one hooks directory. Naming any checkout acts on all of
+# them — so "an unnamed repository is left entirely alone" is false for a
+# sibling nobody mentioned unless the preflight says its name out loud.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant ours)"
+: > "$R/seed"; git -C "$R" add -A >/dev/null 2>&1
+git -C "$R" -c core.hooksPath=/nonexistent commit -q -m seed >/dev/null 2>&1
+git -C "$R" worktree add -q "$CASE/wt" -b wt >/dev/null 2>&1
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if said "$CASE/wt"; then
+  ok "the preflight names every worktree the migration will affect"
+else
+  bad "the preflight names every worktree the migration will affect" \
+      "the linked worktree at $CASE/wt shares the configuration and was not reported" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — the hook is recognised before it is removed (9.4g)"
+
+# Naming a repository is the operator's belief about what is inside it. It is
+# not evidence about the file, and the negative is the case that matters: a
+# repository named by mistake keeps the hook its operator wrote.
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant foreign)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && has_hook "$R" && [ -z "$(enrolled "$R")" ] && [ -n "$(local_hp "$R")" ]; then
+  ok "a foreign pre-commit refuses the repository without writing to it"
+else
+  bad "a foreign pre-commit refuses the repository without writing to it" \
+      "rc=$RC enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")' hook=$(has_hook "$R" && echo present || echo GONE)" \
+      "$OUT"
+fi
+
+if said "$R/.git/hooks/pre-commit"; then
+  ok "and the file it declined to remove is named"
+else
+  bad "and the file it declined to remove is named" "$OUT"
+fi
+
+# Found by the security pass on this diff, not by review. The marker narrows
+# the delete to files this workflow wrote, which is NOT the same as files in the
+# repository that was named: a symlinked hooks directory sends the removal
+# somewhere else while the preflight still prints the path inside the repository.
+# A symlinked hook is visible in the report; a symlinked directory is not.
+setup_case
+plant_gate
+R="$(gated_repo r1 none ours)"
+mkdir -p "$CASE/other-hooks"
+printf '#!/bin/sh\n%s\nexit 1\n' "$GATE_MARKER" > "$CASE/other-hooks/pre-commit"
+rm -rf "$R/.git/hooks" && ln -s "$CASE/other-hooks" "$R/.git/hooks"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && [ -f "$CASE/other-hooks/pre-commit" ] && [ -z "$(enrolled "$R")" ]; then
+  ok "a symlinked hooks directory refuses, rather than deleting outside the repository"
+else
+  bad "a symlinked hooks directory refuses, rather than deleting outside the repository" \
+      "rc=$RC enrolled='$(enrolled "$R")' target=$([ -f "$CASE/other-hooks/pre-commit" ] && echo present || echo DELETED)" \
+      "$OUT"
+fi
+
+setup_case
+plant_gate
+R="$(gated_repo r1 redundant absent)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$R"
+if [ "$RC" -ne 0 ] && [ -z "$(enrolled "$R")" ] && [ -n "$(local_hp "$R")" ]; then
+  ok "an absent hook refuses the repository too, rather than migrating nothing"
+else
+  bad "an absent hook refuses the repository too, rather than migrating nothing" \
+      "rc=$RC enrolled='$(enrolled "$R")' hooksPath='$(local_hp "$R")'" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — one repository fails and the rest continue (9.4h)"
+
+setup_case
+plant_gate
+BAD_R="$(gated_repo bad redundant foreign)"
+GOOD_R="$(gated_repo good redundant ours)"
+GLOBAL_FLOOR_ACCEPT_PLAN=1 run_binder_with "$BAD_R" "$GOOD_R"
+if [ "$(enrolled "$GOOD_R")" = true ] && ! has_hook "$GOOD_R"; then
+  ok "the repository after the failure is still processed"
+else
+  bad "the repository after the failure is still processed" \
+      "enrolled='$(enrolled "$GOOD_R")' hook=$(has_hook "$GOOD_R" && echo PRESENT || echo gone)" "$OUT"
+fi
+
+if [ "$RC" -ne 0 ]; then
+  ok "and the run exits non-zero, so a partial migration is not reported as a complete one"
+else
+  bad "and the run exits non-zero, so a partial migration is not reported as a complete one" \
+      "rc=0 with $BAD_R refused" "$OUT"
+fi
+
+# The machine is still bound. The failure is about one repository, and refusing
+# to bind a machine because one named path was wrong would be the larger act
+# taken for the smaller reason.
+if [ "$RC" -ne 0 ] && [ "$(bound)" = "$HOOKDIR" ]; then
+  ok "and the machine is bound regardless, because the failure was local to one repository"
+else
+  bad "and the machine is bound regardless, because the failure was local to one repository" \
+      "rc=$RC binding='$(bound)'" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
 echo
 echo "----------------------------------------------------------------"
 echo "  $pass passed, $fail failed"

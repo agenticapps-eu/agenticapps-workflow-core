@@ -357,6 +357,16 @@ hooks-directory inventory already learned one level up: a file's location proves
 who could have written it and never who did, so recognition has to come from the
 file rather than from the fact that somebody typed a path.
 
+**And what is removed SHALL be what the report named.** A repository describes
+where its own hooks live — a `.git` file names another directory, a hooks
+directory may be a symlink — so the path the preflight prints and the file the
+removal reaches are not the same thing by construction. A symlinked hooks
+directory SHALL refuse the repository, because unlike a symlinked hook it is
+invisible in the report: the operator accepts a path inside the repository they
+named and the delete lands somewhere else. Demonstrated before this was written,
+against a hooks directory linked out of the repository: the file outside it was
+removed and the run exited 0.
+
 Everything the run will do SHALL be reported before anything is done, under a
 **single** acceptance covering what will be published into the hooks directory,
 what this run will newly enrol, and what will be migrated. Separate acceptances
@@ -409,6 +419,13 @@ promise about the whole install is one the preflight cannot keep.
   recognised as this workflow's gate
 - **THEN** the migration SHALL refuse that repository without writing to it
 - **AND** SHALL report why, naming the file it declined to remove
+
+#### Scenario: A named repository's hooks directory is a symlink
+
+- **WHEN** a named repository's resolved hooks directory is a symlink
+- **THEN** the migration SHALL refuse that repository without writing to it
+- **AND** SHALL report that what would be removed is not what the preflight can
+  name
 
 #### Scenario: A repository was not named
 
