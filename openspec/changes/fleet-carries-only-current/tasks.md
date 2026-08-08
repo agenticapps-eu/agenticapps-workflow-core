@@ -9,6 +9,26 @@
 
 ## 1. Re-measure, because the inventory is dated
 
+> **2026-08-08: the fleet shrank by two while this change sat unstarted.**
+> `agenticapps-dashboard` and `agenticapps-roadmap` were deleted from the
+> machine. Every count in `proposal.md`'s inventory table was taken across a
+> fleet that included both, so each row is now an upper bound rather than a
+> figure — `## Coding Discipline` in "8 repos", `workflow-config.md` in "7",
+> `claude-md/` in "5", `scheduled_tasks.lock` in "5" all need re-running before
+> any of them is acted on. That is 1.1's job and it was already its job; this is
+> the drift it was written to expect, arriving early.
+>
+> Section 3 is entirely moot: roadmap's 134 tracked `.planning/` files are no
+> longer on this machine. They live in the archived GitHub repository, which is
+> what "kept, not migrated" always meant in practice.
+>
+> **Also re-scope against the host repositories before re-measuring.**
+> `claude-workflow`, `codex-workflow`, `opencode-workflow` and
+> `pi-agentic-apps-workflow` come off the disk at the end of the plan. They were
+> already out of scope here; the new part is that nothing should be *fixed* in
+> them in the meantime either, so any inventory row whose count depends on them
+> should say so rather than mixing them in.
+
 The table in `proposal.md` was measured on 2026-08-07 and this change executes
 later. Every count below is a hypothesis until re-run.
 

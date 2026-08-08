@@ -102,6 +102,20 @@ authority.* Fastest, and it is exactly the move core refused to make on its own
 file. A rule that exists in eight places and then nowhere is a rule nobody
 decided to drop.
 
+> **Overtaken by events, 2026-08-08.** Both retired checkouts were deleted from
+> the machine hours after this was decided, so there is nothing left to sweep in
+> either. The section is kept because the *reasoning* is what the change needs —
+> it is the argument for where the line falls, and the next retired repository
+> will land on one side of it — but as a statement about `agenticapps-dashboard`
+> and `agenticapps-roadmap` it now describes work that will not happen.
+>
+> **And the deletion answers the question better than the sweep did.** The
+> premise here is "a repository that stays on disk is one an agent will open".
+> Removing the checkout removes the premise: nothing local means nothing to
+> load, nothing to sweep, and nothing to re-check later. The GitHub copies stay
+> readable and carry no fleet artifacts anyone will execute. Where a retired
+> repository can simply go, that beats sweeping it and leaving it there.
+
 ### The retired repositories are swept; the archived ones are not
 
 `agenticapps-dashboard` is retired and its `CLAUDE.md` actively encourages

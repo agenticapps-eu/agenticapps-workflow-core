@@ -37,8 +37,8 @@ the chain and must land before `projects-bind-not-copy`.
       | `claude-workflow` | 1201 | archived, deleted wholesale by Phase 5b |
       | `codex-workflow` | 5844 | archived, deleted wholesale by Phase 5b |
       | `opencode-workflow` | 2270 | archived, deleted wholesale by Phase 5b |
-      | `agenticapps-dashboard` | 5844 | retired 2026-08-05 |
-      | `agenticapps-roadmap` | 1201 | retired 2026-08-08 |
+      | ~~`agenticapps-dashboard`~~ | 5844 | **gone — checkout deleted 2026-08-08** |
+      | ~~`agenticapps-roadmap`~~ | 1201 | **gone — checkout deleted 2026-08-08** |
       | `agents-task-viewer` | 1201 | **live — migration set** |
       | `callbot` | 1201 | **live — migration set** |
       | `fx-signal-agent` | 1201 | **live — migration set** |
@@ -48,12 +48,24 @@ the chain and must land before `projects-bind-not-copy`.
       scheduled for deletion" is out of scope — and core is excluded because it
       keeps a local binding by ADR-0028. `fbc-platform` carries husky, not the
       gate.
-      `agenticapps-roadmap` was retired by the operator, confirmed 2026-08-08.
-      **The first census classified it live**, and correctly on the evidence
-      available: the retirement is recorded in neither the family instruction
-      file's retired-repos section nor the repo's own ADRs. Recorded here as the
-      cheapest place it will be found, and 0.3b tracks putting it where it
-      belongs
+      **Superseded again the same day: both retired checkouts were deleted from
+      the machine on 2026-08-08.** Re-measured after the deletion — **seven**
+      gate copies remain, not nine, and the two that left were the two largest
+      dispositions to reason about. The migration set is unchanged at three,
+      because neither was in it.
+
+      `agenticapps-roadmap`'s retirement **was** recorded, and the first census
+      looked in the wrong place for it. Not in the family instruction file, not
+      in the repo's ADRs — **on GitHub, as the archived flag**, set 2026-08-05,
+      the same day as the dashboard's. The census read local disk and never
+      asked the forge, so it reported a repository as live while its own remote
+      had been read-only for three days. Corrected: the retirement date is
+      **2026-08-05**, not the 08-08 an earlier revision of this task recorded —
+      08-08 is when it surfaced here, which is not the same fact.
+      This is worth more than the correction. A local checkout carries no field
+      that says "retired", so any census built only on what is on disk will keep
+      making this mistake. `archived` on the remote is the machine-readable
+      record, it is one API call, and 0.3b now covers asking it
       Note the **five** byte-identical 1201-byte copies, spanning an archived
       checkout, a retired one and all three live repositories. That is what
       Decision 4's category error looks like from the outside: `install.sh`
@@ -61,13 +73,17 @@ the chain and must land before `projects-bind-not-copy`.
       population mixes deliberate adoption with drive-by installs and nothing on
       disk separates them. It is the evidence for Decision 5 refusing to
       translate the hook into a marker unasked
-- [ ] 0.3b Record `agenticapps-roadmap`'s retirement where a reader will find
-      it — the family instruction file's retired-repos section, next to
-      `agenticapps-dashboard`'s, with the reason and the date. It is currently
-      recorded only in this change's working notes, which is the wrong home for
-      a fact three other in-flight changes depend on. **Outside this repository,
-      so it is the operator's call, not this change's** — noted here so it is
-      not lost, not claimed as scope
+- [ ] 0.3b **A census SHALL ask the forge whether a repository is archived, not
+      only the disk.** Rewritten 2026-08-08 after the original version of this
+      task — "record roadmap's retirement in the family instruction file" —
+      turned out to be solving the wrong problem: the retirement *was* recorded,
+      as GitHub's `archived` flag, set 2026-08-05. A checkout carries no field
+      that says "retired", so a disk-only census reports a repository as live
+      while its remote has been read-only for days. `gh api repos/<owner>/<name>
+      --jq .archived` is one call per repository.
+      Still worth doing separately: the family instruction file's retired-repos
+      section lists only `agenticapps-dashboard`. **Outside this repository, so
+      it is the operator's call** — noted so it is not lost, not claimed as scope
 - [x] 0.4 Record the six repositories that set a local `core.hooksPath` and what
       each names, as the before-state for the sweep in section 3.
       **Done 2026-08-07.** Neither `--global` nor `--system` sets it, so there is
@@ -88,7 +104,16 @@ the chain and must land before `projects-bind-not-copy`.
       is retired; its branch `chore/setup-codex-workflow` is pushed and intact at
       `a44ba77`). The before-state for the sweep is therefore **five bindings
       over five config files**, one checkout each — the shared-config special
-      case is gone. Section 3b is simpler by exactly one row
+      case is gone. Section 3b is simpler by exactly one row.
+
+      **Superseded again 2026-08-08 and re-measured, not inferred: four
+      bindings.** The dashboard's checkout was deleted, taking its config with
+      it. What remains is `claude-workflow`, `callbot`, `fbc-platform`
+      (`.husky/_`, the genuine opt-out) and `fx-signal-agent`.
+      Of those, **`claude-workflow` is a host repository scheduled for deletion
+      at the end of the plan**, so the sweep leaves it alone: unsetting a binding
+      in a directory that is going to be removed is work that returns nothing.
+      The sweep's real subject is therefore **two** repositories
 
 ## 1. Inherited, not done here
 
@@ -321,11 +346,16 @@ Six repositories set a local `core.hooksPath`, which git prefers over the global
 one, so the new floor reaches none of them. Five name the directory git would
 resolve anyway, so unsetting them changes nothing today and restores reach.
 
-- [ ] 3b.1 Unset the local `core.hooksPath` in `claude-workflow`, `callbot`,
-      `fx-signal-agent` and `agenticapps-dashboard` — **four configs, four
-      bindings**. This previously read "four configs, five bindings, since the
-      dashboard's linked worktree shares its config"; that worktree was removed
-      on 2026-08-07, so the shared-config case no longer exists
+- [ ] 3b.1 Unset the local `core.hooksPath` in `callbot` and `fx-signal-agent`
+      — **two configs, two bindings**, re-measured 2026-08-08.
+      This has now been wrong twice in two days, in the same direction each
+      time, which is the argument for 1.1-style re-measurement rather than a
+      list maintained by hand. It read "four configs, five bindings" while the
+      dashboard's linked worktree shared its config; that worktree went on
+      2026-08-07, making it four and four. Then the dashboard's checkout itself
+      went on 2026-08-08, and `claude-workflow` was excluded as a host
+      repository scheduled for deletion — unsetting a binding in a directory
+      that is about to be removed returns nothing
 - [x] 3b.2 Confirm each named its own default hooks directory before unsetting,
       so the sweep is provably a no-op rather than assumed to be one.
       **Done 2026-08-07**, and the obvious check would have been circular:
