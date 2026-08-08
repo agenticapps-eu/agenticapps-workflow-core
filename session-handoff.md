@@ -1,99 +1,119 @@
-# Session Handoff — 2026-08-08 (eighteenth session)
+# Session Handoff — 2026-08-08 (nineteenth session)
 
-**Step 4's code review finally ran, and six of its seven findings are fixed.**
-Two commits on `feat/projects-bind-not-copy` (PR #89). Tree clean,
-`openspec validate --all` 14/14, 560 tests across 14 suites green.
+**PR #89 is merged and §10 is closed.** Four commits on
+`feat/floor-establishes-cores-binding`, pushed, **no PR open yet**. Tree clean,
+`openspec validate --all` 14/14, 14 suites green.
 
-The open question that had been sitting at the top of the last three handoffs —
-"Step 4's code review has still never run" — is closed.
+The floor binder now repairs what it displaces and inventories what it
+activates. Then the security pass found two defects in the consent gate that
+had just been built, and both are fixed.
 
 ## Accomplished
 
-- **Stage 2 ran** in this cleared session, per §07, with no implementation
-  context. Artifact: `openspec/changes/one-enforcement-floor/CODE-REVIEW.md`.
-  Verdict pass-with-followups: 1 Critical, 2 Important, 4 Minor, 1 spec drift.
-- **All six Important and Minor findings fixed**, RED before GREEN. Recorded as
-  §11 of `one-enforcement-floor/tasks.md` and §10 of `fresh-clone-needs-nothing`.
-  Suites grew 29→42, 47→50, 53→56.
-- **PR #89 retitled and rewritten.** The stale "no code yet" description is gone;
-  the C1 warning is now the first section a reviewer sees.
-- **Three things cleared as NOT defects** so they are not re-raised: `sort -V`
-  works here and the `semver.sh` removal is clean; `install-core-git-hooks.sh`
-  will not clobber the published floor hook (its whole-line marker check refuses
-  it); the surviving mentions of deleted scripts are prose, not live paths.
+- **PR #89 merged** as `3fb113c`; branch deleted; local `main` level with
+  `origin/main`, which closes last session's "32 commits behind".
+- **§10 complete — 10.1 through 10.7.** The binder establishes core's local
+  binding plus `agenticapps.hooksbinding=declared` before the global one (10.2),
+  inventories `~/.agenticapps/git-hooks/` with per-entry consent before binding
+  (10.1), core's `PreToolUse` registration is gone (10.3), and the sweep stops
+  describing itself as a no-op (10.4).
+- **Two security findings, both reproduced before being fixed** (10.7). See
+  Decisions 4 and 5.
+- **A test suite was writing into this repository** (10.6). Fixed at both ends.
+- `tools/global-floor-bind.test.sh` 18 → **48 cases**, and **0 of 48 pass**
+  under `GLOBAL_FLOOR_BIND_BIN=/usr/bin/true`. `test-claude-hook-wrapper.sh`
+  12 → 14.
 
 ## Decisions
 
-- **C1 does not block merging, only running.** `install.sh:346` binds the floor
-  unconditionally while §10 and 9.4a are open. Both halves were reproduced end
-  to end: `core.hooksPath` displaces `.git/hooks/pre-commit` entirely, and the
-  floor dispatcher exits 0 *in silence* when the repository is not enrolled. The
-  composition silently ungates every locally-gated repository, core included.
-  Merging changes nothing; the first run does. Recovery is
-  `git config --global --unset core.hooksPath`.
-- **`--host auto` now ADDS to the named set.** It replaced it, and naming a host
-  is exactly what you do when detection will not find it — so the one request
-  that needed making was the one discarded.
-- **`install.sh` stays at exactly 217 executable lines.** Both fixes were
-  written long, measured at 229, and compacted. The budget is spec-enforced and
-  the suite checks it.
-- **The fixes are NOT covered by CODE-REVIEW.md.** §07 forbids the implementer
-  authoring Stage 2, and the reviewer wrote them. The artifact says so and names
-  four things a second pass should look at.
+- **Core's binding is established only when the global bind is actually about to
+  happen.** A foreign global `core.hooksPath` is refused *first*, before core is
+  touched: refusing means the global binding is never set, so core's hook is
+  never displaced, so there is no casualty to repair — and writing into a
+  repository with nothing to repair is the shape Decision 4 removed.
+- **A foreign LOCAL binding in core is reported, never overwritten** — the same
+  posture the binder already takes one level up. husky sets exactly that, and a
+  `declared` flag left on someone else's hooks directory would tell the sweep to
+  protect it.
+- **The default hooks directory comes from `--git-common-dir`.** Never
+  `--git-path hooks`, which honours `core.hooksPath` and would let a wrong
+  binding confirm itself.
+- **Recognition of `pre-commit` is the publisher's exit status, not the presence
+  of a marker.** The marker is a comment, so it cannot establish who wrote a
+  file. A `pre-commit` carrying `9.9.9` is newer than the checkout's,
+  arbitration declines to publish, the file survives — and the run bound the
+  directory *while printing "holds nothing this installer did not publish"*.
+  The false claim was the finding. Exit 3 is still not a publish failure; it is
+  no longer a bind decision either, and conflating the two was the hole.
+- **The acceptance list must not glob.** `for a in $ACCEPT` is unquoted for word
+  splitting, and unquoted expansion also does pathname expansion, so
+  `GLOBAL_FLOOR_ACCEPT='*'` expanded against whatever directory the binder ran
+  from. `set -f` around the loop.
+- **`.claude/settings.json` is deleted, not emptied.** `{}` is dead text and
+  dead text reads as a live guarantee. The wrapper **stays** and documents
+  in-file that it is deliberately unregistered — `project-hook-binding` provides
+  for exactly that, and two suites read it as core's shim-contract instance.
+- **10.4 corrected in all four places**, since `proposal.md` and the §3b
+  preamble carried the same words. `design.md`'s "a no-op **setting**" stands —
+  that describes the binding, which is genuinely redundant, not the unset.
+- **No `.gstack/security-reports/` and no new ADR.** This repo carries what the
+  diagram requires, so findings live beside the tasks that produced them; and
+  Decision 6 is locked in the change's `design.md`, as Decisions 1–5 were.
 
 ## Files modified
 
-- `openspec/changes/one-enforcement-floor/CODE-REVIEW.md` — new; the Stage 2 artifact
-- `openspec/changes/one-enforcement-floor/tasks.md` — §11 added (install.sh M1, M3)
-- `openspec/changes/fresh-clone-needs-nothing/tasks.md` — §10 added (I1, I2, M2, M4)
-- `install.sh` — project-hook line keys on its own exit status; `--host auto` adds
-- `reference-implementations/openspec-tools/bind-openspec-tools.sh` — `link()`
-  returns 0 only for a link that exists; failed `ln` named; `$#` guarded on three
-  flags; unreachable `[ -z "$skills" ]` branch removed
-- `reference-implementations/init-project/init-project.sh` — CLAUDE.md replaced
-  atomically via temp+`mv -f`; `COLLAPSE` flag retired with the `rm` it authorised
-- `tools/{install,bind-openspec-tools,init-project}.test.sh` — 16 new cases
+- `reference-implementations/global-floor/bind-global-floor.sh` — pre-bind
+  inventory with per-entry consent (`GLOBAL_FLOOR_ACCEPT` + tty prompt);
+  establishes core's local binding and declaration before the global one;
+  foreign global and foreign local bindings both refused, never overwritten
+- `.claude/settings.json` — **deleted** (held only the `PreToolUse` registration)
+- `.claude/hooks/openspec-change-gate.sh` — header records that it is
+  deliberately unregistered and why the file still exists
+- `tools/global-floor-bind.test.sh` — 18 → 48 cases; `$CORE` is now a real
+  repository; `run_binder` reads stdin from `/dev/null`
+- `tools/install.test.sh` — `new_core()` git-inits the copy; `run_install`
+  records this repo's own local binding around every run and fails by case name
+- `tools/test-claude-hook-wrapper.sh` — registration assertions inverted, plus
+  CI-runs-the-gate and installer-exists
+- `openspec/changes/one-enforcement-floor/{tasks,proposal}.md` — §10 ticked with
+  its reasoning; 10.6 and 10.7 added; the no-op claim corrected
 
 ## Next session: start here
 
-**Implement `one-enforcement-floor` §10, and 10.2 first** — unchanged from the
-last handoff, and now the only thing standing between this branch and a
-runnable installer. 10.2 is the ordering constraint: the binder sets core's
-local `core.hooksPath` plus `agenticapps.hooksbinding=declared` **before** the
-global binding, and does not set the global one if either write fails. Then
-10.1 (pre-bind inventory), then 10.3, then 10.4.
-
-After §10, do **9.4a** — nothing in the shipped code sets
-`agenticapps.workflow.enrolled` at all, so the floor governs nothing once bound.
-That is the other half of C1 and the two are only safe together.
-
-Tests go in `tools/global-floor-bind.test.sh` (18 cases today), per-case `HOME`
-**and** per-case git config — 6.8 exists because a test that sets a global
-`core.hooksPath` against the real home rebinds the operator's machine.
-
-Measured 2026-08-08 and still true: global `core.hooksPath` **unset**, core's
-local **unset**, `agenticapps.workflow.enrolled` **unset**, core's own hook
-present. The displacement is latent and fires on the first successful bind.
+**Do 9.4a.** Nothing in the shipped code sets `agenticapps.workflow.enrolled` at
+all, so the published dispatcher exits 0 in silence for every repository and the
+floor governs nothing once bound. That is the remaining half of C1: §10 landed
+the guard rails, but **`install.sh` still must not be run** until enrolment
+exists, because `install.sh:346` binds the floor unconditionally and
+`core.hooksPath` displaces `.git/hooks/pre-commit` entirely. Recovery if it is
+run: `git config --global --unset core.hooksPath`. Tests go in
+`tools/global-floor-bind.test.sh` or a new enrolment suite, per-case `HOME`
+**and** per-case git config — and now also per-case *local* config, which is
+what 10.6 was about. Measured today and still true: global `core.hooksPath`
+unset, core's local unset, `agenticapps.workflow.enrolled` unset.
 
 ## Open questions
 
-1. **The six fixes need their own Stage 2** — a small, self-contained delta
-   (3 scripts, 2 suites, 16 cases). `CODE-REVIEW.md`'s last section names what
-   to look at, including the two-statement `if/else` compacted to fit the budget
-   and the `sed 's/ auto / /g'` word surgery.
-2. **Local `main` is 32 commits behind `origin/main`.** It made the review
-   report 84 commits when the PR is 53. Harmless this time — the stale base made
-   the review a superset — but `git fetch` before the next scope measurement.
-3. **Eight §9 findings still open** — 9.4a, 9.4b, 9.5, 9.7, 9.8, 9.9, 9.10, 9.12.
-4. **Spec drift on `main`, not on this branch**:
-   `openspec/specs/project-hook-binding/spec.md` names `normalize-claude-md` as a
-   live shim instance in seven places; the implementation is already gone.
-   Planned in `diagram-is-the-surface`, which is 0/46.
-5. **Three credentials outlived their file.** `agenticapps-roadmap`'s `.env` held
-   `CLOUDFLARE_API_TOKEN`, `GH_CROSS_REPO_TOKEN`, `LINEAR_API_KEY`. Deleting the
-   checkout did not revoke them. Operator action, still outstanding.
-6. **`claude-workflow` cannot be deleted safely yet.** 11 commits on no remote,
+1. **No PR for this branch yet**, and four commits of §10 sit on it.
+2. **Stage 2 has not read any of §10.** Per §07 it must run in a cleared session
+   with no implementation context — that now covers the six `install.sh` fixes
+   from last session *and* everything in this one.
+3. **The newer-marked-`pre-commit` refusal is behaviour the spec delta does not
+   name.** The inventory requirement has three scenarios and this is a fourth;
+   it should get one, or the code is ahead of its delta.
+4. **Eight §9 findings still open** — 9.4a, 9.4b, 9.5, 9.7, 9.8, 9.9, 9.10, 9.12.
+5. **The vendored `opencode` `pre-commit` is still in
+   `~/.agenticapps/git-hooks/`** — 2.3K, unmarked, dated 2025-07-25. Re-measured
+   today. Under the new inventory a real run reports it and replaces it.
+6. **Spec drift on `main`**: `openspec/specs/project-hook-binding/spec.md` names
+   `normalize-claude-md` as a live shim instance in seven places; the
+   implementation is gone. Planned in `diagram-is-the-surface`, 0/46.
+7. **Three credentials outlived their file** — `agenticapps-roadmap`'s `.env`
+   held `CLOUDFLARE_API_TOKEN`, `GH_CROSS_REPO_TOKEN`, `LINEAR_API_KEY`.
+   Deleting the checkout did not revoke them. Operator action, still outstanding.
+8. **`claude-workflow` cannot be deleted safely yet** — 11 commits on no remote,
    `plan/28-split-01` 9 ahead of `origin/main`, 1 stash.
-7. **The fleet trim** is still task 4.6 of `fleet-carries-only-current`, gated on
-   `projects-bind-not-copy` archiving. Lifting it out standalone is still live.
-8. **CodeRabbit still has not reviewed anything here.**
+9. **The fleet trim** is still task 4.6 of `fleet-carries-only-current`, gated on
+   `projects-bind-not-copy` archiving, which #89 did not do.
+10. **CodeRabbit still has not reviewed anything here** — it went SUCCESS on #89
+    again without reading it.
