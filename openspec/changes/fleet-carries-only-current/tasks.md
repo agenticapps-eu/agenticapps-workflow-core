@@ -316,7 +316,7 @@ instruction-file work. One PR per repository.
 
       **Two consequences this leaves behind, neither of them silent:** 2.6b and
       1.3d
-- [ ] 2.6b **Deleting `.planning/` made `commitment-reinject.sh` a permanent
+- [x] 2.6b **Deleting `.planning/` made `commitment-reinject.sh` a permanent
       no-op, and that hook is worth keeping.** It fires on `SessionStart
       matcher: compact` and re-injects the commitment ritual and skill-routing
       rules that compaction strips — its own header calls it "the single
@@ -334,7 +334,39 @@ instruction-file work. One PR per repository.
       here**, because it widens the hook from AgenticApps-with-`.planning` to
       every OpenSpec repository on the machine, and that is a behaviour decision
       rather than a repair. Left with the reasoning attached so it is a choice
-      rather than an oversight
+      rather than an oversight.
+
+      **Taken 2026-08-08.** Predicate is now `[ -d openspec ]`, and the dead
+      `COMMITMENT.md` block is deleted rather than left to read as live code —
+      it was GSD-era structure that outlived GSD by months. Verified rather than
+      assumed: `bash -n` clean, 55 lines emitted in core, **0 lines and exit 0**
+      in a directory with no `openspec/`, and it now fires in **9** repositories,
+      8 of which have a `CLAUDE.md` to inject.
+
+      A correction the verification forced: the scope was reported to the
+      operator as "9 repos, but only 6 have a CLAUDE.md". The 6 came from a
+      `find -maxdepth 2` measured from `~/Sourcecode`, where a family directory
+      eats one level, so it missed two. The real figure is 8 — the option was
+      undersold by the measurement offered in its favour
+- [ ] 2.8 **`fx-signal-agent` PR #121 has been open since 2026-08-05 and holds
+      the correction this repository most needs.** Three commits of the
+      operator's, never merged: `AGENTS.md` as a symlink to `CLAUDE.md`, the
+      `.planning` removal — and the substantive one, `CLAUDE.md` telling agents
+      the change-gate blocks until `REVIEWS.md` carries two other-vendor
+      reviewers. **It does not**, and has not since gate 2.0.0: it blocks on
+      `openspec validate --all` alone. An instruction file that overstates what
+      the machine enforces is worse than one that says nothing, because it
+      teaches people to trust a gate that is not there.
+
+      Found only because this session duplicated `cca3298` as PR #130 — the
+      sweep removed `.planning/config.json` from a repository where the
+      operator had already removed it three days earlier on an open PR. **Check
+      `git branch` and `gh pr list` before doing work in someone else's
+      repository**; the branch was three days old and named almost exactly what
+      this session reached for, which is how the collision happened at all.
+      #121's failing checks are `gitleaks` and `pnpm-audit`, which fail on that
+      repository's `main` too, plus a stale `auth-seam-integration` run from the
+      day it was opened
 - [x] 1.3d **A second field of orphaned worktrees: `fx-signal-agent`, 22 trees,
       6.4G.** Same signature as 1.3b — `.git` files pointing at
       `~/Sourcecode/fx-signal-agent`, the pre-family-reorganisation path, so git
