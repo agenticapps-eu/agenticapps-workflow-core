@@ -87,6 +87,36 @@ across a fleet that still included `agenticapps-dashboard` and
 
       Verified after: `cparx` on the same branch with the same six dirty files,
       `git fsck` clean, `git worktree list` one entry.
+- [ ] 1.3c **GSD was never uninstalled, and 1.4 says otherwise.** Measured
+      2026-08-08, after this change had already reported GSD "removed from the
+      two live repositories". What was removed on 2026-07-28 was GSD's state in
+      `~/.claude/` — and nothing else on the machine:
+
+      | Where | What |
+      |---|---|
+      | `~/.pi/gsd/` | 1.9M, 201 files — 19 agents, 5 hooks, 60+ prompts |
+      | `~/.config/opencode/get-shit-done/` | 3.2M, 256 files, executable `bin/` |
+      | `~/.config/opencode/agents/gsd-*` | 33 agent definitions |
+      | `~/.config/opencode/skills/gsd-*` | 12 skills |
+      | `~/.config/opencode/rules/gsd-oc-work-hard.md` | a **rule** — always loaded |
+      | `~/.codex/get-shit-done/` | 456K, 42 files |
+      | `pi-gsd@2.1.4` | a global **npm package** |
+
+      The npm package is **2.1.4 against the file trees' 1.30.0**, and
+      `~/.pi/cache/gsd-update-check.json` still reads `update_available: true`,
+      last checked 2026-07-21 — a retired tool that went on checking for
+      upgrades a week after it was retired.
+
+      **This was missed by the sweep that wrote 1.3a**, which searched
+      `~/Sourcecode` and `~/.claude`, found three project copies, deleted two,
+      and reported the tool gone — having never looked in `~/.pi`,
+      `~/.config/opencode`, `~/.codex` or `npm ls -g`. 1.3a said each sweep
+      searches where the workflow is; this one searched where the *last* sweep
+      had been. The operational form is: **a tool is uninstalled when its
+      package, its per-host config directories and its project copies are all
+      gone** — check all three and never infer two from one.
+      Nothing removed. Operator call, and it spans three hosts plus a package
+      manager
 - [ ] 1.3a The predicate that missed it is worth stating, because it is the same
       one that missed 21 skills behind symlinks and a 46-line `pre-commit` in
       `~/.agenticapps/git-hooks/`. Each sweep so far has searched **where the
@@ -95,7 +125,7 @@ across a fleet that still included `agenticapps-dashboard` and
       inventory in 3.1 should declare the search *space* — every repository on
       the machine — separately from the search *terms*, or the next removed tool
       hides in the next directory nobody associated with us
-- [x] 1.4 Two rows the 2026-08-07 inventory missed entirely, found on 2026-08-08
+- [ ] 1.4 Two rows the 2026-08-07 inventory missed entirely, found on 2026-08-08
       and **already removed**, so 1.1 does not rediscover them as a surprise:
       core's own `.gitnexus` index (44M, gitignored, untracked — the only one in
       the fleet), and GSD's installer state in `~/.claude/` (`get-shit-done/`,
@@ -105,7 +135,14 @@ across a fleet that still included `agenticapps-dashboard` and
       this change is about and neither was in the table: the inventory looked at
       repositories for *checked-in* artifacts, and these are machine-level and
       gitignored. The declaration in 3.1 must own paths outside a repository's
-      tracked set, or the same class goes on being invisible
+      tracked set, or the same class goes on being invisible.
+      **Reopened 2026-08-08. The GSD half of this row is wrong.** What was
+      removed from `~/.claude/` was GSD's *installer state* — the snapshot,
+      the patch journal, the manifests. GSD itself was never uninstalled and is
+      live on three other hosts plus npm; see 1.3c. This row said "already
+      removed, so 1.1 does not rediscover them as a surprise", and that framing
+      is exactly what stopped anyone looking further. The `.gitnexus` half
+      stands and is independently confirmed absent
 
 ## 2. The safe half — removed-tool artifacts and `.planning/`
 
