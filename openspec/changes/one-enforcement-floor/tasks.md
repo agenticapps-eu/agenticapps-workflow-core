@@ -579,12 +579,24 @@ highest-consequence first:
       no binding to unwind. Confirmed while implementing 2.1: the branch is
       unreachable and the code has no unwind because none is possible. Either
       delete the clause or give it the post-bind failure it was written for
-- [ ] 9.6 **Binding activates every hook type in the published directory, not
+- [x] 9.6 **Binding activates every hook type in the published directory, not
       just `pre-commit`.** codex, MEDIUM/SECURITY, and it generalises 2.1a:
       ownership and permissions establish who wrote a file, never that the
       operator intended it to run fleet-wide. `~/.agenticapps/git-hooks/` on
       this machine already holds a file nobody bound. Inventory and require
-      consent, or refuse unexpected entries before binding
+      consent, or refuse unexpected entries before binding.
+      **Decided 2026-08-08 as Decision 6, and the finding understated it.** The
+      structural form is publish-is-file-scoped, bind-is-directory-scoped: git
+      runs every entry by name, so an unpublished `pre-push` becomes machine-wide
+      the moment the binding lands. Normative as "Binding activates a directory,
+      so its every entry is inventoried first" — per-entry consent, named, never
+      a blanket prompt. **The file nobody bound was measured**: a 46-line
+      `pre-commit` vendored from `opencode-workflow` dated 2026-07-25, unmarked,
+      exporting `OPENSPEC_GATE_SELF=opencode` and describing the pre-2.0.0 rule
+      in which `REVIEWS.md` blocks. It self-heals (unmarked reads 0.0.0, floor is
+      1.1.0) — but named `pre-push` it would have gated every commit on the
+      machine under an archived host's identity. A copy, not a symlink, so every
+      symlink-scoped sweep walked past it
 - [ ] 9.7 **The enrolment predicate and `hooks.d` have no stated ordering.** The
       hook exits 0 before the gate when unenrolled, so an operator's
       machine-level hooks never run in unenrolled repositories. Both readings
@@ -603,10 +615,20 @@ highest-consequence first:
 - [ ] 9.10 **Repository discovery is undefined** for both the sweep and
       `--check`'s "names any repository the floor cannot reach". Same finding as
       3b.5, raised again independently — worth promoting out of a sub-task
-- [ ] 9.11 **The `core-self-enforcement` contradiction.** codex HIGH: the design
+- [x] 9.11 **The `core-self-enforcement` contradiction.** codex HIGH: the design
       removes the host `PreToolUse` hook while the unchanged durable requirement
       still mandates it. Either carry a core-only exception explicitly or amend
-      every affected requirement and scenario
+      every affected requirement and scenario.
+      **Fixed 2026-08-08 by amending, not excepting.** "Core provides and
+      registers the gate against its own repository" is now a MODIFIED
+      requirement in the delta: two interposition points core owns —
+      `pre-commit` and CI — and the floor for everything else, with the whole
+      block carried and every scenario amended. A core-only exception was
+      rejected because it would exempt core from the floor it publishes, which
+      inverts what core is for. The amendment states the cost rather than
+      netting it out: the removed hook gated edits regardless of commit flags,
+      both remaining local points are commit-time, and `--no-verify` bypasses
+      one — which is where 9.8's honest version now lives
 - [ ] 9.12 **`--project`'s removal is not normative** — stated in proposal,
       design and an open task, but no scenario requires rejection without
       writes, so it does not survive archival and cannot be tested. codex
@@ -620,4 +642,48 @@ highest-consequence first:
       value 3b.2's predicate classifies as redundant: **the sweep would unset
       the binding 3.5 exists to establish.** 3.4 anticipates this as "declare
       core's binding", which is now load-bearing rather than tidy. codex raised
-      the establisher half; the collision is new
+      the establisher half; the collision is new.
+      **Both halves closed 2026-08-08.** The collision half was already
+      normative and I had not read far enough to see it: the delta specifies
+      `agenticapps.hooksbinding = declared` as a git config key in the same
+      local scope, and the sweep excludes a declared binding without inspecting
+      its value. The establisher half is Decision 6 — **the binder does it**,
+      setting core's local binding and declaration before the global one and
+      refusing the global one if that fails. Every other candidate owner
+      disclaims it in its own text: `install.sh` by Decision 4,
+      `init-project.sh` by "no hooks, no host configuration",
+      `fresh-clone-needs-nothing` by "nothing else", CI by being a detector.
+      Re-measured today: global `core.hooksPath` unset, core's local unset,
+      core's `<common-dir>/hooks` is `.git/hooks` and core's own hook is there —
+      so the displacement is still latent and will fire on the first successful
+      bind
+
+- [x] 9.14 **The sweep is not a no-op, and 3b.2 proved the wrong thing.** Found
+      while closing 9.13. 3b.2 confirmed all five bindings equal
+      `<common-dir>/hooks` and concluded "the sweep is a proven no-op". Unsetting
+      a default-valued local binding is a no-op **only while no global binding
+      exists** — which is the state 3b.2 measured and is still true today. Once
+      the floor is bound, those same five unsets are what hand five repositories
+      to it. That is the intent and the opposite of a no-op: the sweep is the
+      mechanism. It matters beyond wording, because "provably a no-op" is the
+      argument that made writing to another repository's git config feel safe
+      enough to need no authorization boundary — which is 3b.5, reached from the
+      other side
+
+## 10. Implementation the Decision 6 findings create
+
+- [ ] 10.1 The binder inventories `~/.agenticapps/git-hooks/` before binding and
+      refuses on an entry it did not publish, until accepted by name. Per entry,
+      naming it — never a blanket "unexpected files, proceed?"
+- [ ] 10.2 The binder establishes core's local binding and
+      `agenticapps.hooksbinding=declared` **before** the global binding, and does
+      not set the global one if either write fails
+- [ ] 10.3 Remove core's `PreToolUse` registration from `.claude/settings.json`,
+      which 9.11's amendment now permits and 2.x requires. Confirm the
+      `pre-commit` hook and CI still gate, since they become the only two
+- [ ] 10.4 Reword 3b.1 and 3b.2 so the sweep is described as the mechanism that
+      extends the floor's reach, not as a no-op. The measurement stands; the
+      conclusion drawn from it does not
+- [ ] 10.5 RED before GREEN on all of the above: an unrecognised entry blocks the
+      bind; acceptance by name allows it; a failed core-binding write aborts the
+      global bind; core's hook still runs after a successful bind

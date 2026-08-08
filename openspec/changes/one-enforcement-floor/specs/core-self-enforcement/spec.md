@@ -1,5 +1,85 @@
 ## MODIFIED Requirements
 
+### Requirement: Core provides and registers the gate against its own repository
+
+The core repository SHALL provide and register the §18 change gate against
+itself at two interposition points it owns — a git `pre-commit` hook and a CI
+job — and SHALL be governed by the machine-level enforcement floor for
+everything else. Publishing an enforcement artifact SHALL NOT be accepted as a
+substitute for running it.
+
+**The `PreToolUse` hook is removed, and this requirement is amended rather than
+left to contradict the change that removes it.** The unamended text mandated
+three points, the first of which was "a `PreToolUse` hook registered in
+`.claude/settings.json`" — precisely what this change deletes across the fleet,
+core included. A durable requirement that mandates what an active change removes
+is not a tension to be noted in prose; one of the two is wrong, and it is the
+requirement, because the reason the hook went is that a per-host session hook
+cannot gate the session that installs it and does not exist for a human with an
+editor.
+
+**"Provides and registers", not "runs".** The `pre-commit` hook is written by an
+installer and is absent until that installer is run, so a requirement that core
+*runs* the gate would be unsatisfiable in any fresh clone — and would contradict
+this capability's own "the installer was never run" scenario, which explicitly
+blesses that state. The obligation is on what the repository ships and wires,
+which is what core controls.
+
+**§18 requires an interposition point, and no surface SHALL claim it requires
+these two.** §18's requirement is a `PreToolUse` hook (or host equivalent); it
+mentions `pre-commit` and CI only as *evaluating contexts* whose reviewer
+identity must come from the trailer rather than the environment. With the host
+hook removed, core satisfies §18 through the host-equivalent floor, and the two
+points named here are core's own additions, adopted because core authors the
+gate and wants drift caught at commit time and on the pull request.
+
+**Neither is a guarantee, and the requirement SHALL NOT claim otherwise.** The
+`pre-commit` hook is delivered by an installer and is absent until that
+installer runs. The CI job's verdict blocks a merge only where a repository
+setting requires the check, and core's `main` carries no branch protection and
+no rulesets — so the CI job **reports** rather than enforces. Whether a verdict
+blocks a merge is a repository setting outside this capability's scope.
+
+**What the removal costs is stated rather than netted out.** The `PreToolUse`
+hook gated an edit before it was written, regardless of any commit flag. Both
+remaining local points are commit-time, and `git commit --no-verify` bypasses
+one of them. Core keeps CI, so core is the best-covered case; a repository
+without CI is left with one surface and a documented bypass, which is the
+trade this change makes and does not conceal.
+
+#### Scenario: Both owned interposition points run the gate
+
+- **WHEN** the core repository is inspected for gate wiring
+- **THEN** a CI workflow exists that runs the gate on pull requests and on pushes to `main`
+- **AND** an installer exists that writes the `pre-commit` hook into the repository's resolved hooks directory
+- **AND** no `PreToolUse` hook SHALL be required in `.claude/settings.json`
+
+#### Scenario: A host session hook is present anyway
+
+- **WHEN** a `PreToolUse` hook registered against the gate is found in core
+- **THEN** it SHALL be reported as a surface this capability no longer requires
+- **AND** its presence SHALL NOT be treated as satisfying any part of this
+  requirement, since a surface nothing specifies is a surface nothing maintains
+
+#### Scenario: The CI verdict does not block a merge
+
+- **WHEN** the CI job fails on a pull request against `main`
+- **THEN** the failure SHALL be visible on the pull request
+- **AND** the merge SHALL NOT be prevented by this capability
+- **AND** no surface SHALL describe the CI job as an enforced floor
+
+#### Scenario: Publishing is not running
+
+- **WHEN** core ships a gate, a wrapper or a CI template for other repositories to consume
+- **THEN** that act SHALL NOT discharge this requirement
+- **AND** core SHALL still run the gate against itself
+
+#### Scenario: The gate does not observe every edit path
+
+- **WHEN** a file is modified through `Bash` — by `sed -i`, `tee`, a redirect or a script
+- **THEN** the commit-time points SHALL still observe it, because they read the index rather than the tool call
+- **AND** the capability SHALL NOT describe its interposition points as complete coverage
+
 ### Requirement: Core resolves its own reference implementation
 
 Core's three interposition points SHALL resolve
@@ -269,6 +349,45 @@ Core's binding SHALL therefore be **declared** rather than inferred, so that the
 sweep excludes it by name and not by accident, and so that a reader can see it
 is intentional. A binding that is load-bearing and looks redundant is exactly
 the thing a future cleanup removes with a good conscience.
+
+**The binder establishes it, in the same act that creates the hazard.** Setting
+the global binding is the moment core's own hook stops being preferred; the
+binder is the only thing that knows both facts at once, and it runs from inside
+core's checkout by construction. So it SHALL set core's local binding and its
+declaration **before** setting the global one, and SHALL NOT set the global
+binding if establishing core's fails.
+
+Every other candidate owner disclaims this in its own contract, which is why the
+gap existed rather than being an oversight in one place:
+
+| Candidate | Why not |
+|---|---|
+| `install.sh` | writing hooks into whatever repository the shell is standing in is the category error Decision 4 removed |
+| `init-project.sh` | "no skills, no hooks, no host configuration — those are the machine's business" |
+| `fresh-clone-needs-nothing` | a repository carries `openspec/` and one instruction file, "nothing else. No hooks, no shims" |
+| core's CI | detects the absence; a detector is not an establisher |
+
+This is **not** Decision 4's category error returning. That error was a machine
+installer reaching into an arbitrary repository it happened to be standing in.
+This is the binder repairing the single, known, deterministic casualty of its
+own act, in the one repository it is by definition running from. The
+displacement and the repair are one act, for the same reason "publish, then
+bind" is one act: the orders are not symmetric and the safe one costs nothing.
+
+#### Scenario: The binder runs before any global binding exists
+
+- **WHEN** the binder is about to set the global `core.hooksPath`
+- **THEN** it SHALL first set core's local `core.hooksPath` to core's resolved
+  default hooks directory, together with `agenticapps.hooksbinding=declared`
+- **AND** it SHALL NOT set the global binding if either write fails
+- **AND** a commit in core afterwards SHALL run core's working-tree gate
+
+#### Scenario: Core's binding is already established
+
+- **WHEN** core already carries a declared local binding naming its default
+  hooks directory
+- **THEN** the binder SHALL report it satisfied and rewrite nothing
+- **AND** SHALL proceed to the global binding
 
 #### Scenario: The sweep encounters core
 

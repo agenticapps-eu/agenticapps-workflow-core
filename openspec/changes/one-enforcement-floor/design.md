@@ -411,6 +411,107 @@ constraint with a per-repository failure path. Both are real work, and both were
 already implied by 2.9 and 3b.5 — this decision names them as one act rather
 than three that have to agree with each other.
 
+## Decision 6 — the binder establishes core's binding, because every other owner disclaims it
+
+Closes 9.13's establisher half, 9.11 and 9.6. All three were measured on
+2026-08-08 before being decided; two of the three findings understated what was
+there.
+
+### Core's binding has no owner because four correct boundaries meet
+
+3.5 demanded a named artifact and was right to. Searching for one turns up four
+candidates and every one of them **excludes this in its own text**:
+
+| Candidate | Its own words |
+|---|---|
+| `install.sh` | Decision 4 removed exactly this — a machine installer writing hooks into whatever repository the shell stands in |
+| `init-project.sh` | "No skills, no hooks, no host configuration, no CI workflow. Those are the machine's business" |
+| `fresh-clone-needs-nothing` | a repository carries `openspec/` and one instruction file — "**Nothing else.** No skills, no hooks, no shims" |
+| core's CI | detects the absence, which 3.5 already called a detector rather than an establisher |
+
+That is not one oversight repeated four times. It is a hole produced by four
+boundaries that are individually right, which is why naming an owner kept
+failing: the honest answer is that nobody had the job, not that somebody had it
+and forgot.
+
+**So the binder takes it.** Setting the global binding *is* the moment core's
+own hook stops being preferred, the binder is the only artifact that knows both
+facts at once, and it runs from inside core's checkout by construction —
+`SELF_DIR` is `reference-implementations/global-floor/`. It sets core's local
+binding and its declaration first, and refuses to set the global one if that
+fails.
+
+*Alternative rejected: a fifth artifact owning only this.* Honest, and it makes
+a one-line git config into a published script with a version marker, a test
+suite and a place in the installer's inventory. The cost is not the line, it is
+the surface.
+
+**This is not Decision 4 returning.** Decision 4 forbade a machine installer
+reaching into an arbitrary repository it happened to be standing in. This is the
+binder repairing the single, known, deterministic casualty of its own act, in
+the one repository it is by definition running from. Same shape as publish-then-
+bind: the two orders are not symmetric and the safe one costs nothing.
+
+### The sweep was never a no-op, and 3b.2 proved the wrong thing
+
+3b.2 confirmed all five swept bindings equal `<common-dir>/hooks` exactly and
+concluded "the sweep is a proven no-op". The measurement is right and the
+conclusion does not survive the change that motivates it.
+
+Unsetting a local binding that names the default directory is a no-op **while no
+global binding exists**. That is the state 3b.2 measured — global `core.hooksPath`
+is still unset on this machine today. The instant the floor is bound, those same
+five unsets are what hand five repositories to it. That is the intent, and it is
+the opposite of a no-op: the sweep is the mechanism, not a tidy-up beside it.
+
+This matters beyond wording, because "provably a no-op" is the argument that
+made writing to another repository's git config feel safe enough to need no
+authorization boundary — which is 3b.5's open question, arrived at from the
+other side.
+
+### 9.6 was understated: the asymmetry is publish-file, bind-directory
+
+The finding read as ownership-and-permissions not proving intent, which is true.
+The sharper statement is structural: **the installer publishes one file and binds
+a directory.** Git runs every entry it finds there by name, so a `pre-push` or
+`commit-msg` nobody published becomes machine-wide the moment the binding lands,
+and the existing guards cannot see it — they establish that no *other account*
+could have written the directory, never that the operator meant its contents to
+run on every commit.
+
+The instance on this machine made the point better than the argument.
+`~/.agenticapps/git-hooks/` held one file, dated 2026-07-25: a 46-line
+`pre-commit` vendored from `opencode-workflow` — an archived repository — with no
+version marker, exporting `OPENSPEC_GATE_SELF=opencode` and describing the
+pre-2.0.0 rule in which `REVIEWS.md` blocks. Publishing replaces it, because
+unmarked reads as 0.0.0 and the floor is 1.1.0, so that entry self-heals. Had it
+been named `pre-push` it would have run unchallenged on every commit on the
+machine, under an archived host's identity and a rule retired at gate 2.0.0.
+
+It is also a fifth instance of the pattern the fleet keeps hitting: a **copy**,
+not a symlink, so every sweep scoped to symlinks walked straight past it.
+
+### 9.11 is fixed by amending the requirement, not by an exception
+
+The durable `core-self-enforcement` requirement mandates three interposition
+points and names the first as "a `PreToolUse` hook registered in
+`.claude/settings.json`" — which this change deletes. codex called it HIGH and
+offered two routes: a core-only exception, or amend every affected requirement.
+
+*Exception rejected.* A core-only carve-out would say core keeps a hook the same
+change removes everywhere else, which inverts what core is for: core gates
+itself with the bytes it ships, so it should be the *first* repository to live
+under the floor, not the one exempted from it.
+
+So the requirement is amended: two interposition points core owns —
+`pre-commit` and CI — and the floor for everything else. The amendment carries
+the cost rather than netting it out. The removed hook gated an edit before it
+was written, regardless of commit flags; both remaining local points are
+commit-time and `--no-verify` bypasses one. Core keeps CI so core is the
+best-covered case, which is precisely why the sentence has to name what a
+repository *without* CI is left with — that is 9.8, and this is where the
+honest version of it goes.
+
 ## The question this change refuses to answer by implication
 
 `host-neutral-instruction-files` requires a project's `AGENTS.md` to carry

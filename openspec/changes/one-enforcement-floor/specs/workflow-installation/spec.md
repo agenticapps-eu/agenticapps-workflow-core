@@ -402,6 +402,62 @@ macOS and is not guaranteed to be.
 - **THEN** nothing is published and `core.hooksPath` SHALL NOT be set
 - **AND** the run exits non-zero and says what to change
 
+### Requirement: Binding activates a directory, so its every entry is inventoried first
+
+The installer publishes one file and binds a **directory**. Git runs whatever
+hook it finds there by name, so binding activates every entry — `pre-push`,
+`commit-msg`, `prepare-commit-msg`, any of them — machine-wide, for every
+repository the floor governs. The installer SHALL inventory the machine-level
+hooks directory before binding, and SHALL NOT bind while it holds an entry the
+installer did not publish, unless the operator accepts that entry by name.
+
+The asymmetry is the defect: publish is file-scoped, bind is directory-scoped,
+and nothing reconciles them. The existing directory guards do not close it —
+they establish that the directory is not a symlink and that no *other account*
+can write it, which together prove who could have written a file and never that
+the operator intended it to run on every commit. An entry the operator placed
+there themselves passes both guards.
+
+**Measured 2026-08-08, and the instance is not hypothetical.**
+`~/.agenticapps/git-hooks/` on this machine held exactly one file, dated
+2026-07-25: a 46-line `pre-commit` vendored from `opencode-workflow`, an
+archived host repository scheduled for deletion. It carries no version marker,
+so the arbitration reads it as 0.0.0 and the 1.1.0 publish replaces it — that
+one entry self-heals. What does not self-heal is the shape: it arrived by a
+path nothing inventoried, it sat at the exact filename the binder binds, and it
+would have been byte-for-byte the machine's commit gate had it been named
+`pre-push` instead. It also exported `OPENSPEC_GATE_SELF=opencode` and described
+the pre-2.0.0 semantics in which `REVIEWS.md` blocks — so had it run, every
+repository on the machine would have gated commits under an archived host's
+identity and a rule retired at gate 2.0.0.
+
+Consent SHALL be per entry and SHALL name it. A blanket "the directory contains
+unexpected files, proceed?" is the prompt everyone accepts, and it is the same
+acceptance whether the entry is a stale copy of the installer's own hook or a
+`pre-push` nobody remembers.
+
+#### Scenario: The directory holds only what the installer published
+
+- **WHEN** the machine-level hooks directory holds no entry other than the
+  published `pre-commit`
+- **THEN** the installer SHALL bind without prompting
+- **AND** the inventory SHALL still be reported, so a clean result is evidence
+  rather than silence
+
+#### Scenario: The directory holds an entry the installer did not publish
+
+- **WHEN** the inventory finds an entry the installer did not write
+- **THEN** the installer SHALL name the entry, its size and its modification date
+- **AND** SHALL NOT bind until the operator accepts that entry by name
+- **AND** a refusal SHALL leave the global binding unchanged
+
+#### Scenario: An unpublished entry is a stale copy of the published hook
+
+- **WHEN** the unrecognised entry occupies the published hook's own filename
+- **THEN** version arbitration SHALL still decide the publish
+- **AND** the entry SHALL still be reported, because a hook replaced silently is
+  indistinguishable from a hook that was never there
+
 ### Requirement: The published hook composes rather than monopolises
 
 The published `pre-commit` SHALL dispatch to the gate and then to an
