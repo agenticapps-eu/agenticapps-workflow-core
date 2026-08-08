@@ -43,6 +43,30 @@ across a fleet that still included `agenticapps-dashboard` and
       already associated with the workflow, so a repository carrying a retired
       tool without carrying the workflow was structurally invisible to it. That
       is 1.3's own premise landing on 1.3
+- [ ] 1.3b **31 orphaned agent worktrees in `cparx`, 4.7G, and git cannot read
+      any of them.** Found 2026-08-08 by the verification pass *after* this
+      session had already claimed GSD was gone from the live repositories — the
+      claim was wrong, and the way it was wrong is the point.
+      `.claude/worktrees/` holds 31 full working trees dated 2026-04-16 to
+      2026-05-03, gitignored and untracked. 31 of them still carry
+      `setup-gstack-gsd-superpowers-workflow.md`, so the command removed in PR
+      #129 survives 31 times over in the same repository.
+
+      Each `.git` file reads `gitdir: /Users/donald/Sourcecode/cparx/.git/...`
+      — the **pre-family-reorganisation path**. That directory is now
+      `~/Sourcecode/factiv/cparx`, so every one of them points at a location
+      that no longer exists and every git command inside them fails with
+      `fatal: not a git repository`. They were orphaned by a directory move, not
+      by `git worktree prune`, and `git worktree list` in `cparx` reports one
+      entry: the main checkout.
+
+      **A first pass reported "0 dirty, 0 unpushed" and that reading was
+      vacuous** — git was erroring, the output was empty, and empty counted as
+      clean. Recorded because it is the same defect as every other row here: a
+      check that cannot fail is not evidence, and this one nearly retired 4.7G
+      on the strength of it. Whether anything in those trees is worth keeping
+      cannot be answered with git and needs content comparison against the
+      repository. **Operator call, and nothing was deleted**
 - [ ] 1.3a The predicate that missed it is worth stating, because it is the same
       one that missed 21 skills behind symlinks and a 46-line `pre-commit` in
       `~/.agenticapps/git-hooks/`. Each sweep so far has searched **where the
