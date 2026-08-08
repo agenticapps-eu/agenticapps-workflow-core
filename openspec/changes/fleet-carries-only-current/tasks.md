@@ -324,7 +324,7 @@ instruction-file work. One PR per repository.
       every OpenSpec repository on the machine, and that is a behaviour decision
       rather than a repair. Left with the reasoning attached so it is a choice
       rather than an oversight
-- [ ] 1.3d **A second field of orphaned worktrees: `fx-signal-agent`, 22 trees,
+- [x] 1.3d **A second field of orphaned worktrees: `fx-signal-agent`, 22 trees,
       6.4G.** Same signature as 1.3b — `.git` files pointing at
       `~/Sourcecode/fx-signal-agent`, the pre-family-reorganisation path, so git
       cannot read them and `git worktree list` does not know them. Found while
@@ -336,7 +336,22 @@ instruction-file work. One PR per repository.
       about `cparx` and does not transfer. The same hash-against-the-object-store
       test should run here first. Combined with 1.3b this is **11.1G** of
       orphaned agent worktrees across two repositories, from one directory move
-      nobody swept after
+      nobody swept after.
+
+      **Removed 2026-08-08 after running that test.** 10,260 of 10,304
+      candidates were byte-identical to committed content. The 44 remainder:
+      21 broken `.git` pointers, 21 `settings.local.json`, and 2
+      `pnpm-lock.yaml` whose sibling `package.json` is itself committed content
+      and which the repository's own tracked lockfile supersedes. Verified
+      after: `git fsck` clean, `git worktree list` one entry, `main` identical
+      to `origin/main`.
+
+      **One check inside this test was vacuous and was caught before it counted.**
+      A comparison of packages present in the worktree lockfiles but absent from
+      the repository's reported `0`, which read as reassuring — but the pattern
+      it grepped matched nothing in either file, so it was comparing two empty
+      sets. Same failure as 1.3b's "0 dirty, 0 unpushed". A check that returns
+      the answer you wanted is worth re-reading before it is worth believing
 - [x] 2.7 **Unregister `meta-observer`** from `~/.claude/settings.json`. Its
       `SessionEnd` entry ran
       `agenticapps-dashboard/packages/meta-observer/hooks/session-end.mjs`, a
