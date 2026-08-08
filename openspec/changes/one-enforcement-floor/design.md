@@ -324,18 +324,25 @@ they are not nine migration candidates:
 | `codex-workflow` | 5844 | archived checkout, deleted wholesale by Phase 5b |
 | `opencode-workflow` | 2270 | archived checkout, deleted wholesale by Phase 5b |
 | `agenticapps-dashboard` | 5844 | retired 2026-08-05 |
-| `agenticapps-roadmap` | 1201 | **live** |
+| `agenticapps-roadmap` | 1201 | retired 2026-08-08 |
 | `agents-task-viewer` | 1201 | **live** |
 | `callbot` | 1201 | **live** |
 | `fx-signal-agent` | 1201 | **live** |
 
 `fbc-platform` carries husky, not the gate, and is the one genuine opt-out.
 
-**The live migration set is four repositories.** The four excluded are excluded
+**The live migration set is three repositories.** The six excluded are excluded
 on a precedent this fleet already set: `fleet-carries-only-current` holds that
 "cleaning a repository scheduled for deletion" is out of scope. Enrolling a
 checkout that Phase 5b deletes is work whose only product is a config key in a
 directory that will not exist.
+
+`agenticapps-roadmap`'s retirement was decided by the operator and confirmed
+2026-08-08. It was recorded nowhere — not in the family instruction file's
+retired-repos section, not in its own ADRs — which is why the first census read
+it as live off the machine's own evidence. That is this change's subject matter
+appearing in its own working notes: a decision with no artifact is a decision
+the next reader cannot find, and the census is a reader.
 
 ### The existing hook is evidence of enrolment, and is not enrolment
 

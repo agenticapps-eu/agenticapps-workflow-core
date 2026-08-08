@@ -38,22 +38,36 @@ the chain and must land before `projects-bind-not-copy`.
       | `codex-workflow` | 5844 | archived, deleted wholesale by Phase 5b |
       | `opencode-workflow` | 2270 | archived, deleted wholesale by Phase 5b |
       | `agenticapps-dashboard` | 5844 | retired 2026-08-05 |
-      | `agenticapps-roadmap` | 1201 | **live — migration set** |
+      | `agenticapps-roadmap` | 1201 | retired 2026-08-08 |
       | `agents-task-viewer` | 1201 | **live — migration set** |
       | `callbot` | 1201 | **live — migration set** |
       | `fx-signal-agent` | 1201 | **live — migration set** |
 
-      **The migration set is four.** The four exclusions follow the precedent
+      **The migration set is three.** The exclusions follow the precedent
       `fleet-carries-only-current` already set — "cleaning a repository
       scheduled for deletion" is out of scope — and core is excluded because it
       keeps a local binding by ADR-0028. `fbc-platform` carries husky, not the
       gate.
-      Note the four byte-identical 1201-byte copies. That is what Decision 4's
-      category error looks like from the outside: `install.sh` wrote a hook into
-      whichever repository the shell was sitting in, so this population mixes
-      deliberate adoption with drive-by installs and nothing on disk separates
-      them. It is the evidence for Decision 5 refusing to translate the hook
-      into a marker unasked
+      `agenticapps-roadmap` was retired by the operator, confirmed 2026-08-08.
+      **The first census classified it live**, and correctly on the evidence
+      available: the retirement is recorded in neither the family instruction
+      file's retired-repos section nor the repo's own ADRs. Recorded here as the
+      cheapest place it will be found, and 0.3b tracks putting it where it
+      belongs
+      Note the **five** byte-identical 1201-byte copies, spanning an archived
+      checkout, a retired one and all three live repositories. That is what
+      Decision 4's category error looks like from the outside: `install.sh`
+      wrote a hook into whichever repository the shell was sitting in, so this
+      population mixes deliberate adoption with drive-by installs and nothing on
+      disk separates them. It is the evidence for Decision 5 refusing to
+      translate the hook into a marker unasked
+- [ ] 0.3b Record `agenticapps-roadmap`'s retirement where a reader will find
+      it — the family instruction file's retired-repos section, next to
+      `agenticapps-dashboard`'s, with the reason and the date. It is currently
+      recorded only in this change's working notes, which is the wrong home for
+      a fact three other in-flight changes depend on. **Outside this repository,
+      so it is the operator's call, not this change's** — noted here so it is
+      not lost, not claimed as scope
 - [x] 0.4 Record the six repositories that set a local `core.hooksPath` and what
       each names, as the before-state for the sweep in section 3.
       **Done 2026-08-07.** Neither `--global` nor `--system` sets it, so there is
@@ -252,7 +266,7 @@ ran, so this change starts from an installer that writes no host configuration.
       live" is a fact about the machine; "the binding governs this repository"
       is a fact about the repository, and a local `core.hooksPath` makes them
       different facts in five repositories today.
-      **The migration set is four, not nine** — see the corrected population in
+      **The migration set is three, not nine** — see the corrected population in
       0.3a. Archived and retired checkouts are excluded and reported as excluded
 - [x] 3.2 `tools/install-core-git-hooks.sh` — **superseded. Decided 2026-08-07,
       recorded as design Decision 4.** It resolves its destination with
@@ -517,7 +531,7 @@ highest-consequence first:
       `install.sh` wrote hooks into whichever repository the shell was sitting
       in, so the population mixes deliberate adoption with drive-by installs and
       nothing on disk separates them.
-      Two corrections fell out of it: **the migration set is four, not nine**
+      Two corrections fell out of it: **the migration set is three, not nine**
       (0.3a), and 3.1's "having confirmed the global binding is live" was the
       wrong predicate — that is a fact about the machine, and what matters is a
       fact about the repository
