@@ -23,8 +23,8 @@ open PRs, and no branch is waiting.
   statements corrected, **§13 retired**, ADR-0030 superseding ADR-0011+0012.
 - **PR #101 merged** — change archived; `vestigial-surface-removal` is now a spec
   slot (13 requirements), `change-gate-enforcement` gained 3.
-- **PR #78 closed** as outdated (131 commits behind, conflicting). Its branch
-  `feat/executable-migration-format` is **preserved** — +12,318 lines recoverable.
+- **PR #78 closed** as outdated (131 commits behind, conflicting), and its branch
+  later **deleted** with four others — see *Branch cleanup* below.
 
 ## Decisions
 
@@ -85,8 +85,23 @@ a change whose premise had expired.
    `codex-workflow` templates. Recorded, not patched; those are archived repos.
 4. **After any `gstack-upgrade`, re-run `./setup --host auto`** — upgrade runs a
    bare `./setup`, which relinks claude only.
-5. `feat/executable-migration-format` — reopen as a fresh change against 2.0.0 if
-   the executable migration format is still wanted.
+5. **Branch cleanup — origin and local are now `main` only.** Ten stale branches
+   went: five were fully merged, and five carried **64 commits that never
+   merged**, deleted by explicit operator decision after the counts were shown.
+   There is no local copy of any of them. Tip SHAs, which are the recovery path
+   while GitHub retains unreachable objects:
+
+   | Branch | Tip | Commits |
+   |---|---|---|
+   | `feat/executable-migration-format` | `4fcb645432bf8f2cb35aa86595a983e036dc8dfd` | 38 |
+   | `fix/shim-suppressed-report-and-fleet-propagation` | `a4bae91fb54f1c4211f2f5695eb6cd7058590ed6` | 11 |
+   | `feat/spec-18-single-reviewer-floor` | `d4e3b7a83cc3f9670cd1766f6ce433695156b54a` | 10 |
+   | `feat/run-the-global-floor-migration` | `bcb77a0e92e48679ff3b22715db0b7c5daa1f566` | 4 |
+   | `docs/handoff-donalds-verdict` | `cc71fd35e35a89bebe6fd9c07f1ed7bfc8e2e432` | 1 |
+
+   #78's commit also stays reachable via `refs/pull/78/head`. Do not rely on
+   either route indefinitely. If the executable migration format is wanted again,
+   propose it fresh against 2.0.0 rather than recovering the branch.
 6. Carried over: AGE-510 (nothing detects an unreadable instruction file),
    AGE-509 (`check-shims.sh` has no reverse pass), no interception of destructive
    SQL, `normalize-claude-md` has no implementation, `claude-workflow` has 11
