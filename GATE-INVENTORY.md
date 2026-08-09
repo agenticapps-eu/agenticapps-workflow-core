@@ -50,7 +50,7 @@ Linear owns *what's next*. That's the "complementary, not conflicting" you descr
 
 | Hook | Verdict |
 |---|---|
-| `PreToolUse` / `apply_patch` plan-review hook (+ `check-plan-review.sh` verifier) | **KEEP.** Retarget predicate: block code edits until the active change has `openspec validate` GREEN **and** `REVIEWS.md` ≥2 reviewers. Same escape hatches (`GSD_SKIP_REVIEWS=1`, per-change skip marker). This is the teeth that makes propose-before-code non-bypassable. |
+| `PreToolUse` / `apply_patch` plan-review hook (+ `check-plan-review.sh` verifier) | **KEEP.** Retarget predicate: block code edits until the active change has `openspec validate` GREEN. (This row planned a review-count block and an escape hatch; neither shipped — reviews are reported, not enforced, and the hatch was removed at spec 2.0.0.) |
 
 ## D. Rituals & cross-cutting mechanisms — KEEP (all orthogonal to OpenSpec)
 

@@ -244,3 +244,128 @@ against reintroducing the artifact.
   change
 - **THEN** the archived change, the ADR, and the changelog entry SHALL still
   answer, without reference to the removed artifact itself
+
+### Requirement: A gate binding names only a skill that exists
+
+Core SHALL bind a skill to a gate only while a skill declaring that canonical
+name is installed. When every copy is removed, the binding SHALL be removed with
+it.
+
+Existence is judged by the **declared name**, never by a directory basename. A
+skill packaged as `gstack-qa` declares `qa` and satisfies a binding of that name;
+a directory named `qa` declaring something else does not. Two separate proposals
+in one day reached false conclusions by enumerating directories, and both would
+have passed a basename check.
+
+A stale binding never fails. An absent gate skill is reported and work continues,
+which is the property that lets a binding name a deleted skill indefinitely with
+nothing going red. It is caught by reading, or not at all.
+
+#### Scenario: The bound skill is removed from every host
+
+- **WHEN** no host declares the canonical name a gate binds
+- **THEN** the binding SHALL be removed from the gate table
+- **AND** any rule making that skill's findings blocking SHALL be removed with it
+
+#### Scenario: The skill is present under a prefixed directory name
+
+- **WHEN** a bound skill is installed in a directory carrying a provider prefix
+  whose `SKILL.md` declares the canonical name
+- **THEN** the binding SHALL be satisfied and SHALL NOT be removed
+
+### Requirement: A skill wanted on demand is not bound to a gate
+
+Core SHALL NOT bind a skill to a gate when the skill is to be invoked at the
+operator's choice rather than on the gate's trigger, however useful the skill is.
+
+Availability and binding are different things. A skill installed on every host is
+callable on every host; binding it to a gate additionally fires it automatically,
+which for an on-demand tool is the opposite of what is wanted. Removing a binding
+removes the automatic invocation and changes nothing about whether the skill can
+be called.
+
+Unbinding a skill that still exists is a **policy change, not a cleanup**, and
+SHALL be stated as one rather than grouped with the removal of dead surface.
+
+#### Scenario: An installed skill is unbound
+
+- **WHEN** an installed skill is to be invoked on demand rather than on a trigger
+- **THEN** no gate SHALL bind it
+- **AND** the skill SHALL remain installed and callable by canonical name on
+  every host
+- **AND** the change SHALL describe the unbinding as a policy change
+
+### Requirement: A gate left unbound stays defined, and the removal is breaking
+
+Removing core's binding SHALL NOT remove the gate from §02's taxonomy. The gate
+SHALL keep its trigger and evidence definitions so any host with a suitable skill
+can bind it.
+
+The version consequence SHALL be taken from §09 against the **behaviour** that
+changes, not from whether a taxonomy row survives. A gate that stops firing and a
+normative section that is deleted are breaking to every consumer, and SHALL be
+released as a major version. A change SHALL NOT declare its own version
+consequence inside its spec delta; §09 is the sole authority and a requirement
+that classifies the change introducing it is circular.
+
+#### Scenario: Core removes a binding
+
+- **WHEN** core removes the skill bound to a gate
+- **THEN** the gate SHALL remain defined in §02 with its trigger and evidence
+  unchanged
+- **AND** the release SHALL be classified under §09 by the behaviour lost
+
+#### Scenario: A delta attempts to classify itself
+
+- **WHEN** a spec delta states the version increment its own change is entitled to
+- **THEN** that statement SHALL be removed and the classification taken from §09
+
+### Requirement: A local artifact is not evidence about a normative section
+
+A spec section SHALL NOT be retired, nor its obligations weakened, on evidence
+drawn from one machine's state — a skills directory listing, a symlink, or an
+installer variable.
+
+Where a section leaves the concrete implementation name to the host's
+discretion, no directory's presence or absence says anything about it. Three
+separate attempts to retire §13 failed on exactly this: the first read
+`~/.claude/skills`, the second read a deleted symlink, the third read
+`install.sh`'s `ARCHIVED` variable — which identifies legacy symlink targets and
+states in its own comment that it is "not a dependency". Measured 2026-08-09,
+every host repository it names had a live remote and a commit four days old.
+
+Retiring a section SHALL require an argument about repository lifecycle and
+deployed consumers: a deprecation window, or evidence that no host ships an
+implementation.
+
+#### Scenario: A retirement is argued from local state
+
+- **WHEN** a proposal argues to retire a section from a directory listing, a
+  symlink, or an installer variable naming repositories
+- **THEN** that argument SHALL NOT be sufficient
+- **AND** the section SHALL be retained until a lifecycle argument is made
+
+#### Scenario: A section names its implementation at the host's discretion
+
+- **WHEN** a section states that the implementing skill's name is the host's
+  choice
+- **THEN** the absence of any particular skill name SHALL NOT be read as the
+  section being unimplemented
+
+### Requirement: A tool's failure-path recommendation is governed surface
+
+Where a shipped tool recommends an artifact to an operator on a failure path,
+that recommendation SHALL be treated as part of the governed interface and SHALL
+be removed together with the artifact it names.
+
+A removed artifact that a tool still tells an operator to reach for has not been
+removed from the operator's point of view; it has been made unavailable while
+still being advertised, which is worse than either state alone.
+
+#### Scenario: A failure path recommends a removed artifact
+
+- **WHEN** an artifact is removed and a shipped tool recommends it in a failure
+  message
+- **THEN** the recommendation SHALL be removed in the same change
+- **AND** the removal SHALL be verified against the tool's output, not only its
+  source

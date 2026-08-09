@@ -39,7 +39,6 @@ unblocked. A missing review is not a parse error and always blocks.
 
 | Var | Effect |
 |---|---|
-| `GSD_SKIP_REVIEWS=1` | Documented escape hatch — bypasses the review clause. `validate` must still be green (see *Deviations*). |
 | `OPENSPEC_GATE_STRICT=1` | Also block edits when there is *no* active change ("no code without a change"). |
 | `MIN_REVIEWERS` | Reviewer threshold. Default `2`. |
 | `OPENSPEC_BIN` | `openspec` CLI name/path. Lets the harness stub `validate` and test the gate hermetically. |
@@ -121,14 +120,8 @@ closed, for the same reason.
 
 ## Deviations from §18's truth table
 
-One, deliberate and pinned by a harness row:
-
-**`GSD_SKIP_REVIEWS` is applied after the validate check.** §18's row reads
-unconditionally ("escape hatch set → allow"), but here `validate` red plus the
-hatch still blocks. The hatch exists to bypass the *review* clause in an
-emergency, not to ship a change whose spec delta does not parse. A host that
-prefers the literal reading should change it here and flip the row, not diverge
-locally.
+None. The gate blocks on exactly one condition — `openspec validate --all` not
+green — and there is no env var that changes that.
 
 Related asymmetry, worth knowing: a **missing `openspec` CLI blocks** (exit 2 —
 an unvalidatable change must not pass), while a **missing gate in the

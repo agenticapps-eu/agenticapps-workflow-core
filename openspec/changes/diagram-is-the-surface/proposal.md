@@ -46,7 +46,10 @@ the specification of the loop, so it is wrong at the source.
 
 - `workflow.mmd` line 7 states *"no code edits until validate GREEN and REVIEWS
   ≥ 2"*. Reviews have not blocked since 2.0.0.
-- `workflow.mmd` line 13 routes *"db-sentinel if SQL/RLS"* to a removed hook.
+- `workflow.mmd` line 13 routes *"db-sentinel if SQL/RLS · design + qa if UI"* to
+  a removed hook and to two gate bindings this change removes. The diagram wins
+  where it and the prose disagree, so it is corrected in the same change rather
+  than after it.
 - `spec/18-retargeted-change-gate.md` line 104 carries a truth-table row for the
   hatch and line 235 states the gate keeps it deliberately.
 - The gate header documents `MIN_REVIEWERS` as a blocking floor. It is not; it
@@ -54,18 +57,79 @@ the specification of the loop, so it is wrong at the source.
 - Global `CLAUDE.md` warns that two skills claim the `agentic-apps-workflow`
   name. One of the two no longer exists.
 
-**Not touched.** `adrs/`, `openspec/changes/archive/`, `CHANGELOG.md`, and the
-change documents recording these removals. Deleting the record of a decision is
-not minimizing; it is losing the reason.
+**Removed — gate bindings, and this half is a policy change, not a cleanup**
 
-**§13 is not in this change, and an earlier revision had it wrong.** It proposed
-retiring `spec/13-ts-declare-first.md` on the claim that no host bound it. That
-claim was false and was made by checking `~/.claude/skills` and stopping.
-`reference-implementations/README.md` records **three** hosts binding it —
-`codex-ts-declare-first`, `opencode-ts-declare-first`, `pi-ts-declare-first` —
-and pi reached `full` conformance at host v0.6.0 *by* binding §13, after ADR-0004
-reversed its minimal-host framing to do so. Removing it breaks three hosts and
-demotes one. It is dropped, not deferred: the evidence says it is load-bearing.
+Named separately because bundling it under "dead surface" would hide it. One of
+these two skills is gone; the other is not, and unbinding it is a decision.
+
+- **`database-security` → `database-sentinel`.** The skill is gone from every
+  host — checkout and both aliases removed 2026-08-09, and no host declares the
+  name. The gate table still routes every SQL, RLS and migration change to it.
+  This is the stale-binding half.
+- **`design` → `impeccable`.** The skill **exists and stays installed**,
+  resolving by canonical name on every host. It is unbound because it is wanted
+  on demand rather than fired automatically on every UI change. This is the
+  policy half, and it removes a control that ADR-0011 made automatic.
+
+The `qa` binding and all seven always-on gates are untouched. Neither gate leaves
+§02's taxonomy; core stops binding a skill to each, and §02 and §17 are amended
+where they oblige otherwise.
+
+**Version: 2.0.0.** Two gates lose their bindings and §02 and §17 are amended
+where they oblige those gates to be bound and to fire. An earlier draft argued
+1.7.0 on the grounds that §09's "gate removed" means removed from the taxonomy;
+two independent reviewers called that self-serving and they were right. A team
+pulling this loses an automatic security control, and the number has to say so.
+Per §09 the release entry states the conformance impact, so `CHANGELOG.md` is in
+scope — see the corrected exclusion below.
+
+**Not touched.** `openspec/changes/archive/` and the change documents recording
+these removals. Deleting the record of a decision is not minimizing; it is
+losing the reason.
+
+**Two entries left this exclusion list and both were wrong to be on it.**
+`adrs/` — no ADR is edited or deleted, but ADR-0030 is *added*, superseding
+ADR-0011 (`impeccable` at two gate points) and ADR-0012 (`database-sentinel`
+findings block branch close, and `db-pre-launch-audit` with it). Both are
+Accepted and both mandate behaviour this change removes, so leaving them
+standing would leave the repository contradicting itself. `CHANGELOG.md` — §09
+requires the release entry to state conformance impact, which a 2.0.0 cannot
+skip.
+
+**Honest scope on installed copies.** Removing an artifact from
+`~/.agenticapps/bin` on this machine does not remove it from any other machine's
+install. The installer publishes an allowlist and has **no retired-artifact
+sweep**, so an existing installation keeps an orphan indefinitely. This change
+does not build that sweep. The claim is therefore limited to this machine, and
+the missing mechanism is recorded as a gap rather than implied to be solved.
+
+**§13 is not in this change. Three attempts have now tried to retire it and all
+three were wrong, in the same way each time.** Recorded in full because the
+pattern is the point, and a fourth attempt is otherwise inevitable.
+
+1. The first proposed retiring `spec/13-ts-declare-first.md` on the claim that no
+   host bound it. False, and reached by checking `~/.claude/skills` and stopping.
+   `reference-implementations/README.md` records **three** hosts binding it —
+   `codex-ts-declare-first`, `opencode-ts-declare-first`, `pi-ts-declare-first` —
+   and pi reached `full` conformance at host v0.6.0 *by* binding §13.
+2. The second, on 2026-08-09, read the deleted `~/.claude/skills/ts-declare-first`
+   symlink as evidence about the section. §13 makes the skill name **explicitly
+   host-discretionary** — "commonly named `ts-declare-first`, but the name is at
+   the host's discretion" — so no directory's absence on one machine says
+   anything about it at all.
+3. The third argued that the three hosts are on `install.sh`'s
+   `ARCHIVED` list and so protect no live consumer. Also false. That list
+   identifies **legacy symlink targets to strip**, and says so: "a tombstone
+   list, **not a dependency**." It is not a statement about repository
+   lifecycle. Measured 2026-08-09: all four host repos have live `origin`
+   remotes and commits dated 2026-08-05, and `agenticapps/CLAUDE.md` lists three
+   of them under *"Active repos"*.
+
+Every attempt read a **local artifact** — a skills directory, a symlink, an
+installer variable — as evidence about a **normative section with a
+host-discretionary implementation**. It never is. Retiring §13 requires an
+argument about repository lifecycle and deployed consumers: a deprecation window,
+or evidence that no host ships it. Until one exists, §13 stays.
 
 **On BREAKING and the version, which two reviewers found in tension.** Both
 readings were in this document: `GSD_SKIP_REVIEWS` marked **BREAKING**, and the
@@ -73,17 +137,26 @@ design claiming nothing here breaks the `spec/` surface. They are not the same
 claim, and the document should not have left them adjacent without saying so.
 
 Removing a documented environment variable an operator may have exported is
-breaking **to the gate's interface**, and it is labelled so. It is not breaking to
-the **numbered `spec/` sections**, which is what §09's host-conformance versioning
-governs — no section is removed and no host's `implements_spec` claim is
-invalidated. But §18 is normative and two of its statements are edited, so this is
-not version-neutral either: it is a `spec/` change at §18, and the version it
-lands at SHALL be decided before the §18 task runs.
+breaking **to the gate's interface**, and it is labelled so.
 
-What it is *not* is a competitor for 2.0.0 on the grounds §13 would have created —
-that collision was about removing a whole section, and §13 is no longer here.
-Whether §18's edit is a minor or a major under §09 is the open question, and it is
-recorded as one rather than assumed away in either direction.
+**The open question that used to sit here is now closed, and closed the other
+way.** It read: no `spec/` section is removed, no `implements_spec` claim is
+invalidated, only §18 is edited, so whether that is minor or major is undecided.
+Every clause of that is now false. §13 **is** removed. Two gate bindings **are**
+removed. §02 and §17 are amended. Host claims citing §13 **are** invalidated —
+which is acceptable only because every host that holds one is on this
+repository's own archived list, not because no claim moves.
+
+So this lands at **2.0.0**, and the §18 edit rides along inside it rather than
+needing its own verdict.
+
+An earlier draft of the folded scope argued 1.7.0, reading §09's "gate removed"
+as meaning removed from §02's taxonomy while a binding could go quietly. Two
+independent reviewers rejected it in the same words — *self-serving* — and they
+were right: a consumer who loses an automatic security control and a normative
+contract has had something broken, whatever the taxonomy still lists. The
+classification is taken from §09 against behaviour lost, and never from a
+requirement this change writes about itself.
 
 ## Capabilities
 

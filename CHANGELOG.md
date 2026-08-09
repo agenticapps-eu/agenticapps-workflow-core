@@ -20,6 +20,32 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**Spec 1.6.0 → 2.0.0 — MAJOR. Core binds no database-security or design audit
+skill, and the gate's escape hatch is gone.** Two conditional gate bindings are
+removed. `database-security` and `db-pre-launch-audit` lose
+`database-sentinel`, which was removed from every host on 2026-08-09 and which
+no host declares any more. The design gate loses `impeccable` — that skill still
+exists and stays installed on every host, but it is invoked **on demand** rather
+than fired automatically on any UI change. `qa` is the only conditional binding
+left.
+
+**Conformance impact.** The gates are **not** removed from §02: they keep their
+triggers and required evidence, §02's binding guidance becomes MAY, and §17
+records that each fires only where a host has bound a skill. Restoring either is
+a one-row change. But two gates stop firing for every consumer of this workflow,
+so **prior-major conformance claims become obsolete per §09** and hosts citing
+1.x must re-assert against 2.0.0. Nothing audits database security by default
+any more; ADR-0030 records that loss and names the acceptor.
+
+Also removed: **`GSD_SKIP_REVIEWS`**, the gate's documented escape hatch. It has
+escaped nothing since gate 2.0.0 — its only remaining effect was suppressing
+review NOTE lines, under a name promising to proceed without evidence that was
+in fact present. §18 now forbids retaining a review-oriented hatch as a no-op.
+The orphaned `gate/` directory and the duplicate `workflow-diagram.mmd` go with
+it, and `workflow.mmd` no longer claims that reviews block.
+
+ADR-0030 supersedes ADR-0011 and ADR-0012; both are left unedited.
+
 **Spec 1.5.0 → 1.6.0 — minor. New `spec/21-installer-prerequisites.md`: an
 installer asks before it changes software the workflow does not own.** Four
 host installers hold two incompatible answers to the same question.

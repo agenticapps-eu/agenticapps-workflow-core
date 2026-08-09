@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.6.0
+spec_version: 2.0.0
 ---
 
 # 00 — Overview
@@ -85,7 +85,19 @@ gained the `plan-review` pre-execution gate at v0.5.0, specifying the
 robust phase-resolution order and grandfather rule. Section 14
 (prompt-injection defense) was added at v0.6.0 as an additive minor
 section, conditional on the host shipping an LLM prompt-building surface
-(ADR-0016). Section 15 (knowledge capture) was added at v0.7.0 (ADR-0017) and
+(ADR-0016). **Spec 2.0.0 (2026-08-09)** removes core's bindings for the
+`database-security`, `db-pre-launch-audit` and design gates. The gates remain
+defined in §02 with their triggers and evidence intact — §02's binding guidance
+becomes MAY, and §17 records that each fires only where a host has bound a
+skill. `database-sentinel` was removed from every host; `impeccable` stays
+installed and is invoked on demand rather than automatically (ADR-0030,
+superseding ADR-0011 and ADR-0012). This is breaking: two gates stop firing for
+every consumer, and prior-major conformance claims become obsolete per §09.
+§13 is **not** retired — three attempts have tried and all three argued from
+local machine state about a section whose implementing skill name is at the
+host's discretion.
+
+Section 15 (knowledge capture) was added at v0.7.0 (ADR-0017) and
 **REMOVED at v1.2.0**. Its purpose — retaining what was learned across
 sessions — is served by the OpenSpec archive: `openspec/changes/archive/`
 retains each change's proposal, design, delta and review evidence

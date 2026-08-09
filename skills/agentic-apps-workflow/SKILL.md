@@ -53,8 +53,8 @@ review".
 Review evidence is **computed and reported, never enforced**. Reviewer count,
 verdicts, independence and the trailer all produce `NOTE` lines; none fails any
 surface — not the hook, not the pre-commit hook, not `--ci`. Two rejections open
-the gate exactly as two approvals do. The escape hatch is `GSD_SKIP_REVIEWS=1`
-(name kept for compatibility) and it is logged.
+the gate exactly as two approvals do. There is no escape hatch, because there is
+nothing to escape.
 
 > A green gate is therefore the **weakest possible evidence** that anyone read
 > the delta. Nothing makes you run the reviewers. Step 2b is a discipline you
@@ -107,8 +107,6 @@ Conditionally, by what the change touches:
 
 | Touches | Gate | Skill |
 |---|---|---|
-| SQL, RLS, migrations, any DB schema or rules | database-security | `database-sentinel` |
-| UI | design | `impeccable` |
 | UI | qa | `qa` |
 
 Every skill named above is **upstream, bound by this workflow and not owned by
@@ -124,8 +122,12 @@ failed lookup on every host that installs the same skills a different way.
 `install.sh` now binds one checkout into all of them, so the plain name resolves
 everywhere and is the only name that does.
 
-Critical or High findings from `database-sentinel` block branch close
-(ADR-0012). Override only via the database-security acceptance ADR.
+**Two conditional gates carry no skill, deliberately.** `database-security` and
+`design` are still defined in §02 — this workflow just binds nothing to them.
+`database-sentinel` was removed from every host, and `impeccable` is installed
+everywhere but invoked **on demand** rather than fired automatically on any UI
+change. Nothing blocks branch close on either any more (ADR-0030, superseding
+ADR-0011 and ADR-0012). Bind a skill to either gate if you want it back.
 
 ## Coding Discipline (NON-NEGOTIABLE)
 

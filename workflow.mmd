@@ -4,13 +4,13 @@ flowchart TB
     P["1 · propose&nbsp;&nbsp;—&nbsp;&nbsp;openspec new change (/opsx:propose)<br/>proposal + design + SPEC DELTA + tasks"]:::spec
     V["2 · validate&nbsp;&nbsp;—&nbsp;&nbsp;openspec validate --all<br/>(every requirement has a scenario)"]:::spec
     PR["2b · plan-review&nbsp;&nbsp;—&nbsp;&nbsp;≥2 AI adversarially review the delta → REVIEWS.md"]:::gate
-    H{{"hook + CI — no code edits until validate GREEN and REVIEWS ≥ 2"}}:::hook
+    H{{"hook + CI — no code edits until openspec validate --all is GREEN"}}:::hook
     B["3 · build&nbsp;&nbsp;—&nbsp;&nbsp;/opsx:apply + Superpowers: writing-plans → TDD (RED → GREEN)"]:::exec
     CR["4 · code-review&nbsp;&nbsp;—&nbsp;&nbsp;independent reviewer of the DIFF"]:::exec
     VER["5 · verification&nbsp;&nbsp;—&nbsp;&nbsp;diff satisfies tasks + spec delta"]:::exec
     AR["6 · archive&nbsp;&nbsp;—&nbsp;&nbsp;openspec archive -y (/opsx:archive)<br/>fold delta into specs/ (now current truth)"]:::spec
     SH["7 · ship&nbsp;&nbsp;—&nbsp;&nbsp;commit · PR · changelog · version · close Linear&nbsp;&nbsp;↻"]:::ship
-    COND(["conditional gates by what the change touches:&nbsp; security always · db-sentinel if SQL/RLS · design + qa if UI"]):::cond
+    COND(["conditional gates by what the change touches:&nbsp; security always · qa if UI"]):::cond
 
     L --> P --> V --> PR --> H --> B --> CR --> VER --> AR --> SH
     B -.-> COND

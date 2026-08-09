@@ -198,8 +198,9 @@ evidence artifact**, and **binding guidance**.
 - **Required evidence artifact**: a database-audit report (e.g.
   database-sentinel output, RLS audit summary) referenced from
   SECURITY.md or VERIFICATION.md.
-- **Binding guidance**: hosts bind a database-security audit skill.
-  See ADR-0012.
+- **Binding guidance**: hosts **MAY** bind a database-security audit
+  skill. Core binds none — see ADR-0030, which supersedes ADR-0012.
+  A host that binds nothing reports the gate as unbound and continues.
 
 #### `qa`
 
@@ -217,8 +218,9 @@ evidence artifact**, and **binding guidance**.
   motion). MAY also be invoked retroactively.
 - **Required evidence artifact**: an impeccable-audit report
   referenced from REVIEW.md or VERIFICATION.md.
-- **Binding guidance**: hosts bind a design-quality audit skill. See
-  ADR-0011.
+- **Binding guidance**: hosts **MAY** bind a design-quality audit skill.
+  Core binds none — `impeccable` is installed everywhere and invoked on
+  demand instead. See ADR-0030, which supersedes ADR-0011.
 
 #### `db-pre-launch-audit`
 
@@ -226,8 +228,9 @@ evidence artifact**, and **binding guidance**.
   any major DB migration.
 - **Required evidence artifact**: a database-audit report referenced
   from a launch-readiness artifact (e.g. SECURITY.md, RELEASE.md).
-- **Binding guidance**: hosts bind a database-security audit skill,
-  typically the same one bound to `database-security`. See ADR-0012.
+- **Binding guidance**: hosts **MAY** bind a database-security audit
+  skill, typically the same one bound to `database-security`. Core binds
+  none — see ADR-0030, which supersedes ADR-0012.
 
 ### Finishing gate
 

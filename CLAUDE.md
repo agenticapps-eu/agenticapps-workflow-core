@@ -40,8 +40,8 @@ every other project resolves the published copy through a shim.
 green. Review evidence is computed and reported, never enforced: reviewer count,
 verdicts and independence all produce `NOTE` lines and none of them fails any
 surface. A blocked edit means a spec delta that does not parse, so fix the delta.
-It never means "go get a review". The escape hatch is `GSD_SKIP_REVIEWS=1` (name
-retained for compatibility) and it is logged.
+It never means "go get a review". There is no escape hatch — reviews do not
+block, so there is nothing for one to release.
 
 The practical consequence: a green gate is the weakest possible evidence that
 anyone read the delta. Running the plan reviewers before code is a discipline you

@@ -31,8 +31,6 @@
 #           * MAJOR: any caller depending on exit 2 for an unreviewed change no
 #             longer gets it. Nothing in the fleet does — the gate is consumed
 #             by PreToolUse hooks and CI, both of which want this
-#           * GSD_SKIP_REVIEWS is now vestigial for reviews and kept only so
-#             existing exports do not error
 #   1.6.0 — a reviewer section is closed ONLY by the next `## Reviewer:`.
 #           1.5.0 closed it at any level-1/2 heading, so `## Summary` above a
 #           verdict — the commonest shape an LLM returns — discarded the verdict
@@ -81,8 +79,8 @@
 #           two blocked all work whenever the second vendor was slow, rate
 #           limited or down — trading a large certain cost for a small
 #           uncertain one. Two is still better and is still surfaced, now via
-#           PREFERRED_REVIEWERS and a NOTE rather than a refusal. Set
-#           MIN_REVIEWERS=2 to restore the previous behaviour.
+#           PREFERRED_REVIEWERS and a NOTE rather than a refusal. Raising
+#           MIN_REVIEWERS changes which NOTE prints, not whether it blocks.
 #   1.3.1 — tolerate markdown emphasis around the verdict label. 1.3.0 anchored
 #           on a bare `VERDICT:` and missed `**VERDICT: REQUEST-CHANGES**`,
 #           which is what opencode wrote on the first real run after 1.3.0
@@ -144,11 +142,9 @@
 #   --ci           Whole-repo — every active change must validate + have reviews. Exit 0/1.
 #
 # Env:
-#   GSD_SKIP_REVIEWS=1     vestigial since 2.0.0 — reviews no longer block, so there is
-#                          nothing to escape. Suppresses the review NOTEs. Kept so
-#                          existing exports keep working.
 #   OPENSPEC_GATE_STRICT=1 also block edits when there is NO active change ("no code without a change").
-#   MIN_REVIEWERS=1        blocking floor (spec 1.1.0 MUST). Set 2 for the old behaviour.
+#   MIN_REVIEWERS=1        selects which NOTE prints. NOT a blocking floor — nothing
+#                          here blocks on reviewer count.
 #   PREFERRED_REVIEWERS=2  reported-but-not-enforced target (spec 1.1.0 SHOULD).
 #   OPENSPEC_BIN=openspec  override the openspec CLI name/path.
 #   OPENSPEC_GATE_SELF     IGNORED since 1.5.0 — retained only so an operator
@@ -162,15 +158,13 @@
 #
 # Exit codes follow the Claude Code PreToolUse convention (2 = block) in hook mode.
 #
-# Documented deviation from §18's truth table: the GSD_SKIP_REVIEWS escape hatch
-# is applied AFTER the validate check, so `validate` red + the hatch set still
-# blocks. §18's row reads unconditionally. This narrowing is deliberate — the
-# hatch exists to bypass the *review* clause in an emergency, not to ship a
-# change whose spec delta does not parse — and it is pinned by a harness row.
+# There is no escape hatch. Reviews have not blocked since 2.0.0, so there was
+# nothing left to escape; the variable that used to suppress the review NOTEs was
+# removed rather than kept as a name the gate still knows.
 
 set -uo pipefail
 # FLOOR (blocks) and PREFERENCE (reports). Spec 1.1.0 §18: MUST >= 1,
-# SHOULD >= 2. Raising MIN_REVIEWERS back to 2 restores the old hard behaviour
+# SHOULD >= 2. Raising MIN_REVIEWERS selects a different NOTE; it restores no
 # for a repo that wants it; both are env-overridable.
 MIN_REVIEWERS="${MIN_REVIEWERS:-1}"
 PREFERRED_REVIEWERS="${PREFERRED_REVIEWERS:-2}"
@@ -514,7 +508,6 @@ gate_check(){
     log "openspec CLI not found — cannot verify; run 'npm i -g @fission-ai/openspec'"; return 2
   fi
   if ! validate_ok; then log "openspec validate --all FAILED — fix the spec delta first"; return 2; fi
-  if [ "${GSD_SKIP_REVIEWS:-0}" = "1" ]; then log "GSD_SKIP_REVIEWS=1 — review reporting suppressed"; return 0; fi
   # No review condition sets this any more; it is retained so the loop's shape
   # stays obvious and a future blocking condition has somewhere to live.
   local blocked=0 d n v

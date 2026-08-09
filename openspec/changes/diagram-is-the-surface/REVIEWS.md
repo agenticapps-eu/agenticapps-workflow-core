@@ -6,51 +6,110 @@
 
 # Review record
 
-- requested: gemini codex claude opencode
-- counted:   gemini (APPROVE) codex (REQUEST-CHANGES) opencode (REQUEST-CHANGES)
+- requested: gemini codex
+- counted:   gemini (REQUEST-CHANGES) codex (REQUEST-CHANGES)
 - excluded:  claude (declared implementing host)
 - failed:    (none)
+- models:    gemini (not reported by CLI), codex (gpt-5.6-sol)
+- artifacts sha256: 7c638e33412515b54b62663617a616c5b8e3f08c62784ab9f8484b4695332db2
+- round:     2 — re-review after three items were folded in. Final round by
+             operator instruction; findings are folded in and the change
+             proceeds without a third.
 
-## Reviewer: gemini
-_generated 2026-08-07T13:22:33Z · timeout 600s_
+> **This record replaces the round-1 record**, which described the pre-fold
+> artifacts. Per ADR-0025 review evidence is bound to what was reviewed, and the
+> earlier reviewers did not see the folded scope. The round-1 verdicts
+> (gemini APPROVE, codex REQUEST-CHANGES, opencode REQUEST-CHANGES) are recorded
+> in the archived change history and are not carried forward as if current.
 
-VERDICT: APPROVE
-- The rationale for removing each piece of vestigial surface is clear and well-supported by evidence from the repository.
-- The self-correction regarding `spec/13-ts-declare-first.md` demonstrates diligence and strengthens confidence in the change's other claims.
-- The new capability `vestigial-surface-removal` is carefully scoped to enforcement/interface artifacts, correctly exempting historical records like ADRs and changelogs.
-- The requirement to resolve diagram/implementation conflicts against the decision record (not just defaulting to the code) is a crucial process improvement that reinforces spec-first authority.
-- The change correctly identifies and redacts a machine-local path from evidence, showing appropriate attention to detail.
+## Where both reviewers converged
 
-## Reviewer: codex
-_generated 2026-08-07T13:24:46Z · timeout 600s_
+**1. The fold made the change self-contradictory.** Independently found, and
+verified true — this is my error, not a reviewer's misreading. Three artifacts
+were revised and `design.md` was not, so the change simultaneously said §13 is
+retired (proposal, spec delta, tasks 9c) and that "§13 is dropped… nothing here
+is breaking to `spec/`" (design). codex also found task-level contradictions the
+append introduced: task 1.2 preserves the database arm of the diagram that 9e
+removes, and tasks 8.4 / 9.5 preserve the §13 that 9c deletes. An executor could
+not satisfy the plan.
 
-VERDICT: REQUEST-CHANGES
+**2. The §13 retirement argument is not sound.** Both called it out; codex gave
+the disproof and it checks out:
 
-- **HIGH:** Task 1.2 conflates the removable `database-sentinel.sh` hook with the still-required upstream database-security audit. Removing the diagram arm contradicts ADR-0012, spec §17, and the workflow skill. Keep the arm or normatively retire that gate and its safety guarantees.
-- **HIGH:** `vestigial-surface-removal` both includes operator documentation and explicitly exempts all authored prose, `docs/`, `prompts/`, `tools/`, tests, and `spec/`. Several scenarios and tasks therefore both require and forbid applying the capability to the same artifacts.
-- **HIGH:** The proposal labels removal of `GSD_SKIP_REVIEWS` “BREAKING” and changes normative §18, then claims nothing breaks the spec surface. Spec §09 requires a major version for breaking removals; the versioning decision is unresolved.
-- **MEDIUM:** Cleanup coverage is incomplete. `workflow-diagram.mmd` duplicates the stale diagram, while `SIMPLIFICATION-PLAN.md`, `docs/recipes/0001-planning-to-openspec.md`, and other files still describe review blocking. Task 9.4 does not search for these claims.
-- **MEDIUM:** `database-sentinel.sh` has two owners. `projects-bind-not-copy` already requires deleting both the declaration and implementation; task 5.1 duplicates that work, while its fallback can separate declaration, fleet unbinding, and implementation removal across releases.
-- **MEDIUM:** Machine-level mutations lack normative scenarios and a safe rollback contract. Backing up the entire `opencode.json` may duplicate secrets or private paths without defined permissions or retention, while redacted evidence cannot restore the removed entry.
-- **PROCESS:** The current `REVIEWS.md` is stale; the gate reports that its digest no longer matches the revised artifacts.
+- `install.sh`'s `ARCHIVED` list identifies **legacy symlink targets to strip**.
+  Its own comment says "a tombstone list, **not a dependency**". It is not a
+  statement about repository lifecycle.
+- **Verified:** all four host repos have live `origin` remotes and commits dated
+  2026-08-05, and `agenticapps/CLAUDE.md` lists `claude-workflow`,
+  `codex-workflow` and `pi-agentic-apps-workflow` under **"## Active repos"**.
+- gemini added the point the tombstone reading skips entirely: "archived" does
+  not mean "unused by everyone, everywhere", and no deprecation period was
+  offered.
 
-## Reviewer: opencode
-_generated 2026-08-07T13:28:48Z · timeout 600s_
+So the second attempt to retire §13 failed for a *different* reason than the
+first, and both failures were the same species — reading a local artifact as
+evidence about a section whose skill name is explicitly host-discretionary.
 
-VERDICT: REQUEST-CHANGES
+**3. Split the change.** gemini MEDIUM, codex HIGH. Three kinds of work are
+bundled: dead-surface cleanup, a policy reversal on a skill that exists, and a
+breaking spec evolution.
 
-I verified the change's factual claims against the working tree before judging it. They hold up well: `gate/` exists and nothing resolves it (`resolve-core-artifact.sh` maps the shared install to `reference-implementations/openspec-change-gate/`; the installed `~/.agenticapps/bin/openspec-change-gate.sh` is sha-identical to the reference implementation, not to `gate/`), the reference gate reads `GSD_SKIP_REVIEWS` only to suppress NOTE lines (line 517), `run-plan-review.sh:677` does recommend it at a failure path, `workflow.mmd` lines 7 and 13 are both stale as described, `SHIMMED-HOOKS:24` still names `database-sentinel`, and `.claude/skills/gitnexus/` contains exactly six skills. The self-corrections from prior review rounds are real improvements. But:
+## Reviewer: codex (gpt-5.6-sol) — additional findings
 
-- **The installed `database-sentinel.sh` is not in the removal plan — the same defect this change exists to fix.** Task 5.1 deletes `reference-implementations/project-hooks/database-sentinel.sh` and the `SHIMMED-HOOKS` entry, but `~/.agenticapps/bin/database-sentinel.sh` exists *right now* and the project-hooks README records the whole fleet binding it, with shims that invoke the installed path. Deleting the repo implementation while the installed copy remains means the hook keeps running — a removal whose primary artifact survives exactly where it executes. Task 6 ("machine-level") covers the symlink and the MCP entry but not this. Add its removal (with the same redacted-evidence treatment) or state explicitly why it is out of scope.
-- **Task 5.1's fallback contradicts the Capabilities scoping.** The proposal declines to delta `project-hook-binding` because `projects-bind-not-copy` owns the `SHIMMED-HOOKS` edit — yet the fallback says "carry the declaration edit here." If the fallback triggers, this change edits exactly the surface its Capabilities section refused to touch. Either scope a conditional delta for it or drop the fallback and make the block unconditional.
-- **The `BREAKING` label vs. "2.0.0 stays uncontested."** The What Changes section marks `GSD_SKIP_REVIEWS` removal BREAKING; the design argues nothing here is breaking so the version stands. Both cannot be asserted without addressing what BREAKING means for versioning — removing a documented interface variable that operators may export is breaking by any reading the repo has previously used. Resolve the tension explicitly.
-- **One scenario promises more than the stated verification can deliver.** "No environment variable able to alter that outcome" is a universal behavioral claim, but the change forbids behaviour-when-set tests and verifies only absence of one name by grep. A differently-named override would pass every check specified. Restate the scenario as what is actually verified (source inspection for any bypass path), or accept a behavioral test for the validate-RED-blocks case.
-- **No mechanical guard against recurrence of a second published copy.** The change's own thesis is that unenforced rules fail silently, and `gate/` drifted for a month precisely because nothing checked for it. Task 9.4 is a one-time grep. Consider a conformance/CI assertion (no `gate/`, single gate copy) — otherwise the capability documents the rule the same way the stale docs did.
-- **Minor: Impact section and task 4.6 disagree** — Impact omits root `CLAUDE.md` (= `AGENTS.md`), `.claude/hooks/openspec-change-gate.sh`, `docs/instruction-file-audit-2026-08.md`, and `prompts/03-cparx-sandbox-pilot.md`, all of which advertise the hatch and appear in 4.6. And Migration Plan step numbers ("steps 7 and 9 are not in version control") don't match tasks.md numbering (6 and 8).
+- **[HIGH]** Re-review was ordered at group 9a, *after* eight implementation and
+  machine-mutation groups — contradicting review-before-code and ADR-0025. It
+  must be group 0 and a precondition for every mutation.
+- **[HIGH]** `vestigial-surface-removal`'s own scope says deletion cannot reach
+  `spec/`, tests or tooling, then the added requirements mandate deleting §13.
+  The capability cannot satisfy itself.
+- **[HIGH]** Gate coverage incomplete: ADR-0012 and §17 bind both
+  `database-security` **and `db-pre-launch-audit`**; only the first was tasked.
+  Task 9b.5 also misattributes `impeccable-audit` to ADR-0012 — it is ADR-0011.
+- **[HIGH]** §09 requires the release entry to state conformance impact, but the
+  proposal explicitly excludes `CHANGELOG.md`.
+- **[HIGH]** Deleting `~/.agenticapps/bin` files on this machine is not a
+  migration for installed copies elsewhere; the installer has no retired-artifact
+  sweep. Either build one or scope the claim honestly to this machine.
+- **[MEDIUM]** Task 9c.5 would erase current implementation facts from
+  `reference-implementations/README.md`; those hosts do still ship and bind the
+  skills.
 
-<!-- openspec-review-trailer v1
-implementing-host: claude
-digest: sha256:2060f8a179c215e5bd3dd02471d44b87a54baa33fe71e30aa2713d638a27b550
-producer-version: 1.2.0
-tasks-digest: sha256:14905018756a5361780c9c2b7f9472bff63d566332f3bb64e4a6cba8b9b40e47
--->
+## Reviewer: gemini — additional findings
+
+- **[LOW]** The rule that a tool's failure-path *recommendation* is part of the
+  governed interface is only in prose; it should be a scenario in the delta.
+- Assumption named: that a `grep` sweep is complete, after the change itself
+  records that this method has failed before.
+
+## Resolution
+
+**§13 is dropped from this change.** The operator asked for it explicitly, on the
+basis that the host repos are going away. That basis is disproven above by
+evidence the operator did not have when choosing, so it is reported rather than
+executed. Reinstating it needs a repository-lifecycle argument — a deprecation
+window, or evidence about deployed consumers — not another reading of a local
+directory. This is the operator's call to reverse; it is one edit either way.
+
+**Kept, with the coherence defects fixed:** the two gate-binding removals
+(`database-security → database-sentinel`, `design → impeccable`). They belong
+here because this change already owns `workflow.mmd`, and the diagram wins.
+
+Folded in without further review, per the one-round instruction:
+
+1. `design.md` rewritten so it states the folded scope, replacing the superseded
+   "§13 is dropped / nothing breaks `spec/`" text rather than contradicting it.
+2. Re-review moved to **group 0**, a precondition for every mutation.
+3. Superseded original tasks deleted, not left beside their replacements —
+   specifically the diagram arm in 1.2 and the §13 preservation in 8.4 / 9.5.
+4. `db-pre-launch-audit` added to the gate scope; `impeccable-audit`
+   re-attributed to ADR-0011.
+5. A `CHANGELOG.md` entry stating conformance impact added, and the blanket
+   "CHANGELOG not touched" exclusion corrected.
+6. The installed-copy claim scoped honestly to this machine, with the missing
+   installer sweep recorded as a gap rather than implied to be solved.
+7. The failure-path-recommendation rule promoted from prose to a scenario.
+
+**Not done:** the reviewers' recommendation to split into three changes. The
+operator chose the fold. With §13 out, two of the three strands remain and both
+are gate bindings on a change that already owns the diagram, which is the
+coherent subset of what they were objecting to.

@@ -48,7 +48,7 @@ simulated PreToolUse payloads:
 | OpenSpec artifact | Write `openspec/…/proposal.md` | `0` | exempt (must be able to author the change) |
 | **Active change, validate OK, NO REVIEWS.md** | Edit `classify.go` | **`2`** | **BLOCK** — "missing REVIEWS.md (>= 2 reviewers)" |
 | **Active change, validate OK, REVIEWS.md ≥2 reviewers** | Edit `classify.go` | **`0`** | **ALLOW** |
-| Escape hatch | Edit `x.go` w/ `GSD_SKIP_REVIEWS=1` | `0` | documented override |
+| Escape hatch | Edit `x.go` w/ `GSD_SKIP_REVIEWS=1` | `0` | documented override — **the hatch was removed at spec 2.0.0; this row records what was true when the pilot ran** |
 | Malformed stdin | garbage | `0` | fail-open (never silently disables the gate by crashing) |
 
 The gate enforces **both** clauses: `openspec validate --all` must pass **and** every active
