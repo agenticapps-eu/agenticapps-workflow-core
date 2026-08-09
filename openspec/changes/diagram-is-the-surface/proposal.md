@@ -103,9 +103,9 @@ sweep**, so an existing installation keeps an orphan indefinitely. This change
 does not build that sweep. The claim is therefore limited to this machine, and
 the missing mechanism is recorded as a gap rather than implied to be solved.
 
-**§13 is not in this change. Three attempts have now tried to retire it and all
-three were wrong, in the same way each time.** Recorded in full because the
-pattern is the point, and a fourth attempt is otherwise inevitable.
+**§13 is retired in this change — on the fourth argument, and the first sound
+one.** The three that failed are recorded in full below, because the pattern is
+the point and the reasoning is what stops a fifth.
 
 1. The first proposed retiring `spec/13-ts-declare-first.md` on the claim that no
    host bound it. False, and reached by checking `~/.claude/skills` and stopping.
@@ -125,11 +125,23 @@ pattern is the point, and a fourth attempt is otherwise inevitable.
    remotes and commits dated 2026-08-05, and `agenticapps/CLAUDE.md` lists three
    of them under *"Active repos"*.
 
-Every attempt read a **local artifact** — a skills directory, a symlink, an
+Every one of those read a **local artifact** — a skills directory, a symlink, an
 installer variable — as evidence about a **normative section with a
-host-discretionary implementation**. It never is. Retiring §13 requires an
-argument about repository lifecycle and deployed consumers: a deprecation window,
-or evidence that no host ships it. Until one exists, §13 stays.
+host-discretionary implementation**. It never is, and the hosts they dismissed
+are real.
+
+**The argument that works is about marginal cost, not usage, and it only became
+available once this release went major.** Removing the two gate bindings already
+obsoletes every prior-major conformance claim under §09. The three hosts binding
+§13 must re-assert against 2.0.0 either way. Retiring §13 in this release
+therefore adds no break the release does not already impose, while retiring it in
+any later release would impose a second one on the same three hosts. One accepted
+break is strictly cheaper than two.
+
+So the section file is deleted, the number stays **vacant**, and nothing is
+renumbered — §15's rule applied a second time. `reference-implementations/README.md`
+keeps its record of the three bindings: those are true facts about what those
+repos contain, and only their status changes.
 
 **On BREAKING and the version, which two reviewers found in tension.** Both
 readings were in this document: `GSD_SKIP_REVIEWS` marked **BREAKING**, and the

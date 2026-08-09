@@ -44,6 +44,14 @@ in fact present. §18 now forbids retaining a review-oriented hatch as a no-op.
 The orphaned `gate/` directory and the duplicate `workflow-diagram.mmd` go with
 it, and `workflow.mmd` no longer claims that reviews block.
 
+**`spec/13-ts-declare-first.md` is retired.** The number stays vacant and nothing
+is renumbered, per §15's precedent. Three earlier attempts argued from local
+machine state and were wrong; what makes it legitimate now is that this release
+is already major, so the three hosts that bind §13 must re-assert against 2.0.0
+regardless — retiring it here imposes no break the release does not already
+impose, and retiring it later would impose a second. §17's `ts-declare` → lint
+mapping stands on its own.
+
 ADR-0030 supersedes ADR-0011 and ADR-0012; both are left unedited.
 
 **Spec 1.5.0 → 1.6.0 — minor. New `spec/21-installer-prerequisites.md`: an

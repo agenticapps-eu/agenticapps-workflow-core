@@ -247,6 +247,25 @@ retire it all failed.
 - [x] 9c.3 Confirm no surface still routes SQL/RLS to `database-sentinel` or UI
       to `impeccable`
 
+## 9d. Retire §13
+
+Added after the operator pressed a second time. The three failed arguments are in
+the proposal; the one that holds is that this release is already major, so the
+three hosts binding §13 re-assert against 2.0.0 either way.
+
+- [x] 9d.1 Delete `spec/13-ts-declare-first.md`
+- [x] 9d.2 `spec/00-overview.md` — drop 13 from the declarative-contract list,
+      record the retirement beside §15's with the marginal-cost reasoning, and
+      note it in the version history. Number stays vacant, nothing renumbered
+- [x] 9d.3 `spec/17-lifecycle-and-gate-mapping.md` — the `ts-declare` row no
+      longer cites a live §13; the lint mapping stands on its own
+- [x] 9d.4 `docs/WORKFLOW.md` — same row
+- [x] 9d.5 `reference-implementations/README.md` — **keep** the three binding
+      facts; add the status note that 2.0.0 obsoletes prior-major claims, so no
+      host is non-conformant for having implemented a since-retired section
+- [x] 9d.6 ADR-0030 and the CHANGELOG record the retirement and its reasoning
+- [x] 9d.7 Confirm no live `spec/` or `docs/` file still cites §13
+
 ## 10. Verify
 
 - [x] 9.1 `openspec validate --all --strict` green

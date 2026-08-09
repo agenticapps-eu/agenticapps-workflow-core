@@ -95,13 +95,23 @@ surface that stopped being true went on being shipped, and nothing detected it.
 - **The gate header's `MIN_REVIEWERS` description** — documented as a "blocking
   floor" while the code used it only to select which NOTE prints.
 
-**§13 is not in this change.** Three attempts have proposed retiring
-`spec/13-ts-declare-first.md` and all three argued from local machine state — a
-skills directory, a deleted symlink, and `install.sh`'s `ARCHIVED` variable. The
-section makes its implementing skill's name explicitly host-discretionary, so
-local absence proves nothing about it, and measured 2026-08-09 all four host
-repositories had live remotes and commits four days old. Retiring it needs an
-argument about repository lifecycle and deployed consumers.
+**§13 is retired here, on the fourth argument and the first sound one.** Three
+earlier attempts argued from local machine state — a skills directory, a deleted
+symlink, `install.sh`'s `ARCHIVED` variable — about a section that leaves its
+implementing skill's name to the host's discretion. All three were wrong, and the
+hosts they dismissed are real: measured 2026-08-09 all four had live remotes and
+commits four days old.
+
+The argument that holds is about **marginal cost, not usage**. This release is
+already major on independent grounds: removing the gate bindings obsoletes every
+prior-major conformance claim under §09. The three hosts binding §13 must
+re-assert against 2.0.0 whether or not §13 goes. Retiring it in the same release
+therefore imposes no break the release does not already impose — and retiring it
+later would impose a second one. Doing it once, now, is strictly cheaper for
+every consumer.
+
+`reference-implementations/README.md` keeps its records of those bindings.
+They are true facts about what those repos contain; only their status changes.
 
 **Host-repo residue, recorded rather than patched.** `GSD_SKIP_REVIEWS` survives
 in `claude-workflow` (`templates/.claude/claude-md/workflow.md`,
