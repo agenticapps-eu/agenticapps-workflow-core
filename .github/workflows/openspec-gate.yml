@@ -57,7 +57,15 @@ jobs:
       # Raising this needs no ceremony. LOWERING IT REQUIRES A RECORDED DECISION
       # — removing obsolete rows is legitimate, so the floor must be able to
       # follow, but the number has to move deliberately and show in the diff.
-      MIN_SCORED_ROWS: "71"
+      #
+      # 71 -> 69 at spec 2.0.0. The two removed rows asserted GSD_SKIP_REVIEWS
+      # behaviour — "hatch set -> allow" and "hatch set + validate RED -> block".
+      # The variable is gone from the gate, so both rows asserted an interface
+      # that no longer exists. They were NOT replaced with a row asserting the
+      # variable is ignored: that would re-establish it as a name the gate knows,
+      # which is the thing being removed. Row call sites are unchanged at 57 —
+      # those two lines carried an env prefix and never matched that pattern.
+      MIN_SCORED_ROWS: "69"
       # A SECOND, INDEPENDENT FLOOR — on the harness SOURCE, not its output.
       # MIN_SCORED_ROWS is scraped from the harness's own stdout, so it bounds
       # only HONEST shrinkage: a stub that prints "TOTAL: 71 passed, 0 failed"
