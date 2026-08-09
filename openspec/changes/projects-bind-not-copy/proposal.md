@@ -204,6 +204,38 @@ two names, and splitting them would leave the second one to be rediscovered.
   `project-skill-binding` rather than leaving the reader to infer that projects
   were considered.
 
+### Retired Capability surface
+
+`project-hook-binding` also **loses eight requirements and keeps nine**, because
+removing `database-sentinel` empties `ARTIFACTS` and the publisher that reads it
+has no other subject. This was not anticipated when the change was written; task
+3.9b found it while emptying `SHIMMED-HOOKS` and left it as a decision rather
+than taking it silently. The decision, 2026-08-09, is to **retire the publish
+half and keep the bind half.**
+
+The two halves are separable and only one lost its subject:
+
+| Half | State | Files |
+|---|---|---|
+| publish | no subject — `ARTIFACTS` names only `database-sentinel` | `database-sentinel.sh`, `ARTIFACTS`, `install-project-hooks.sh`, `tools/project-hooks.test.sh`, `install.sh`'s `PROJHOOKS` delegation, the project-hook cases in `tools/install.test.sh` |
+| bind / check | live instrument | `SHIMMED-HOOKS` (empty by decision), `FLEET`, `OPT-OUTS`, `shim-template.sh`, `openspec-change-gate.shim.sh`, `tools/check-shims.sh` and its suite, `tools/project-hook-shim.test.sh` |
+
+Deleting the bind half as well was considered and rejected: `check-shims.sh`
+reads four of those files and exits 65 without the template, and it landed on
+`main` in PR #94 hours before this decision. Shipping a requirement and deleting
+it in a sibling change is the ship-then-delete shape, and the empty declaration
+was chosen as an end state on 2026-08-08 rather than as a way station.
+
+The eight removed requirements are the manifest and provenance apparatus
+(currency against an authority, the version-marker comparison, provisioning as a
+triple, provisioning checked per machine) and the four that describe
+`database-sentinel` itself (its protections, its divergent copies, its
+unreachable gate, its host registration). Two more are modified rather than
+removed: the authority requirement keeps its one-authoritative-file claim and
+loses the manifest, and the scaffolder requirement keeps its obligation and
+loses a scenario that promised newly scaffolded projects "the shims", of which
+there are now none.
+
 ## Impact
 
 - **Eight repositories across two families**, four of them in `factiv`

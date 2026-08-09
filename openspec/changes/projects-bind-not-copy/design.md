@@ -182,6 +182,55 @@ dependency runs one way and it is already satisfied on this machine, but the
 change that carries these removals SHALL NOT merge before the branch carrying
 that binding does.
 
+### The publisher is retired and the checker is kept, because only one lost its subject
+
+Removing `database-sentinel` empties `ARTIFACTS`, and `ARTIFACTS` is the whole
+input to `install-project-hooks.sh`. That is a subsystem losing its subject, not
+a declaration losing a row, and task 3.9b stopped rather than assume which way it
+went.
+
+**What settles it is which files still have a reader.** `check-shims.sh` reads
+`SHIMMED-HOOKS`, `FLEET`, `OPT-OUTS` and `shim-template.sh`, and exits 65 if the
+template is absent — so the bind half is driven by live code that landed on
+`main` in PR #94. The publish half is driven by nothing: with `ARTIFACTS` empty,
+`install-project-hooks.sh:122` dies with *"no artifacts to publish"*, and the
+only thing that would still call it is `install.sh:25`.
+
+**The manifest decided it.** The publisher's reason to exist is the attestation
+it writes, and three measurements taken 2026-08-09 say that attestation has no
+consumer and one false claim:
+
+1. `~/.agenticapps/manifest.tsv` is read by `tools/install.test.sh` and by
+   nothing else in the repository. `resolve-core-artifact.sh` reads a
+   *different* file — `core-vendor.manifest`, keyed `core_repo=` /
+   `core_commit=` — which this subsystem does not write.
+2. `install-shared-artifact.sh`, which survives and publishes the four shared
+   artifacts, writes no manifest and computes no digest. So the provenance the
+   capability demands is produced for the one artifact being deleted and for
+   none of the four being kept.
+3. The manifest carries rows forward for artifacts a run does not touch —
+   `install-project-hooks.sh:215-224`, correctly, so that a partial run does not
+   look like a fresh install of a smaller set — and nothing ever expires them.
+   Rewritten in full at 22:58 on 2026-08-08, it attested
+   `normalize-claude-md.sh 1.0.1` with a digest, for a path holding no file.
+
+A drift instrument whose only reader is its own test, whose surviving row is
+false, and which covers none of the artifacts that remain, is not evidence. It
+is deleted rather than repaired, and the machine copy goes with it: this change
+removes `~/.agenticapps/bin/database-sentinel.sh` and `~/.agenticapps/manifest.tsv`
+outright. Leaving a published executable nothing runs is the shape already
+rejected for husky in `fbc-platform` — an installed-but-unbound hook is an
+executable that never fires, and keeping it costs the same confusion for none of
+the protection.
+
+**The alternative was to keep the machinery dormant** — delete only the
+implementation and leave `ARTIFACTS` empty, the way `SHIMMED-HOOKS` was left. It
+is rejected because the two cases differ in exactly the way that matters:
+`SHIMMED-HOOKS` empty is *read* by a live checker and means something ("no
+project binds a fleet hook"), whereas `ARTIFACTS` empty is read by an installer
+that refuses to run, and means nothing to anybody. An empty declaration earns its
+keep when something asks it a question.
+
 ## Risks / Trade-offs
 
 - **Eight PRs across two families.** Cross-family work is explicit in the
@@ -202,3 +251,19 @@ that binding does.
 - **A repository could reintroduce a copy** between the sweep and the check
   landing. The check is the answer, so it lands in the same change rather than
   after it.
+- **Retiring the publisher removes the fleet's only provenance mechanism, and
+  nothing replaces it.** After this change no installer records a digest for
+  anything it publishes, so a hand-edited `~/.agenticapps/bin/openspec-change-gate.sh`
+  is undetectable by any tool in this repository. That is a real reduction and it
+  is stated rather than softened. It is accepted because the mechanism being
+  removed never covered those four artifacts either — it only ever attested the
+  one hook being deleted — so what is lost is a capability the fleet was
+  described as having and did not have. Restoring provenance for the surviving
+  artifacts is a separate change against `install-shared-artifact.sh`, and this
+  change does not pretend to have done it.
+- **A future fleet-shared project hook would need the publisher rebuilt.** The
+  code is recoverable from this change's archive, and the requirements with it.
+  The judgement is that rebuilding from an archived, working implementation costs
+  less than carrying a subsystem whose declaration no code reads — and that the
+  cost falls only if such a hook ever appears, which the host-neutrality rule now
+  makes unlikely.

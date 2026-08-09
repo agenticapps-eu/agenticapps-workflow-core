@@ -34,9 +34,20 @@ closed while a single hook holds it open.
 destructive-SQL arms do make the pre-tool argument, and make it correctly —
 `DROP TABLE` never enters git, so no commit-time or CI surface can see it, and
 they are the only interception of an irreversible action in this workflow. It is
-removed regardless, because it protects Claude sessions only. The protection is
-not claimed to survive; it is reassigned to the host's own permission layer,
-which is the operator's configuration and not core's to ship.
+removed regardless, because it protects Claude sessions only.
+
+**The protection is not reassigned, and this paragraph used to say it was.** The
+earlier text sent it to "the host's own permission layer, which is the
+operator's configuration and not core's to ship" — which reads as a handover and
+is not one. Task 3.9d put the question directly and the answer, measured on
+2026-08-08, is that no such rule is expressible: the hook matched *content* —
+`DROP TABLE`, `TRUNCATE TABLE`, `DELETE` with no `WHERE`, case-insensitively,
+anywhere in a Bash command — and host permission rules match a command *prefix*.
+The nearest expressible rule denies `psql` outright, blocks every legitimate use,
+and would be switched off within a day. So the hook was removed from five
+repositories on 2026-08-08 and **nothing replaced it**. Commands that drop or
+truncate tables are no longer intercepted before they run, on any host, in any
+repository. That is the recorded end state, not an interim one.
 
 #### Scenario: A hook is bound through a single-host surface
 
@@ -57,8 +68,12 @@ which is the operator's configuration and not core's to ship.
 - **WHEN** a hook's protection genuinely cannot be provided at commit time, and
   the surface carrying it reaches only one of the provisioned hosts
 - **THEN** the hook is removed with the surface
-- **AND** the change names what is lost and where the protection is reassigned
+- **AND** the change names what is lost
+- **AND** the change names where the protection is reassigned, or records it as
+  unmitigated when no reassignment is expressible
 - **AND** the change SHALL NOT describe the protection as preserved
+- **AND** the change SHALL NOT describe it as reassigned to a surface that
+  cannot express it
 
 ### Requirement: No project binds any fleet hook once the surface is closed
 
@@ -228,3 +243,207 @@ seven of its members.
 - **THEN** the declared hook is reported bound and the undeclared one is reported
   as undeclared
 - **AND** one clean pass does not suppress the other's finding
+
+## MODIFIED Requirements
+
+### Requirement: A hook implementation is authoritative in one place
+
+A **fleet-shared** workflow hook's behaviour SHALL be defined in exactly one
+authoritative file. A project SHALL NOT carry a copy of that behaviour.
+
+A shim resolves the authoritative file through an ordered lookup, and that
+lookup naming several candidate locations does not make several
+implementations: at most one is authoritative on a given machine, and the order
+decides which.
+
+**Maintained source and executed copy are distinct.** The tracked file in core
+is what maintainers edit; the copy under the shared install directory is what
+runs. Where an implementation is published, the publishing installer SHALL write
+it to a temporary path in the destination directory and `rename` it into place,
+so no reader observes a partial file, and SHALL hold a lock that does not
+outlive its holder for the duration of its critical section.
+
+**Everything this requirement used to say about a manifest is removed, because
+the only code that wrote one is deleted by this change.** The removed apparatus
+was a `sha256` row per published artifact in a manifest beside the shared
+install directory, an implementation version marker the manifest row carried, a
+whole-manifest atomic rewrite, an ordering rule placing the artifact before its
+row, and the crash-recovery behaviour that followed from that ordering. All of
+it was satisfied by `install-project-hooks.sh` and by nothing else:
+`install-shared-artifact.sh`, which survives and publishes the gate, the
+reviewer CLI, the plan reviewer and the initializer, writes no manifest and
+computes no digest. Retaining the requirement would leave this capability
+demanding provenance that no surviving installer produces.
+
+**The manifest it described had one reader, and that reader was its own test.**
+Measured 2026-08-08: `~/.agenticapps/manifest.tsv` was consulted by
+`tools/install.test.sh` and by no production code path. Its rows were carried
+forward for artifacts a run did not touch and never expired, so the file
+attested `normalize-claude-md.sh 1.0.1` — with a digest — for a path that held no
+file. A drift instrument with no reader, whose only surviving claim was false, is
+not provenance.
+
+**The lock's named primitive goes with it, and the deviation is resolved rather
+than left standing.** The removed text required `flock` on a lockfile and
+excluded a create-and-check lock by name. Neither installer ever implemented it:
+`flock(1)` does not ship on macOS, which is this fleet's only platform, so both
+use an atomic `mkdir` plus the owning pid and break a lock whose owner is gone.
+That deviation was recorded in both files rather than taken silently, and the
+property it protects — a lock that does not outlive its holder — is what this
+requirement now states, in place of a primitive the platform does not have.
+
+#### Scenario: A hook's behaviour is changed
+
+- **WHEN** a fleet-shared hook's behaviour is edited
+- **THEN** it is edited in the one authoritative file
+- **AND** no project carries a second copy of that behaviour to edit
+
+#### Scenario: The executed copy has drifted from the maintained source
+
+- **WHEN** the copy under the shared install directory differs from the tracked
+  file in core
+- **THEN** the difference is reported against the maintained source, which is
+  the only remaining authority for what the executed copy should be
+
+#### Scenario: Publication is interrupted partway
+
+- **WHEN** a publishing run is killed after writing a temporary file and before
+  the rename
+- **THEN** no reader observes a partial implementation
+- **AND** the lock it held is broken by the next run rather than waited on
+
+### Requirement: The scaffolder's templates carry the current shape
+
+A change to the fleet's hook set SHALL update the scaffolder's project templates
+and setup snapshot in the same change. A scaffolder that provisions the previous
+shape re-creates whatever the change removed, in every project created after it.
+
+A scaffolder may vendor the hook set in more than one place — project templates
+and a setup snapshot are distinct copies — together with the matcher
+configuration in its settings snapshot. Deleting a hook from every existing
+project while leaving it in either means the next project is born with it.
+
+**The scaffolder now provisions no hook and no shim, and this requirement is
+restated to say so.** Its previous scenario required a newly scaffolded project
+to receive "the shims, the current matchers, and none of the deleted hooks",
+which describes a fleet that no longer exists: `SHIMMED-HOOKS` names nothing, so
+there are no shims to receive, and the matcher configuration lived in the
+host-specific settings file this change closes. `init-project.sh` writes
+`openspec/`, one instruction file, and the local enrolment key — and a
+conforming scaffolder SHALL write no hook, no shim and no host settings file.
+
+#### Scenario: A hook is deleted fleet-wide
+
+- **WHEN** a hook is removed from every project that carries it
+- **THEN** it is removed from the scaffolder's templates and snapshot in the
+  same change, so a newly scaffolded project does not receive it
+
+#### Scenario: A project is scaffolded after the change
+
+- **WHEN** the scaffolder provisions a new project
+- **THEN** that project receives no hook, no shim and no host settings file
+- **AND** its enforcement comes from the machine-level git hook, which it
+  reaches by being enrolled rather than by carrying anything
+
+## REMOVED Requirements
+
+### Requirement: A machine's provisioning is a triple, not a state name
+
+**Reason**: The triple was (installer run, artifacts published, shims bound).
+This change deletes the publisher, and `SHIMMED-HOOKS` names no hook to bind, so
+two of the three terms have no referent and the third is not a triple. The
+instrument that read the triple, `provisioning-check.sh`, was deleted on
+2026-08-05 together with its suite, nothing else having called either — so the
+requirement has had no implementation for four days and no consumer for longer.
+
+**Migration**: None. What a machine now needs is `core.hooksPath` bound and each
+repository enrolled, which `one-enforcement-floor` specifies and
+`install.sh --check` reports.
+
+### Requirement: Currency is judged against an authority checkout
+
+**Reason**: Every scenario in it — the installed build older than the
+authority's, the authority unreachable, versions agreeing while bytes differ,
+the authority holding no such artifact, the machine ahead of the authority — is
+about comparing a **published project-hook implementation** against core. With
+`ARTIFACTS` empty there is no such implementation to compare. The surviving
+installer publishes the gate, the reviewer CLI, the plan reviewer and the
+initializer, and their currency is judged by the version-marker arbitration in
+`install-shared-artifact.sh` and reported by `install.sh --check`, which is a
+different mechanism this requirement never described.
+
+**Migration**: None for any consumer. `install.sh --check` continues to report
+each shared artifact as current or not, naming the checkout's version — the
+behaviour an operator actually used this requirement for.
+
+### Requirement: Provisioning is checked per machine, not only per repository
+
+**Reason**: It requires a per-machine provisioning check, which was
+`provisioning-check.sh`, deleted 2026-08-05. Its two scenarios are about a
+machine pulling a shim without running the installer, and about rollout ordering
+being offered as fleet-wide assurance. Neither has a subject once no shim is
+pulled and no project-hook artifact is installed.
+
+**Migration**: None. The per-machine question that remains — is the floor bound
+and is this repository enrolled — is answered by the machine-level git hook,
+which fails loudly at commit time in an unenrolled repository rather than
+requiring a check to notice.
+
+### Requirement: The implementation version marker is compared, not merely carried
+
+**Reason**: It requires a check to compare a published implementation's
+`# <hook>-version:` marker against the authority's and to refrain from fixing
+what it found. The only markers it governed were on project-hook
+implementations, and `database-sentinel.sh` is the last of them. The identically
+named rule for shared artifacts lives in `workflow-installation` and is
+unaffected.
+
+**Migration**: None. `install-shared-artifact.sh` still refuses to overwrite a
+published copy carrying a higher version, for the artifacts it publishes.
+
+### Requirement: A shared hook's protections are described as what they are
+
+**Reason**: Its single scenario is an operator relying on a shared hook's
+protections, and it exists to stop those protections being described as broader
+than they are. `database-sentinel` was the only hook with protections to
+describe. The rule's substance is not lost — it is restated, sharper, in this
+change's ADDED requirement "The workflow binds no host-specific hook surface",
+which forbids describing a removed protection as preserved *or* as reassigned to
+a surface that cannot express it.
+
+**Migration**: None. The obligation moved rather than disappeared.
+
+### Requirement: Reconciling divergent copies selects semantics deliberately
+
+**Reason**: It governs reconciling variants of one hook across projects —
+variants differing in matched paths, in handled tools, one broader by mistake,
+one deliberately inert. It was written for the four divergent copies of
+`database-sentinel` found across the fleet. There is now one copy of no hook, so
+there is nothing to reconcile and no semantics to select.
+
+**Migration**: None. Should a fleet-shared hook ever return, this requirement is
+recoverable from the archive of this change; it is removed because it has no
+subject, not because its reasoning was wrong.
+
+### Requirement: A canonical implementation carries no unreachable gate
+
+**Reason**: Both scenarios are about the canonical copy of a shared
+implementation — a dead sentinel check inside it, and a protection genuinely
+broader in one variant. The canonical copy this described is
+`database-sentinel.sh`, deleted by this change.
+
+**Migration**: None.
+
+### Requirement: Registration matches the implementation's tool coverage
+
+**Reason**: It governs the agreement between a hook implementation's tool
+coverage and its registration in a host's settings file — matchers narrower or
+wider than declared coverage, a declared hook registered nowhere, a tool that no
+longer exists on the host. The registration surface it describes is
+`.claude/settings.json`, which this change closes in every repository, and the
+implementation it describes is the one being deleted. Both sides of the
+agreement are gone.
+
+**Migration**: None. This change's ADDED requirement "The workflow binds no
+host-specific hook surface" forbids the surface outright, which is a stronger
+statement than requiring a registration on it to be accurate.

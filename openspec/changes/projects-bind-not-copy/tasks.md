@@ -192,6 +192,14 @@ sets with the removability rule: once retired `agenticapps-dashboard` leaves
       references across `project-hook-shim.test.sh` and `install.test.sh` plus
       the whole of `project-hooks.test.sh` are about this one artifact. Decide
       whether the subsystem is retired with it before deleting the file.
+      **DECIDED 2026-08-09: the publish half is retired, the bind half is kept.**
+      Only one of the two lost its subject. `check-shims.sh` reads
+      `SHIMMED-HOOKS`, `FLEET`, `OPT-OUTS` and `shim-template.sh` and exits 65
+      without the template, so the bind half is driven by live code that landed
+      on `main` in PR #94; `install-project-hooks.sh` with an empty `ARTIFACTS`
+      dies at line 122 and is called only by `install.sh:25`. The argument and
+      the three manifest measurements are in `design.md` under "The publisher is
+      retired and the checker is kept". Carried out by group 3.13 below.
 - [ ] 3.9c Record the reassigned protection in the operator's host permission
       configuration — a Bash deny rule for `DROP TABLE`, `TRUNCATE TABLE` and
       `DELETE` without `WHERE`. This is host-specific by nature and therefore
@@ -299,3 +307,54 @@ sets with the removability rule: once retired `agenticapps-dashboard` leaves
       the skill copies and not swept by this change, because a command is neither
       a skill nor a hook and widening the check to "anything stale under
       `.claude/`" is a different rule needing its own argument
+
+## 3.13 Retire the project-hook publisher
+
+Decided on 3.9b, argued in `design.md`. **RED before GREEN applies to a deletion
+too**: each assertion below is written and observed failing against today's tree
+before the file it names is removed, because a test written after the deletion
+proves only that it can describe the present.
+
+- [ ] 3.13a **Write the RED assertions first, and watch them fail.** Three
+      claims, none of which holds today: `install.sh --check` reports no
+      project-hook set; `install.sh` carries no `PROJHOOKS` delegation; and no
+      manifest is written under `$HOME/.agenticapps/`. Add them to
+      `tools/install.test.sh` alongside the cases they replace, run the suite,
+      and record the failure count in this task before deleting anything
+- [ ] 3.13b Delete `reference-implementations/project-hooks/database-sentinel.sh`
+      and `reference-implementations/project-hooks/ARTIFACTS`. **3.9a's file
+      half, unblocked** — the declaration half was done 2026-08-08
+- [ ] 3.13c Delete `reference-implementations/shared-install/install-project-hooks.sh`
+      and `tools/project-hooks.test.sh`. The suite is entirely about
+      `database-sentinel`; it is deleted rather than narrowed because narrowing
+      it leaves a file whose every case is about an absent artifact
+- [ ] 3.13d Unwire `install.sh`: remove the `PROJHOOKS` variable (line 25), the
+      delegation that publishes and attests the project-hook set, and whatever
+      `--check` prints about it. The four shared artifacts keep publishing
+      through `install-shared-artifact.sh`, which is a different helper and is
+      not touched
+- [ ] 3.13e Remove the project-hook cases from `tools/install.test.sh` — the 24
+      references counted on 3.9b, including the `stub_helper` lines for the
+      deleted installer and the manifest assertions at 567-571. **Read each one
+      before deleting it**: a case that stubs the installer while asserting
+      something else entirely is a case about `install.sh`, and it stays with its
+      stub removed rather than going with the subsystem
+- [ ] 3.13f Confirm the bind half still passes untouched: `tools/check-shims.test.sh`,
+      `tools/project-hook-shim.test.sh`, `tools/bind-openspec-tools.test.sh`.
+      **This is the assertion that the split was drawn in the right place.** Any
+      failure here means a file was deleted that the checker reads, and the
+      deletion is wrong rather than the test
+- [ ] 3.13g Delete the machine copies: `~/.agenticapps/bin/database-sentinel.sh`
+      and `~/.agenticapps/manifest.tsv`. Not a source change, so it is recorded
+      here rather than inferred from the diff — and it is the step that makes the
+      retirement true on the only machine that has this workflow. Verify
+      afterwards that `./install.sh` and `./install.sh --check` both still exit 0
+      with the manifest absent
+- [ ] 3.13h Reconcile `reference-implementations/project-hooks/README.md`, 44k,
+      which documents the publisher and the currency rules at lines 546 and 555.
+      **Cut what described the publish half; keep what describes the shim
+      contract**, which is still the authority `check-shims.sh` compares against
+- [ ] 3.13i Re-run `openspec validate --all` and confirm the delta's eight
+      REMOVED and two MODIFIED requirements match what was actually deleted. A
+      requirement removed in the delta whose code survives, or code deleted with
+      no delta entry, is the failure this task exists to catch
