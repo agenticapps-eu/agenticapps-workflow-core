@@ -183,7 +183,7 @@ open question 7, deferred four times, and this change will not repeat it.
 - [x] 8.1 Write the ADR recording these removals and the test applied. ADRs are
       append-only, so this is a new record rather than an edit to 0012 or 0027.
       Redact home paths
-- [ ] 8.2 Record `agenticapps-dashboard-add-agent-board` — a stray worktree
+- [x] 8.2 Record `agenticapps-dashboard-add-agent-board` — a stray worktree — RESOLVED: the worktree no longer exists. The `agenticapps-dashboard` checkout was deleted 2026-08-08 and `git worktree list` shows only this repo plus a prunable opencode temp dir. Nothing to record beyond its absence.
       carrying its own gate and conformance harness, and the likeliest source of
       the repeated fleet miscounts. **Recording only**; its disposition is design
       open question 2
