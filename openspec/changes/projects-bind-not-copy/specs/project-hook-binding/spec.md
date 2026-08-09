@@ -114,13 +114,30 @@ implementation under `~/.agenticapps/bin/`, and that is the criterion. A hook a
 project wrote and owns resolves nothing there and is not this capability's
 business.
 
-**A retired hook needs a durable name, not an inference.** Once
-`normalize-claude-md` leaves the declaration, nothing distinguishes a stale
-binding of it from a project-authored hook that happens to share the shape. The
-declaration SHALL therefore carry retired names as **tombstones** — recorded,
-not silently dropped — so that "declared", "retired" and "never ours" are three
-states rather than two. Shrinking a declaration to nothing and inferring the
-difference is the same shrinkage defect `ARTIFACTS` was written to prevent.
+**A retired hook needs a durable name, not an inference — and the tombstone
+answer is withdrawn, because it contradicts the empty declaration it sits
+beside.** An earlier revision required the declaration to carry retired names as
+machine-readable tombstones so that "declared", "retired" and "never ours" were
+three states rather than two. Both round-2 reviewers found the contradiction
+independently: the delta cannot claim `SHIMMED-HOOKS` is empty and require it to
+hold entries. Nothing implements tombstones today — `check-shims.sh` reads the
+declaration through `decl()`, which strips comments, so the file parses to zero
+entries — so the requirement had no code to contradict either.
+
+**The discriminator is resolution, and it is sufficient because one fleet
+implementation survives.** A hook is fleet-shared if its shim resolves an
+implementation under `~/.agenticapps/bin/`. After this change that directory
+holds `openspec-change-gate.sh`, `run-plan-review.sh`, `reviewer-cli.sh` and
+`init-project.sh`, published by `install-shared-artifact.sh` — so a repository
+that still binds the gate shim, which is the reintroduction this pass exists to
+catch, resolves and is caught. A hook a project wrote and owns resolves nothing
+there and is not this capability's business.
+
+The three states survive without a second registry: **declared** is a name in
+`SHIMMED-HOOKS`, which is empty; **retired** is a shim whose target resolves
+under the shared directory while the declaration names nothing; **never ours**
+is a shim that resolves nothing there. The middle state is exactly what the
+reverse pass reports, and it needs no tombstone to do it.
 
 This does **not** remove the need for a sanctioned-transition mechanism, and an
 earlier revision claimed it did. `OPT-OUTS` records a *missing* binding as
@@ -362,19 +379,19 @@ repository enrolled, which `one-enforcement-floor` specifies and
 
 ### Requirement: Currency is judged against an authority checkout
 
-**Reason**: Every scenario in it — the installed build older than the
-authority's, the authority unreachable, versions agreeing while bytes differ,
-the authority holding no such artifact, the machine ahead of the authority — is
-about comparing a **published project-hook implementation** against core. With
-`ARTIFACTS` empty there is no such implementation to compare. The surviving
-installer publishes the gate, the reviewer CLI, the plan reviewer and the
-initializer, and their currency is judged by the version-marker arbitration in
-`install-shared-artifact.sh` and reported by `install.sh --check`, which is a
-different mechanism this requirement never described.
+**Reason**: **Relocated, not retired** — this requirement leaves
+`project-hook-binding` because its subject is no longer a project hook, and it is
+added to `workflow-installation` unchanged in substance. An earlier revision of
+this change removed it outright on the grounds that a different mechanism now
+answered the question. A reviewer showed that is wrong: `install.sh`'s
+`check_artifact()` compares the published copy against the checkout with `cmp`
+and reports `MODIFIED — same version as checkout, different bytes, not current`,
+which is precisely "currency judged against an authority checkout" and covers
+every one of this requirement's scenarios for the four surviving artifacts.
+Removing it would have deleted a requirement that live code satisfies.
 
-**Migration**: None for any consumer. `install.sh --check` continues to report
-each shared artifact as current or not, naming the checkout's version — the
-behaviour an operator actually used this requirement for.
+**Migration**: None. The behaviour does not change and the governing capability
+does. See the `workflow-installation` delta in this change.
 
 ### Requirement: Provisioning is checked per machine, not only per repository
 
@@ -391,15 +408,17 @@ requiring a check to notice.
 
 ### Requirement: The implementation version marker is compared, not merely carried
 
-**Reason**: It requires a check to compare a published implementation's
-`# <hook>-version:` marker against the authority's and to refrain from fixing
-what it found. The only markers it governed were on project-hook
-implementations, and `database-sentinel.sh` is the last of them. The identically
-named rule for shared artifacts lives in `workflow-installation` and is
-unaffected.
+**Reason**: **Relocated, not retired**, for the same reason as the requirement
+above and corrected after the same review finding. It requires a check to
+compare a published implementation's `# <hook>-version:` marker against the
+authority's and to refrain from fixing what it found — and that is live
+behaviour, not orphaned behaviour: `install-shared-artifact.sh` arbitrates on
+the marker and refuses to overwrite a copy carrying a higher version, and
+`install.sh --check` reports the comparison without acting on it. What changes
+is that no *project hook* carries such a marker any more, so the requirement
+belongs to the capability that governs the surviving installer.
 
-**Migration**: None. `install-shared-artifact.sh` still refuses to overwrite a
-published copy carrying a higher version, for the artifacts it publishes.
+**Migration**: None. Added to `workflow-installation` in this change.
 
 ### Requirement: A shared hook's protections are described as what they are
 

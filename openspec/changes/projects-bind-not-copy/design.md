@@ -30,7 +30,13 @@ planning commands.
 
 - Reviving `--project`. `one-enforcement-floor` superseded it and this change
   does not need it: removing a copy needs no installer.
-- Touching `install.sh`. Its budget, modes and tests are untouched.
+- ~~Touching `install.sh`. Its budget, modes and tests are untouched.~~
+  **No longer a non-goal, as of 2026-08-09.** Retiring the project-hook
+  publisher unwires `install.sh`'s delegation to it (task 3.13d) and removes the
+  project-hook cases from `tools/install.test.sh` (3.13e), so the installer
+  contract does change and this change owns that. Its budget and its modes are
+  still not touched, and the four shared artifacts publish exactly as before
+  through a different helper.
 - The `openspec-*` skills, per the Context.
 - Deciding what a *new* project does at creation time. That is a bootstrapping
   question, and the capability window `core-installer-one-entry-point` opened is
@@ -189,12 +195,29 @@ input to `install-project-hooks.sh`. That is a subsystem losing its subject, not
 a declaration losing a row, and task 3.9b stopped rather than assume which way it
 went.
 
-**What settles it is which files still have a reader.** `check-shims.sh` reads
-`SHIMMED-HOOKS`, `FLEET`, `OPT-OUTS` and `shim-template.sh`, and exits 65 if the
-template is absent — so the bind half is driven by live code that landed on
-`main` in PR #94. The publish half is driven by nothing: with `ARTIFACTS` empty,
-`install-project-hooks.sh:122` dies with *"no artifacts to publish"*, and the
-only thing that would still call it is `install.sh:25`.
+**What settles it is which files still have a reader — and the honest answer is
+narrower than an earlier revision of this section claimed.** That revision said
+the bind half is "driven by live code that landed on `main` in PR #94", which
+overstates it. `check-shims.sh` does read `SHIMMED-HOOKS`, `FLEET`, `OPT-OUTS`
+and `shim-template.sh`, and does exit 65 without the template. But its only loop
+iterates the declaration, and with the declaration empty that loop never
+executes: **it currently walks every repository, examines nothing, and says so.**
+Its reverse pass — the one that asks what a repository *holds* — is specified in
+tasks 2b.1–2b.5 and all five are open. So the bind half is live code that checks
+nothing yet.
+
+The distinction from the publish half survives that correction, because it was
+never really about current readers:
+
+| Half | Reader today | Reader planned |
+|---|---|---|
+| publish | none — `install-project-hooks.sh:122` dies *"no artifacts to publish"* on an empty declaration, verified by running it against a comments-only `ARTIFACTS`, and its only caller is `install.sh:25` | none — no task in this change or any other proposes a future project-hook artifact, and the host-neutrality rule this change adds makes one unlikely |
+| bind / check | none — the forward pass is vacuous by design since 2b.6 | tasks 2b.1–2b.5, open, which read all four declaration files and the template |
+
+Keeping the bind half is therefore a bet on 2b.1–2b.5 landing, stated as such
+rather than dressed up as a claim that it checks something today. Deleting it
+would mean deleting the inputs to a pass this same change specifies and has not
+yet built.
 
 **The manifest decided it.** The publisher's reason to exist is the attestation
 it writes, and three measurements taken 2026-08-09 say that attestation has no
@@ -251,16 +274,25 @@ keep when something asks it a question.
 - **A repository could reintroduce a copy** between the sweep and the check
   landing. The check is the answer, so it lands in the same change rather than
   after it.
-- **Retiring the publisher removes the fleet's only provenance mechanism, and
-  nothing replaces it.** After this change no installer records a digest for
-  anything it publishes, so a hand-edited `~/.agenticapps/bin/openspec-change-gate.sh`
-  is undetectable by any tool in this repository. That is a real reduction and it
-  is stated rather than softened. It is accepted because the mechanism being
-  removed never covered those four artifacts either — it only ever attested the
-  one hook being deleted — so what is lost is a capability the fleet was
-  described as having and did not have. Restoring provenance for the surviving
-  artifacts is a separate change against `install-shared-artifact.sh`, and this
-  change does not pretend to have done it.
+- **Retiring the publisher removes durable installation provenance — and NOT
+  drift detection, which an earlier revision of this paragraph got wrong.** It
+  claimed a hand-edited `~/.agenticapps/bin/openspec-change-gate.sh` would be
+  undetectable by any tool in this repository. That is false, and a round-2
+  reviewer caught it: `install.sh`'s `check_artifact()` runs `cmp -s` against the
+  checkout *before* it looks at any version, and reports `MODIFIED — same version
+  as checkout, different bytes, not current` by name. Byte drift of every
+  surviving artifact is detected today and continues to be.
+
+  What is actually lost is narrower and worth stating precisely: a **record of
+  what was installed, when, and with what hash, independent of the checkout.**
+  `check_artifact` answers "does this match the checkout *as it stands now*",
+  so if the checkout moves, the answer moves with it and no history says what was
+  on the machine yesterday. The manifest was that record. It is accepted as a
+  loss because the record covered exactly one artifact — the hook being deleted —
+  and none of the four that survive, so what disappears is a property the fleet
+  was described as having for artifacts it never had it for. Giving the surviving
+  artifacts real provenance is a separate change against
+  `install-shared-artifact.sh`, and this change does not pretend to have done it.
 - **A future fleet-shared project hook would need the publisher rebuilt.** The
   code is recoverable from this change's archive, and the requirements with it.
   The judgement is that rebuilding from an archived, working implementation costs

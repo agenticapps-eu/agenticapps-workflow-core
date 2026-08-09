@@ -315,12 +315,22 @@ too**: each assertion below is written and observed failing against today's tree
 before the file it names is removed, because a test written after the deletion
 proves only that it can describe the present.
 
-- [ ] 3.13a **Write the RED assertions first, and watch them fail.** Three
-      claims, none of which holds today: `install.sh --check` reports no
-      project-hook set; `install.sh` carries no `PROJHOOKS` delegation; and no
-      manifest is written under `$HOME/.agenticapps/`. Add them to
-      `tools/install.test.sh` alongside the cases they replace, run the suite,
-      and record the failure count in this task before deleting anything
+- [ ] 3.13a **Write the RED assertions first, and watch them fail.**
+      **Corrected after round-2 review — one of the three could never have gone
+      RED.** The original task claimed `install.sh --check` reports a
+      project-hook set today. It does not: `--check` calls `check_artifact` for
+      the four shared artifacts only and prints nothing about project hooks,
+      verified by running it. An assertion that is already true proves nothing
+      about a deletion. The two that genuinely fail against today's tree, plus
+      one replacement:
+      - `install.sh` carries no `PROJHOOKS` delegation — fails today, line 25
+      - a run of `./install.sh` writes no manifest under `$HOME/.agenticapps/` —
+        fails today, the run at 22:58 on 2026-08-08 wrote two rows
+      - `./install.sh` prints no *"published and attested the project-hook set"*
+        line — fails today; this is the observable `--check` was wrongly assumed
+        to carry, and it lives in the install path rather than the check path
+      Add them to `tools/install.test.sh` beside the cases they replace, run the
+      suite, and record the failure count here before deleting anything
 - [ ] 3.13b Delete `reference-implementations/project-hooks/database-sentinel.sh`
       and `reference-implementations/project-hooks/ARTIFACTS`. **3.9a's file
       half, unblocked** — the declaration half was done 2026-08-08
@@ -339,17 +349,49 @@ proves only that it can describe the present.
       before deleting it**: a case that stubs the installer while asserting
       something else entirely is a case about `install.sh`, and it stays with its
       stub removed rather than going with the subsystem
-- [ ] 3.13f Confirm the bind half still passes untouched: `tools/check-shims.test.sh`,
+- [ ] 3.13f Confirm the bind half still passes: `tools/check-shims.test.sh`,
       `tools/project-hook-shim.test.sh`, `tools/bind-openspec-tools.test.sh`.
       **This is the assertion that the split was drawn in the right place.** Any
       failure here means a file was deleted that the checker reads, and the
-      deletion is wrong rather than the test
+      deletion is wrong rather than the test.
+      **"Untouched" was the wrong word and round-2 review caught why**: the bind
+      half is not inert, it *documents the publisher*. `shim-template.sh:8-9`
+      tells the reader an implementation "is published to `~/.agenticapps/bin/`
+      by `install-project-hooks.sh`", so keeping it verbatim leaves the
+      checker's own authority describing an installer that no longer exists.
+      Rewrite those lines to name `install-shared-artifact.sh` and the four
+      artifacts it publishes — and bump the template's `# shim-contract:` marker,
+      because changing the template's bytes is exactly what that marker exists
+      to propagate
+- [ ] 3.13k **Add the invariant that keeps the kept half honest.** With no
+      publisher, a future non-empty `SHIMMED-HOOKS` entry would have the checker
+      demanding a binding whose implementation nothing can install. Record in the
+      declaration's header that an active entry requires either a restored
+      publisher or a named surviving one that owns the implementation — the
+      condition `openspec-change-gate` already satisfies through
+      `install-shared-artifact.sh`, and the reason it is the one hook the reverse
+      pass can still resolve
 - [ ] 3.13g Delete the machine copies: `~/.agenticapps/bin/database-sentinel.sh`
       and `~/.agenticapps/manifest.tsv`. Not a source change, so it is recorded
       here rather than inferred from the diff — and it is the step that makes the
       retirement true on the only machine that has this workflow. Verify
       afterwards that `./install.sh` and `./install.sh --check` both still exit 0
-      with the manifest absent
+      with the manifest absent.
+      **State the search boundary rather than implying a global one.** The claim
+      "nothing reads `manifest.tsv`" was established by searching *this
+      repository*, where the only reader is `tools/install.test.sh`. Before
+      deleting, grep `~/Sourcecode` and `~/.agenticapps` for readers outside it,
+      and record what was searched. If an external reader exists, this task
+      changes rather than proceeds. Copy the file to the change directory as a
+      record before removing it — it is 248 bytes and it is the only evidence of
+      what the machine had installed
+- [ ] 3.13j **Sweep the retired names and assert none survives in live source.**
+      `rg` for `install-project-hooks`, `PROJHOOKS`, `manifest.tsv`,
+      `database-sentinel` and the project-hook `ARTIFACTS` across the working
+      tree, allowlisting `openspec/changes/**` and `adrs/**`, which record
+      history and are supposed to keep naming them. Round-2 review found the
+      README was named on 3.13h while `shim-template.sh` was not; a name-based
+      sweep is what stops the next one being missed the same way
 - [ ] 3.13h Reconcile `reference-implementations/project-hooks/README.md`, 44k,
       which documents the publisher and the currency rules at lines 546 and 555.
       **Cut what described the publish half; keep what describes the shim
