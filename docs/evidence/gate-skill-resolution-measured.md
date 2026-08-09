@@ -54,25 +54,38 @@ prefixed-name fallback, no additional binding, and no installer budget raise.
   that enumerates directories is measuring packaging, not identity. This is the
   same shape as the recorded lesson that sweeps see symlinks rather than
   directories: the cheap enumeration answers a question next to the one asked.
-- **The `*-impeccable-audit` and `*-database-sentinel-audit` aliases must not be
-  deleted.** On codex and opencode they are the *sole* providers of those two
-  canonical names. They look like legacy vendoring and are load-bearing.
+- **The `*-impeccable-audit` alias must not be deleted.** On codex and opencode
+  it is the *sole* provider of the canonical name `impeccable`. It looks like
+  legacy vendoring and is load-bearing.
+
+  > **`database-sentinel` was removed entirely later the same day, by operator
+  > decision.** The measurement above is left as recorded because it was true
+  > when taken, but the skill checkout and both `*-database-sentinel-audit`
+  > aliases are gone from every host, and no host declares that name now. So the
+  > "must not be deleted" caution applies to `impeccable` only. A prior session
+  > handoff claimed the *skill* was a live gate that stays while only the *hook*
+  > was retired; that was wrong, and both are now gone.
 - **The six gstack-derived prefixed links removed on 2026-08-09 were genuine
   duplicates** — `codex-cso` and `gstack-cso` both declared `cso` on the same
   host. That removal stands; it deduplicated rather than deleted.
 
 ## The one real gap this surfaced
 
-Nothing in core *guarantees* `impeccable` and `database-sentinel` stay bound to
-codex and opencode. They persist only because `install.sh`'s `sweep_vendored`
-rebound the archived host-installer links to live sources. `bind_dir` iterates
-`$ROOT/skills/*` and `$UPSTREAM/skills/*`, and neither skill is in either — so
-if those aliases are ever deleted, no installer run recreates them and two gates
-silently lose their skill on two hosts.
+Nothing in core *guarantees* `impeccable` stays bound to codex and opencode. It
+persists only because `install.sh`'s `sweep_vendored` rebound an archived
+host-installer link to a live source. `bind_dir` iterates `$ROOT/skills/*` and
+`$UPSTREAM/skills/*`, and the skill is in neither — so if that alias is ever
+deleted, no installer run recreates it and the design gate silently loses its
+skill on two hosts.
 
-That is a real fragility and it is **not fixed**. It needs its own change, sized
-against the installer's line budget (216 of 217 as of this date — the budget
-clause's "measures 210, leaving 7" is stale).
+The gap was originally written up for two skills. `database-sentinel` has since
+been removed deliberately, which closes its half by subtraction rather than by
+fixing anything: the gate now names a skill that exists nowhere, which is a
+different problem and is tracked with the gate's removal.
+
+The `impeccable` fragility is real and **not fixed**. It needs its own change,
+sized against the installer's line budget (216 of 217 as of this date — the
+budget clause's "measures 210, leaving 7" is stale).
 
 ## Review record
 
