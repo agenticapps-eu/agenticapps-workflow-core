@@ -98,7 +98,7 @@ lint, not a review — it does not replace either.
 2b. **Plan-review (adversarial, kept).** ≥2 other-vendor agents critique the change and
    write `changes/<name>/REVIEWS.md`. Your existing multi-AI gate, retargeted from
    `PLAN.md` to the change. Dropping it re-opens the ADR-0018 failure mode. Escape hatches
-   (`GSD_SKIP_REVIEWS=1`, a per-change skip marker) carry over.
+   (a per-change skip marker) carry over.
 3. **Build with Superpowers.** Only brainstorm when the change is genuinely open-ended.
    Always: writing-plans → failing test first (RED) → make it pass (GREEN). Conditional
    gates fire by what the diff touches (security always; db-sentinel on SQL/RLS; design/qa

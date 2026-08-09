@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# .git/hooks/pre-commit — agent-agnostic enforcement floor.
-# Blocks a commit that stages code while an OpenSpec change isn't validated + reviewed.
-# Install:  ln -sf "$(git rev-parse --show-toplevel)/gate/openspec-change-gate.sh" .git/hooks/pre-commit  (via a wrapper),
-# or copy this file to .git/hooks/pre-commit and point GATE at the installed script.
-GATE="${OPENSPEC_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}"
-[ -x "$GATE" ] || GATE="$(git rev-parse --show-toplevel)/gate/openspec-change-gate.sh"
-exec "$GATE" --pre-commit

@@ -10,7 +10,7 @@
 # none of them fails the job. The gate still counts reviewers exactly as
 # accurately as when it blocked, and still reports the shortfall against a floor
 # of 1 and a preference of 2 — but the report is the whole mechanism now, so
-# read it. No env var turns blocking back on; `GSD_SKIP_REVIEWS` is vestigial
+# read it. No env var turns blocking back on.
 # and only silences the NOTEs.
 #
 # Blocking is reserved for what is an ERROR rather than an ABSENCE: a spec delta

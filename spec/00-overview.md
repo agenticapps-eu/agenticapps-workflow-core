@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 1.6.0
+spec_version: 2.0.0
 ---
 
 # 00 — Overview
@@ -65,11 +65,11 @@ contracts in their own idiom.
 - Sections 01, 03, 04, 05, 11 are **canonical prose** — host
   implementations reproduce these blocks verbatim. Substitution is
   permitted only inside `{{...}}` placeholders.
-- Sections 02, 06, 07, 08, 10, 12, 13, 14, 16, 17, 18, 19, 21 are
+- Sections 02, 06, 07, 08, 10, 12, 14, 16, 17, 18, 19, 21 are
   **declarative contracts** — host implementations satisfy the listed
   MUST / SHOULD / MAY requirements in whatever idiom is natural for the
-  host runtime. (Section 15 was on this list until it was retired at
-  v1.2.0; see below.)
+  host runtime. (Sections 13 and 15 were on this list until they were
+  retired, at v2.0.0 and v1.2.0 respectively; see below.)
 - Sections 16–19 are the **OpenSpec front end** (spec v1.0.0). A host
   citing 1.0.0 or later implements them; §02 and §07 are remapped onto
   the OpenSpec lifecycle for those hosts and remain as written for hosts
@@ -80,12 +80,39 @@ v0.2.1 (cparx-pilot patches), extended at v0.3.0 with the conformance
 enforcement primitives in §10.9, and clarified at v0.3.2 with the §10.5
 Flush-primitive obligation. Section 11 (coding discipline), section 12
 (authoring conventions), and section 13 (TS declare-first skill) were
-added at v0.4.0 as additive minor sections. Section 02 (hook taxonomy)
+added at v0.4.0 as additive minor sections; section 13 was retired at v2.0.0. Section 02 (hook taxonomy)
 gained the `plan-review` pre-execution gate at v0.5.0, specifying the
 robust phase-resolution order and grandfather rule. Section 14
 (prompt-injection defense) was added at v0.6.0 as an additive minor
 section, conditional on the host shipping an LLM prompt-building surface
-(ADR-0016). Section 15 (knowledge capture) was added at v0.7.0 (ADR-0017) and
+(ADR-0016). **Spec 2.0.0 (2026-08-09)** removes core's bindings for the
+`database-security`, `db-pre-launch-audit` and design gates. The gates remain
+defined in §02 with their triggers and evidence intact — §02's binding guidance
+becomes MAY, and §17 records that each fires only where a host has bound a
+skill. `database-sentinel` was removed from every host; `impeccable` stays
+installed and is invoked on demand rather than automatically (ADR-0030,
+superseding ADR-0011 and ADR-0012). This is breaking: two gates stop firing for
+every consumer, and prior-major conformance claims become obsolete per §09.
+**Section 13 (TS declare-first) is RETIRED at v2.0.0.** The number stays vacant
+and nothing is renumbered, exactly as §15's retirement established — closing the
+gap would invalidate every §14–§21 cross-reference in the fleet.
+
+Three earlier attempts to retire it failed, and the reason is worth keeping: each
+argued from **local machine state** — a skills directory, a deleted symlink,
+`install.sh`'s `ARCHIVED` variable — about a section that leaves its implementing
+skill's name to the host's discretion. Local absence never evidenced anything
+about it. `reference-implementations/README.md` records three hosts binding it,
+and those hosts are real: measured 2026-08-09 all four had live remotes and
+commits four days old.
+
+What makes the retirement legitimate is not that nobody implements it. It is that
+**this release is already major on independent grounds** — the gate bindings
+removed above obsolete every prior-major conformance claim under §09. Those three
+hosts must re-assert against 2.0.0 regardless, so retiring §13 in the same release
+adds no conformance cost that the release does not already impose. It is an
+accepted break, made once, rather than a second break imposed later.
+
+Section 15 (knowledge capture) was added at v0.7.0 (ADR-0017) and
 **REMOVED at v1.2.0**. Its purpose — retaining what was learned across
 sessions — is served by the OpenSpec archive: `openspec/changes/archive/`
 retains each change's proposal, design, delta and review evidence

@@ -470,18 +470,6 @@ score_gate() {
   run_row "validate green + 2 reviewers -> allow" 0 "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
-  # Documented escape hatch → allow.
-  fx="$(make_fixture 0)"
-  GSD_SKIP_REVIEWS=1 run_row "GSD_SKIP_REVIEWS=1 -> allow" 0 "$fx" "$(p_claude src/main.go)"
-  rm -rf "$fx"
-
-  # The hatch bypasses the REVIEW clause, not validate. §18's row reads
-  # unconditionally; this narrowing is a documented deviation (see the gate
-  # header) and is pinned here so it cannot drift silently in either direction.
-  fx="$(make_fixture 1)"
-  GSD_SKIP_REVIEWS=1 run_row "GSD_SKIP_REVIEWS=1 + validate RED -> block" 2 "$fx" "$(p_claude src/main.go)"
-  rm -rf "$fx"
-
   # Fail OPEN on parse error — never on policy.
   fx="$(make_fixture 0)"
   local before="$fail"

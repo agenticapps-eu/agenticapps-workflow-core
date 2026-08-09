@@ -94,13 +94,13 @@ lifecycle. Three fates:
 | `brainstorm-architecture` | **Conditional (design)** | Stage 1. Folds into the design note when the change adds a service/model/integration. |
 | `design-shotgun` | **Conditional (design)** | Stage 1/3. Fires for a UI change with no design contract yet. |
 | `design-critique` | **Conditional (design)** | Stage 1/3. Fires for a UI change with an existing design contract. |
-| `impeccable-audit` | **Conditional (design)** | Stage 3. Fires when the change alters a shipping visual surface. |
+| `impeccable-audit` | **Conditional (design)** | Stage 3. Fires when the change alters a shipping visual surface **and a host has bound a skill**. Core binds none (ADR-0030). |
 | `ui-preview` | **Conditional (design)** | Stage 3. Screenshot evidence for a frontend change. |
-| `database-security` | **Conditional (db-sentinel)** | Stage 3. Fires when the change touches schema, RLS, definer functions, or storage policy. |
-| `db-pre-launch-audit` | **Conditional (db-sentinel)** | Stage 3. Fires before first production launch / after a major DB migration. |
+| `database-security` | **Conditional** | Stage 3. Fires when the change touches schema, RLS, definer functions, or storage policy **and a host has bound a skill**. Core binds none (ADR-0030). |
+| `db-pre-launch-audit` | **Conditional** | Stage 3. Fires before first production launch / after a major DB migration **and a host has bound a skill**. Core binds none (ADR-0030). |
 | `qa` | **Conditional** | Stage 3. Fires when the change ships user-visible behavior and a dev server is reachable. |
 | `branch-close` | **Retained** (ship) | Stage 4. The ship step: PR body links the change (`changes/archive/<date>-<slug>/`) and its evidence. |
-| `ts-declare` (§13) | **Mapped → lint** | Stage 3. The declare-first TS discipline (§13) is enforced as a lint gate on TS changes rather than a bespoke gate. |
+| `ts-declare` | **Mapped → lint** | Stage 3. A declare-first TS discipline is enforced as a lint gate on TS changes rather than a bespoke gate. §13, which specified it, was retired at spec 2.0.0; the lint mapping stands on its own. |
 
 ## Requirements
 

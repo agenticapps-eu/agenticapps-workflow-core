@@ -76,7 +76,8 @@ Three of seven fleet repos have no `AGENTS.md` (the brief estimated four). No
 files, which is why all four diverged.
 
 Duplicated-in-the-skill (class 4) is present but not itemised per line: the
-`GSD_SKIP_REVIEWS=1` escape-hatch prose and §11 coding-discipline text appear in
+`GSD_SKIP_REVIEWS=1` escape-hatch prose (**removed at spec 2.0.0**; this audit
+records the state on its own date) and §11 coding-discipline text appear in
 both instruction files and the trigger skill — `agents-task-viewer:268` and
 `fx-signal-agent:262` are representative. These resolve when the trigger skill
 becomes the single home for behaviour.

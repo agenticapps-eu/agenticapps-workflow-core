@@ -109,7 +109,7 @@ delta. It never means "go get a review".
 Review evidence — reviewer count, verdicts, independence, the trailer — is
 computed and reported, never enforced. All of it produces `NOTE` lines. Two
 rejections open the gate exactly as two approvals do. The escape hatch is
-`GSD_SKIP_REVIEWS=1` (name retained for compatibility) and it is logged.
+nothing — reviews do not block, so no escape hatch exists.
 
 The consequence, stated in the trigger skill itself: **a green gate is the
 weakest possible evidence that anyone read the delta.** Running the reviewers

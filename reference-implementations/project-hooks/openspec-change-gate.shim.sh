@@ -35,7 +35,6 @@
 # Fires on PreToolUse matcher: Edit|Write|MultiEdit|NotebookEdit
 # Exit 2 = BLOCK; Exit 0 = ALLOW; Exit 1 = could not resolve — allow and report.
 #
-# Override (emergency, logged):  export GSD_SKIP_REVIEWS=1
 # Stricter posture (opt-in):     export OPENSPEC_GATE_STRICT=1
 #
 # FAIL-OPEN AND REPORT if the gate cannot be located. A missing shared install

@@ -101,7 +101,6 @@ truth table is normative:
 | `REVIEWS.md` with no trailer, or a malformed one | **allow + report (zero counted)** | `0` |
 | Trailer digest no longer matches the change artifacts | **allow + report (stale)** | `0` |
 | Counted reviewer(s) present, some carrying REQUEST-CHANGES | **allow + report** | `0` |
-| Documented escape hatch env var set (e.g. `GSD_SKIP_REVIEWS=1`) | **suppresses the review reports; does not affect the `validate` block** | — |
 | Malformed / unparseable stdin | **allow (fail-open)** | `0` |
 
 - **MUST** block a code edit under an active change on exactly one
@@ -230,12 +229,11 @@ truth table is normative:
   clause names the one condition that must still fail closed.
 - **MUST** provide a documented escape hatch (an env var) for whatever the
   host blocks on; an undocumented bypass is non-conformant. Where the only
-  blocking condition is a red `validate`, a host **MAY** retain a
-  review-oriented hatch as a no-op accepted for compatibility — the reference
-  gate keeps `GSD_SKIP_REVIEWS` for exactly that reason, where it now
-  suppresses the review reports and nothing else. A hatch **MUST NOT** be
-  documented as bypassing validation when it does not, and a host that adopts
-  the MAY-extension above **MUST** state which hatch releases it.
+  blocking condition is a red `validate`, there is nothing a hatch could
+  release, and a host **MUST NOT** retain a review-oriented hatch as a no-op:
+  a documented variable that no longer does anything advertises an escape the
+  host cannot provide. A hatch **MUST NOT** be documented as bypassing
+  validation when it does not.
 
 ### Reviewer-CLI robustness
 

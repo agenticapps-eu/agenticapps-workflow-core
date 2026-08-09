@@ -674,7 +674,7 @@ done
 
 if [ "$count" -lt "$MIN" ]; then
   echo "only $count reviewer(s) produced output (need $MIN) — ${OUT#"$ROOT"/} left unchanged." >&2
-  echo "Install another other-vendor agent CLI, or use GSD_SKIP_REVIEWS=1 for a logged emergency override." >&2
+  echo "Install another other-vendor agent CLI. Reviews do not block, so you may also proceed." >&2
   exit 1
 fi
 

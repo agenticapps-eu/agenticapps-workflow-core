@@ -57,7 +57,6 @@
 #     every non-exempt edit is blocked. That is inherited §18 behaviour, and it
 #     is stated here because the gate's fail-open reputation makes it surprising.
 #
-# Override (emergency, logged):  export GSD_SKIP_REVIEWS=1
 # Stricter posture (opt-in):     export OPENSPEC_GATE_STRICT=1
 
 # ROOT MUST NOT come from the working directory. Hooks run in whatever

@@ -64,7 +64,7 @@ code-editing tool calls unless: (a) an **active** OpenSpec change exists and
 `openspec validate --all` passes, AND (b) that change has a `REVIEWS.md` with ≥2
 reviewers — this preserves your multi-AI adversarial review (ADR-0018), just retargeted
 from `PLAN.md` to the change. For the sandbox, if you don't have ≥2 other-vendor CLIs
-handy, use the existing escape hatch (`GSD_SKIP_REVIEWS=1`) and note it in the report —
+handy, note it in the report — reviews do not block, so you may proceed —
 do not silently drop the check. Wire it the way this host wires hooks (codex:
 `.codex/hooks.json`; claude: the settings hook block).
 

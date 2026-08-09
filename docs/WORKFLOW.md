@@ -88,7 +88,7 @@ Two things about this picture matter most:
 | `tdd`, `verification` | **retained** — Superpowers execution |
 | `security` | **retained, always** on triggering changes |
 | design / database / qa | **conditional** — fire on their triggers |
-| `ts-declare` (§13) | **→ lint gate** |
+| `ts-declare` | **→ lint gate** |
 
 ## The gate that enforces it (§18)
 

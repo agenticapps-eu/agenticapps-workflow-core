@@ -26,11 +26,23 @@ it. All of it was found on 2026-08-07 while measuring something else.
   the recommendation in `run-plan-review.sh`.
 - Correct the two false statements on `workflow.mmd` and the one in the gate
   header, because an arbiter wrong at the source decides wrongly.
+- **Remove two gate bindings** — `database-security → database-sentinel`, whose
+  skill is gone from every host, and `design → impeccable`, whose skill exists
+  and is unbound as a **policy decision** so it is invoked on demand rather than
+  automatically. Folded in 2026-08-09. The `qa` binding and the seven always-on
+  gates are untouched.
 
 **Non-Goals:**
 
-- Removing anything from `adrs/`, `openspec/changes/archive/`, or `CHANGELOG.md`.
-- **§13.** Removed from this change entirely — see below.
+- Removing anything from `openspec/changes/archive/`, or **editing or deleting**
+  any ADR. ADR-0030 is *added*, superseding ADR-0011 and ADR-0012, which both
+  mandate behaviour the gate-binding removal ends. `CHANGELOG.md` gains the
+  2.0.0 entry §09 requires it to have; it is no longer excluded.
+- **§13.** Removed from this change entirely — see below. Three attempts to
+  retire it have now failed, the third during this change's own re-review.
+- Building the installer's missing retired-artifact sweep. Without one, removing
+  a published artifact here does not remove it from installs on other machines;
+  that gap is recorded, not closed.
 - Re-specifying `database-sentinel`'s removal; `projects-bind-not-copy` owns that
   requirement.
 - Deciding the fate of the stray `agenticapps-dashboard-add-agent-board` worktree.
@@ -51,8 +63,23 @@ The dangling symlink that produced the false claim is real and still removed —
 it just evidences that *one host's global binding* went, not that the contract is
 unused. A machine-level absence was read as a fleet-wide one.
 
-*Consequence:* the spec-version collision with PR #78 dissolves. Nothing here is
-breaking to `spec/`, so 2.0.0 stays uncontested.
+*Consequence for §13 alone:* dropping it removes one reason this change would
+have needed a major version.
+
+**But the version collision with PR #78 does not dissolve, and the earlier claim
+that it did is now false.** That sentence was written when this change touched no
+gate binding. Two items folded in on 2026-08-09 — removing the
+`database-security → database-sentinel` binding and the `design → impeccable`
+binding, with the §02 and §17 amendments that follow — and a consumer who loses
+an automatic security control has had something broken. Two independent reviewers
+rejected the alternative reading as self-serving.
+
+So this change is **breaking to `spec/`** and lands at **2.0.0**, and PR #78
+(*executable migration format — §08*) is open claiming the same number. Both
+cannot have it. The resolution is sequencing, not argument: whichever merges
+first takes 2.0.0 and the other rebases to 2.1.0. This is recorded as a live
+collision rather than assumed away, because assuming it away is exactly what the
+previous sentence did.
 
 **`gate/` is removed rather than corrected.** It could be regenerated from the
 reference implementation, and that is the obvious alternative. Rejected because a
