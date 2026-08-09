@@ -262,8 +262,21 @@ sets with the removability rule: once retired `agenticapps-dashboard` leaves
 
 ## 5. Verify on the machine, not in the tests
 
-- [ ] 5.1 Open a session in a swept repository and confirm the workflow skill
+- [x] 5.1 Open a session in a swept repository and confirm the workflow skill
       loads and resolves into core — the same measurement as 1.1, after
+      **Measured 2026-08-09 in a throwaway worktree of `cparx`, on two hosts.**
+      codex 0.145.0 and omp 17.2.9, same prompt, no mention of the workflow in
+      it. Both activated `agentic-apps-workflow` unprompted, emitted the
+      commitment ritual, routed the task as small and named the gates due; omp
+      identified it as v4.0.0, which is core's copy and not the deleted v3.2.0
+      project copy. The worktree inherited `agenticapps.workflow.enrolled` and
+      `core.hooksPath` from the parent, so the floor was live in it too.
+      **The gap this surfaced, which no test covers**: codex reported the four
+      `superpowers:*` gate skills as not installed in its session. It handled
+      that exactly as the skill requires — said so and continued — so the
+      behaviour is correct and the coverage is not: on codex the TDD,
+      verification, branch-close and `cso` gates are unenforced discipline
+      rather than resolvable skills
 - [ ] 5.2 Confirm no repository lost a capability: the `/opsx:*` commands still
       work in a swept repository, which is the concrete form of "the `openspec-*`
       skills were left alone"

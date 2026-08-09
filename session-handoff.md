@@ -1,127 +1,94 @@
-# Session Handoff — 2026-08-09 (twenty-fifth session)
+# Session Handoff — 2026-08-09 (twenty-sixth session)
 
-Both core PRs are merged, `init-project.sh` 1.1.0 is published, and the
-retirement question 3.9b left open has an answer with a reviewed plan behind it.
-No code was deleted — the session ends at the gate, deliberately.
+Group 3.13 is executed, reviewed against the code rather than the plan, pushed
+and on PR #95. The four working repositories now resolve an instruction file on
+every host — three of them did not when the session started.
 
 ## Accomplished
 
-- **#93 and #94 merged.** #94 was stacked on #93, so squashing #93 made #94
-  conflict; rebased with `--onto origin/main 084638b` to replay only its own two
-  commits. `check-shims.test.sh` 9/9 after the rebase.
-- **`init-project.sh` 1.1.0 published.** `~/.agenticapps/bin/` held 1.0.0, so
-  anyone running the published copy got an unenrolled project. `install.sh
-  --check` now reports all four artifacts current.
-- **`projects-bind-not-copy` gained the retirement decision**, folded into all
-  four planning artifacts plus a `workflow-installation` delta. `openspec
-  validate --all` green.
-- **Step 2b run, two vendors, both REQUEST-CHANGES.** `REVIEWS-2.md`. The round
-  falsified two of the eight removals and one of the design's risk claims.
-- **fbc-platform diagnosed but not touched** — another session is live in it.
+- **Group 3.13 complete, RED first.** Three assertions written and observed
+  failing (56 passed / 3 failed against a 56/0 baseline) before a single
+  deletion; 55/0 after. Deleted `database-sentinel.sh`, `ARTIFACTS`,
+  `install-project-hooks.sh`, `tools/project-hooks.test.sh`, the `PROJHOOKS`
+  wiring, 4 cases and 16 stub lines. On the machine:
+  `~/.agenticapps/bin/database-sentinel.sh` and `manifest.tsv`.
+- **The bind half is green and untouched** — check-shims 9/0, project-hook-shim
+  64/0, bind-openspec-tools 42/0, init-project 55/0, `validate --all` 14/0.
+- **PR #95 open.** Not archived: 34 tasks in the change are still open.
+- **THREE OF FOUR REPOS HAD NO READABLE INSTRUCTION FILE.** `callbot` and
+  `fx-signal-agent` carried a committed symlink loop — `AGENTS.md → CLAUDE.md →
+  AGENTS.md`, ELOOP on both names, since 2026-08-08 21:46. `fbc-platform` had
+  `CLAUDE.md` only, so codex/pi/omp read nothing. All three fixed and committed.
+- **5.1 measured on two hosts.** codex and omp, in a throwaway `cparx` worktree,
+  both activated the skill unprompted and emitted the ritual. Worktree removed.
 
 ## Decisions
 
-- **The publish half retires; the bind half stays.** Only one lost its subject.
-  `install-project-hooks.sh` with an empty `ARTIFACTS` dies at line 122 — verified
-  by running it against a comments-only declaration in a scratch HOME, publishing
-  nothing. `check-shims.sh` reads four declaration files and exits 65 without the
-  template.
-- **Six requirements retire, two relocate — corrected mid-session.** I had all
-  eight retiring. Codex showed `install.sh:check_artifact()` *is* "currency judged
-  against an authority checkout" and `install-shared-artifact.sh`'s downgrade
-  refusal *is* "the version marker is compared". Their subject stopped being a
-  project hook; their behaviour did not. Moved to `workflow-installation` — deleting
-  them would have unspecified working code.
-- **The manifest is deleted, not repaired.** Its only reader is
-  `tools/install.test.sh`; `install-shared-artifact.sh` writes none for the four
-  surviving artifacts; and it never expires rows, so after a full rewrite at 22:58
-  on 08-08 it attested `normalize-claude-md.sh 1.0.1`, with a digest, for a path
-  holding no file.
-- **What retiring it costs is durable attestation, NOT drift detection.** My risk
-  paragraph said a hand-edited artifact would become undetectable. False —
-  `check_artifact()` runs `cmp -s` before any version comparison and names the
-  same-version-different-bytes case. Gemini asserted the opposite of codex here and
-  the code settled it against gemini.
-- **Tombstones withdrawn.** The delta required `SHIMMED-HOOKS` to be empty *and*
-  to carry machine-readable tombstones. Nothing implemented them, `decl()` strips
-  comments so it already parses to zero entries, and the resolution discriminator
-  suffices because `openspec-change-gate.sh` survives in `~/.agenticapps/bin/`.
-- **`install.sh` is no longer a non-goal.** `proposal.md:251` and `design.md:33`
-  promised it would not change while 3.13d–e change it.
+- **The `# shim-contract:` marker is NOT bumped**, against task 3.13f. It argued
+  the bump propagates template bytes; `check-shims.sh:97` propagates them with
+  `cmp -s` and never reads the marker, and the spec names exactly four triggers —
+  resolution order, exit behaviour, identification, reporting. A header comment
+  is none. Bumping would have moved two sibling files for a contract that did
+  not change.
+- **`SHIMMED-HOOKS` carries the invariant** (3.13k): an entry requires a
+  surviving publisher owning the implementation. Otherwise the checker demands
+  shims that fail open against a path nothing writes.
+- **Docs reconciled, not rewritten.** What instructed is corrected; what recorded
+  is marked superseded and left. An evidence file edited to match the present
+  stops being evidence.
+- **`database-sentinel` the upstream skill keeps its name everywhere.** It is a
+  different thing from the retired hook and the sweep had to say so explicitly.
+- **The change is not archived.** Groups 2, 2b, 3.8 and most of 4–6 are open. It
+  was never one change; it is four.
 
 ## Files modified
 
-- `openspec/changes/projects-bind-not-copy/proposal.md` — "Retired Capability
-  surface"; the install.sh non-goal reversed
-- `openspec/changes/projects-bind-not-copy/design.md` — the publisher/checker
-  decision, three manifest measurements, two corrected risks
-- `openspec/changes/projects-bind-not-copy/tasks.md` — group 3.13 (eleven tasks),
-  3.9b answered
-- `.../specs/project-hook-binding/spec.md` — 8 REMOVED (2 marked relocated), 2
-  MODIFIED, tombstones withdrawn, the "reassigned" contradiction fixed
-- `.../specs/workflow-installation/spec.md` — the two relocated requirements
-- `.../REVIEWS-2.md` — new, round 2
-- `~/.agenticapps/bin/init-project.sh` — 1.0.0 → 1.1.0 (machine, not repo)
+- `install.sh` — PROJHOOKS variable, delegation and the attestation claim removed
+- `tools/install.test.sh` — 3.13a's three assertions in, 4 cases and 16 stubs out
+- `reference-implementations/project-hooks/{shim-template.sh,SHIMMED-HOOKS,FLEET,README.md}`
+- `docs/HOW-IT-FITS-TOGETHER.md`, `docs/evidence/install-run-after.md`
+- `tools/project-hook-shim.test.sh` — header notes why the fixture name survives
+- `openspec/changes/projects-bind-not-copy/{tasks.md,manifest.tsv.retired}`
+- `callbot`, `fx-signal-agent`, `fbc-platform` — instruction files (own commits)
 
 ## Next session: start here
 
-Execute **group 3.13** on `feat/retire-the-project-hook-publisher` (pushed, two
-commits, no PR yet). Start with **3.13a**, and start with it RED: assert that
-`install.sh` carries no `PROJHOOKS` delegation, that a run writes no manifest
-under `$HOME/.agenticapps/`, and that it prints no *"published and attested the
-project-hook set"* line — all three fail against today's tree, unlike the
-`--check` assertion the task originally named, which was already true and could
-never have failed. Then 3.13b–e delete and unwire, 3.13f rewrites
-`shim-template.sh:8-9` (it still tells readers the implementation is published by
-the installer being deleted) and bumps its `# shim-contract:` marker, and 3.13g
-removes the machine copies after grepping `~/Sourcecode` and `~/.agenticapps` for
-readers of `manifest.tsv` outside this repo. The bind-half suites passing at 3.13f
-is the proof the split was drawn in the right place.
+**Do not open a new group in `projects-bind-not-copy`.** Merge #95, then decide
+whether that change survives as one change at all — 34 open tasks across five
+groups, and the two that matter (2: `check-project-skills.sh`; 2b: the reverse
+pass) are independent tools that would each be a change in their own right. The
+first action is a split proposal, not more execution. Open question 1 from the
+previous handoff still stands and is now the deciding one: `check-shims.sh` has
+no reverse pass, so keeping the bind half is a bet on 2b landing.
 
 ## Open questions
 
-1. **`check-shims.sh` has no reverse pass at all** — its only loop iterates the
-   declaration, so over an empty one it examines nothing. Tasks 2b.1–2b.5 are all
-   open. Keeping the bind half is a bet on those landing; if they are not going to
-   land, the split's justification weakens and the whole capability is worth
-   re-examining. Neither reviewer found this.
-2. **fbc-platform #143 is red and the fix belongs to the other session.** Root
-   `deno.lock` still records `husky@9.1.7` and `lint-staged@17.3.0` after
-   `package.json` dropped them; CI runs `deno test --frozen`. Fix is
-   `deno install --frozen=false` committed to `chore/drop-vendored-workflow-copies`.
-   Its working tree also holds nineteen deletions already committed on #143 —
-   they should be restored, not committed onto the AGE-507 branch. **Two lockfiles
-   in that repo; only `pnpm-lock.yaml` was regenerated on 08-08.**
-3. **An ADR accepting the unmitigated destructive-SQL loss** — codex asked for one
-   with an owner. The decision is recorded on 3.9d but an ADR is its right home.
-4. Nothing intercepts destructive SQL, in any repository, on any host. Unchanged.
-5. **`normalize-claude-md` still has no implementation anywhere** while
+1. **codex resolves none of the four `superpowers:*` gate skills.** Measured this
+   session. It reports and continues, which is correct behaviour and no coverage
+   at all — on codex, TDD/verification/branch-close/`cso` are prose. Whether that
+   is acceptable is a decision nobody has made.
+2. **Nothing intercepts destructive SQL, on any host, in any repository.** An ADR
+   accepting the unmitigated loss, with an owner, is still owed (3.9d records the
+   decision; an ADR is its home).
+3. `check-shims.sh` has no reverse pass — tasks 2b.1–2b.5 all open.
+4. `normalize-claude-md` has no implementation anywhere while
    `project-hook-binding/spec.md` names it as a live shim in seven places. The
-   phantom manifest row was its only trace on the machine and goes at 3.13g.
-6. `.planning/` survives in cparx, fbc-platform, fx-signal-agent (task 6.2).
-7. callbot and fx-signal-agent instruction files collapsed but not thinned (~24k).
-8. Tasks 3.1 / 3b.1 / 3b.4 of `one-enforcement-floor` satisfied but unticked;
-   3.0a–3.0g describe a mechanism with no reason to exist.
-9. `fleet-carries-only-current` task 0.1 gated on `projects-bind-not-copy` being
-   archived — implemented, not archived. Recheck.
-10. Delete the transitional binder: `reference-implementations/global-floor/` and
-    `tools/global-floor-bind.test.sh`. Its finding worth keeping first: a repository
-    refused at the preflight is never enrolled, so binding the floor silences the
-    hook the refusal said it was keeping.
-11. Three credentials outlived their file in `agenticapps-roadmap`'s `.env`.
-12. `claude-workflow` cannot be deleted safely — 11 commits on no remote.
+   phantom manifest row was its last trace and went with the manifest.
+5. `.planning/` survives in cparx, fbc-platform, fx-signal-agent (task 6.2).
+6. fbc-platform #143: root `deno.lock` still records `husky@9.1.7` and
+   `lint-staged@17.3.0`; CI runs `deno test --frozen`. Fix is
+   `deno install --frozen=false` on `chore/drop-vendored-workflow-copies`.
+7. Delete the transitional binder: `reference-implementations/global-floor/` and
+   `tools/global-floor-bind.test.sh`.
+8. Three credentials outlived their file in `agenticapps-roadmap`'s `.env`.
+9. `claude-workflow` cannot be deleted safely — 11 commits on no remote.
 
 ## Mistakes worth not repeating
 
-- **I offered a file list that would have deleted the checker.** The first
-  retirement option I put up included `SHIMMED-HOOKS`, `FLEET`, `OPT-OUTS` and
-  `shim-template.sh` — all four read by `check-shims.sh`, merged hours earlier in
-  #94. Caught before anything was deleted, by reading the checker instead of
-  trusting the category "the subsystem".
-- **Two reviewers made opposite claims about the same function and I nearly took
-  the wrong one.** Gemini's finding arrived first and read as plausible. Reading
-  `check_artifact()` was eight seconds of work and reversed it.
-- **A category is not a subject.** "The publish/shim/check subsystem" was one
-  phrase covering two things with different fates, and it was mine — from the
-  previous handoff. The phrase survived four sessions before anyone asked which
-  half had a reader.
+- **I spent the session's first half on archaeology the user did not ask for.**
+  The task was "remove the residue"; I produced a reconciled 44k README. The
+  three broken repositories — the thing actually blocking work — were found only
+  after the user said so, in a check that took ninety seconds.
+- **A symlink loop is invisible to every check we have.** `[ -L ]` is true,
+  `ls -l` looks right, git shows a clean tree. Only reading the file finds it,
+  and no sweep reads instruction files. Two repositories ran that way for a day.
