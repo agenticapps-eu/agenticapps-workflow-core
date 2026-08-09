@@ -5,9 +5,16 @@
 #
 # This file is a SHIM, not an implementation. Editing it changes nothing about
 # what the hook enforces; the implementation lives in agenticapps-workflow-core
-# at reference-implementations/project-hooks/@@HOOK@@.sh and is published to
-# ~/.agenticapps/bin/ by install-project-hooks.sh. See that directory's
-# README.md for the contract this file implements.
+# and is published to ~/.agenticapps/bin/ by install-shared-artifact.sh, which
+# publishes openspec-change-gate.sh, run-plan-review.sh, reviewer-cli.sh and
+# init-project.sh. See reference-implementations/project-hooks/README.md for the
+# contract this file implements.
+#
+# A SHIM WHOSE HOOK IS NOT IN THAT SET RESOLVES NOTHING. The attesting installer
+# that published a second, project-hook set was retired with its last artifact;
+# only the four above can be resolved at ~/.agenticapps/bin/ now. That is the
+# condition SHIMMED-HOOKS' header records, and the reason an entry there is only
+# honest when a surviving publisher owns its implementation.
 #
 # Profile: published-resolution (design Decision 17). It resolves a PUBLISHED
 # copy, so the two-candidate resolution order and byte-identity across every

@@ -8,6 +8,16 @@
 # override variable in the environment, and an exit code out. Nothing here
 # reaches into its internals.
 #
+# `database-sentinel` APPEARS THROUGHOUT AS A FIXTURE NAME, AND THE HOOK IT NAMES
+# WAS RETIRED ON 2026-08-09. That is deliberate rather than left over. The
+# contract under test is the template's, which is hook-agnostic: every case here
+# renders the template for some name and drives it, and the implementations it
+# resolves are written by the case itself into a temp bin. None of it reads
+# reference-implementations/project-hooks/database-sentinel.sh, which is why the
+# suite passed unchanged through that file's deletion. Kept because a hook with
+# no implementation anywhere is now the realistic subject for the
+# unresolvable-and-fail-open cases, which are most of this file.
+#
 # Usage: tools/project-hook-shim.test.sh
 # Exit 0 = all pass, 1 = at least one failure.
 

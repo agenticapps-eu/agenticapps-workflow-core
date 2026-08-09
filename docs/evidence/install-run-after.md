@@ -3,6 +3,12 @@
 Task 8.4. The before state is `install-check-before.md`; `./install.sh --check`
 matched it byte for byte immediately before this run.
 
+> **This is a dated record and parts of it no longer describe the installer.**
+> The project-hook publisher, its `ARTIFACTS` declaration and the `manifest.tsv`
+> this run wrote were all retired on 2026-08-09, so §8.6 below attests a file
+> that no longer exists and a hook that is no longer published. Kept unedited:
+> an evidence file that is corrected to match the present stops being evidence.
+
 `./install.sh --host auto --replace-unrecognised`
 
 ## What it did

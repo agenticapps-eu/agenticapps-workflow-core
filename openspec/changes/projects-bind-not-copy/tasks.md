@@ -1,3 +1,47 @@
+## CLOSED 2026-08-09 — every remaining task is obsolete by measurement
+
+This change is closed with tasks unticked. They are **not done**; they no longer
+have a subject. Ticking them would be a lie and executing them would be a week
+spent building instruments for conditions that do not exist. The measurement,
+taken 2026-08-09 across all five repositories named in `FLEET`:
+
+```
+agents-task-viewer  skillcopy=-  hooks=[]  settings=[]
+callbot             skillcopy=-  hooks=[]  settings=[]
+cparx               skillcopy=-  hooks=[]  settings=[]
+fbc-platform        skillcopy=-  hooks=[]  settings=[]
+fx-signal-agent     skillcopy=-  hooks=[]  settings=[]
+```
+
+No repository carries a copy of `agentic-apps-workflow`. None binds any hook.
+The sweep this change existed to perform has completed. Also verified gone from
+disk: the `setup-gstack-gsd-superpowers-workflow.md` command (task 6.4b), every
+`.planning/` directory (6.2), every `SKILL.md.pre-0034` (1.4), and the
+`agenticapps-dashboard-add-agent-board` worktree (3.12).
+
+Where each group went:
+
+| Group | Disposition |
+|---|---|
+| 2.1–2.6 — `check-project-skills.sh` | **AGE-508**, Backlog. Sound tool, no subject |
+| 2b.1–2b.9 — the hooks reverse pass | **AGE-509**, Backlog. Real defect, no subject |
+| 3.8, 3.9, 3.11, 3.12 — the sweep PRs | Already performed |
+| 1.2, 1.4, 1.7 — re-measure and rewrite the proposal | Prose about a decision already executed |
+| 4.1–4.3 — GREEN for group 2 | Depends on a tool that should not be built now |
+| 5.2–5.5 — verify the above | Nothing left to verify. 5.1 was measured on two hosts |
+| 6.1–6.4 — "what this change does not do" | Already the record; nothing to execute |
+
+3.9c (a host Bash deny rule for destructive SQL) is the one item with residual
+value and it is host-configuration, explicitly not core's to ship. It is carried
+in the handoff's open questions instead, with the ADR that owes it.
+
+**Filed separately, and not from this list:** AGE-510 — nothing detects an
+unreadable instruction file. Two of four working repositories ran a full day
+with a committed `AGENTS.md -> CLAUDE.md -> AGENTS.md` loop, invisible to every
+check in the fleet. That is the gap this change should have found and did not.
+
+---
+
 ## 1. Measure before deleting
 
 The design rests on a claim about loader precedence that has not been observed
@@ -192,6 +236,14 @@ sets with the removability rule: once retired `agenticapps-dashboard` leaves
       references across `project-hook-shim.test.sh` and `install.test.sh` plus
       the whole of `project-hooks.test.sh` are about this one artifact. Decide
       whether the subsystem is retired with it before deleting the file.
+      **DECIDED 2026-08-09: the publish half is retired, the bind half is kept.**
+      Only one of the two lost its subject. `check-shims.sh` reads
+      `SHIMMED-HOOKS`, `FLEET`, `OPT-OUTS` and `shim-template.sh` and exits 65
+      without the template, so the bind half is driven by live code that landed
+      on `main` in PR #94; `install-project-hooks.sh` with an empty `ARTIFACTS`
+      dies at line 122 and is called only by `install.sh:25`. The argument and
+      the three manifest measurements are in `design.md` under "The publisher is
+      retired and the checker is kept". Carried out by group 3.13 below.
 - [ ] 3.9c Record the reassigned protection in the operator's host permission
       configuration — a Bash deny rule for `DROP TABLE`, `TRUNCATE TABLE` and
       `DELETE` without `WHERE`. This is host-specific by nature and therefore
@@ -254,8 +306,21 @@ sets with the removability rule: once retired `agenticapps-dashboard` leaves
 
 ## 5. Verify on the machine, not in the tests
 
-- [ ] 5.1 Open a session in a swept repository and confirm the workflow skill
+- [x] 5.1 Open a session in a swept repository and confirm the workflow skill
       loads and resolves into core — the same measurement as 1.1, after
+      **Measured 2026-08-09 in a throwaway worktree of `cparx`, on two hosts.**
+      codex 0.145.0 and omp 17.2.9, same prompt, no mention of the workflow in
+      it. Both activated `agentic-apps-workflow` unprompted, emitted the
+      commitment ritual, routed the task as small and named the gates due; omp
+      identified it as v4.0.0, which is core's copy and not the deleted v3.2.0
+      project copy. The worktree inherited `agenticapps.workflow.enrolled` and
+      `core.hooksPath` from the parent, so the floor was live in it too.
+      **The gap this surfaced, which no test covers**: codex reported the four
+      `superpowers:*` gate skills as not installed in its session. It handled
+      that exactly as the skill requires — said so and continued — so the
+      behaviour is correct and the coverage is not: on codex the TDD,
+      verification, branch-close and `cso` gates are unenforced discipline
+      rather than resolvable skills
 - [ ] 5.2 Confirm no repository lost a capability: the `/opsx:*` commands still
       work in a swept repository, which is the concrete form of "the `openspec-*`
       skills were left alone"
@@ -299,3 +364,99 @@ sets with the removability rule: once retired `agenticapps-dashboard` leaves
       the skill copies and not swept by this change, because a command is neither
       a skill nor a hook and widening the check to "anything stale under
       `.claude/`" is a different rule needing its own argument
+
+## 3.13 Retire the project-hook publisher
+
+Decided on 3.9b, argued in `design.md`. **RED before GREEN applies to a deletion
+too**: each assertion below is written and observed failing against today's tree
+before the file it names is removed, because a test written after the deletion
+proves only that it can describe the present.
+
+- [x] 3.13a **Write the RED assertions first, and watch them fail.**
+      **Observed 2026-08-09: 56 passed, 3 failed** — the suite's own baseline
+      immediately before was 56 passed, 0 failed, so all three new assertions
+      and only those three went RED.
+      **Corrected after round-2 review — one of the three could never have gone
+      RED.** The original task claimed `install.sh --check` reports a
+      project-hook set today. It does not: `--check` calls `check_artifact` for
+      the four shared artifacts only and prints nothing about project hooks,
+      verified by running it. An assertion that is already true proves nothing
+      about a deletion. The two that genuinely fail against today's tree, plus
+      one replacement:
+      - `install.sh` carries no `PROJHOOKS` delegation — fails today, line 25
+      - a run of `./install.sh` writes no manifest under `$HOME/.agenticapps/` —
+        fails today, the run at 22:58 on 2026-08-08 wrote two rows
+      - `./install.sh` prints no *"published and attested the project-hook set"*
+        line — fails today; this is the observable `--check` was wrongly assumed
+        to carry, and it lives in the install path rather than the check path
+      Add them to `tools/install.test.sh` beside the cases they replace, run the
+      suite, and record the failure count here before deleting anything
+- [x] 3.13b Delete `reference-implementations/project-hooks/database-sentinel.sh`
+      and `reference-implementations/project-hooks/ARTIFACTS`. **3.9a's file
+      half, unblocked** — the declaration half was done 2026-08-08
+- [x] 3.13c Delete `reference-implementations/shared-install/install-project-hooks.sh`
+      and `tools/project-hooks.test.sh`. The suite is entirely about
+      `database-sentinel`; it is deleted rather than narrowed because narrowing
+      it leaves a file whose every case is about an absent artifact
+- [x] 3.13d Unwire `install.sh`: remove the `PROJHOOKS` variable (line 25), the
+      delegation that publishes and attests the project-hook set, and whatever
+      `--check` prints about it. The four shared artifacts keep publishing
+      through `install-shared-artifact.sh`, which is a different helper and is
+      not touched
+- [x] 3.13e Remove the project-hook cases from `tools/install.test.sh` — the 24
+      references counted on 3.9b, including the `stub_helper` lines for the
+      deleted installer and the manifest assertions at 567-571. **Read each one
+      before deleting it**: a case that stubs the installer while asserting
+      something else entirely is a case about `install.sh`, and it stays with its
+      stub removed rather than going with the subsystem
+- [x] 3.13f Confirm the bind half still passes: `tools/check-shims.test.sh`,
+      `tools/project-hook-shim.test.sh`, `tools/bind-openspec-tools.test.sh`.
+      **This is the assertion that the split was drawn in the right place.** Any
+      failure here means a file was deleted that the checker reads, and the
+      deletion is wrong rather than the test.
+      **"Untouched" was the wrong word and round-2 review caught why**: the bind
+      half is not inert, it *documents the publisher*. `shim-template.sh:8-9`
+      tells the reader an implementation "is published to `~/.agenticapps/bin/`
+      by `install-project-hooks.sh`", so keeping it verbatim leaves the
+      checker's own authority describing an installer that no longer exists.
+      Rewrite those lines to name `install-shared-artifact.sh` and the four
+      artifacts it publishes — and bump the template's `# shim-contract:` marker,
+      because changing the template's bytes is exactly what that marker exists
+      to propagate
+- [x] 3.13k **Add the invariant that keeps the kept half honest.** With no
+      publisher, a future non-empty `SHIMMED-HOOKS` entry would have the checker
+      demanding a binding whose implementation nothing can install. Record in the
+      declaration's header that an active entry requires either a restored
+      publisher or a named surviving one that owns the implementation — the
+      condition `openspec-change-gate` already satisfies through
+      `install-shared-artifact.sh`, and the reason it is the one hook the reverse
+      pass can still resolve
+- [x] 3.13g Delete the machine copies: `~/.agenticapps/bin/database-sentinel.sh`
+      and `~/.agenticapps/manifest.tsv`. Not a source change, so it is recorded
+      here rather than inferred from the diff — and it is the step that makes the
+      retirement true on the only machine that has this workflow. Verify
+      afterwards that `./install.sh` and `./install.sh --check` both still exit 0
+      with the manifest absent.
+      **State the search boundary rather than implying a global one.** The claim
+      "nothing reads `manifest.tsv`" was established by searching *this
+      repository*, where the only reader is `tools/install.test.sh`. Before
+      deleting, grep `~/Sourcecode` and `~/.agenticapps` for readers outside it,
+      and record what was searched. If an external reader exists, this task
+      changes rather than proceeds. Copy the file to the change directory as a
+      record before removing it — it is 248 bytes and it is the only evidence of
+      what the machine had installed
+- [x] 3.13j **Sweep the retired names and assert none survives in live source.**
+      `rg` for `install-project-hooks`, `PROJHOOKS`, `manifest.tsv`,
+      `database-sentinel` and the project-hook `ARTIFACTS` across the working
+      tree, allowlisting `openspec/changes/**` and `adrs/**`, which record
+      history and are supposed to keep naming them. Round-2 review found the
+      README was named on 3.13h while `shim-template.sh` was not; a name-based
+      sweep is what stops the next one being missed the same way
+- [x] 3.13h Reconcile `reference-implementations/project-hooks/README.md`, 44k,
+      which documents the publisher and the currency rules at lines 546 and 555.
+      **Cut what described the publish half; keep what describes the shim
+      contract**, which is still the authority `check-shims.sh` compares against
+- [x] 3.13i Re-run `openspec validate --all` and confirm the delta's eight
+      REMOVED and two MODIFIED requirements match what was actually deleted. A
+      requirement removed in the delta whose code survives, or code deleted with
+      no delta entry, is the failure this task exists to catch

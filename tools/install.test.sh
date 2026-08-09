@@ -529,7 +529,6 @@ echo "install.sh — task 2.1: the four workflow executables go through the arbi
 new_case "each workflow executable is published through install-shared-artifact.sh with its own marker key"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install
 missing=""
@@ -546,48 +545,64 @@ if [ "$RUN_RC" -ne 0 ]; then
   bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
 elif [ -n "$missing" ]; then
   bad "$CASE_NAME" "not published through the helper with key:$missing" "calls: $(calls | tr '\n' ';')"
-elif calls | grep -q '^SHARED .*database-sentinel'; then
-  bad "$CASE_NAME" "database-sentinel went through the arbitrating helper, which does not attest"
 else
   ok "$CASE_NAME"
 fi
 finish_case
 
 echo
-echo "install.sh — task 2.2: the project-hook set goes through the attesting installer"
-new_case "project hooks are published through install-project-hooks.sh and the manifest is written"
+echo "install.sh — task 3.13a: the project-hook publisher is retired"
+# RED BEFORE GREEN APPLIES TO A DELETION TOO. These three are written and
+# observed failing against the tree that still carries the publisher, because a
+# test written after the deletion proves only that it can describe the present.
+#
+# They replaced the task 2.2 case and the code-review M1 pair, which asserted
+# the opposite and were deleted at 3.13e. They were added first and observed
+# failing against the tree that still had all three — 56 passed, 3 failed, the
+# suite's own baseline immediately before being 56 passed, 0 failed.
+#
+# The task originally named a fourth: that `--check` reports no project-hook
+# set. Round-2 review killed it. `--check` calls check_artifact for the four
+# shared artifacts and prints nothing about project hooks today, so the
+# assertion was already true and could never have gone RED. The observable it
+# was reaching for lives in the install path, and it is the third case here.
+if [ ! -f "$INSTALL" ]; then
+  bad "install.sh carries no PROJHOOKS delegation" "install.sh does not exist"
+elif grep -q 'PROJHOOKS\|install-project-hooks' "$INSTALL"; then
+  bad "install.sh carries no PROJHOOKS delegation" \
+      "$(grep -n 'PROJHOOKS\|install-project-hooks' "$INSTALL" | head -3)" \
+      "the front end still resolves and calls the retired attesting installer"
+else
+  ok "install.sh carries no PROJHOOKS delegation"
+fi
+
+new_case "a full run writes no manifest under ~/.agenticapps"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
-# install-project-hooks.sh is left REAL here: the assertion is about the
-# attestation it writes, and a stub cannot produce one.
+# Nothing standing in for the publisher: the assertion is that no code path
+# writes an attestation, and a stub would satisfy it by doing nothing at all.
 run_install
-if [ "$RUN_RC" -ne 0 ]; then
-  bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
-elif [ ! -f "$CASE_HOME/.agenticapps/manifest.tsv" ]; then
-  bad "$CASE_NAME" "no manifest.tsv — the attestation project-hook-binding requires is absent"
-elif ! grep -q 'database-sentinel\.sh' "$CASE_HOME/.agenticapps/manifest.tsv"; then
-  bad "$CASE_NAME" "manifest.tsv carries no row for the declared hook" \
-                   "$(cat "$CASE_HOME/.agenticapps/manifest.tsv" 2>/dev/null | head -3)"
+if ! require_ran; then :
+elif [ -e "$CASE_HOME/.agenticapps/manifest.tsv" ]; then
+  bad "$CASE_NAME" "the run wrote an attestation manifest" \
+                   "$(head -3 "$CASE_HOME/.agenticapps/manifest.tsv" 2>/dev/null)" \
+                   "the manifest is retired with its writer — nothing reads it"
 else
   ok "$CASE_NAME"
 fi
 finish_case
 
-echo
-echo "install.sh — task 2.3: a declared hook missing from the source fails the step"
-new_case "a declared project hook missing from the source is reported, not silently skipped"
+new_case "a full run does not claim to have published and attested a project-hook set"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
-# ARTIFACTS still declares database-sentinel; the implementation is removed. The
-# declared set is what makes this detectable — a glob would just publish less.
-rm -f "$CASE_CORE/reference-implementations/project-hooks/database-sentinel.sh"
+stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh OPSXBIND 0
 run_install
-if [ "$RUN_RC" -eq 0 ]; then
-  bad "$CASE_NAME" "expected non-zero — a declared hook could not be published — got 0"
-elif ! printf '%s' "$RUN_OUT" | grep -qi 'database-sentinel'; then
-  bad "$CASE_NAME" "the failure does not name the missing hook" "$(printf '%s' "$RUN_OUT" | head -3)"
+if ! require_ran; then :
+elif printf '%s' "$RUN_OUT" | grep -qi 'project.hook'; then
+  bad "$CASE_NAME" "the run still reports on a project-hook set" \
+                   "$(printf '%s' "$RUN_OUT" | grep -i 'project.hook' | head -3)"
 else
   ok "$CASE_NAME"
 fi
@@ -601,7 +616,6 @@ new_core
 # declared in its own contract to be success. Classifying it as skipped would
 # report failure on a machine that is already in the intended state.
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 3
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install
 if [ "$RUN_RC" -ne 0 ]; then
@@ -619,11 +633,11 @@ echo "install.sh — task 2.5: what is published is executable"
 new_case "every published artifact is executable at its destination"
 new_core
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
-# Both publishers left REAL — the executable bit is a property of what actually
+# The publisher is left REAL — the executable bit is a property of what actually
 # lands, and a stub lands nothing.
 run_install
 notexec=""
-for a in openspec-change-gate.sh run-plan-review.sh reviewer-cli.sh database-sentinel.sh init-project.sh; do
+for a in openspec-change-gate.sh run-plan-review.sh reviewer-cli.sh init-project.sh; do
   d="$CASE_HOME/.agenticapps/bin/$a"
   [ -f "$d" ] || { notexec="$notexec $a(absent)"; continue; }
   [ -x "$d" ] || notexec="$notexec $a"
@@ -642,7 +656,6 @@ echo "install.sh — task 2.6: the floor is bound, and a foreign binding is refu
 new_case "the machine-level floor is bound through bind-global-floor.sh"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install
 if [ "$RUN_RC" -ne 0 ]; then
@@ -666,7 +679,6 @@ finish_case
 new_case "install.sh no longer installs a per-repository hook"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 stub_helper tools/install-core-git-hooks.sh                                     GITHOOK 0
 run_install
@@ -691,7 +703,6 @@ finish_case
 new_case "a foreign global core.hooksPath is refused rather than rebound"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 foreign_dir="$CASE_DIR/somebody-elses-hooks"
 mkdir -p "$foreign_dir"
 GIT_CONFIG_GLOBAL="$CASE_HOME/.gitconfig" GIT_CONFIG_SYSTEM=/dev/null \
@@ -723,7 +734,6 @@ bind_case() {
   new_case "$1"
   new_core
   stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-  stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
   stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
   CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
   mkdir -p "$CLAUDE_SKILLS"
@@ -1141,7 +1151,6 @@ echo "install.sh — fresh-clone-needs-nothing task 9: the openspec tooling is b
 new_case "the binder is delegated to, once, naming every requested host"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND 0
 run_install --host claude --host codex
@@ -1164,7 +1173,6 @@ finish_case
 new_case "a binder failure is reported and does not fail the whole install"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 # 1 is what the binder returns when it could not generate, or when a name
 # collided. Neither means the workflow failed to install.
@@ -1218,7 +1226,9 @@ new_core
 gate_ver="$(checkout_version gate-version "$GATE_SRC")"
 # The marker says current. The bytes do not. This is the case a
 # marker-comparison implementation passes wrongly, and it is the reason
-# project-hook-binding judges currency against an authority checkout.
+# workflow-installation judges currency against an authority checkout. The
+# requirement was project-hook-binding's until the publisher retired; its
+# subject here is check_artifact, which survives, so it moved rather than went.
 publish_fake openspec-change-gate.sh gate-version "$gate_ver" 'echo "somebody edited me"'
 run_install --check
 if ! require_ran; then :
@@ -1293,7 +1303,6 @@ echo "install.sh — task 5.7: a full run twice leaves the same machine"
 new_case "two identical runs leave identical state and the second creates no new bindings"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 run_install --host claude --host pi
 first_state="$(case_state)"
@@ -1323,7 +1332,6 @@ new_core
 mkdir -p "$CASE_HOME/.claude/skills"
 CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"; printf 'first\n'  > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
 run_install --host claude --replace-unrecognised
@@ -1354,7 +1362,6 @@ new_case "a backup of a removed skill is written outside the skill directory"
 new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 mkdir -p "$CLAUDE_SKILLS/agenticapps-workflow/skill"
 printf 'name: agentic-apps-workflow\n' > "$CLAUDE_SKILLS/agenticapps-workflow/skill/SKILL.md"
@@ -1382,7 +1389,6 @@ new_case "a preserved copy carries the mode of what it replaced"
 new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 printf 'notes\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"; chmod 640 "$CLAUDE_SKILLS/agentic-apps-workflow"
 run_install --host claude --replace-unrecognised
@@ -1403,7 +1409,6 @@ new_case "when the preserved copy cannot be written, the target is left unmodifi
 new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 printf 'irreplaceable\n' > "$CLAUDE_SKILLS/agentic-apps-workflow"
 # The directory the backup would be written into is read-only, so preserving is
@@ -1427,7 +1432,6 @@ new_case "running the stated restore command verbatim brings back what was repla
 new_core
 mkdir -p "$CASE_HOME/.claude/skills"; CLAUDE_SKILLS="$CASE_HOME/.claude/skills"
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 mkdir -p "$CLAUDE_SKILLS/agentic-apps-workflow"
 printf 'the thing to get back\n' > "$CLAUDE_SKILLS/agentic-apps-workflow/SKILL.md"
@@ -1455,7 +1459,6 @@ echo "install.sh — task 8.8: what the round-five code review found"
 new_case "a bare --host is a usage error, not a shell error"
 new_core
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED 0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS  0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh FLOORBIND 0
 # `set -u` is on. Before the guard, a trailing `--host` expanded an unset $2 and
 # aborted with the shell's own message and the shell's own status — the one bad
@@ -1507,52 +1510,13 @@ else
 fi
 finish_case
 
-echo
-echo "install.sh — code review M1: a step reports its OWN outcome"
-# The success line was `[ -n "$out" ] && [ "$SKIPPED" = 0 ] && say ...`, so it
-# reported the project-hook set only when NOTHING ELSE in the run had skipped.
-# A run whose artifact publishing failed and whose project hooks published and
-# attested cleanly said nothing about the second — the operator reading the
-# output cannot tell "it did not happen" from "something unrelated failed".
-# It also required the helper to be chatty, which is a fact about the helper's
-# stdout rather than about whether the step succeeded.
-new_case "the project-hook set is reported published even when an earlier step skipped"
-new_core
-stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    1
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     0
-stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
-stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
-run_install
-if ! require_ran; then :
-elif ! printf '%s' "$RUN_OUT" | grep -qi 'published and attested'; then
-  bad "$CASE_NAME" "the project hooks published, and the run did not say so" \
-                   "$(printf '%s' "$RUN_OUT" | head -8)"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
-
-new_case "and it is NOT reported when the project-hook installer itself fails"
-new_core
-stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     1
-stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
-stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
-run_install
-if ! require_ran; then :
-# Anchored, because the SKIP line contains the success line's words as a
-# substring — "SKIPPED: project hooks were not published and attested". An
-# unanchored match called the correct refusal a false claim.
-elif printf '%s' "$RUN_OUT" | grep -q '^  published and attested'; then
-  bad "$CASE_NAME" "a failed project-hook install was reported as attested" \
-                   "$(printf '%s' "$RUN_OUT" | grep -i attested | head -2)"
-elif ! printf '%s' "$RUN_OUT" | grep -qi 'SKIPPED.*project hooks'; then
-  bad "$CASE_NAME" "the failure was not reported as a skipped step" \
-                   "$(printf '%s' "$RUN_OUT" | head -8)"
-else
-  ok "$CASE_NAME"
-fi
-finish_case
+# Code review M1 — "a step reports its OWN outcome" — lived here as a pair of
+# cases, and both went with the publisher at 3.13e. The rule they encoded was
+# that a step's report must not be conditioned on `$SKIPPED`, and the
+# project-hook delegation was its only subject: what publish() reports now is
+# one line per artifact from the case statement, which consults nothing outside
+# the call it is reporting on. A case whose subject is gone proves only that it
+# can describe the present.
 
 echo
 echo "install.sh — code review M3: --host auto ADDS to the named set, never replaces it"
@@ -1569,7 +1533,6 @@ host_exec claude                 # detectable
 # be undetectable has to be made so explicitly.
 hide_command codex
 stub_helper reference-implementations/shared-install/install-shared-artifact.sh SHARED    0
-stub_helper reference-implementations/shared-install/install-project-hooks.sh   HOOKS     0
 stub_helper reference-implementations/global-floor/bind-global-floor.sh         FLOORBIND 0
 stub_helper reference-implementations/openspec-tools/bind-openspec-tools.sh     OPSXBIND  0
 run_install --host auto --host codex

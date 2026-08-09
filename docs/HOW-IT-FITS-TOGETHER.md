@@ -40,9 +40,16 @@ Most confusion here comes from mixing these up.
 in it is "installed"; it is the master copy.
 
 **B — the shared bin**, `~/.agenticapps/bin/`. Real copied files published from
-A: `openspec-change-gate.sh`, `run-plan-review.sh`, `reviewer-cli.sh`,
-`database-sentinel.sh`, and `manifest.tsv` — the attestation recording what is
-published at what version.
+A: `openspec-change-gate.sh`, `run-plan-review.sh`, `reviewer-cli.sh` and
+`init-project.sh`. Those four are the whole set, and every one of them is
+published by `install-shared-artifact.sh`.
+
+A second, project-hook set used to be published beside them by its own attesting
+installer, which also wrote `manifest.tsv` recording what was published at what
+version. Both were retired on 2026-08-09 with the last artifact they carried.
+Nothing read the manifest but its own test suite, and the version arbitration it
+was assumed to underwrite lives in `install.sh`'s `check_artifact`, which
+compares bytes against the checkout and never consulted it.
 
 **C — the host directories**, `~/.claude/skills` and friends. Symlinks into A.
 Never copies.
@@ -162,9 +169,10 @@ directory, and the honest basis for that trust is that you can read it.
 
 A full run, in order:
 
-1. Publish the three executables to `~/.agenticapps/bin/` through
-   `install-shared-artifact.sh`, then the project-hook set through
-   `install-project-hooks.sh` (which also writes the attesting `manifest.tsv`).
+1. Publish the four executables to `~/.agenticapps/bin/` through
+   `install-shared-artifact.sh`. That is the whole publishing step — the second
+   delegation that published a project-hook set and attested it was retired on
+   2026-08-09.
 2. Install core's own git pre-commit hook.
 3. Per host directory: remove legacy copied skill directories → sweep archived
    symlinks (rebind or remove) → bind core's two skills.

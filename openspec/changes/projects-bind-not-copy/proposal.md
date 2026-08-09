@@ -204,6 +204,49 @@ two names, and splitting them would leave the second one to be rediscovered.
   `project-skill-binding` rather than leaving the reader to infer that projects
   were considered.
 
+### Retired Capability surface
+
+`project-hook-binding` also **loses eight requirements and keeps nine — but only
+six of the eight are retired.** The other two are **relocated** to
+`workflow-installation`, which is a correction: an earlier revision of this
+section retired all eight, and a round-2 reviewer showed that live code satisfies
+two of them. "Currency is judged against an authority checkout" is what
+`install.sh`'s `check_artifact()` does, `cmp` first and version second, and "The
+implementation version marker is compared, not merely carried" is what
+`install-shared-artifact.sh` arbitrates on when it refuses a downgrade. Their
+subject stopped being a project hook; their behaviour never stopped. A
+requirement whose implementation still runs is moved, not deleted, and the
+distinction matters because deleting it would have quietly unspecified working
+code. This was not anticipated when the change was written; task
+3.9b found it while emptying `SHIMMED-HOOKS` and left it as a decision rather
+than taking it silently. The decision, 2026-08-09, is to **retire the publish
+half and keep the bind half.**
+
+The two halves are separable and only one lost its subject:
+
+| Half | State | Files |
+|---|---|---|
+| publish | no subject — `ARTIFACTS` names only `database-sentinel` | `database-sentinel.sh`, `ARTIFACTS`, `install-project-hooks.sh`, `tools/project-hooks.test.sh`, `install.sh`'s `PROJHOOKS` delegation, the project-hook cases in `tools/install.test.sh` |
+| bind / check | live instrument | `SHIMMED-HOOKS` (empty by decision), `FLEET`, `OPT-OUTS`, `shim-template.sh`, `openspec-change-gate.shim.sh`, `tools/check-shims.sh` and its suite, `tools/project-hook-shim.test.sh` |
+
+Deleting the bind half as well was considered and rejected: `check-shims.sh`
+reads four of those files and exits 65 without the template, and it landed on
+`main` in PR #94 hours before this decision. Shipping a requirement and deleting
+it in a sibling change is the ship-then-delete shape, and the empty declaration
+was chosen as an end state on 2026-08-08 rather than as a way station.
+
+The six genuinely retired are the two provisioning requirements — provisioning
+as a triple, provisioning checked per machine, both implemented by a
+`provisioning-check.sh` deleted on 2026-08-05 — and the four that describe
+`database-sentinel` itself: its protections, its divergent copies, its
+unreachable gate, and its host registration. Every one of them names something
+this change deletes or something already gone.
+
+Two more are modified rather than removed. The authority requirement keeps its
+one-authoritative-file claim and loses the manifest apparatus; the scaffolder
+requirement keeps its obligation and loses a scenario that promised newly
+scaffolded projects "the shims", of which there are now none.
+
 ## Impact
 
 - **Eight repositories across two families**, four of them in `factiv`
@@ -216,9 +259,15 @@ two names, and splitting them would leave the second one to be rediscovered.
   discover halfway through.
 - **`tools/`** gains a check; the `FLEET` declaration already lists seven of the
   repositories and is the natural place to resolve them from.
-- **No change to `install.sh`.** Its budget, its modes and its tests are
-  untouched, which is the main reason this is a separate change and not an
-  amendment to a spec archived yesterday.
+- **`install.sh` DOES change, and this bullet used to say it did not.** The
+  original text — "no change to `install.sh`; its budget, its modes and its
+  tests are untouched" — was true when written and was falsified by the
+  retirement decision folded in on 2026-08-09, which unwires the installer's
+  delegation to the project-hook publisher and deletes the project-hook cases
+  from its suite. A round-2 reviewer found the contradiction between this bullet
+  and tasks 3.13d–e. What remains true: the budget and the modes are unchanged,
+  and the four shared artifacts publish exactly as before through
+  `install-shared-artifact.sh`, which this change does not touch.
 - **This change SHALL NOT land before `one-enforcement-floor`.** Its own
   measurement is the argument: `cparx` has no `pre-commit` and no
   `core.hooksPath`, so the `PreToolUse` entry this change deletes is the *only*

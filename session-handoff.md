@@ -1,144 +1,94 @@
-# Session Handoff — 2026-08-08 (twenty-fourth session)
+# Session Handoff — 2026-08-09 (twenty-sixth session)
 
-The floor is bound, the fleet's per-project copies are gone from all five live
-repositories, and `projects-bind-not-copy` has its core-side half. The session
-began by trying to run a migration, found the tool could not touch a single
-repository it was built for, and ended up doing the thing the migration was for.
+Group 3.13 is executed, reviewed against the code rather than the plan, pushed
+and on PR #95. The four working repositories now resolve an instruction file on
+every host — three of them did not when the session started.
 
-## The machine now
+## Accomplished
 
-| | |
-|---|---|
-| `core.hooksPath` (global) | `~/.agenticapps/git-hooks` — hook 1.1.0 |
-| enrolled + verified gating | `agents-task-viewer`, `callbot`, `cparx`, `fbc-platform`, `fx-signal-agent`, core |
-| core | local `core.hooksPath` → own `.git/hooks`, `agenticapps.hooksbinding=declared` (ADR-0028) |
-| `SHIMMED-HOOKS` | **empty** — no project binds a fleet hook |
-
-Verified by probing with a stand-in gate: all six invoke it and propagate its
-exit; an unenrolled repository does not. That pair is the only test that
-separates "gated" from "quiet" — a bare exit 0 looks the same for gated,
-unenrolled and failing-open. The floor's `NOTE` output is visible on every real
-commit made tonight.
-
-Undo the bind: `git config --global --unset core.hooksPath`. **Valid only while
-no hook has been removed** — after removal it takes away the only surface the
-migrated repositories have.
-
-## Open PRs
-
-| Repo | PR | What |
-|---|---|---|
-| core | **#94** | `projects-bind-not-copy` core half — empty declaration + the vacuous-truth fix, 9 new cases |
-| core | **#93** | `init-project.sh` enrols — task 2.8b, 50 → 55 cases |
-| cparx | **#130** | vendored copies dropped + two instruction files collapsed, 433 → 282 lines |
-| fx-signal-agent | **#132** | vendored copies dropped, files collapsed |
-| fbc-platform | **#143** | vendored copies dropped + husky removed |
-| callbot | #101 | commits ride the existing cleanup branch |
-| agents-task-viewer | #19 | same |
-
-Core PR **#92 is closed** — an adoption predicate built for a one-time act on
-one machine. Its one real finding is under "start here".
+- **Group 3.13 complete, RED first.** Three assertions written and observed
+  failing (56 passed / 3 failed against a 56/0 baseline) before a single
+  deletion; 55/0 after. Deleted `database-sentinel.sh`, `ARTIFACTS`,
+  `install-project-hooks.sh`, `tools/project-hooks.test.sh`, the `PROJHOOKS`
+  wiring, 4 cases and 16 stub lines. On the machine:
+  `~/.agenticapps/bin/database-sentinel.sh` and `manifest.tsv`.
+- **The bind half is green and untouched** — check-shims 9/0, project-hook-shim
+  64/0, bind-openspec-tools 42/0, init-project 55/0, `validate --all` 14/0.
+- **PR #95 open.** Not archived: 34 tasks in the change are still open.
+- **THREE OF FOUR REPOS HAD NO READABLE INSTRUCTION FILE.** `callbot` and
+  `fx-signal-agent` carried a committed symlink loop — `AGENTS.md → CLAUDE.md →
+  AGENTS.md`, ELOOP on both names, since 2026-08-08 21:46. `fbc-platform` had
+  `CLAUDE.md` only, so codex/pi/omp read nothing. All three fixed and committed.
+- **5.1 measured on two hosts.** codex and omp, in a throwaway `cparx` worktree,
+  both activated the skill unprompted and emitted the ritual. Worktree removed.
 
 ## Decisions
 
-- **`init-project.sh` writes a third thing: the enrolment key.** The other two
-  writes are inert without it. Five repositories had live OpenSpec changes and
-  none was enrolled, because the only thing that ever wrote the key was somebody
-  remembering a git command. `--local` never `--global`; warns rather than fails.
-- **`database-sentinel`'s loss is UNMITIGATED, and that is the recorded answer.**
-  Task 3.9d allowed two answers and forbade a third. The replacement was to be a
-  host deny rule; it is not expressible — the hook matched *content* anywhere in
-  a Bash command, deny rules match a command *prefix*. Nothing intercepts
-  `DROP TABLE` before it runs now, in any repository.
-- **An empty declaration is not an absent one.** `check-shims.sh` read both
-  through `sed 2>/dev/null`, so a deleted file and a clean fleet were the same
-  empty string and both printed the conformance sentence. Distinguished before
-  the read, since after it the information is gone.
-- **husky removed from fbc-platform.** Its local `core.hooksPath` was what kept
-  the floor out; unsetting it stops husky either way, and leaving husky
-  installed-but-unbound is an executable hook that never runs. `ci.yml:24-25`
-  already runs `pnpm lint` and `pnpm typecheck`, so what is lost is earliness.
-  Lockfile regenerated and `--frozen-lockfile` verified, which CI depends on.
-- **cparx's two instruction files reconciled by hand**, because `init-project.sh`
-  correctly refuses to choose between two rule-sets. `AGENTS.md` was a copy of
-  core **0.4.0** §11; `CLAUDE.md` restated the workflow and linked to deleted
-  files.
+- **The `# shim-contract:` marker is NOT bumped**, against task 3.13f. It argued
+  the bump propagates template bytes; `check-shims.sh:97` propagates them with
+  `cmp -s` and never reads the marker, and the spec names exactly four triggers —
+  resolution order, exit behaviour, identification, reporting. A header comment
+  is none. Bumping would have moved two sibling files for a contract that did
+  not change.
+- **`SHIMMED-HOOKS` carries the invariant** (3.13k): an entry requires a
+  surviving publisher owning the implementation. Otherwise the checker demands
+  shims that fail open against a path nothing writes.
+- **Docs reconciled, not rewritten.** What instructed is corrected; what recorded
+  is marked superseded and left. An evidence file edited to match the present
+  stops being evidence.
+- **`database-sentinel` the upstream skill keeps its name everywhere.** It is a
+  different thing from the retired hook and the sweep had to say so explicitly.
+- **The change is not archived.** Groups 2, 2b, 3.8 and most of 4–6 are open. It
+  was never one change; it is four.
+
+## Files modified
+
+- `install.sh` — PROJHOOKS variable, delegation and the attestation claim removed
+- `tools/install.test.sh` — 3.13a's three assertions in, 4 cases and 16 stubs out
+- `reference-implementations/project-hooks/{shim-template.sh,SHIMMED-HOOKS,FLEET,README.md}`
+- `docs/HOW-IT-FITS-TOGETHER.md`, `docs/evidence/install-run-after.md`
+- `tools/project-hook-shim.test.sh` — header notes why the fixture name survives
+- `openspec/changes/projects-bind-not-copy/{tasks.md,manifest.tsv.retired}`
+- `callbot`, `fx-signal-agent`, `fbc-platform` — instruction files (own commits)
 
 ## Next session: start here
 
-**1. `ARTIFACTS` empties too, and nobody decided that.** It declares *only*
-`database-sentinel`, so deleting the implementation leaves
-`install-project-hooks.sh` with nothing to publish and the whole publish / shim /
-check subsystem without a subject. 24 references across
-`project-hook-shim.test.sh` and `install.test.sh` plus all of
-`project-hooks.test.sh` are about that one artifact. **Decide whether the
-subsystem is retired with it before deleting the file** — recorded on task 3.9b.
-This is the largest open thread and it is a decision, not a cleanup.
+**Do not open a new group in `projects-bind-not-copy`.** Merge #95, then decide
+whether that change survives as one change at all — 34 open tasks across five
+groups, and the two that matter (2: `check-project-skills.sh`; 2b: the reverse
+pass) are independent tools that would each be a change in their own right. The
+first action is a split proposal, not more execution. Open question 1 from the
+previous handoff still stands and is now the deciding one: `check-shims.sh` has
+no reverse pass, so keeping the bind half is a bet on 2b landing.
 
-**2. Publish `init-project.sh` 1.1.0.** `~/.agenticapps/bin/` still holds 1.0.0,
-so anyone running the published copy gets an unenrolled project.
+## Open questions
 
-**3. Delete the transitional binder.** `reference-implementations/global-floor/`
-and `tools/global-floor-bind.test.sh` exist for a migration that has happened and
-cannot happen again here. Its one finding worth keeping first: **a repository
-refused at the preflight is never enrolled, so binding the floor silences the
-hook the refusal said it was keeping.** Reproduced with a failing test; the fix
-is on the closed branch `feat/run-the-global-floor-migration`.
-
-## Open
-
-1. **Nothing intercepts destructive SQL any more.** See the decision above. If
-   this matters, it needs a surface that covers more than one host — which is
-   the argument that removed the old one.
-2. **`.planning/` survives in cparx, fbc-platform and fx-signal-agent** (task
-   6.2), untouched tonight.
-3. **callbot and fx-signal-agent instruction files are collapsed but not
-   thinned.** Both ~24k and likely restate the workflow the way cparx's did.
-   Same editorial pass, one repo at a time.
-4. **`normalize-claude-md` is specified but has no implementation anywhere** —
-   `project-hook-binding/spec.md` names it as a live shim in seven places. It was
-   failing open on every edit in five repos until tonight. Planned in
-   `diagram-is-the-surface`, 0/46.
-5. Tasks 3.1 / 3b.1 / 3b.4 of `one-enforcement-floor` are satisfied in fact but
-   unticked, and 3.0a–3.0g describe a mechanism with no reason to exist.
-   Reconcile before archiving.
-6. `--check`'s half of 9.10 — now the only surface that would report a repository
-   the floor does not reach. 9.5, 9.7, 9.8, 9.9, 9.12 open.
-7. Stale `.clone/worktrees/agent-*` stubs in callbot and cparx; sandbox blocked
-   the delete.
-8. **2.6a**: `.planning/` was one name doing two jobs; the split is unrecorded.
-9. `fx-signal-agent` has no `packageManager` pin.
-10. Census inconsistencies CodeRabbit found on #90 — `proposal.md:71` ten/six vs
-    eleven/seven, `planning-removal-inventory.md` 48/6 vs 50/4, GSD tree counts
-    in `proposal.md:27` and `tasks.md:206`. MD040 fences in three docs.
-11. **Three credentials outlived their file** — `agenticapps-roadmap`'s `.env`
-    held `CLOUDFLARE_API_TOKEN`, `GH_CROSS_REPO_TOKEN`, `LINEAR_API_KEY`.
-12. `claude-workflow` cannot be deleted safely — 11 commits on no remote,
-    `plan/28-split-01` 9 ahead, 1 stash. It is the provenance of every hook
-    removed today and of the templates that seeded the forks.
-13. `fleet-carries-only-current` task 0.1 was gated on `projects-bind-not-copy`
-    being archived. It is now implemented but not archived — recheck.
+1. **codex resolves none of the four `superpowers:*` gate skills.** Measured this
+   session. It reports and continues, which is correct behaviour and no coverage
+   at all — on codex, TDD/verification/branch-close/`cso` are prose. Whether that
+   is acceptable is a decision nobody has made.
+2. **Nothing intercepts destructive SQL, on any host, in any repository.** An ADR
+   accepting the unmitigated loss, with an owner, is still owed (3.9d records the
+   decision; an ADR is its home).
+3. `check-shims.sh` has no reverse pass — tasks 2b.1–2b.5 all open.
+4. `normalize-claude-md` has no implementation anywhere while
+   `project-hook-binding/spec.md` names it as a live shim in seven places. The
+   phantom manifest row was its last trace and went with the manifest.
+5. `.planning/` survives in cparx, fbc-platform, fx-signal-agent (task 6.2).
+6. fbc-platform #143: root `deno.lock` still records `husky@9.1.7` and
+   `lint-staged@17.3.0`; CI runs `deno test --frozen`. Fix is
+   `deno install --frozen=false` on `chore/drop-vendored-workflow-copies`.
+7. Delete the transitional binder: `reference-implementations/global-floor/` and
+   `tools/global-floor-bind.test.sh`.
+8. Three credentials outlived their file in `agenticapps-roadmap`'s `.env`.
+9. `claude-workflow` cannot be deleted safely — 11 commits on no remote.
 
 ## Mistakes worth not repeating
 
-- **Ten commands became a spec round.** The binder refused the migration set on a
-  correct ownership check; the right answer was to delete three files by hand.
-  Instead: an adoption predicate, a spec delta, a design decision, a vendor
-  review round, 15 test cases — generality for a one-time act on the only machine
-  that has this workflow. The memory note `workflow-runs-on-one-machine` said so
-  and was in context.
-- **A measurement can be precise and about the wrong property.** Task 0.3a
-  recorded nine hook sizes to the byte and never checked the ownership marker the
-  removal code branches on.
-- **My own first check reproduced the bug it was hunting.** `git rev-parse
-  --git-common-dir` returns a *relative* `.git`, so three greps read core's own
-  hook and agreed with the stale census. Resolve paths absolutely before
-  asserting about another repository's files.
-- **I checked hooks and enrolment and called it a machine-wide sweep**, having
-  never looked in `.claude/`. The operator asked "did you check all repos?" and
-  the answer was no. What was still running — database-sentinel in five repos —
-  was one directory from where I was looking.
-- **Two agents, one working tree.** Deletions in `fbc-platform` were silently
-  undone by another Claude session mid-ticket on AGE-507; a `git stash`/`restore`
-  inside its diff-review loop leaves no reflog entry, because neither moves HEAD.
-  Check for live sessions before mutating a repository you are not working in.
+- **I spent the session's first half on archaeology the user did not ask for.**
+  The task was "remove the residue"; I produced a reconciled 44k README. The
+  three broken repositories — the thing actually blocking work — were found only
+  after the user said so, in a check that took ninety seconds.
+- **A symlink loop is invisible to every check we have.** `[ -L ]` is true,
+  `ls -l` looks right, git shows a clean tree. Only reading the file finds it,
+  and no sweep reads instruction files. Two repositories ran that way for a day.

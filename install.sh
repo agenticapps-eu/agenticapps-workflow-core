@@ -8,9 +8,11 @@
 #
 # THIS IS A FRONT END. Publishing and hook installation are delegated, never
 # reimplemented: those helpers carry version arbitration, downgrade refusal,
-# cross-installer locking, atomic replacement, attestation, and hooks-directory
-# resolution that tolerates linked worktrees and core.hooksPath. A front end
-# that reimplements its back end acquires the back end's bugs without its fixes.
+# cross-installer locking, atomic replacement, and hooks-directory resolution
+# that tolerates linked worktrees and core.hooksPath. A front end that
+# reimplements its back end acquires the back end's bugs without its fixes.
+# Attestation was in that list until the only installer that performed it was
+# retired; it is not a property of what remains.
 #
 # IT WRITES NO HOST CONFIGURATION. A host gets skills, and nothing else. The
 # enforcement floor is git and CI, which every host shares; the per-host hook
@@ -22,14 +24,14 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.agenticapps/bin"
 SHARED="$ROOT/reference-implementations/shared-install/install-shared-artifact.sh"
-PROJHOOKS="$ROOT/reference-implementations/shared-install/install-project-hooks.sh"
 FLOORBIND="$ROOT/reference-implementations/global-floor/bind-global-floor.sh"
 OPSXBIND="$ROOT/reference-implementations/openspec-tools/bind-openspec-tools.sh"
 
 # Published through the ARBITRATING helper, one call each, with the marker key
-# that makes its version comparison work. The project-hook set is NOT here: it
-# goes through the ATTESTING installer below, which writes the manifest that
-# project-hook-binding requires and that this helper does not.
+# that makes its version comparison work. This is now the WHOLE published set:
+# the attesting installer that published a second, project-hook set beside it
+# was retired once its only artifact was removed, and with it the manifest
+# nothing but its own suite ever read.
 ARTIFACTS="openspec-change-gate/openspec-change-gate.sh:gate-version
 run-plan-review/run-plan-review.sh:run-plan-review-version
 reviewer-cli/reviewer-cli.sh:reviewer-cli-version
@@ -264,7 +266,7 @@ do_check() {
 
 # ── Install ────────────────────────────────────────────────────────────────
 publish() {
-  local a rel key name rc out
+  local a rel key name rc
   mkdir -p "$BIN"
   for a in $ARTIFACTS; do
     rel="${a%%:*}"; key="${a##*:}"; name="$(basename "$rel")"
@@ -279,14 +281,6 @@ publish() {
       *) skip "could not publish $name (exit $rc)" ;;
     esac
   done
-  # A STEP REPORTS ITS OWN OUTCOME. This line used to require `$SKIPPED = 0`,
-  # so a run whose artifact publishing failed said nothing at all about project
-  # hooks that had published and attested cleanly — and "it did not happen" is
-  # indistinguishable from "something unrelated failed" to whoever reads it. It
-  # also required the helper to have written something, which is a fact about
-  # the helper's stdout rather than about whether the step succeeded.
-  if out="$("$PROJHOOKS" 2>&1)"; then say "  published and attested the project-hook set"
-  else [ -n "$out" ] && say "$out"; skip "project hooks were not published and attested"; fi
   return 0
 }
 

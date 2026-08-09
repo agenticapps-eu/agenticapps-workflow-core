@@ -10,10 +10,12 @@
 # the repository could re-run the propagation check, and — worse — a repository
 # MISSING from those lists was indistinguishable from one that passed.
 #
-# That is Stage-2 finding 7 one level up. ARTIFACTS declares what the installer
-# publishes and SHIMMED-HOOKS declares what projects bind, both because an
-# expected set discovered from what you happened to find cannot detect a missing
-# member. This is the same answer applied to the repositories themselves.
+# That is Stage-2 finding 7 one level up. SHIMMED-HOOKS declares what projects
+# bind, because an expected set discovered from what you happened to find cannot
+# detect a missing member. This is the same answer applied to the repositories
+# themselves. ARTIFACTS answered it for the publish side until 2026-08-09, when
+# it was retired with install-project-hooks.sh; what remains is published by
+# install-shared-artifact.sh, which install.sh declares.
 #
 # WHY NAMES AND NOT PATHS.
 #
