@@ -58,32 +58,95 @@ session's subject is gstack (AGE-523), and it is already researched.
 
 ## Next session: start here
 
-**AGE-523 — gstack.** Researched, not started. Three findings: (1) `cso`, `qa`,
-`database-sentinel` are Claude-only *copies*, `impeccable` a copy on `~/.agents`;
-(2) the twelve `codex-*`/`opencode-*` prefixed variants are **byte-identical** to
-the neutral ones — zero diff — which is exactly why codex reports `cso` missing;
-(3) `~/.claude/skills/gstack` is a **1.1 GB checkout inside the skills directory**
-with 552 `SKILL.md` files and **54 of 54 top-level names colliding** with existing
-top-level skills. The fix is PR #96's shape and `bind_dir` already takes a second
-source. **Answer the open question first: bind only the four gate skills, or all
-54? Recommend four.** The operator asked to discuss this before work starts.
+**AGE-523 — gstack.** Researched and decided; not started.
+
+### What the operator decided, in their words
+
+- **They use gstack's skills** — not just the four the workflow names. So this is
+  a live dependency, and the question "bind four or all 54" is answered: **all of
+  them.** Do not narrow it to the gate skills.
+- **Same shape as `superpowers`**: one clone in a global location, symlinked per
+  host.
+- **On the two competing copies**: fetch the latest into the global checkout and
+  **remove both old ones.** Do not try to reconcile or merge them — the newest
+  upstream wins and the duplicates go.
+- **On the installer**: read how gstack installs itself, then decide whether to
+  use its installer or do our own symlinking. Their framing, and it turned out to
+  be the load-bearing question.
+
+### What the research found, and why it inverts PR #96's approach
+
+**gstack already does exactly what we were about to build, and does it better.**
+`~/.claude/skills/gstack/setup` is a 1531-line multi-host installer:
+
+- targets `CODEX_SKILLS`, `OPENCODE_SKILLS`, `FACTORY_SKILLS`, kiro, openclaw,
+  hermes, gbrain
+- `--host claude|codex|kiro|factory|opencode|auto`, with `auto` detecting by
+  executable — the same rule `install.sh` uses
+- **symlinks**, via one helper carrying an explicit invariant that *every*
+  symlink in the script routes through it (the `cp -R` branch is Windows-only)
+- carries `migrate_direct_codex_install`, which relocates a checkout to
+  `$HOME/.gstack/repos/gstack` — so upstream is itself moving off the
+  skills-directory location
+
+**So do not write our own binder.** Run `./setup --host auto` and let it own the
+per-host symlinking. Writing our own would fight an installer that already
+handles four more hosts than we do, and it is the exact mistake nearly made with
+the superpowers plugin cache — reaching into another tool's internals instead of
+using its supported path.
+
+**The checkout's location is upstream's documented default, not a mistake.** The
+README's install line is
+`git clone … ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`.
+Moving it out unilaterally would break `gstack-upgrade` and the hourly
+auto-update check. If it should move, `$HOME/.gstack/repos/gstack` is upstream's
+own answer — check whether `setup` supports being run from there before assuming.
+
+**The prefixed copies are probably ours, not gstack's.** `install.sh`'s own
+comment says the archived host installers vendored `codex-cso`, `opencode-qa`,
+`codex-impeccable-audit`. gstack's setup creates *neutral* names. So the twelve
+`codex-*`/`opencode-*` directories are almost certainly legacy vendoring from the
+retired `codex-workflow`/`opencode-workflow`, and running gstack's setup will not
+remove them — **we** have to. They are byte-identical to the neutral versions, so
+deleting them loses nothing. Confirm the provenance before deleting.
+
+**And the top-level `cso`/`qa` copies are stale.** They are real directories, and
+they are *missing files* the checkout's versions have (`ACKNOWLEDGEMENTS.md`,
+`SKILL.md.tmpl`). That is an older gstack vendored at some point, not a symlink
+setup produced — which is the operator's "remove both old ones" case exactly.
+
+### Suggested first actions
+
+1. `cd ~/.claude/skills/gstack && git pull` — get latest into the global checkout.
+2. Read `setup`'s host-targeting section properly (lines ~180–260) and confirm
+   what it writes where, and whether it is idempotent over the current mess.
+3. Establish provenance of the twelve prefixed copies and the stale top-level
+   `cso`/`qa` before removing anything.
+4. Run `./setup --host auto`, then re-measure the 54 collisions.
+5. Decide whether `install.sh` should invoke gstack's setup the way it already
+   invokes `bind-openspec-tools.sh`, or whether gstack stays operator-run.
 
 ## Open questions
 
-1. **gstack — bind four gate skills or all 54?** Blocks AGE-523.
-2. **AGE-510** — nothing detects an unreadable instruction file. Todo, High.
+1. **gstack: use upstream's `setup`, or our own symlinking?** Research says use
+   `setup`. Confirm it is idempotent against the current duplicated state first.
+2. **Does the gstack checkout move out of `~/.claude/skills/`?** Upstream's
+   documented install puts it there; upstream's own migration helper points at
+   `$HOME/.gstack/repos/gstack`. Do not move it without reading which upstream
+   actually supports today.
+3. **AGE-510** — nothing detects an unreadable instruction file. Todo, High.
    `[ -L ]` is true, `ls` looks right, git shows clean. Only reading finds it.
-3. **Nothing intercepts destructive SQL** on any host, in any repository. An ADR
+4. **Nothing intercepts destructive SQL** on any host, in any repository. An ADR
    accepting the unmitigated loss, with an owner, is still owed.
-4. **AGE-509** — `check-shims.sh` has no reverse pass. Backlog. Keeping the
+5. **AGE-509** — `check-shims.sh` has no reverse pass. Backlog. Keeping the
    checker half in #95 was a bet on this landing; if it never does, re-examine.
-5. `normalize-claude-md` has no implementation anywhere while
+6. `normalize-claude-md` has no implementation anywhere while
    `project-hook-binding/spec.md` names it as a live shim in seven places.
-6. fbc-platform #143: root `deno.lock` still records `husky@9.1.7` and
+7. fbc-platform #143: root `deno.lock` still records `husky@9.1.7` and
    `lint-staged@17.3.0`; CI runs `deno test --frozen`.
-7. Delete the transitional binder: `reference-implementations/global-floor/`.
-8. Three credentials outlived their file in `agenticapps-roadmap`'s `.env`.
-9. `claude-workflow` cannot be deleted safely — 11 commits on no remote.
+8. Delete the transitional binder: `reference-implementations/global-floor/`.
+9. Three credentials outlived their file in `agenticapps-roadmap`'s `.env`.
+10. `claude-workflow` cannot be deleted safely — 11 commits on no remote.
 
 ## Mistakes worth not repeating
 
