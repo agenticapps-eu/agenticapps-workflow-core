@@ -771,6 +771,70 @@ fi
 finish_case
 
 echo
+echo "install.sh — upstream discipline skills are bound from one checkout, not per host"
+# THE GATES THE WORKFLOW NAMES WERE REACHABLE FROM EXACTLY ONE HOST.
+# `superpowers` ships test-driven-development, verification-before-completion,
+# finishing-a-development-branch and requesting-code-review — four of the seven
+# gates in the skill's own table — and on this machine it arrived as a Claude
+# PLUGIN, under ~/.claude/plugins/cache/, which no other host reads. Measured
+# 2026-08-09: codex resolved none of the four and said so, correctly, while
+# claude resolved all four. One workflow, two disciplines.
+#
+# Binding the plugin cache directly would have been worse than leaving it. The
+# cache is version-PATHED and keeps old versions — 6.1.1 and 6.2.0 both present
+# — so a symlink into 6.2.0 never dangles when Claude moves to 6.3.0. It keeps
+# resolving, silently, to the old bytes. Every one of the 14 skills differs
+# between those two versions, so that is not a cosmetic pin.
+#
+# So it is bound the way core's own skills are: ONE checkout, symlinked into
+# every host. Same version everywhere by construction, and `git pull` moves all
+# of them together.
+bind_case "an upstream discipline skill is bound into the host from the shared checkout"
+UP="$CASE_HOME/.agenticapps/upstream/superpowers/skills"
+mkdir -p "$UP/test-driven-development" "$UP/verification-before-completion"
+printf -- '---\nname: test-driven-development\n---\n' > "$UP/test-driven-development/SKILL.md"
+printf -- '---\nname: verification-before-completion\n---\n' > "$UP/verification-before-completion/SKILL.md"
+run_install --host claude
+wrong=""
+for s in test-driven-development verification-before-completion; do
+  t="$CLAUDE_SKILLS/$s"
+  if   [ ! -L "$t" ]; then wrong="$wrong $s(not-a-symlink)"
+  elif [ ! -f "$t/SKILL.md" ]; then wrong="$wrong $s(does-not-resolve)"
+  # Into the CHECKOUT, never into a plugin cache. A binding that resolves to a
+  # version-pathed cache directory is the drift this case exists to forbid.
+  elif case "$(readlink "$t")" in *"/upstream/superpowers/skills/$s") false ;; *) true ;; esac; then
+    wrong="$wrong $s(->$(readlink "$t"))"
+  fi
+done
+if [ "$RUN_RC" -ne 0 ]; then
+  bad "$CASE_NAME" "expected exit 0, got $RUN_RC" "$(printf '%s' "$RUN_OUT" | head -3)"
+elif [ -n "$wrong" ]; then
+  bad "$CASE_NAME" "not bound from the shared checkout:$wrong"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+# A missing upstream is REPORTED, NEVER A BLOCK — the skill's own rule for every
+# gate it does not own. `skip()` would make the run exit 1, which would turn an
+# absent optional dependency into a failed install.
+bind_case "an absent upstream checkout is reported and does not fail the run"
+run_install --host claude
+if ! require_ran; then :
+elif [ "$RUN_RC" -ne 0 ]; then
+  bad "$CASE_NAME" "an absent upstream checkout failed the run (exit $RUN_RC)" \
+                   "$(printf '%s' "$RUN_OUT" | head -5)"
+elif printf '%s' "$RUN_OUT" | grep -qi 'SKIPPED.*superpower'; then
+  bad "$CASE_NAME" "reported as a skipped step, which makes the installer exit 1"
+elif ! printf '%s' "$RUN_OUT" | grep -qi 'superpower'; then
+  bad "$CASE_NAME" "the run said nothing about the upstream it could not bind" \
+                   "$(printf '%s' "$RUN_OUT" | head -5)"
+else
+  ok "$CASE_NAME"
+fi
+finish_case
+
+echo
 echo "install.sh — task 3.2: a binding into an archived checkout is replaced outright"
 bind_case "a symlink into an archived checkout is replaced without asking, and its old target reported"
 old="$(archived_skill claude-workflow agentic-apps-workflow)"

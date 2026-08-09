@@ -77,12 +77,12 @@ Skills:      <the ones you are about to invoke, in order>
 
 | Size | Route |
 |---|---|
-| **Tiny** — typo, comment, README | `superpowers:verification-before-completion` |
-| **Small** — one file, contained logic | `superpowers:test-driven-development` → `verification-before-completion` → `finishing-a-development-branch` |
-| **Medium** — multi-file feature | the **full loop**. Stage-2 `superpowers:requesting-code-review` and an ADR for any locked decision are mandatory |
+| **Tiny** — typo, comment, README | `verification-before-completion` |
+| **Small** — one file, contained logic | `test-driven-development` → `verification-before-completion` → `finishing-a-development-branch` |
+| **Medium** — multi-file feature | the **full loop**. Stage-2 `requesting-code-review` and an ADR for any locked decision are mandatory |
 | **Large** — cross-cutting | as Medium, plus every applicable conditional gate below |
 
-A **bug** goes straight to `superpowers:systematic-debugging` — Observe →
+A **bug** goes straight to `systematic-debugging` — Observe →
 Hypothesize → Test → Conclude — before any fix is proposed.
 
 The gate engages only once a change is open, so tiny and small work may proceed
@@ -95,12 +95,12 @@ Always, on every change:
 
 | Gate | Skill | When |
 |---|---|---|
-| brainstorm | `superpowers:brainstorming` | before proposing anything creative |
+| brainstorm | `brainstorming` | before proposing anything creative |
 | plan-review | `openspec-change-review` | step 2b — writes `REVIEWS.md` |
-| tdd | `superpowers:test-driven-development` | every task, RED before GREEN |
-| code-review | `superpowers:requesting-code-review` | step 4, on the diff |
-| verification | `superpowers:verification-before-completion` | step 5 |
-| branch-close | `superpowers:finishing-a-development-branch` | step 7 |
+| tdd | `test-driven-development` | every task, RED before GREEN |
+| code-review | `requesting-code-review` | step 4, on the diff |
+| verification | `verification-before-completion` | step 5 |
+| branch-close | `finishing-a-development-branch` | step 7 |
 | security | `cso` | always |
 
 Conditionally, by what the change touches:
@@ -111,10 +111,18 @@ Conditionally, by what the change touches:
 | UI | design | `impeccable` |
 | UI | qa | `qa` |
 
-`cso`, `database-sentinel`, `impeccable` and `qa` are **upstream skills bound by
-this workflow, not owned by it.** Never vendor a copy into a project or into
-core; bind the installed one. If a gate's skill is absent, say so and continue —
-a missing upstream tool is reported, never silently skipped and never a block.
+Every skill named above is **upstream, bound by this workflow and not owned by
+it.** Never vendor a copy into a project or into core; bind the installed one.
+If a gate's skill is absent, say so and continue — a missing upstream tool is
+reported, never silently skipped and never a block.
+
+**Name them unprefixed, as written above.** The six discipline skills come from
+`superpowers`, which on one host arrived as a plugin and was addressable as
+`superpowers:test-driven-development`. That prefix is a fact about one host's
+packaging, not part of any skill's name, and a table written in it produced a
+failed lookup on every host that installs the same skills a different way.
+`install.sh` now binds one checkout into all of them, so the plain name resolves
+everywhere and is the only name that does.
 
 Critical or High findings from `database-sentinel` block branch close
 (ADR-0012). Override only via the database-security acceptance ADR.

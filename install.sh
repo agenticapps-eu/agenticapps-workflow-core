@@ -26,6 +26,14 @@ BIN="$HOME/.agenticapps/bin"
 SHARED="$ROOT/reference-implementations/shared-install/install-shared-artifact.sh"
 FLOORBIND="$ROOT/reference-implementations/global-floor/bind-global-floor.sh"
 OPSXBIND="$ROOT/reference-implementations/openspec-tools/bind-openspec-tools.sh"
+# One checkout of the upstream discipline skills, bound into every host — the
+# same shape `bind-openspec-tools.sh` uses, and for the same reason. It arrived
+# here as a Claude PLUGIN, which no other host reads, so four of the seven gates
+# the workflow names reached exactly one host of five. Binding the plugin cache
+# instead would have been worse: it is version-pathed and keeps old versions, so
+# a link into 6.2.0 goes on resolving after Claude moves to 6.3.0 rather than
+# breaking — silent drift, and all 14 skills differ between those two versions.
+UPSTREAM="$HOME/.agenticapps/upstream/superpowers"
 
 # Published through the ARBITRATING helper, one call each, with the marker key
 # that makes its version comparison work. This is now the WHOLE published set:
@@ -206,7 +214,9 @@ bind_dir() {
   say "  $dir (read by $readers)"
   apply_legacy "$dir"
   sweep_vendored "$dir"
-  for s in "$ROOT"/skills/*; do
+  # Both sources, one loop: a skill is a skill, and which checkout it came from
+  # is not something the host directory records or the binder needs to branch on.
+  for s in "$ROOT"/skills/* "$UPSTREAM"/skills/*; do
     [ -d "$s" ] || continue
     bind_one "$s" "$dir/$(basename "$s")"
   done
@@ -288,6 +298,10 @@ publish() {
 # per-host branch here — the moment one exists, the next one is cheap.
 install_hosts() {
   local h name dir readers seen=""
+  # Reported, never a block. It is an upstream this workflow binds and does not
+  # own, and the skill's own rule for those is to say so and continue — `skip`
+  # would exit 1 and turn an absent optional dependency into a failed install.
+  [ -d "$UPSTREAM/skills" ] || say "  superpowers is not checked out at $UPSTREAM — its skills are not bound"
   for h in $HOSTS; do
     name="${h%%:*}"; dir="$(field "$h" 2)"
     case " $REQUESTED " in *" $name "*) ;; *) continue ;; esac
