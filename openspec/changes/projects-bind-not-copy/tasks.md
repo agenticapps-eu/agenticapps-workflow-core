@@ -1,3 +1,47 @@
+## CLOSED 2026-08-09 — every remaining task is obsolete by measurement
+
+This change is closed with tasks unticked. They are **not done**; they no longer
+have a subject. Ticking them would be a lie and executing them would be a week
+spent building instruments for conditions that do not exist. The measurement,
+taken 2026-08-09 across all five repositories named in `FLEET`:
+
+```
+agents-task-viewer  skillcopy=-  hooks=[]  settings=[]
+callbot             skillcopy=-  hooks=[]  settings=[]
+cparx               skillcopy=-  hooks=[]  settings=[]
+fbc-platform        skillcopy=-  hooks=[]  settings=[]
+fx-signal-agent     skillcopy=-  hooks=[]  settings=[]
+```
+
+No repository carries a copy of `agentic-apps-workflow`. None binds any hook.
+The sweep this change existed to perform has completed. Also verified gone from
+disk: the `setup-gstack-gsd-superpowers-workflow.md` command (task 6.4b), every
+`.planning/` directory (6.2), every `SKILL.md.pre-0034` (1.4), and the
+`agenticapps-dashboard-add-agent-board` worktree (3.12).
+
+Where each group went:
+
+| Group | Disposition |
+|---|---|
+| 2.1–2.6 — `check-project-skills.sh` | **AGE-508**, Backlog. Sound tool, no subject |
+| 2b.1–2b.9 — the hooks reverse pass | **AGE-509**, Backlog. Real defect, no subject |
+| 3.8, 3.9, 3.11, 3.12 — the sweep PRs | Already performed |
+| 1.2, 1.4, 1.7 — re-measure and rewrite the proposal | Prose about a decision already executed |
+| 4.1–4.3 — GREEN for group 2 | Depends on a tool that should not be built now |
+| 5.2–5.5 — verify the above | Nothing left to verify. 5.1 was measured on two hosts |
+| 6.1–6.4 — "what this change does not do" | Already the record; nothing to execute |
+
+3.9c (a host Bash deny rule for destructive SQL) is the one item with residual
+value and it is host-configuration, explicitly not core's to ship. It is carried
+in the handoff's open questions instead, with the ADR that owes it.
+
+**Filed separately, and not from this list:** AGE-510 — nothing detects an
+unreadable instruction file. Two of four working repositories ran a full day
+with a committed `AGENTS.md -> CLAUDE.md -> AGENTS.md` loop, invisible to every
+check in the fleet. That is the gap this change should have found and did not.
+
+---
+
 ## 1. Measure before deleting
 
 The design rests on a claim about loader precedence that has not been observed
