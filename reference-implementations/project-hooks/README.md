@@ -401,9 +401,16 @@ conformance scan compares against the template in this directory.
 Stated so the hooks can be relied on correctly. A control described as stronger
 than it is invites exactly the wrong decisions.
 
-### `database-sentinel`
+### `database-sentinel` — RETIRED 2026-08-09
 
-**It is best-effort defence in depth, not a security boundary.**
+**Read as a record of what was lost, not as a control you have.** The hook, its
+implementation and its publisher are all deleted. Nothing intercepts destructive
+SQL now, in any repository, on any host — that loss is unmitigated and is
+recorded as such in the `projects-bind-not-copy` change rather than papered over
+here. The boundary below is retained because it is the honest measure of how
+much was actually lost: less than the name suggested.
+
+**It was best-effort defence in depth, not a security boundary.**
 
 - The `Bash` arm matches `DROP TABLE`, `TRUNCATE TABLE`, and `DELETE FROM`
   without a `WHERE`, by regex on the command string. Indirection defeats it:
@@ -459,8 +466,23 @@ export the override into the operator's shell. A green result therefore reads
 
 ## Provisioning — and the regression it answers
 
-Publish with `install-project-hooks.sh`. (`tools/provisioning-check.sh` was
-deleted 2026-08-05 — nothing invoked it but its own test suite.)
+> **RETIRED 2026-08-09, and kept as a record rather than deleted.** The publisher
+> this section instructs you to run — `install-project-hooks.sh` — is gone, with
+> its `ARTIFACTS` declaration, its `manifest.tsv`, and the last artifact it
+> published. `tools/provisioning-check.sh`, the tool the regression below was
+> found by, was already deleted on 2026-08-05.
+>
+> **What survived is the currency question, not the machinery.** `install.sh
+> --check` runs `check_artifact` over the four artifacts
+> `install-shared-artifact.sh` publishes, byte-compares each against this
+> checkout, and names the same-version-different-bytes case explicitly. So the
+> lesson below — that a number on screen compared to nothing is not a check — is
+> still load-bearing, and is still implemented. What is not implemented is
+> anything that reads a manifest, because nothing ever read one but its own
+> suite.
+>
+> Read the rest of this section as history. Every remedy it names that says
+> "re-run the installer" means `./install.sh`.
 
 **The state is a triple, not one of four** (design Decision 12, third axis added
 2026-08-03):
@@ -540,7 +562,7 @@ in another:
 
 | condition | remedy |
 |---|---|
-| published **behind** the authority | re-run `install-project-hooks.sh` |
+| published **behind** the authority | re-run `./install.sh` (was `install-project-hooks.sh`, retired 2026-08-09) |
 | published **ahead** of the authority | **not** the installer — it refuses downgrades. Update the checkout, or investigate a build published from a tree nobody has |
 | versions equal, bytes differ | investigate: a build error or a hand-edit, not a lag |
 | the authority holds no file for a **declared** artifact | check out the authority at a commit that has it, or reconcile `ARTIFACTS` |
@@ -552,10 +574,17 @@ worse than handing them none.
 
 ### Scope, and the mistake that pinned it down
 
-Currency judges the artifacts named in `ARTIFACTS` and nothing else. The shared
-bin also holds `openspec-change-gate`, `reviewer-cli` and `run-plan-review`,
-published by `install-shared-artifact.sh`, which the manifest check already
-reports as *"not covered — published by another installer"*.
+Currency judged the artifacts named in `ARTIFACTS` and nothing else. The shared
+bin also held `openspec-change-gate`, `reviewer-cli` and `run-plan-review`,
+published by `install-shared-artifact.sh`, which the manifest check reported as
+*"not covered — published by another installer"*.
+
+**That boundary is what collapsed on 2026-08-09.** `ARTIFACTS` is retired, so
+"another installer" is now the only installer, and the four artifacts it
+publishes are the whole set `install.sh --check` judges. The scoping lesson
+below survives the collapse — an expected set has to be declared rather than
+discovered — and the surviving declaration is `install.sh`'s own `ARTIFACTS`
+variable, which is read by the publisher and the checker alike.
 
 This was learned rather than designed: an earlier revision made "the authority
 holds no such file" a `stale` finding **without** scoping it, and running it
@@ -790,8 +819,16 @@ them.
 
 | File | What |
 |---|---|
-| `database-sentinel.sh` | canonical implementation, published to `~/.agenticapps/bin/` |
 | `shim-template.sh` | the authority for shim conformance |
+| `openspec-change-gate.shim.sh` | the authority for that one hook's shim, which is not a template render |
+| `SHIMMED-HOOKS` / `FLEET` / `OPT-OUTS` | what `check-shims.sh` measures against |
+
+`database-sentinel.sh` was here, as the canonical implementation published to
+`~/.agenticapps/bin/`, until 2026-08-09. It went with the host-specific surface
+it lived on rather than being reassigned — see `SHIMMED-HOOKS` for why that is
+not a migration — and its publisher went with it. **No project hook has an
+implementation in this directory now**; what remains is the shim contract and
+the declarations the checker reads.
 
 ---
 

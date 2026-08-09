@@ -315,7 +315,10 @@ too**: each assertion below is written and observed failing against today's tree
 before the file it names is removed, because a test written after the deletion
 proves only that it can describe the present.
 
-- [ ] 3.13a **Write the RED assertions first, and watch them fail.**
+- [x] 3.13a **Write the RED assertions first, and watch them fail.**
+      **Observed 2026-08-09: 56 passed, 3 failed** — the suite's own baseline
+      immediately before was 56 passed, 0 failed, so all three new assertions
+      and only those three went RED.
       **Corrected after round-2 review — one of the three could never have gone
       RED.** The original task claimed `install.sh --check` reports a
       project-hook set today. It does not: `--check` calls `check_artifact` for
@@ -331,25 +334,25 @@ proves only that it can describe the present.
         to carry, and it lives in the install path rather than the check path
       Add them to `tools/install.test.sh` beside the cases they replace, run the
       suite, and record the failure count here before deleting anything
-- [ ] 3.13b Delete `reference-implementations/project-hooks/database-sentinel.sh`
+- [x] 3.13b Delete `reference-implementations/project-hooks/database-sentinel.sh`
       and `reference-implementations/project-hooks/ARTIFACTS`. **3.9a's file
       half, unblocked** — the declaration half was done 2026-08-08
-- [ ] 3.13c Delete `reference-implementations/shared-install/install-project-hooks.sh`
+- [x] 3.13c Delete `reference-implementations/shared-install/install-project-hooks.sh`
       and `tools/project-hooks.test.sh`. The suite is entirely about
       `database-sentinel`; it is deleted rather than narrowed because narrowing
       it leaves a file whose every case is about an absent artifact
-- [ ] 3.13d Unwire `install.sh`: remove the `PROJHOOKS` variable (line 25), the
+- [x] 3.13d Unwire `install.sh`: remove the `PROJHOOKS` variable (line 25), the
       delegation that publishes and attests the project-hook set, and whatever
       `--check` prints about it. The four shared artifacts keep publishing
       through `install-shared-artifact.sh`, which is a different helper and is
       not touched
-- [ ] 3.13e Remove the project-hook cases from `tools/install.test.sh` — the 24
+- [x] 3.13e Remove the project-hook cases from `tools/install.test.sh` — the 24
       references counted on 3.9b, including the `stub_helper` lines for the
       deleted installer and the manifest assertions at 567-571. **Read each one
       before deleting it**: a case that stubs the installer while asserting
       something else entirely is a case about `install.sh`, and it stays with its
       stub removed rather than going with the subsystem
-- [ ] 3.13f Confirm the bind half still passes: `tools/check-shims.test.sh`,
+- [x] 3.13f Confirm the bind half still passes: `tools/check-shims.test.sh`,
       `tools/project-hook-shim.test.sh`, `tools/bind-openspec-tools.test.sh`.
       **This is the assertion that the split was drawn in the right place.** Any
       failure here means a file was deleted that the checker reads, and the
@@ -363,7 +366,7 @@ proves only that it can describe the present.
       artifacts it publishes — and bump the template's `# shim-contract:` marker,
       because changing the template's bytes is exactly what that marker exists
       to propagate
-- [ ] 3.13k **Add the invariant that keeps the kept half honest.** With no
+- [x] 3.13k **Add the invariant that keeps the kept half honest.** With no
       publisher, a future non-empty `SHIMMED-HOOKS` entry would have the checker
       demanding a binding whose implementation nothing can install. Record in the
       declaration's header that an active entry requires either a restored
@@ -371,7 +374,7 @@ proves only that it can describe the present.
       condition `openspec-change-gate` already satisfies through
       `install-shared-artifact.sh`, and the reason it is the one hook the reverse
       pass can still resolve
-- [ ] 3.13g Delete the machine copies: `~/.agenticapps/bin/database-sentinel.sh`
+- [x] 3.13g Delete the machine copies: `~/.agenticapps/bin/database-sentinel.sh`
       and `~/.agenticapps/manifest.tsv`. Not a source change, so it is recorded
       here rather than inferred from the diff — and it is the step that makes the
       retirement true on the only machine that has this workflow. Verify
@@ -385,18 +388,18 @@ proves only that it can describe the present.
       changes rather than proceeds. Copy the file to the change directory as a
       record before removing it — it is 248 bytes and it is the only evidence of
       what the machine had installed
-- [ ] 3.13j **Sweep the retired names and assert none survives in live source.**
+- [x] 3.13j **Sweep the retired names and assert none survives in live source.**
       `rg` for `install-project-hooks`, `PROJHOOKS`, `manifest.tsv`,
       `database-sentinel` and the project-hook `ARTIFACTS` across the working
       tree, allowlisting `openspec/changes/**` and `adrs/**`, which record
       history and are supposed to keep naming them. Round-2 review found the
       README was named on 3.13h while `shim-template.sh` was not; a name-based
       sweep is what stops the next one being missed the same way
-- [ ] 3.13h Reconcile `reference-implementations/project-hooks/README.md`, 44k,
+- [x] 3.13h Reconcile `reference-implementations/project-hooks/README.md`, 44k,
       which documents the publisher and the currency rules at lines 546 and 555.
       **Cut what described the publish half; keep what describes the shim
       contract**, which is still the authority `check-shims.sh` compares against
-- [ ] 3.13i Re-run `openspec validate --all` and confirm the delta's eight
+- [x] 3.13i Re-run `openspec validate --all` and confirm the delta's eight
       REMOVED and two MODIFIED requirements match what was actually deleted. A
       requirement removed in the delta whose code survives, or code deleted with
       no delta entry, is the failure this task exists to catch

@@ -1,23 +1,27 @@
 # The hooks projects bind through a shim.
 #
-# WHY THIS IS NOT ARTIFACTS.
+# AN ENTRY HERE REQUIRES A PUBLISHER THAT OWNS ITS IMPLEMENTATION.
 #
-# ARTIFACTS declares what install-project-hooks.sh PUBLISHES to the shared bin
-# directory. This file declares what projects BIND. They are different sets and
-# the difference is not an oversight: openspec-change-gate is shimmed by every
-# project, but its implementation is published by install-shared-artifact.sh
-# alongside reviewer-cli and run-plan-review, so it has no row in this
-# manifest's set. Merging the two lists would either make the installer publish
-# an artifact it does not own or make the conformance scan blind to the gate —
-# which is the shim carrying the §18 gate's only blocking condition.
+# This file declares what projects BIND; it has never declared what anything
+# PUBLISHES. Until 2026-08-09 the two sets were maintained separately —
+# ARTIFACTS held the publish side, and this header explained at length why the
+# lists must not be merged. ARTIFACTS is gone with install-project-hooks.sh, and
+# the retirement turns that separation into a condition somebody has to keep:
 #
-# WHY IT IS DECLARED AT ALL.
+#   a hook may be listed here only when some SURVIVING publisher puts its
+#   implementation at ~/.agenticapps/bin/<hook>.sh.
 #
-# The retired conformance tool carried this set as a hardcoded array while the
-# installer and the provisioning check read a declaration, so one fleet had two
-# expected sets maintained in two places — the drift ARTIFACTS was created to
-# prevent, reintroduced in a third tool (Stage-2 finding 7). `check-shims.sh`
-# reads this file for the same reason.
+# Today that means install-shared-artifact.sh, which publishes exactly four —
+# openspec-change-gate.sh, run-plan-review.sh, reviewer-cli.sh, init-project.sh.
+# A name outside that set has no publisher at all: adding it would have
+# check-shims.sh demand a shim in every fleet repository, and every shim it
+# demanded would fail open at run time against a path nothing writes. The
+# checker would report a green fleet of hooks that resolve nothing.
+#
+# So `openspec-change-gate` is the one name a reverse pass could still resolve,
+# and it is listed nowhere below for an unrelated reason — the machine-level git
+# hook replaced its project binding. Restoring a publisher is the other way to
+# satisfy the condition, and it is a change, not an edit to this file.
 #
 # One hook name per line, without the .sh. Blank lines and # comments ignored.
 #
