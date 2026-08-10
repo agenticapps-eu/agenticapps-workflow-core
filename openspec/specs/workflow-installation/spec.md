@@ -389,6 +389,28 @@ layout is shared by two hosts and by unrelated tools, so its presence identifies
 no host at all. Binding a host that is not installed creates symlinks nobody
 resolves and reports an install that did not happen.
 
+**Detection answers whether to bind; it does not answer where.** Binding a
+detected host SHALL use the skill directory established for it by the requirement
+above. An earlier revision specified only detection, and the shared-directory
+reasoning here proved sharper than the mapping it governed: `~/.agents/skills` is
+shared by pi and omp, and the spec noted the sharing without ever asking whether
+either host reads it. pi does not. It reads `~/.pi/agent/skills`, a real directory
+of per-skill symlinks core did not populate, and core's skill is absent from it —
+so pi has been detected correctly and bound nowhere useful for as long as the
+mapping has existed.
+
+omp's share of that directory is **correct, and established from omp's own
+implementation**, which names both `~/.omp/agent/skills` and `.agents/skills`
+(user home) as directories it loads. So the two hosts shared one mapping and only
+pi was wrong about it.
+
+The route to that conclusion is the part worth keeping. omp was first recorded
+unverified because no `~/.omp/agent/skills` directory existed to find — absence of
+a directory taken as absence of evidence. A host that ships its own loader is
+evidence about itself, and it outranks anything inferred from the filesystem.
+Where a host is recorded unverified, that SHALL mean its implementation was
+consulted and settled nothing, not merely that no directory was found.
+
 #### Scenario: A directory exists but the host does not
 
 - **WHEN** a host's directory exists and that host is not installed
@@ -400,6 +422,14 @@ resolves and reports an install that did not happen.
 - **THEN** the binding is reported once, as a shared binding, naming the hosts
   that read it
 - **AND** it is not reported as evidence that any particular one is installed
+- **AND** each named host's reading of that directory SHALL be established by
+  evidence, because a shared directory is shared by assumption until it is not
+
+#### Scenario: A detected host has an unverified skill directory
+
+- **WHEN** a host is detected and no evidence establishes where it reads skills
+- **THEN** the installer SHALL report the binding as unconfirmed and SHALL NOT
+  count it toward a successful install
 
 ### Requirement: The check mode reports state and changes nothing
 
@@ -631,4 +661,135 @@ by amending this specification rather than silently in the implementation.
 - **WHEN** the mandatory behaviour alone cannot fit the budget
 - **THEN** the overage is reported together with the behaviour responsible
 - **AND** the budget is not raised without amending this specification
+
+### Requirement: A host's skill directory is established by evidence, not assumed
+
+The installer SHALL bind a host's skills into the directory that host actually
+reads. That directory SHALL be established by evidence — the host's documented
+skill path, an observed load, or **the host's own implementation** — and the
+evidence SHALL be recorded alongside the mapping.
+
+The third source is named because it settled a case the first two did not: omp
+documents nothing useful and had no directory to observe, while its shipped code
+names the paths it loads outright. A host is the authority on what a host reads.
+
+Where no such evidence is available, the host SHALL be recorded as **unverified**
+and its mapping SHALL NOT be asserted as correct.
+
+This capability already requires a host to be *detected* by evidence that it is
+installed. It never required the same of the *path*, and the gap is not
+theoretical: pi has been bound to a directory it does not read for as long as the
+mapping has existed, and nothing failed, because binding into the wrong directory
+succeeds. A skill that is not there does not error — it is merely absent, and
+absence is what nobody notices.
+
+#### Scenario: A host's skill directory is known from its documentation
+
+- **WHEN** a host documents the directory it loads skills from
+- **THEN** the installer SHALL bind into that directory, and the mapping SHALL
+  record the source
+
+#### Scenario: A host is bound into a directory it does not read
+
+- **WHEN** the installer binds a host into a directory the host does not load from
+- **THEN** this SHALL be treated as a defect, not as a partial success, because
+  the install reports success while the host resolves nothing
+
+#### Scenario: No evidence establishes a host's skill directory
+
+- **WHEN** a host is installed but neither documents a skill path nor exposes one
+  to observe
+- **THEN** the host SHALL be recorded as unverified, and the installer SHALL
+  report that its binding is unconfirmed rather than reporting success
+
+#### Scenario: A host's binding is confirmed by resolution
+
+- **WHEN** a binding is claimed correct
+- **THEN** it SHALL be confirmed by the host resolving the skill, not by the
+  symlink existing — the symlink existing is what was already true for pi
+
+#### Scenario: A corrected mapping has not yet been confirmed by resolution
+
+- **WHEN** a mapping is corrected on the strength of a directory's contents, and
+  no observation of the host resolving the skill has been made
+- **THEN** the host SHALL be recorded as **corrected but unconfirmed**, not as
+  fixed
+- **AND** this applies to pi: `~/.pi/agent/skills` holding per-skill symlinks is
+  the presence of a directory, which this very requirement refuses as evidence.
+  Claiming pi fixed on that basis would apply to pi the standard this change was
+  written to stop applying to omp
+
+#### Scenario: A bound directory is shared with an unrelated tool
+
+- **WHEN** the installer binds into a directory another tool populates, and a
+  name it would write is already present
+- **THEN** it SHALL NOT overwrite the other tool's entry, and SHALL report the
+  collision naming both
+- **AND** the co-tenancy SHALL be reported by the check mode thereafter, because
+  the other tool can remove core's links on its own sweep and nothing else would
+  notice
+
+### Requirement: The openspec tooling is bound machine-level, not written per repository
+
+The installer SHALL bind the `openspec` CLI's skill and command files into each
+detected host's machine-level directories, and the project initializer SHALL
+invoke `openspec init --tools none` so that no repository receives them.
+
+`openspec init --tools <host>` is a per-project agent installer: it writes six
+skills, and for most hosts a set of command files, into the repository. That is
+behaviour in a repository, which is a *version* of behaviour, which is the drift
+this workflow exists to remove. Binding it once per machine gives every
+repository the same commands — including repositories that were never
+initialized.
+
+**The shape differs per host and SHALL NOT be inferred from another host.**
+Measured 2026-08-07: the skills are uniform, six per host at
+`<host>/skills/openspec-*/SKILL.md`. The command surface is not — claude uses a
+nested `commands/opsx/` directory, opencode a flat `commands/opsx-*.md`, pi
+`prompts/opsx-*.md`, and codex has no command surface at all. A single binding
+pattern applied five times would put files where three hosts do not read them,
+which is the defect this capability's evidence requirement already names.
+
+The files SHALL be generated by the CLI rather than hand-copied, because only the
+CLI knows their content, and SHALL be bound by symlink rather than copied, for
+the same reason every other skill in this workflow is.
+
+#### Scenario: A host is bound
+
+- **WHEN** the installer binds a detected host
+- **THEN** the openspec skills and that host's command files are bound into its
+  machine-level directories
+- **AND** `/opsx:*` resolves in a repository that carries no host directory at all
+
+#### Scenario: A host's command surface has nothing to bind
+
+- **WHEN** the CLI generates no command files for a detected host — as it does
+  not for codex, whose `~/.codex/prompts` exists and is populated by other tools
+- **THEN** its skills are bound and the empty command surface is recorded
+- **AND** this SHALL NOT be reported as a partial or failed install, because the
+  absence is on the generator's side rather than the host's
+
+#### Scenario: A host has no bindable command directory at all
+
+- **WHEN** a host exposes no global command or prompt directory — as pi does not,
+  installing extensions as packages instead
+- **THEN** its command surface SHALL be recorded **unverified**, and no directory
+  SHALL be created to bind into
+- **AND** a directory SHALL NOT be inferred from that host's *project-level*
+  layout, because pi writing `.pi/prompts/` inside a repository is not evidence
+  that pi reads `~/.pi/agent/prompts` outside one — that inference is the defect
+  this capability's evidence requirement exists to prevent
+
+#### Scenario: A command directory is assumed rather than established
+
+- **WHEN** a host's machine-level command directory is chosen by symmetry with
+  another host's
+- **THEN** this is a defect, because the per-project shapes already differ across
+  all four hosts measured
+
+#### Scenario: A repository is initialized
+
+- **WHEN** the project initializer creates `openspec/`
+- **THEN** it SHALL pass `--tools none`, so the repository receives no skill,
+  command, or prompt file
 

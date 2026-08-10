@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: The Claude instruction file is out of scope only while it is a separate file
+### Requirement: The Claude instruction file is out of scope
 
 `CLAUDE.md` SHALL NOT be subject to these requirements **while it is a regular
 file that Claude alone reads**.
@@ -19,7 +19,7 @@ capability would exempt from its own marker and frontmatter rules the very bytes
 those rules exist to govern — and it would do so through a name, not through a
 property of the content.
 
-#### Scenario: Claude-only project with a separate file
+#### Scenario: Claude-only project
 
 - **WHEN** a repo is provisioned for Claude alone and `CLAUDE.md` is a regular file
 - **THEN** no requirement in this capability applies to it
