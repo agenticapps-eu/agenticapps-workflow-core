@@ -73,79 +73,116 @@ the drift this workflow spent its history removing.
 
 ### Requirement: The instruction file is one file under two names
 
-A repository's instruction file SHALL be `AGENTS.md`, with `CLAUDE.md` a symlink
-to it. Where either already exists as a regular file, the workflow's section
-SHALL be appended behind the markers `host-neutral-instruction-files` makes
-normative — never a marker of this capability's own — and the existing content
-SHALL be preserved.
+A repository's instruction file SHALL exist under both names, `AGENTS.md` and
+`CLAUDE.md`, as **regular files with byte-identical content**. Neither SHALL be
+a symlink. Where either already exists, the workflow's section SHALL be inserted
+or updated behind the markers `host-neutral-instruction-files` makes normative —
+never a marker of this capability's own — and every existing line SHALL be
+preserved.
+
+The initializer's only write to these files is **between the markers**. It SHALL
+NOT move, replace, link or delete either name. Where one name is absent it SHALL
+be created containing the block; where both are absent both SHALL be created.
+After writing, the two names SHALL hold identical content.
 
 **Every starting state is defined, because the interesting ones are the states
-that can silently produce two real files.** Appending to an existing `CLAUDE.md`
-and separately creating `AGENTS.md` is the obvious implementation and it is
-forbidden: it produces exactly the two divergent copies this requirement exists
-to prevent.
+that can silently produce two different files.** Appending to an existing
+`CLAUDE.md` while leaving `AGENTS.md` untouched is the obvious implementation
+and it is forbidden: it produces the two divergent copies this requirement
+exists to prevent.
 
-Symlinks are assumed to work. This workflow runs on one machine, and a
-filesystem without symlinks would require a two-real-file fallback — reintroducing
-the failure mode deliberately, for a platform with no user here. If that changes,
-it is a new decision and not a fallback smuggled in as robustness.
+The previous revision made `CLAUDE.md` a symlink to `AGENTS.md`, and gave the
+reason that "two real files would be two versions of one rule… a symlink makes
+them the same bytes by construction". That guarantee was real. It was bought at
+the price of a mechanism that owns the whole file in order to deliver an
+eight-line pointer — measured at 5% of cparx's instruction file and 0% of
+callbot's — and on 2026-08-10 that disproportion turned a guard defect into
+22,292 bytes of lost content across two repositories.
 
-`AGENTS.md` is the cross-host surface — codex, opencode, pi and omp all read it.
-Claude reads `CLAUDE.md`. Two real files would be two versions of one rule, which
-is the failure this workflow names everywhere else; a symlink makes them the same
-bytes by construction. Core already does this with its own `AGENTS.md`.
+Identity is now established by enforcement rather than by construction, and the
+requirement below carries it. Three costs go with the link and are the rest of
+the reason: git stores the target path rather than the content, so anything
+reading the object store sees `AGENTS.md` where the instructions should be;
+Windows checks a link out as a one-line text file unless developer mode is on;
+and adoption cannot be additive, because a repository holding only `CLAUDE.md`
+has that file relocated and its readership widened from Claude to every host.
+
+That prior revision required this to be a deliberate decision — "if that
+changes, it is a new decision and not a fallback smuggled in as robustness".
+This is that decision, taken for the blast radius and not for portability.
 
 #### Scenario: Neither file exists
 
 - **WHEN** the initializer runs in a repository with no instruction file
-- **THEN** `AGENTS.md` is created and `CLAUDE.md` is created as a symlink to it
-
-#### Scenario: Only `AGENTS.md` exists
-
-- **WHEN** `AGENTS.md` exists as a regular file with content and `CLAUDE.md` does
-  not exist
-- **THEN** the workflow's section is appended to `AGENTS.md` behind the normative
-  markers, `CLAUDE.md` is created as a symlink to it, and no existing line is
-  removed or rewritten
+- **THEN** `AGENTS.md` and `CLAUDE.md` are both created as regular files
+- **AND** each contains the workflow section behind the normative markers
+- **AND** the two are byte-identical
 
 #### Scenario: Only `CLAUDE.md` exists
 
-- **WHEN** `CLAUDE.md` exists as a regular file with content and `AGENTS.md` does
-  not exist
-- **THEN** its content SHALL become `AGENTS.md`, and `CLAUDE.md` SHALL be replaced
-  by a symlink to it, preserving every existing line
-- **AND** the initializer SHALL NOT append to `CLAUDE.md` while creating a
-  separate `AGENTS.md`, because that produces the two real files this requirement
-  exists to prevent
-- **AND** the operator SHALL be told that content previously read only by Claude
-  is now read by every host that reads `AGENTS.md`, because that is a disclosure,
-  not a rename
+- **GIVEN** a repository carrying a `CLAUDE.md` and no `AGENTS.md`
+- **WHEN** the initializer runs
+- **THEN** `CLAUDE.md` SHALL remain at its own path, and no line of it SHALL be
+  removed or reordered
+- **AND** the workflow section is inserted behind the normative markers
+- **AND** `AGENTS.md` is created holding the same content
+- **AND** neither name is a symlink
 
-#### Scenario: Both exist as separate regular files and differ
+#### Scenario: Only `AGENTS.md` exists
 
-- **WHEN** both exist independently and their contents differ
-- **THEN** the initializer SHALL report the divergence and SHALL NOT silently
-  choose one, because collapsing them is a decision about which rule survives
+- **GIVEN** a repository carrying an `AGENTS.md` and no `CLAUDE.md`
+- **WHEN** the initializer runs
+- **THEN** the workflow section is inserted behind the normative markers,
+  preserving every existing line
+- **AND** `CLAUDE.md` is created holding the same content
 
 #### Scenario: Both exist as separate regular files and are identical
 
-- **WHEN** both exist independently with byte-identical content
-- **THEN** `AGENTS.md` is kept and `CLAUDE.md` is replaced by a symlink to it,
-  because there is no rule to choose between and no content to lose
+- **GIVEN** both names present, byte-identical
+- **WHEN** the initializer runs
+- **THEN** the workflow section is inserted or updated in both
+- **AND** they remain byte-identical
+
+#### Scenario: Both exist as separate regular files and differ
+
+- **GIVEN** both names present with differing content
+- **WHEN** the initializer runs
+- **THEN** it SHALL exit non-zero and write nothing
+- **AND** it SHALL report that reconciling them decides which rule survives,
+  which is the operator's decision and not the tool's
+
+#### Scenario: One name is a symlink to the other
+
+- **GIVEN** a repository carrying the previous arrangement, in either direction
+- **WHEN** the initializer runs
+- **THEN** it SHALL exit non-zero and write nothing
+- **AND** it SHALL report which name is the link and that replacing it with a
+  copy of the content is the migration step
+
+Refused rather than migrated in place. Replacing a link with content is a
+one-time, per-repository act that belongs in a reviewable commit, not in a
+scaffolder run that an operator may not be watching.
 
 #### Scenario: `CLAUDE.md` is already a symlink to something else
 
-- **WHEN** `CLAUDE.md` is a symlink whose target is not the repository's
-  `AGENTS.md`
-- **THEN** the initializer SHALL refuse and report the target, and SHALL NOT
-  rewrite the link
-- **AND** it SHALL NOT follow the link to write through it, because the target may
-  lie outside the repository
+- **GIVEN** either name — the header keeps `CLAUDE.md` because that is where
+  this state was first met, but the rule is symmetric — is a symlink whose
+  target is not the other name
+- **WHEN** the initializer runs
+- **THEN** it SHALL exit non-zero, naming the target
+- **AND** it SHALL NOT follow the link to write through it, because the target
+  may lie outside the worktree
 
 #### Scenario: An instruction path is a directory or a dangling link
 
 - **WHEN** either name exists as a directory, or as a symlink with no target
 - **THEN** the initializer SHALL refuse and report what it found, changing nothing
+- **AND** the same SHALL hold for any other name that is not a regular file — a
+  FIFO, a socket, a device — because the writer reads the existing file to build
+  the new content, and a read of a FIFO blocks until a writer appears
+
+Refusing a scaffolder is a worse outcome than success and a far better one than
+a scaffolder that never returns.
 
 ### Requirement: The initializer is idempotent and adds nothing on a second run
 
