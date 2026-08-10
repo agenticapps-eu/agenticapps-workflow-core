@@ -96,19 +96,48 @@ when in two of them there is no section at all.
 |---|---|---|
 | `cparx` | section, no version | fixed — PR #134, one line per file |
 | `fx-signal-agent` | section, no version; migration PR still open | fixed **inside** that PR, so it lands correct rather than landing wrong |
-| `callbot` | two identical regular files, **no section** | nothing to fix; scores 5/5 clean |
-| `fbc-platform` | `CLAUDE.md` only, **no section** | nothing to fix; out of scope as the sole instruction file |
+| `callbot` | two identical regular files, **no section** | provisioned — PR #111 |
+| `fbc-platform` | see below — the survey read a feature branch | migrated **and** provisioned — PR #151 |
 
 Both fixes were written by `init-project.sh` 2.1.0 rather than by hand, so the
 block matches what the writer emits and a re-run is a no-op. Diff in each case is
 `2 files changed, 2 insertions(+)`, both rewritten in place, nothing outside the
 markers touched. cparx scored 9/1 before and 10/0 after.
 
-**Whether `callbot` and `fbc-platform` should carry the section at all is a
-decision, not a repair.** For `fbc-platform` it is the larger one: it has no
-`AGENTS.md`, so provisioning it would create one and widen its rules' readership
-from Claude to every host — which the initializer discloses precisely because it
-is a semantic change.
+**All four enrolled repositories are now at standard**, verified from the index
+on `origin/main` rather than the worktree: both names mode `100644`, one blob
+each, section present and versioned.
+
+**`fbc-platform` was the find of the session, and my survey had it wrong twice.**
+It reported "`CLAUDE.md` only, no section" because it read whatever branch each
+checkout happened to be on — and that repository sits on a feature branch. On
+`main` it carries both names, and `AGENTS.md` is mode `120000`, a symlink to
+`CLAUDE.md`.
+
+That would be ordinary except the repository sets **`core.symlinks=false`**, so
+git checks the entry out as a plain text file whose entire content is the string
+`CLAUDE.md`. **That is the Windows failure mode the proposal argued from, reached
+on macOS through a repository setting** — and it means codex, opencode, pi and
+omp have been reading eleven bytes and no instructions from that repository.
+Only Claude ever saw the real file. Nothing detected it, because every structural
+check reports a plausible file.
+
+Two consequences worth carrying:
+
+- **Survey from the index, and name the ref.** A worktree sweep answers about
+  whichever branch someone left checked out, which is not a fact about the
+  repository. `git ls-tree origin/main` is the question actually being asked.
+- **`core.symlinks=false` makes the index mode authoritative and the filesystem
+  mute.** Writing a regular file over the link is not enough — git keeps the
+  `120000` entry because it will not trust the file type it sees. The mode had to
+  be set explicitly with `git update-index --cacheinfo 100644`. The gate caught
+  it: the commit blocked on "staged as a symlink" until the mode changed.
+
+**Both provisioning commits were made from temporary git worktrees**, not the
+live checkouts. `callbot`'s had 22 uncommitted files from a parallel session —
+including an edit inside `AGENTS.md` itself — which a first attempt nearly swept
+into the commit. Both live checkouts were left on the branch and with the working
+tree they had.
 
 Two open changes remain, neither touched this session:
 `initializer-cannot-destroy-instruction-file` (complete, unarchived — check
