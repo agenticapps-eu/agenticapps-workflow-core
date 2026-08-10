@@ -124,6 +124,28 @@ The scan validator's output is the canonical answer to "is this project conforma
 
 - **Auto-update baseline on every scan run (v0.3.0 alternative).** Rejected — auto-updating the baseline on every scan would let new gaps slip into the baseline silently. The decision: baseline updates happen only on successful `scan-apply` (because the apply implies an explicit human decision) or via an explicit `--update-baseline` flag. CI scans never write the baseline.
 
+## Amendment — 2026-08-10 (reference implementation dropped Axiom)
+
+`agenticapps-observability` **ADR-0037** removed the Axiom destination adapter
+from every stack it generates. The default role map is now
+`errors→sentry, logs→none, analytics→none`: logs are the wrapper's structured
+JSON line on console/stdout, captured by each runtime's native log product.
+Propagation to consuming projects is that repo's migration 0024 (consumer axis
+1.22.0→1.23.0).
+
+**Nothing in this ADR or in spec §10 required amending.** Both are
+vendor-agnostic by construction — §10.8 specifies `- logs:
+<vendor-or-self-hosted>`, and every mention of Axiom below is an *example* of a
+destination someone could configure, never a prescribed default. The §10.6
+destination-independence requirement is what made the removal a config-shaped
+change rather than a refactor, which is the property this ADR was written to
+buy.
+
+This note exists only so a reader does not infer from "PostHog and Axiom remain
+available as additional destinations" that the reference generator ships an
+Axiom adapter. It does not. Axiom remains *implementable* against the unchanged
+`Destination` contract; it is simply no longer *implemented*.
+
 ## Consequences
 
 **Positive:**

@@ -87,12 +87,28 @@ which is what cleared the publish hold. Nothing is in flight.
 
 ## Next session: start here
 
-**Re-run `init-project.sh` in `callbot`, `cparx`, `fx-signal-agent` and
-`fbc-platform`.** All four carry a section with no `section-version`, and the
-in-place block update is what repairs it — this is the first real use of the
-update path 2.0.0 made possible, so watch that it leaves everything outside the
-markers alone. That is the only work this change leaves behind; everything else
-is merged, archived and published.
+**The fleet repair is done, and it was two repositories, not four.** The claim
+that all four carried a version-less section was wrong: it read a
+`section-version: (none)` sweep as meaning the section existed without a version,
+when in two of them there is no section at all.
+
+| repo | state | action |
+|---|---|---|
+| `cparx` | section, no version | fixed — PR #134, one line per file |
+| `fx-signal-agent` | section, no version; migration PR still open | fixed **inside** that PR, so it lands correct rather than landing wrong |
+| `callbot` | two identical regular files, **no section** | nothing to fix; scores 5/5 clean |
+| `fbc-platform` | `CLAUDE.md` only, **no section** | nothing to fix; out of scope as the sole instruction file |
+
+Both fixes were written by `init-project.sh` 2.1.0 rather than by hand, so the
+block matches what the writer emits and a re-run is a no-op. Diff in each case is
+`2 files changed, 2 insertions(+)`, both rewritten in place, nothing outside the
+markers touched. cparx scored 9/1 before and 10/0 after.
+
+**Whether `callbot` and `fbc-platform` should carry the section at all is a
+decision, not a repair.** For `fbc-platform` it is the larger one: it has no
+`AGENTS.md`, so provisioning it would create one and widen its rules' readership
+from Claude to every host — which the initializer discloses precisely because it
+is a semantic change.
 
 Two open changes remain, neither touched this session:
 `initializer-cannot-destroy-instruction-file` (complete, unarchived — check
