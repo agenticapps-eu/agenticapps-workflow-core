@@ -472,6 +472,73 @@ run_init "$r"
   || bad "and it reads as true under the dispatcher's own --type=bool" \
          "the dispatcher would not treat this repository as enrolled"
 
+# ---------------------------------------------------------------------------
+echo
+echo "L. AGENTS.md is already a symlink — the arrangement that closes a cycle"
+# ---------------------------------------------------------------------------
+# THE CASE THAT DESTROYED TWO REPOSITORIES. Every structural check the script
+# and this suite made was satisfied while both names ended at mode 120000
+# pointing at each other and neither could be read.
+#
+# `-f` and `cmp` both dereference, so the preflight compared CLAUDE.md to
+# itself, found it trivially identical, and never refused. The link guard then
+# asked `-L CLAUDE.md` — false, it is the real file — and moved a fresh symlink
+# over it. AGENTS.md -> CLAUDE.md -> AGENTS.md, ELOOP, content gone.
+r=$(new_repo agents-is-link)
+printf '# Real rules\n\nNever force-push to main.\n' > "$r/CLAUDE.md"
+( cd "$r" && ln -s CLAUDE.md AGENTS.md )
+c_before=$(shasum -a 256 "$r/CLAUDE.md" | cut -d' ' -f1)
+run_init "$r"
+
+[ "$RC" -ne 0 ] && ok "an AGENTS.md symlink is refused" \
+  || bad "an AGENTS.md symlink is refused" "exited 0 — this is the loop being created"
+
+printf '%s' "$OUT" | grep -qi 'agents\.md' \
+  && ok "the refusal names AGENTS.md" \
+  || bad "the refusal names AGENTS.md" "output: $(printf '%s' "$OUT" | head -2)"
+
+# Read through the name rather than stat it: -f and -L are exactly the checks
+# that could not tell a working link from a loop.
+if cat "$r/CLAUDE.md" >/dev/null 2>&1 \
+   && [ "$(shasum -a 256 "$r/CLAUDE.md" | cut -d' ' -f1)" = "$c_before" ]; then
+  ok "CLAUDE.md is still readable and byte-identical"
+else
+  bad "CLAUDE.md is still readable and byte-identical" \
+      "read: $(cat "$r/CLAUDE.md" 2>&1 | head -1)"
+fi
+
+[ "$(cd "$r" && readlink AGENTS.md)" = "CLAUDE.md" ] \
+  && ok "AGENTS.md still points where it did" \
+  || bad "AGENTS.md still points where it did" \
+         "readlink: $(cd "$r" && readlink AGENTS.md 2>&1)"
+
+# ---------------------------------------------------------------------------
+echo
+echo "M. Both names are readable after a successful run"
+# ---------------------------------------------------------------------------
+# The assertion whose absence let this ship. Case A asserted AGENTS.md is a
+# regular file and CLAUDE.md is a symlink pointing at it — every one of which is
+# true of a repository whose instruction file cannot be read at all. Only a read
+# distinguishes a working link from a loop.
+r=$(new_repo readable)
+run_init "$r"
+
+a_read=$(cat "$r/AGENTS.md" 2>/dev/null); a_rc=$?
+c_read=$(cat "$r/CLAUDE.md" 2>/dev/null); c_rc=$?
+
+[ "$a_rc" -eq 0 ] && [ -n "$a_read" ] \
+  && ok "AGENTS.md can be read and is non-empty" \
+  || bad "AGENTS.md can be read and is non-empty" "rc=$a_rc"
+
+[ "$c_rc" -eq 0 ] && [ -n "$c_read" ] \
+  && ok "CLAUDE.md can be read and is non-empty" \
+  || bad "CLAUDE.md can be read and is non-empty" \
+         "rc=$c_rc — a symlink cycle reads exactly like this"
+
+[ "$a_read" = "$c_read" ] \
+  && ok "both names return the same content" \
+  || bad "both names return the same content" "the two names disagree"
+
 echo
 echo "  passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]
