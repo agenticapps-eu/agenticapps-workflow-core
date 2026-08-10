@@ -399,7 +399,7 @@ of per-skill symlinks core did not populate, and core's skill is absent from it 
 so pi has been detected correctly and bound nowhere useful for as long as the
 mapping has existed.
 
-omp's share of that directory is **correct, and established from omp's own
+For omp the same directory is **correct, and established from omp's own
 implementation**, which names both `~/.omp/agent/skills` and `.agents/skills`
 (user home) as directories it loads. So the two hosts shared one mapping and only
 pi was wrong about it.
