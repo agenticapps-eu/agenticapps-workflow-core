@@ -36,6 +36,20 @@ bytes are shared, never whether the path is a link.
 - **AND** the markers, frontmatter and section version SHALL be identical in
   both, because the two files are required to be byte-identical
 
+#### Scenario: `CLAUDE.md` is a symlink to the shared file
+
+A repository that has not migrated still carries the previous arrangement, so
+this scenario is kept rather than deleted — and its answer is unchanged, because
+it never turned on the link. What the link decided was only whether the bytes
+were shared, and two identical regular files share them just as completely.
+
+- **WHEN** `CLAUDE.md` resolves to the shared instruction file
+- **THEN** every requirement in this capability applies to the resolved file
+- **AND** the requirements SHALL be evaluated once, against the resolved path,
+  rather than once per name
+- **AND** the arrangement SHALL NOT be produced by the initializer, which
+  refuses it, nor committed, which the change gate fails
+
 #### Scenario: Tooling counts instruction files
 
 - **WHEN** tooling counts the instruction files in a repository carrying both

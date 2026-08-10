@@ -47,7 +47,7 @@ This is that decision, taken for the blast radius and not for portability.
 - **AND** each contains the workflow section behind the normative markers
 - **AND** the two are byte-identical
 
-#### Scenario: Only CLAUDE.md exists
+#### Scenario: Only `CLAUDE.md` exists
 
 - **GIVEN** a repository carrying a `CLAUDE.md` and no `AGENTS.md`
 - **WHEN** the initializer runs
@@ -57,7 +57,7 @@ This is that decision, taken for the blast radius and not for portability.
 - **AND** `AGENTS.md` is created holding the same content
 - **AND** neither name is a symlink
 
-#### Scenario: Only AGENTS.md exists
+#### Scenario: Only `AGENTS.md` exists
 
 - **GIVEN** a repository carrying an `AGENTS.md` and no `CLAUDE.md`
 - **WHEN** the initializer runs
@@ -65,14 +65,14 @@ This is that decision, taken for the blast radius and not for portability.
   preserving every existing line
 - **AND** `CLAUDE.md` is created holding the same content
 
-#### Scenario: Both exist as regular files with identical content
+#### Scenario: Both exist as separate regular files and are identical
 
 - **GIVEN** both names present, byte-identical
 - **WHEN** the initializer runs
 - **THEN** the workflow section is inserted or updated in both
 - **AND** they remain byte-identical
 
-#### Scenario: Both exist as regular files and differ
+#### Scenario: Both exist as separate regular files and differ
 
 - **GIVEN** both names present with differing content
 - **WHEN** the initializer runs
@@ -92,11 +92,23 @@ Refused rather than migrated in place. Replacing a link with content is a
 one-time, per-repository act that belongs in a reviewable commit, not in a
 scaffolder run that an operator may not be watching.
 
-#### Scenario: A name is a symlink pointing outside the repository
+#### Scenario: `CLAUDE.md` is already a symlink to something else
 
-- **GIVEN** `AGENTS.md` or `CLAUDE.md` is a symlink whose target is not the
-  other name
+- **GIVEN** either name — the header keeps `CLAUDE.md` because that is where
+  this state was first met, but the rule is symmetric — is a symlink whose
+  target is not the other name
 - **WHEN** the initializer runs
 - **THEN** it SHALL exit non-zero, naming the target
 - **AND** it SHALL NOT follow the link to write through it, because the target
   may lie outside the worktree
+
+#### Scenario: An instruction path is a directory or a dangling link
+
+- **WHEN** either name exists as a directory, or as a symlink with no target
+- **THEN** the initializer SHALL refuse and report what it found, changing nothing
+- **AND** the same SHALL hold for any other name that is not a regular file — a
+  FIFO, a socket, a device — because the writer reads the existing file to build
+  the new content, and a read of a FIFO blocks until a writer appears
+
+Refusing a scaffolder is a worse outcome than success and a far better one than
+a scaffolder that never returns.

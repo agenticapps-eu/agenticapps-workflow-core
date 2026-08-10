@@ -1,9 +1,9 @@
 # Session Handoff — 2026-08-10 (twenty-eighth session)
 
-`two-real-instruction-files` is **implemented, tested, published and complete**
-on `feat/two-real-instruction-files` (PR #107). Every task in the change is
-ticked. `agents-task-viewer` was retired and deleted in the same session, which
-is what cleared the publish hold. Nothing is half-finished.
+`two-real-instruction-files` is **shipped**: implemented, tested, published,
+merged (#107) and **archived** into the four spec slots. #106 is closed as
+superseded. `agents-task-viewer` was retired and deleted in the same session,
+which is what cleared the publish hold. Nothing is in flight.
 
 ## Accomplished
 
@@ -41,8 +41,15 @@ is what cleared the publish hold. Nothing is half-finished.
 
 - **Merge #106 into this branch rather than wait for it.** Core's own hook
   resolves the working tree, so the new check failed every commit here until the
-  migration landed. **#106 is now redundant and can be closed** — its commit is
-  in #107's history.
+  migration landed. #106 was then closed unmerged, its commit being in #107's
+  history — merging both would have landed the same change twice.
+- **Refresh the deltas rather than force the archive.** `openspec archive`
+  refused three times, each time naming scenarios the MODIFIED blocks would have
+  deleted: three in `agent-lifecycle-management`, one in
+  `host-neutral-instruction-files`, six in `project-onboarding` — five of which
+  were only RENAMED, since a header that changes wording reads as a scenario
+  removed. Every one was carried through, and the directory/dangling-link
+  scenario gained the FIFO case the implementation already handles.
 - **Publishing was held, then released.** `./install.sh` is the moment the check
   reaches every enrolled repository, and `agents-task-viewer` would have been
   blocked on the spot. The hold was lifted only after that repository was gone
@@ -80,16 +87,17 @@ is what cleared the publish hold. Nothing is half-finished.
 
 ## Next session: start here
 
-**Merge PR #107, then archive the change.** The work is done and the artifacts
-are already published, so the merge is the last step that changes anything:
-`gh pr merge 107`, then `openspec archive two-real-instruction-files`, which
-folds the four spec deltas into their slots.
-
-**Then re-run `init-project.sh` in `callbot`, `cparx`, `fx-signal-agent` and
+**Re-run `init-project.sh` in `callbot`, `cparx`, `fx-signal-agent` and
 `fbc-platform`.** All four carry a section with no `section-version`, and the
 in-place block update is what repairs it — this is the first real use of the
 update path 2.0.0 made possible, so watch that it leaves everything outside the
-markers alone.
+markers alone. That is the only work this change leaves behind; everything else
+is merged, archived and published.
+
+Two open changes remain, neither touched this session:
+`initializer-cannot-destroy-instruction-file` (complete, unarchived — check
+whether 2.0.0 subsumed it before archiving) and `one-enforcement-floor`
+(55/100).
 
 ## Open questions
 

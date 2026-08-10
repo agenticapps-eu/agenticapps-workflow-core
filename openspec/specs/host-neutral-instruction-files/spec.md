@@ -306,41 +306,58 @@ guaranteed it for the next host.
 
 ### Requirement: The Claude instruction file is out of scope
 
-`CLAUDE.md` SHALL NOT be subject to these requirements **while it is a regular
-file that Claude alone reads**.
+`CLAUDE.md` SHALL NOT be subject to these requirements **only where it is the
+sole instruction file in the repository and Claude alone reads it**.
 
-Where `CLAUDE.md` is a symlink to the shared instruction file, it is not a second
-file and this carve-out does not apply: every requirement in this capability
-governs those bytes, because they are the shared file's bytes. Markers, the
-`agents:` frontmatter and the section version apply exactly once, to the one file
-under both names.
+Where a repository carries both names, `CLAUDE.md` is one of the two copies of
+the shared instruction file and this carve-out does not apply. Every requirement
+in this capability governs its bytes, because they are the shared file's bytes.
+Markers, the `agents:` frontmatter and the section version appear in both
+copies, identically, because the two copies are required to be identical.
 
 The original reason for the carve-out was that "Claude is its only reader, so
-there is no second agent to coordinate with and nothing to deduplicate". A
-symlink inverts that premise rather than satisfying it: the file Claude reads
-becomes the file codex, opencode, pi and omp read. Left unamended, this
-capability would exempt from its own marker and frontmatter rules the very bytes
-those rules exist to govern — and it would do so through a name, not through a
-property of the content.
+there is no second agent to coordinate with and nothing to deduplicate". Two
+identical files invert that premise exactly as the symlink did: the file Claude
+reads holds the same bytes codex, opencode, pi and omp read. The previous
+revision narrowed the carve-out for the symlink case only, which would now
+exempt `CLAUDE.md` in precisely the arrangement that replaced it — a regular
+file carrying the shared content. The condition that matters is whether the
+bytes are shared, never whether the path is a link.
 
 #### Scenario: Claude-only project
 
-- **WHEN** a repo is provisioned for Claude alone and `CLAUDE.md` is a regular file
-- **THEN** no requirement in this capability applies to it
+- **WHEN** a repo is provisioned for Claude alone, carrying `CLAUDE.md` and no
+  `AGENTS.md`
+- **THEN** no requirement in this capability applies to `CLAUDE.md`
 - **AND** the absence of markers in `CLAUDE.md` SHALL NOT be reported as a
   violation
 
+#### Scenario: Both names are present
+
+- **GIVEN** a repository carrying both `AGENTS.md` and `CLAUDE.md`
+- **WHEN** this capability's requirements are evaluated
+- **THEN** they SHALL apply to both names
+- **AND** the markers, frontmatter and section version SHALL be identical in
+  both, because the two files are required to be byte-identical
+
 #### Scenario: `CLAUDE.md` is a symlink to the shared file
+
+A repository that has not migrated still carries the previous arrangement, so
+this scenario is kept rather than deleted — and its answer is unchanged, because
+it never turned on the link. What the link decided was only whether the bytes
+were shared, and two identical regular files share them just as completely.
 
 - **WHEN** `CLAUDE.md` resolves to the shared instruction file
 - **THEN** every requirement in this capability applies to the resolved file
 - **AND** the requirements SHALL be evaluated once, against the resolved path,
   rather than once per name
+- **AND** the arrangement SHALL NOT be produced by the initializer, which
+  refuses it, nor committed, which the change gate fails
 
 #### Scenario: Tooling counts instruction files
 
-- **WHEN** tooling enumerates instruction files to check or repair them
-- **THEN** it SHALL resolve symlinks first, so one file under two names is
-  processed once
-- **AND** SHALL NOT report the second name as a duplicate section
+- **WHEN** tooling counts the instruction files in a repository carrying both
+  names
+- **THEN** it SHALL count one shared instruction file, present under two paths
+- **AND** it SHALL NOT report a duplicate-content violation for the pair
 

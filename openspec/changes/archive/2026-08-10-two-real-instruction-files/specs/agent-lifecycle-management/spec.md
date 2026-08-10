@@ -28,6 +28,33 @@ path are unchanged — not that its bytes were untouched. The byte-identical
 claim is made only of the host-neutral section, where it is both achievable and
 the property that matters, since that section is the content every agent reads.
 
+The three scenarios below are carried through unchanged. A MODIFIED block
+replaces the requirement whole, so omitting them would delete them — which is
+what `openspec archive` refused to do, correctly, when this delta first named
+only the new one.
+
+#### Scenario: First agent arrives
+
+- **WHEN** an agent is provisioned into a repo with no agents
+- **THEN** the host-neutral workflow section SHALL be added
+- **AND** that agent's link SHALL be added
+
+#### Scenario: Second agent arrives
+
+- **WHEN** a second agent is provisioned
+- **THEN** only that agent's link SHALL be added
+- **AND** the host-neutral workflow section SHALL be byte-identical before and
+  after
+- **AND** the first agent's link SHALL be unchanged
+
+#### Scenario: One of several agents leaves
+
+- **WHEN** an agent is removed from a repo that will still have agents
+- **THEN** only that agent's link SHALL be removed
+- **AND** the host-neutral workflow section SHALL be byte-identical before and
+  after
+- **AND** every remaining agent's link SHALL be unchanged
+
 #### Scenario: Adding an agent in a repository carrying both names
 
 - **GIVEN** a repository carrying the shared file as `AGENTS.md` and `CLAUDE.md`
