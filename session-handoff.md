@@ -1,122 +1,81 @@
-# Session Handoff — 2026-08-09 (twenty-seventh session)
+# Session Handoff — 2026-08-10 (twenty-eighth session)
 
-gstack removed and reinstalled clean. **Spec 2.0.0 shipped and archived.** Three
-PRs merged, one closed. Nothing is in flight — the tree is clean, there are no
-open PRs, and no branch is waiting.
+`two-real-instruction-files` is **implemented, tested and pushed** on
+`feat/two-real-instruction-files` (PR #107, one commit `572a067` plus a merge of
+#106). Nothing is half-finished. **Publishing is deliberately held** — that is
+the first decision the next session inherits.
 
 ## Accomplished
 
-- **gstack: full removal and clean reinstall.** One checkout at
-  `~/.claude/skills/gstack` (→ **v1.61.0.0**), `./setup --host auto`, native on
-  claude + codex + opencode. Removed 55 link-dirs, the hand-vendored
-  `setup-gstack`, six duplicate prefixed links, `~/.pi/agent/gstack-pi`
-  (**1.0 GB**) and the `pi-gstack` npm package. Kept by decision: `~/.gstack`
-  (API key, learnings, 308M browser profiles) and eight project `.gstack/` dirs.
-- **`database-sentinel` removed** from every host — skill checkout and both
-  aliases. No host declares the name.
-- **`impeccable` made on-demand everywhere** — canonical name on all four skill
-  dirs, one declaration each, via plain symlinks **nothing in the workflow owns**.
-- **PR #99 merged** — the gate-resolution measurement evidence.
-- **PR #100 merged — spec 2.0.0.** Two gate bindings removed
-  (`database-security`, design), `GSD_SKIP_REVIEWS` deleted from the live
-  surface, `gate/` and `workflow-diagram.mmd` deleted, `workflow.mmd`'s two false
-  statements corrected, **§13 retired**, ADR-0030 superseding ADR-0011+0012.
-- **PR #101 merged** — change archived; `vestigial-surface-removal` is now a spec
-  slot (13 requirements), `change-gate-enforcement` gained 3.
-- **PR #78 closed** as outdated (131 commits behind, conflicting), and its branch
-  later **deleted** with four others — see *Branch cleanup* below.
+- **`init-project` 1.2.0 → 2.0.0.** No `ln -s`, no `mv -f`, no `rm`: its only
+  write to an existing file is between the markers, in place, so the file keeps
+  its path, inode and mode. The block is now *updated* rather than skipped when
+  present. A symlink under either name is refused, naming which one and the
+  migration step; so is a FIFO. 17 RED → **101/101 GREEN twice**.
+- **`gate` 2.0.0 → 2.1.0.** A second blocking condition: `AGENTS.md` and
+  `CLAUDE.md` must be readable, regular and byte-identical. 12 new harness rows
+  (section G), 6 RED → **81/81 GREEN**, plus five real commits in a scratch repo.
+- **spec 2.0.0 → 2.1.0**, minor. §18's escape-hatch MUST narrowed.
+- **Core migrated**, by merging #106 in. Both names are regular files, one blob.
+- **`tools/agents-md-conformance.sh`** no longer refuses `CLAUDE.md` outright —
+  only where it is the sole instruction file. 77 → 79 rows, green.
+- **A sixth enrolled repository found**: `agents-task-viewer`.
 
 ## Decisions
 
-- **Kill the custom prefixed links, go native on all hosts.** The six removed
-  were true duplicates — `codex-cso` and `gstack-cso` both declared `cso`.
-- **`~/.gstack` kept.** Holds a live OpenAI key and months of learnings, and
-  causes no duplication.
-- **`impeccable` unbound but not uninstalled.** It is a policy change, labelled
-  as one rather than buried under "dead surface". Its availability is
-  deliberately not the workflow's concern.
-- **§13 retired on the fourth argument.** Three attempts argued from local
-  machine state and were wrong. The one that holds: this release is already
-  major, so the three hosts binding §13 re-assert against 2.0.0 either way —
-  retiring it now imposes no break the release does not already impose, and
-  retiring it later would impose a second. `reference-implementations/README.md`
-  **keeps** the binding facts; only their status changed.
-- **2.0.0, not 1.7.0.** Two reviewers independently called the minor argument
-  self-serving. They were right.
-- **CI floor lowered 71 → 69** with the reason in the diff, as the guard demands.
+- **Merge #106 into this branch rather than wait for it.** Core's own hook
+  resolves the working tree, so the new check failed every commit here until the
+  migration landed. **#106 is now redundant and can be closed** — its commit is
+  in #107's history.
+- **Hold publishing.** `./install.sh` is what makes the check reach every
+  enrolled repository, and `agents-task-viewer` would be blocked on the spot.
+- **Amend §18 rather than add an escape hatch.** The hatch MUST had been vacuous
+  since gate 2.0.0; a second blocker made it live and would have demanded a hatch
+  for the one check whose value is that it has none. §18 now names both
+  conditions as taking none. Minor: it removes an obligation and adds none, and
+  it does **not** oblige hosts to implement the pair check.
+- **Preservation is scoped to bytes outside the markers**, and asserted two ways
+  — a digest of the file minus the marker range for the update case, and an
+  exact-prefix comparison for the append case, since appending necessarily adds
+  the blank separator line.
+- **Inode assertions**, because every content assertion in the suite is satisfied
+  by a `mv` of a fresh file over the destination — which is what task 1.4 forbids.
 
 ## Files modified
 
-Merged in #100 (39 files) and #101. Principal:
-`spec/00-overview.md` (2.0.0, §13 retirement), `spec/02`, `spec/17`, `spec/18`,
-`spec/13-ts-declare-first.md` (deleted), `skills/agentic-apps-workflow/SKILL.md`,
-`reference-implementations/openspec-change-gate/*`, `tools/change-gate-conformance.sh`,
-`.github/workflows/openspec-gate.yml`, `workflow.mmd`, `gate/` + `workflow-diagram.mmd`
-(deleted), `adrs/0030-*`, `CHANGELOG.md`, `reference-implementations/README.md`,
-`docs/evidence/gate-skill-resolution-measured.md`.
-Machine, not version-controlled: gstack, database-sentinel, impeccable,
-ts-declare-first as above.
+`reference-implementations/init-project/init-project.sh` (rewritten, 2.0.0) ·
+`reference-implementations/openspec-change-gate/openspec-change-gate.sh`
+(`instruction_pair_check`, wired first in pre-commit; 2.1.0) ·
+`tools/init-project.test.sh` (rewritten; symlink assertions inverted) ·
+`tools/change-gate-conformance.sh` (+section G, 12 rows) ·
+`tools/agents-md-conformance.sh` + `.test.sh` (carve-out narrowed) ·
+`.github/workflows/openspec-gate.yml` (floors 69→81, 57→69) ·
+`spec/18-retargeted-change-gate.md`, `spec/00-overview.md`, `CHANGELOG.md` ·
+`docs/HOW-IT-FITS-TOGETHER.md` · `AGENTS.md` + `CLAUDE.md` (both, identically) ·
+`openspec/changes/two-real-instruction-files/tasks.md`.
 
 ## Next session: start here
 
-**Nothing is half-finished.** Pick one of three live changes, all reviewed, none
-started this session:
-
-| Change | Open | What it is |
-|---|---|---|
-| `one-enforcement-floor` | 45 | largest; has a CODE-REVIEW.md already |
-| `fresh-clone-needs-nothing` | 36 | |
-| `fleet-carries-only-current` | 32 | carries three GSD/planning removal inventories |
-
-`projects-bind-not-copy` shows 34 open tasks and is **CLOSED** — its `tasks.md`
-says so on line 1, obsolete by measurement. Do not work it.
-
-Two of these predate spec 2.0.0 and may need their version claims reconciled.
-**Check that first**, before executing tasks — this session lost most of a day to
-a change whose premise had expired.
+**Migrate `agents-task-viewer`, then publish.** It is enrolled, its index stages
+`CLAUDE.md` at mode `120000`, and it is the only thing between here and
+`./install.sh`. Give it one reviewable commit in its own repository — replace the
+link with a copy of `AGENTS.md`'s content — then verify with
+`git ls-files --stage AGENTS.md CLAUDE.md` (the index, not the worktree, is what
+the check reads), then run `./install.sh` here and re-measure the published
+version markers. Only then are tasks 2.6, 5.1 and 5.3 closable and the change
+archivable.
 
 ## Open questions
 
-1. **`impeccable` is bound by two hand-made symlinks** no installer recreates.
-   Deliberate, but a machine rebuild loses them.
-2. **The installer has no retired-artifact sweep**, so removals don't reach other
-   machines' installs. Scoped honestly to this machine; gap open.
-3. **Host-repo residue** — `GSD_SKIP_REVIEWS` survives in `claude-workflow` and
-   `codex-workflow` templates. Recorded, not patched; those are archived repos.
-4. **After any `gstack-upgrade`, re-run `./setup --host auto`** — upgrade runs a
-   bare `./setup`, which relinks claude only.
-5. **Branch cleanup — origin and local are now `main` only.** Ten stale branches
-   went: five were fully merged, and five carried **64 commits that never
-   merged**, deleted by explicit operator decision after the counts were shown.
-   There is no local copy of any of them. Tip SHAs, which are the recovery path
-   while GitHub retains unreachable objects:
-
-   | Branch | Tip | Commits |
-   |---|---|---|
-   | `feat/executable-migration-format` | `4fcb645432bf8f2cb35aa86595a983e036dc8dfd` | 38 |
-   | `fix/shim-suppressed-report-and-fleet-propagation` | `a4bae91fb54f1c4211f2f5695eb6cd7058590ed6` | 11 |
-   | `feat/spec-18-single-reviewer-floor` | `d4e3b7a83cc3f9670cd1766f6ce433695156b54a` | 10 |
-   | `feat/run-the-global-floor-migration` | `bcb77a0e92e48679ff3b22715db0b7c5daa1f566` | 4 |
-   | `docs/handoff-donalds-verdict` | `cc71fd35e35a89bebe6fd9c07f1ed7bfc8e2e432` | 1 |
-
-   #78's commit also stays reachable via `refs/pull/78/head`. Do not rely on
-   either route indefinitely. If the executable migration format is wanted again,
-   propose it fresh against 2.0.0 rather than recovering the branch.
-6. Carried over: AGE-510 (nothing detects an unreadable instruction file),
-   AGE-509 (`check-shims.sh` has no reverse pass), no interception of destructive
-   SQL, `normalize-claude-md` has no implementation, `claude-workflow` has 11
-   commits on no remote.
-
-## Mistakes worth not repeating
-
-- **I measured skill presence by directory basename.** codex and opencode key on
-  the declared frontmatter `name:`. That one error produced a whole proposed
-  change with no subject. Use `grep -lm1 "^name: X$" */SKILL.md`.
-- **I over-decomposed the plan** — 64 checkboxes for ~26 actions, after two
-  proposed changes that were discarded. The operator called it out; the actual
-  implementation then took one pass with no further review.
-- **I stopped at "your reason was wrong" instead of finding a better one.** §13's
-  retirement was available the whole time via the marginal-cost argument; it took
-  the operator asking twice to go look.
-- **I talked myself down from a correct 2.0.0 to a wrong 1.7.0** and needed two
-  external reviewers to put it back.
+1. **`tools/test-install-core-git-hooks.sh` is RED on `main`**, not from this
+   work — verified by stashing. Every row exits 1 or 127. Unrelated to this
+   change and not investigated.
+2. **The proposal's migration inventory is still wrong in the file.** It says
+   five repositories; it is six. `tasks.md` §5.1 records the correction and the
+   reason — the inventory enumerated repositories carrying the workflow
+   *section*, and the floor dispatches on the *enrolment key*.
+3. **`cmux` is excluded as being removed** and was never re-checked. If that
+   repository outlives the plan, it carries the old arrangement.
+4. Carried over: AGE-510, AGE-509, no interception of destructive SQL,
+   `normalize-claude-md` has no implementation, `claude-workflow` has 11 commits
+   on no remote, the installer has no retired-artifact sweep.
