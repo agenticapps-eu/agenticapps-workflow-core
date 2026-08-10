@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gate-version: 2.0.0
+# gate-version: 2.1.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. That path is written by claude / codex /
@@ -7,6 +7,24 @@
 # a host still vendoring an older copy silently republishes it over a newer one
 # and reverts the fix for every agent on the machine. Installers MUST refuse to
 # overwrite a higher version. Bump this whenever the gate's behaviour changes.
+#   2.1.0 — a second BLOCKING condition, and the first that is not about the
+#           change artifacts: `AGENTS.md` and `CLAUDE.md` must be readable,
+#           regular and byte-identical, judged from the STAGED INDEX. It ships
+#           with init-project 2.0.0, which is what stopped making one of them a
+#           symlink; neither half is publishable alone.
+#           * a writer without a check is an outcome this repository has already
+#             had once. Six "auto-synced" blocks went on claiming to be
+#             auto-synced for months after their syncer was retired on
+#             2026-07-28, because nothing was looking
+#           * it REPLACES a guarantee rather than adding one. Two names, one
+#             inode, could not diverge; two regular files can
+#           * MINOR on the 1.5.0 precedent — that version was marked BREAKING
+#             for evidence and still took a minor bump. Nothing that passed
+#             2.0.0 in a repository whose instruction files agree fails 2.1.0,
+#             and the pre-commit surface is reached at all only in a repository
+#             the floor has enrolled
+#           * PRE-COMMIT ONLY. Hook mode decides one edit at a time, and a pair
+#             that diverged three edits ago is not this edit's fault
 #   2.0.0 — REVIEWS NO LONGER BLOCK. A plan review is worth running; refusing to
 #           let anyone write code until one exists is a different claim, and it
 #           is the one that kept failing. Missing, stale, unverifiable and
@@ -728,6 +746,125 @@ is_openspec_artifact(){                # edits to the change itself must always 
   esac
 }
 
+# --- the instruction-file pair ----------------------------------------------
+#
+# THE SECOND THING THIS GATE BLOCKS ON, and the only one that is not about the
+# change artifacts. It earns that by REPLACING a guarantee rather than adding
+# one: until two-real-instruction-files, `AGENTS.md` and `CLAUDE.md` were one
+# inode and could not diverge. They are two regular files now, and a check that
+# merely reported would leave the fleet where the last synced-block mechanism
+# left it — six blocks declaring themselves auto-synced for months after their
+# syncer was retired, with nothing looking and nothing saying so.
+#
+# IT READS THE STAGED INDEX, NEVER THE WORKING TREE, for the comparison. A
+# pre-commit check that compares worktree files asserts something other than
+# what is about to be committed: an unstaged edit to one name can make a
+# genuinely divergent pair look equal, and an unstaged edit can fail a commit
+# whose staged content is fine. Both directions teach the operator that the
+# check is noise, which is worse than not checking.
+#
+# The one thing it does read from the working tree is whether each name can be
+# READ AT ALL, and that is not a comparison. Structural inspection reports a
+# plausible file for both halves of a symlink cycle — `-L` is true, `readlink`
+# answers — which is how two repositories carried unreadable instruction files
+# for about 36 hours with every check green. Only a read distinguishes them.
+#
+# Pre-commit only. The requirement is written about a commit; hook mode decides
+# one edit at a time, and an instruction file that diverged three edits ago is
+# not this edit's fault.
+INSTRUCTION_NAMES="AGENTS.md CLAUDE.md"
+
+repo_is_enrolled() {
+  [ "$(git config --local --type=bool --get agenticapps.workflow.enrolled 2>/dev/null)" = true ]
+}
+
+# Prints `<mode> <blob>` for a path in the index, or nothing when it has no
+# entry there. A staged DELETION is invisible here — the index simply has no
+# row — which is why the deletion case below diffs against HEAD instead.
+staged_entry() { # $1 = path
+  git ls-files --stage -- "$1" 2>/dev/null | awk 'NR==1 {print $1, $2}'
+}
+
+instruction_pair_check() { # 0 = nothing to report, 1 = block the commit
+  local rc=0 name mode blob a_mode a_blob c_mode c_blob deleted
+
+  # (1) Readability, in the working tree, before anything else. A name that
+  # cannot be read is the failure no other check can see, and it is worth
+  # saying even when the staged blobs are impeccable.
+  for name in $INSTRUCTION_NAMES; do
+    { [ -e "$ROOT/$name" ] || [ -L "$ROOT/$name" ]; } || continue
+    if ! cat "$ROOT/$name" >/dev/null 2>&1; then
+      log "BLOCKED — $name cannot be read. An unreadable instruction file is"
+      log "          indistinguishable from an absent one to every agent on this machine."
+      rc=1
+    fi
+  done
+
+  # (2) Presence, and only for a repository that opted in. Enrolment is the
+  # existing `agenticapps.workflow.enrolled` predicate the initializer writes
+  # and the floor already resolves, so this needs no new state. A repository
+  # that never ran the initializer has nothing to keep in step.
+  #
+  # It is the DELETION that fails, never the absence: plenty of enrolled
+  # repositories predate the pair, and failing them for a name they never had
+  # would be work created by a version bump. Without this row the pair is
+  # trivially escapable — remove one name and the equality check has no
+  # subject, which an ordinary `git rm` reaches by accident.
+  if repo_is_enrolled && git rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    for name in $INSTRUCTION_NAMES; do
+      deleted="$(git diff --cached --name-only --diff-filter=D -- "$name" 2>/dev/null)"
+      if [ -n "$deleted" ]; then
+        log "BLOCKED — this commit deletes $name, and this repository is enrolled in the"
+        log "          workflow. The instruction file is carried under both names, kept"
+        log "          identical; removing one is how the pair stops being checked at all."
+        rc=1
+      fi
+    done
+  fi
+
+  # (3) The pair itself, from the index. One name alone is not compared —
+  # there is no second copy to disagree with it.
+  a_mode=""; a_blob=""; c_mode=""; c_blob=""
+  read -r a_mode a_blob <<EOF
+$(staged_entry AGENTS.md)
+EOF
+  read -r c_mode c_blob <<EOF
+$(staged_entry CLAUDE.md)
+EOF
+  [ -n "$a_blob" ] && [ -n "$c_blob" ] || return "$rc"
+
+  # A SYMLINK IS REJECTED, NOT RESOLVED. Git records one as mode 120000 with the
+  # target path as its content, so the two halves of a link pair compare EQUAL
+  # to each other under a naive read and would sail through the check below
+  # while reinstating the arrangement this replaced. Mode 160000 (a gitlink)
+  # lands here too, and for the same reason: it is not a file with instructions
+  # in it.
+  for name in AGENTS.md CLAUDE.md; do
+    mode=$([ "$name" = AGENTS.md ] && printf '%s' "$a_mode" || printf '%s' "$c_mode")
+    case "$mode" in
+      100644|100755) ;;
+      120000)
+        log "BLOCKED — $name is staged as a symlink. Both names must be regular files"
+        log "          holding identical content; a link makes git store a path where the"
+        log "          instructions should be, and Windows checks it out as a text file."
+        rc=1 ;;
+      *)
+        log "BLOCKED — $name is staged with mode $mode, which is not a regular file."
+        rc=1 ;;
+    esac
+  done
+
+  if [ "$a_blob" != "$c_blob" ]; then
+    log "BLOCKED — AGENTS.md and CLAUDE.md differ in this commit. They are one"
+    log "          instruction file under two names and must be byte-identical; every"
+    log "          host reads one of them, and a divergence is two different rules."
+    log "          Copy whichever is correct over the other and stage both."
+    rc=1
+  fi
+
+  return "$rc"
+}
+
 # --- modes -----------------------------------------------------------------
 
 case "$MODE" in
@@ -750,6 +887,15 @@ case "$MODE" in
     ;;
 
   pre-commit)
+    # The instruction-file pair is judged FIRST, and independently of what is
+    # staged. The openspec-only exemption below it is about the CHANGE gate —
+    # "nothing but artifacts staged, so there is no code edit to gate" — and
+    # letting it run first would launder a divergent pair through any commit
+    # that happened to touch no code.
+    if ! instruction_pair_check; then
+      log "commit BLOCKED — the instruction file must be readable and identical under both names."
+      exit 1
+    fi
     # Only block if the commit stages non-openspec files while the gate is unsatisfied.
     # Anchored at ^: staged paths are repo-relative, and `(^|/)openspec/` also
     # exempted `src/openspec/...` — the same bypass is_openspec_artifact had.

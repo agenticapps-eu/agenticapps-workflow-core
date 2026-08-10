@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # init-project.test.sh — the project initializer's contract, test-first.
 #
-# Covers change fresh-clone-needs-nothing tasks 3.1-3.5 and 3.7-3.11. Written
-# and observed RED before reference-implementations/init-project/init-project.sh
-# existed.
+# Covers change two-real-instruction-files section 1, and retains the coverage
+# from fresh-clone-needs-nothing tasks 3.1-3.5 and 3.7-3.11 that survived it.
+#
+# WHAT CHANGED AND WHY THE OLD ASSERTIONS WERE INVERTED. Until 2.0.0 this suite
+# asserted that CLAUDE.md is a SYMLINK to AGENTS.md, which was the arrangement
+# that made the two names one inode. two-real-instruction-files replaces that
+# guarantee with two regular files and a gate check, so every "is a symlink"
+# assertion below is now "is a regular file" and the symlink cases moved from
+# the success path to the refusal path. The rows did not become weaker: the
+# equality they used to get by construction is now asserted directly, on bytes.
 #
 # The initializer is driven through its public interface only: a working
 # directory inside a scratch repository, a PATH, and an exit code out. Nothing
@@ -118,12 +125,83 @@ digest() {
 }
 absent_n=0
 
+# THE PRESERVATION ASSERTION, and the only honest form of it (task 1.7).
+# "Every existing line is preserved" cannot mean every byte: updating the block
+# necessarily rewrites the bytes BETWEEN the markers. So the claim is scoped to
+# the bytes OUTSIDE them, which is what an operator's own content occupies, and
+# this digests exactly that. A file with no markers digests whole.
+digest_outside_markers() {
+  local f="$1" b e
+  if [ ! -f "$f" ]; then printf 'ABSENT(%s)#%s' "$f" "$((++absent_n))"; return; fi
+  b=$(grep -nF -m1 "$BEGIN_MARKER" "$f" 2>/dev/null | cut -d: -f1)
+  e=$(grep -nF -m1 "$END_MARKER" "$f" 2>/dev/null | cut -d: -f1)
+  if [ -z "$b" ] || [ -z "$e" ]; then shasum -a 256 "$f" | cut -d' ' -f1; return; fi
+  { head -n "$((b - 1))" "$f"; tail -n "+$((e + 1))" "$f"; } | shasum -a 256 | cut -d' ' -f1
+}
+
+# The preservation assertion for the OTHER half of task 1.7 — a file that had no
+# block and now has one. digest_outside_markers is the wrong instrument there:
+# appending necessarily adds bytes outside the markers, one of them the blank
+# line that keeps the marker off the end of somebody's last sentence. What can
+# be asserted absolutely is that the original file is an unchanged PREFIX of the
+# new one, which forbids every edit, removal and reordering of existing content
+# while allowing the append that is the whole point of the run.
+#
+# `head -c` and a pipe rather than `cmp -n`: BSD cmp reports "EOF on <file>" for
+# a limit equal to the shorter file's length, so the portable spelling is to cut
+# the prefix and compare whole files.
+prefix_unchanged() { # $1 = file now, $2 = a copy of it as it was
+  local n
+  [ -f "$1" ] && [ -f "$2" ] || return 1
+  n=$(wc -c < "$2" | tr -d ' ')
+  head -c "$n" "$1" | cmp -s - "$2"
+}
+
+# The inode, so "it rewrote the file in place" can be told apart from "it
+# replaced the file with a new one". The distinction is the whole of task 1.4:
+# a `mv` over the destination passes every content assertion in this file and is
+# exactly the operation the requirement forbids.
+inode() { [ -e "$1" ] && ls -i "$1" 2>/dev/null | awk '{print $1}' || printf 'NONE#%s' "$((++absent_n))"; }
+
 # 0 when the file is missing, so a count comparison cannot error out.
 count_marker() { [ -f "$2" ] && grep -cF "$1" "$2" 2>/dev/null || printf '0'; }
 
+# Both names, regular, readable, non-empty and byte-identical. This is the
+# post-condition of every successful run and it is asserted after each one,
+# because it is the invariant the gate check will later enforce on commits —
+# a writer that can produce a pair the gate rejects is a broken writer.
+assert_pair() { # $1 = repo, $2 = label
+  local r="$1" lbl="$2" a c arc crc
+  if [ -L "$r/AGENTS.md" ] || [ -L "$r/CLAUDE.md" ]; then
+    bad "$lbl: neither name is a symlink" "one of them is a link — the arrangement 2.0.0 removed"
+    return
+  fi
+  ok "$lbl: neither name is a symlink"
+
+  [ -f "$r/AGENTS.md" ] && [ -f "$r/CLAUDE.md" ] \
+    && ok "$lbl: both names are regular files" \
+    || { bad "$lbl: both names are regular files" "one is missing or is not a regular file"; return; }
+
+  a=$(cat "$r/AGENTS.md" 2>/dev/null); arc=$?
+  c=$(cat "$r/CLAUDE.md" 2>/dev/null); crc=$?
+  [ "$arc" -eq 0 ] && [ "$crc" -eq 0 ] && [ -n "$a" ] \
+    && ok "$lbl: both names read, and are non-empty" \
+    || bad "$lbl: both names read, and are non-empty" "AGENTS rc=$arc CLAUDE rc=$crc"
+
+  cmp -s "$r/AGENTS.md" "$r/CLAUDE.md" \
+    && ok "$lbl: the two names are byte-identical" \
+    || bad "$lbl: the two names are byte-identical" \
+           "$(diff "$r/AGENTS.md" "$r/CLAUDE.md" 2>&1 | head -3)"
+
+  grep -qF "$BEGIN_MARKER" "$r/AGENTS.md" && grep -qF "$END_MARKER" "$r/AGENTS.md" \
+    && ok "$lbl: the section sits behind the normative markers" \
+    || bad "$lbl: the section sits behind the normative markers" "marker missing"
+}
+
 # Every path the initializer is permitted to leave behind. Anything else in the
 # worktree is a violation of "and nothing else", which is the requirement most
-# likely to erode quietly.
+# likely to erode quietly. It also catches a temp file left in the repository:
+# the writer builds the new content somewhere, and somewhere must not be here.
 unexpected_paths() {
   ( cd "$1" && find . -mindepth 1 \
       -not -path './.git' -not -path './.git/*' \
@@ -134,7 +212,7 @@ unexpected_paths() {
 }
 
 # ---------------------------------------------------------------------------
-echo "A. A bare repository gets exactly two artifacts (task 3.1)"
+echo "A. Neither file exists — a bare repository gets exactly two artifacts"
 # ---------------------------------------------------------------------------
 r=$(new_repo bare)
 run_init "$r"
@@ -159,96 +237,110 @@ grep -q '^init --tools none$' "$r/.openspec-invocations" 2>/dev/null \
   || bad "the CLI is invoked with --tools none" \
          "recorded: $(cat "$r/.openspec-invocations" 2>/dev/null || echo '(nothing)')"
 
-[ -f "$r/AGENTS.md" ] && [ ! -L "$r/AGENTS.md" ] \
-  && ok "AGENTS.md is a regular file" \
-  || bad "AGENTS.md is a regular file" "missing, or it is a link"
-
-[ -L "$r/CLAUDE.md" ] && ok "CLAUDE.md is a symlink" \
-  || bad "CLAUDE.md is a symlink" "missing, or it is a regular file"
-
-[ "$(cd "$r" && readlink CLAUDE.md)" = "AGENTS.md" ] \
-  && ok "CLAUDE.md points at AGENTS.md by relative path" \
-  || bad "CLAUDE.md points at AGENTS.md by relative path" \
-         "readlink gave: $(cd "$r" && readlink CLAUDE.md 2>&1)" \
-         "an absolute link breaks the moment the repo is cloned elsewhere"
-
-grep -qF "$BEGIN_MARKER" "$r/AGENTS.md" 2>/dev/null && grep -qF "$END_MARKER" "$r/AGENTS.md" 2>/dev/null \
-  && ok "the section is written behind the normative markers (task 3.9)" \
-  || bad "the section is written behind the normative markers (task 3.9)" \
-         "host-neutral-instruction-files makes these literal strings normative"
+assert_pair "$r" "bare"
 
 [ -z "$(unexpected_paths "$r")" ] \
-  && ok "and nothing else is written (task 3.5)" \
-  || bad "and nothing else is written (task 3.5)" \
+  && ok "and nothing else is written" \
+  || bad "and nothing else is written" \
          "unexpected: $(unexpected_paths "$r" | tr '\n' ' ')"
 
 for p in .claude .codex .github commands claude-md workflow-config.md; do
-  [ ! -e "$r/$p" ] && ok "no $p (task 3.5)" \
-    || bad "no $p (task 3.5)" "the initializer wrote a host, hook, or CI artifact"
+  [ ! -e "$r/$p" ] && ok "no $p" \
+    || bad "no $p" "the initializer wrote a host, hook, or CI artifact"
 done
 
 # ---------------------------------------------------------------------------
 echo
-echo "B. Running it twice changes nothing the second time (tasks 3.2, 3.9)"
+echo "B. Running it twice changes nothing the second time"
 # ---------------------------------------------------------------------------
-before=$(digest "$r/AGENTS.md")
+a_before=$(digest "$r/AGENTS.md"); c_before=$(digest "$r/CLAUDE.md")
+a_ino=$(inode "$r/AGENTS.md"); c_ino=$(inode "$r/CLAUDE.md")
 run_init "$r"
 
 [ "$RC" -eq 0 ] && ok "second run exits zero" || bad "second run exits zero" "got $RC"
 
-[ -f "$r/AGENTS.md" ] && [ "$(digest "$r/AGENTS.md")" = "$before" ] \
-  && ok "second run leaves AGENTS.md byte-identical" \
-  || bad "second run leaves AGENTS.md byte-identical" "the file changed, or never existed"
+[ "$(digest "$r/AGENTS.md")" = "$a_before" ] && [ "$(digest "$r/CLAUDE.md")" = "$c_before" ] \
+  && ok "second run leaves both names byte-identical to themselves" \
+  || bad "second run leaves both names byte-identical to themselves" "a file changed, or never existed"
 
 [ "$(count_marker "$BEGIN_MARKER" "$r/AGENTS.md")" -eq 1 ] \
-  && ok "the section is not appended twice" \
-  || bad "the section is not appended twice" \
-         "found $(count_marker "$BEGIN_MARKER" "$r/AGENTS.md") begin markers, expected 1"
+  && [ "$(count_marker "$BEGIN_MARKER" "$r/CLAUDE.md")" -eq 1 ] \
+  && ok "the section is not appended twice, in either name" \
+  || bad "the section is not appended twice, in either name" \
+         "AGENTS.md has $(count_marker "$BEGIN_MARKER" "$r/AGENTS.md") begin markers"
 
-[ -L "$r/CLAUDE.md" ] && ok "the symlink is not re-created as a file" \
-  || bad "the symlink is not re-created as a file" "CLAUDE.md is no longer a link"
+# The file is REWRITTEN, never REPLACED. Task 1.4 forbids moving, replacing,
+# linking or deleting, and a `mv` of a freshly built file over the destination
+# satisfies every content assertion above while doing precisely that.
+[ "$(inode "$r/AGENTS.md")" = "$a_ino" ] && [ "$(inode "$r/CLAUDE.md")" = "$c_ino" ] \
+  && ok "neither name is replaced by a different file" \
+  || bad "neither name is replaced by a different file" \
+         "the inode changed — the writer moved a new file over an existing name"
+
+assert_pair "$r" "second run"
 
 # ---------------------------------------------------------------------------
 echo
-echo "C. An existing AGENTS.md keeps every line"
+echo "C. Only AGENTS.md exists — every line of it survives"
 # ---------------------------------------------------------------------------
 r=$(new_repo agents-only)
 printf '# House rules\n\nDeploy on Fridays, never on Mondays.\n' > "$r/AGENTS.md"
+cp "$r/AGENTS.md" "$TMP/agents-only.before"
+a_ino=$(inode "$r/AGENTS.md")
 run_init "$r"
 
 [ "$RC" -eq 0 ] && ok "exits zero" || bad "exits zero" "got $RC"
 grep -q 'Deploy on Fridays' "$r/AGENTS.md" \
   && ok "existing content survives" || bad "existing content survives" "content was lost"
-grep -qF "$BEGIN_MARKER" "$r/AGENTS.md" \
-  && ok "the section is appended behind the markers" \
-  || bad "the section is appended behind the markers" "no marker found"
-[ -L "$r/CLAUDE.md" ] && ok "CLAUDE.md is created as a symlink" \
-  || bad "CLAUDE.md is created as a symlink" "it is not a link"
+prefix_unchanged "$r/AGENTS.md" "$TMP/agents-only.before" \
+  && ok "and every byte of it is an unchanged prefix — the section is appended, never woven in" \
+  || bad "and every byte of it is an unchanged prefix — the section is appended, never woven in" \
+         "existing content was edited, removed or reordered"
+[ "$(inode "$r/AGENTS.md")" = "$a_ino" ] \
+  && ok "AGENTS.md is written in place, not replaced" \
+  || bad "AGENTS.md is written in place, not replaced" "the inode changed"
+assert_pair "$r" "agents-only"
 
 # ---------------------------------------------------------------------------
 echo
-echo "D. Only CLAUDE.md exists — the case that silently makes two files (task 3.7)"
+echo "D. Only CLAUDE.md exists — the case that silently makes two files"
 # ---------------------------------------------------------------------------
+# THE CASE THE WHOLE REQUIREMENT EXISTS FOR. Appending to CLAUDE.md and leaving
+# AGENTS.md alone is the obvious implementation and it produces the two
+# divergent copies the gate will later fail. Until 2.0.0 the script avoided that
+# by MOVING CLAUDE.md to AGENTS.md and linking it back; it no longer moves
+# anything, so the copy must be made and the pair asserted directly.
 r=$(new_repo claude-only)
 printf '# Claude rules\n\nAlways rebase.\n' > "$r/CLAUDE.md"
+c_ino=$(inode "$r/CLAUDE.md")
+cp "$r/CLAUDE.md" "$TMP/claude-only.before"
 run_init "$r"
 
 [ "$RC" -eq 0 ] && ok "exits zero" || bad "exits zero" "got $RC" "output: $(printf '%s' "$OUT" | head -2)"
 
-[ -f "$r/AGENTS.md" ] && [ ! -L "$r/AGENTS.md" ] && grep -q 'Always rebase' "$r/AGENTS.md" \
-  && ok "the content moves into AGENTS.md" \
-  || bad "the content moves into AGENTS.md" "AGENTS.md missing the original content"
+grep -q 'Always rebase' "$r/CLAUDE.md" \
+  && ok "CLAUDE.md keeps its own content" \
+  || bad "CLAUDE.md keeps its own content" "the original content is gone from CLAUDE.md"
 
-[ -L "$r/CLAUDE.md" ] && ok "CLAUDE.md is replaced by a symlink" \
-  || bad "CLAUDE.md is replaced by a symlink" "it is still a regular file"
+# It STAYS at its own path. The 1.x script moved it, which relocated a file the
+# operator did not ask to have relocated and widened its readership in the same
+# step. Content survived that; the path did not.
+[ "$(inode "$r/CLAUDE.md")" = "$c_ino" ] \
+  && ok "CLAUDE.md remains the same file at the same path — not moved" \
+  || bad "CLAUDE.md remains the same file at the same path — not moved" \
+         "the inode changed: it was moved, replaced, or re-created"
 
-# The whole point of the case. Appending to CLAUDE.md and creating AGENTS.md
-# beside it is the obvious implementation, it passes both assertions above, and
-# it produces exactly the two divergent copies the requirement forbids.
-{ [ -L "$r/CLAUDE.md" ] || [ -L "$r/AGENTS.md" ]; } \
-  && ok "NEVER two regular instruction files" \
-  || bad "NEVER two regular instruction files" \
-         "both names are regular files — the failure the rule exists to prevent"
+prefix_unchanged "$r/CLAUDE.md" "$TMP/claude-only.before" \
+  && ok "no line of it is removed, edited or reordered — the section is appended" \
+  || bad "no line of it is removed, edited or reordered — the section is appended" \
+         "the operator's own bytes changed"
+
+grep -q 'Always rebase' "$r/AGENTS.md" 2>/dev/null \
+  && ok "AGENTS.md is created holding the SAME content, block included" \
+  || bad "AGENTS.md is created holding the SAME content, block included" \
+         "AGENTS.md holds only the block, or does not exist"
+
+assert_pair "$r" "claude-only"
 
 printf '%s' "$OUT" | grep -qi 'agents\.md\|every host\|other host' \
   && ok "the widened readership is disclosed to the operator" \
@@ -257,7 +349,7 @@ printf '%s' "$OUT" | grep -qi 'agents\.md\|every host\|other host' \
 
 # ---------------------------------------------------------------------------
 echo
-echo "E. Both names exist as separate regular files (tasks 3.4, 3.8)"
+echo "E. Both exist as regular files"
 # ---------------------------------------------------------------------------
 r=$(new_repo both-differ)
 printf 'agents rule\n' > "$r/AGENTS.md"
@@ -271,23 +363,138 @@ run_init "$r"
   && ok "neither file is touched by the refusal" \
   || bad "neither file is touched by the refusal" "a refusal still wrote something"
 [ ! -d "$r/openspec" ] \
-  && ok "the refusal happens before anything is written (task 3.11 preflight)" \
-  || bad "the refusal happens before anything is written (task 3.11 preflight)" \
+  && ok "the refusal happens before anything is written" \
+  || bad "the refusal happens before anything is written" \
          "openspec/ was created before the conflict was detected"
+printf '%s' "$OUT" | grep -qi 'reconcil\|differ' \
+  && ok "and it says reconciling them is the operator's decision" \
+  || bad "and it says reconciling them is the operator's decision" \
+         "output: $(printf '%s' "$OUT" | head -2)"
 
 r=$(new_repo both-identical)
-printf 'same rule\n' > "$r/AGENTS.md"
-printf 'same rule\n' > "$r/CLAUDE.md"
+printf '# same rule\n' > "$r/AGENTS.md"
+printf '# same rule\n' > "$r/CLAUDE.md"
+a_ino=$(inode "$r/AGENTS.md"); c_ino=$(inode "$r/CLAUDE.md")
 run_init "$r"
 
 [ "$RC" -eq 0 ] && ok "identical content is not a conflict" \
   || bad "identical content is not a conflict" "got $RC; there is no rule to choose between"
-[ -L "$r/CLAUDE.md" ] && ok "identical content collapses to the symlink" \
-  || bad "identical content collapses to the symlink" "CLAUDE.md is still a regular file"
+[ "$(inode "$r/AGENTS.md")" = "$a_ino" ] && [ "$(inode "$r/CLAUDE.md")" = "$c_ino" ] \
+  && ok "both names are written in place, neither is replaced" \
+  || bad "both names are written in place, neither is replaced" "an inode changed"
+grep -q 'same rule' "$r/AGENTS.md" && grep -q 'same rule' "$r/CLAUDE.md" \
+  && ok "the shared content survives in both" \
+  || bad "the shared content survives in both" "content was lost"
+assert_pair "$r" "both-identical"
 
 # ---------------------------------------------------------------------------
 echo
-echo "F. Hostile starting states are refused, not repaired (task 3.8)"
+echo "F. The block is UPDATED in place, never appended beside itself"
+# ---------------------------------------------------------------------------
+# "Inserted or updated" is a real second behaviour, not a synonym for inserted.
+# A repository carrying an older section must end up carrying the current one,
+# and the bytes outside the markers must not move while that happens — which is
+# the preservation claim in its only defensible form (task 1.7).
+r=$(new_repo stale-block)
+{
+  printf '# House rules\n\nRebase, never merge.\n\n'
+  printf '%s\n' "$BEGIN_MARKER"
+  printf '\n## The AgenticApps workflow\n\nSOMETHING OLD AND WRONG.\n\n'
+  printf '%s\n' "$END_MARKER"
+  printf '\n## Afterword\n\nThis paragraph is below the block.\n'
+} > "$r/AGENTS.md"
+cp "$r/AGENTS.md" "$r/CLAUDE.md"
+outside_before=$(digest_outside_markers "$r/AGENTS.md")
+run_init "$r"
+
+[ "$RC" -eq 0 ] && ok "exits zero" || bad "exits zero" "got $RC" "output: $(printf '%s' "$OUT" | head -2)"
+
+[ "$(digest_outside_markers "$r/AGENTS.md")" = "$outside_before" ] \
+  && ok "every byte OUTSIDE the markers is unchanged" \
+  || bad "every byte OUTSIDE the markers is unchanged" \
+         "the writer touched content it does not own"
+
+grep -q 'This paragraph is below the block' "$r/AGENTS.md" \
+  && ok "content below the block survives" \
+  || bad "content below the block survives" "the writer truncated the file at the block"
+
+grep -q 'SOMETHING OLD AND WRONG' "$r/AGENTS.md" \
+  && bad "the stale section is replaced, not kept" "the old block is still there" \
+  || ok "the stale section is replaced, not kept"
+
+[ "$(count_marker "$BEGIN_MARKER" "$r/AGENTS.md")" -eq 1 ] \
+  && ok "and no second block is appended beside it" \
+  || bad "and no second block is appended beside it" \
+         "found $(count_marker "$BEGIN_MARKER" "$r/AGENTS.md") begin markers"
+
+assert_pair "$r" "stale-block"
+
+# A marker pair that does not delimit anything cannot be updated safely, and
+# guessing where the block ends is how a writer eats the rest of the file.
+r=$(new_repo unbalanced-markers)
+{ printf '# Rules\n\n'; printf '%s\n' "$BEGIN_MARKER"; printf '\nno end marker follows\n'; } > "$r/AGENTS.md"
+before=$(digest "$r/AGENTS.md")
+run_init "$r"
+[ "$RC" -ne 0 ] && ok "an unterminated block is refused" \
+  || bad "an unterminated block is refused" "exited 0 with no way to know where the block ends"
+[ "$(digest "$r/AGENTS.md")" = "$before" ] \
+  && ok "and the file is untouched" || bad "and the file is untouched" "it wrote anyway"
+
+# ---------------------------------------------------------------------------
+echo
+echo "G. One name is a symlink — refused in either direction"
+# ---------------------------------------------------------------------------
+# THE STATE THAT DESTROYED TWO REPOSITORIES, and now also the state every
+# repository migrating off 1.x is in. Refused rather than migrated in place:
+# replacing a link with content is a one-time, per-repository act that belongs
+# in a reviewable commit, not in a scaffolder run nobody is watching.
+r=$(new_repo claude-is-link)
+printf '# Real rules\n\nNever force-push to main.\n' > "$r/AGENTS.md"
+( cd "$r" && ln -s AGENTS.md CLAUDE.md )
+a_before=$(shasum -a 256 "$r/AGENTS.md" | cut -d' ' -f1)
+run_init "$r"
+
+[ "$RC" -ne 0 ] && ok "a CLAUDE.md symlink is refused — the 1.x arrangement is not adopted" \
+  || bad "a CLAUDE.md symlink is refused — the 1.x arrangement is not adopted" "exited 0"
+printf '%s' "$OUT" | grep -qi 'claude\.md' \
+  && ok "the refusal names which of the two is the link" \
+  || bad "the refusal names which of the two is the link" "output: $(printf '%s' "$OUT" | head -2)"
+printf '%s' "$OUT" | grep -qi 'copy\|replace\|regular file' \
+  && ok "and names the migration step" \
+  || bad "and names the migration step" "output: $(printf '%s' "$OUT" | head -3)"
+[ "$(shasum -a 256 "$r/AGENTS.md" | cut -d' ' -f1)" = "$a_before" ] \
+  && ok "the real file is left alone" || bad "the real file is left alone" "it was rewritten"
+[ ! -d "$r/openspec" ] \
+  && ok "and nothing is written before the refusal" \
+  || bad "and nothing is written before the refusal" "openspec/ was created first"
+
+# The inverse direction. `-f` and `cmp` both dereference, so when one name links
+# to the other a naive preflight compares a file to ITSELF, finds it trivially
+# identical, and waves through the arrangement it exists to refuse.
+r=$(new_repo agents-is-link)
+printf '# Real rules\n\nNever force-push to main.\n' > "$r/CLAUDE.md"
+( cd "$r" && ln -s CLAUDE.md AGENTS.md )
+c_before=$(shasum -a 256 "$r/CLAUDE.md" | cut -d' ' -f1)
+run_init "$r"
+
+[ "$RC" -ne 0 ] && ok "an AGENTS.md symlink is refused" \
+  || bad "an AGENTS.md symlink is refused" "exited 0 — this is the loop being created"
+printf '%s' "$OUT" | grep -qi 'agents\.md' \
+  && ok "the refusal names AGENTS.md" \
+  || bad "the refusal names AGENTS.md" "output: $(printf '%s' "$OUT" | head -2)"
+if cat "$r/CLAUDE.md" >/dev/null 2>&1 \
+   && [ "$(shasum -a 256 "$r/CLAUDE.md" | cut -d' ' -f1)" = "$c_before" ]; then
+  ok "CLAUDE.md is still readable and byte-identical"
+else
+  bad "CLAUDE.md is still readable and byte-identical" "read: $(cat "$r/CLAUDE.md" 2>&1 | head -1)"
+fi
+[ "$(cd "$r" && readlink AGENTS.md)" = "CLAUDE.md" ] \
+  && ok "AGENTS.md still points where it did" \
+  || bad "AGENTS.md still points where it did" "readlink: $(cd "$r" && readlink AGENTS.md 2>&1)"
+
+# ---------------------------------------------------------------------------
+echo
+echo "H. Other hostile starting states are refused, not repaired"
 # ---------------------------------------------------------------------------
 r=$(new_repo link-elsewhere)
 printf 'elsewhere\n' > "$TMP/outside.md"
@@ -295,8 +502,11 @@ ln -s "$TMP/outside.md" "$r/CLAUDE.md"
 outside_before=$(digest "$TMP/outside.md")
 run_init "$r"
 
-[ "$RC" -ne 0 ] && ok "a CLAUDE.md linked elsewhere is refused" \
-  || bad "a CLAUDE.md linked elsewhere is refused" "exited 0"
+[ "$RC" -ne 0 ] && ok "a CLAUDE.md linked outside the repository is refused" \
+  || bad "a CLAUDE.md linked outside the repository is refused" "exited 0"
+printf '%s' "$OUT" | grep -qF "$TMP/outside.md" \
+  && ok "and the refusal names the target" \
+  || bad "and the refusal names the target" "output: $(printf '%s' "$OUT" | head -2)"
 [ "$(readlink "$r/CLAUDE.md" 2>/dev/null)" = "$TMP/outside.md" ] \
   && ok "the existing link is left alone" || bad "the existing link is left alone" "the link was rewritten"
 [ "$(digest "$TMP/outside.md")" = "$outside_before" ] \
@@ -310,15 +520,54 @@ run_init "$r"
 [ "$RC" -ne 0 ] && ok "AGENTS.md as a directory is refused" \
   || bad "AGENTS.md as a directory is refused" "exited 0"
 
+r=$(new_repo claude-is-dir)
+mkdir "$r/CLAUDE.md"
+run_init "$r"
+[ "$RC" -ne 0 ] && ok "CLAUDE.md as a directory is refused" \
+  || bad "CLAUDE.md as a directory is refused" "exited 0"
+
 r=$(new_repo dangling)
 ln -s no-such-file "$r/CLAUDE.md"
 run_init "$r"
 [ "$RC" -ne 0 ] && ok "a dangling CLAUDE.md link is refused" \
   || bad "a dangling CLAUDE.md link is refused" "exited 0"
 
+# A FIFO is neither a directory nor a link, it passes `-e`, and opening one for
+# reading BLOCKS UNTIL A WRITER APPEARS. The writer reads the existing name to
+# build the new content, so this is the one hostile state that HANGS rather than
+# fails — and a hang is worse than a wrong answer, because it stops the operator
+# rather than telling them anything.
+#
+# Bounded by polling rather than by `timeout`, which is not on a stock macOS.
+# The unblocking write matters as much as the kill: the parked reader is a
+# grandchild of the backgrounded shell, so signalling that shell leaves the read
+# in place and the FIFO held open for the rest of the run.
+if command -v mkfifo >/dev/null 2>&1; then
+  r=$(new_repo agents-is-fifo)
+  mkfifo "$r/AGENTS.md"
+  ( cd "$r" && PATH="$FAKEBIN:/usr/bin:/bin" "$INIT" >"$TMP/fifo.out" 2>&1; echo $? > "$TMP/fifo.rc" ) &
+  fifo_pid=$!
+  n=0
+  while kill -0 "$fifo_pid" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+  if kill -0 "$fifo_pid" 2>/dev/null; then
+    ( : > "$r/AGENTS.md" ) 2>/dev/null &   # gives the parked reader an EOF
+    sleep 1
+    kill -9 "$fifo_pid" 2>/dev/null
+    wait "$fifo_pid" 2>/dev/null
+    bad "a FIFO named AGENTS.md is refused, without hanging" \
+        "it was still running after 5s — it is parked on a read of the FIFO"
+  else
+    wait "$fifo_pid" 2>/dev/null
+    [ "$(cat "$TMP/fifo.rc" 2>/dev/null)" != 0 ] \
+      && ok "a FIFO named AGENTS.md is refused, without hanging" \
+      || bad "a FIFO named AGENTS.md is refused, without hanging" \
+             "it exited 0 on a name that is not a regular file"
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 echo
-echo "G. openspec absent — a state this change deliberately makes reachable (task 3.10)"
+echo "I. openspec absent — a state this change deliberately makes reachable"
 # ---------------------------------------------------------------------------
 r=$(new_repo no-openspec)
 run_init_no_openspec "$r"
@@ -334,7 +583,7 @@ printf '%s' "$OUT" | grep -qi 'openspec' \
 
 # ---------------------------------------------------------------------------
 echo
-echo "H. Invoked below the repository root (task 3.11)"
+echo "J. Invoked below the repository root"
 # ---------------------------------------------------------------------------
 r=$(new_repo subdir)
 mkdir -p "$r/packages/api"
@@ -346,8 +595,9 @@ run_init "$r" "packages/api"
 [ ! -e "$r/packages/api/openspec" ] \
   && ok "no second openspec/ beside the first" \
   || bad "no second openspec/ beside the first" "it initialized the subdirectory"
-[ -f "$r/AGENTS.md" ] && ok "the instruction file lands at the root" \
-  || bad "the instruction file lands at the root" "not at the root"
+[ -f "$r/AGENTS.md" ] && [ ! -e "$r/packages/api/AGENTS.md" ] \
+  && ok "the instruction files land at the root" \
+  || bad "the instruction files land at the root" "not at the root"
 
 r=$(new_repo not-a-repo)
 rm -rf "$r/.git"
@@ -357,64 +607,38 @@ run_init "$r"
 
 # ---------------------------------------------------------------------------
 echo
-echo "I. It makes no network call (task 3.5)"
+echo "K. It makes no network call, and it moves, links and deletes nothing"
 # ---------------------------------------------------------------------------
 # Asserted against the source, because the honest runtime check is a sandbox
 # this suite does not have. A grep is weaker than a sandbox and stronger than
 # nothing: it catches the reachable spellings.
 if [ "$INIT" = "${INIT_PROJECT_BIN:-}" ]; then
-  ok "network scan skipped (running against an override binary)"
-elif grep -nE '(^|[^[:alnum:]_])(curl|wget|nc|ssh|scp)([^[:alnum:]_]|$)|git (clone|fetch|pull|push)' "$INIT" >/dev/null; then
-  bad "no network call in the source" \
-      "found: $(grep -nE '(^|[^[:alnum:]_])(curl|wget|nc|ssh|scp)([^[:alnum:]_]|$)|git (clone|fetch|pull|push)' "$INIT" | head -1)"
+  ok "source scans skipped (running against an override binary)"
 else
-  ok "no network call in the source"
+  net_re='(^|[^[:alnum:]_])(curl|wget|nc|ssh|scp)([^[:alnum:]_]|$)|git (clone|fetch|pull|push)'
+  if grep -nE "$net_re" "$INIT" >/dev/null; then
+    bad "no network call in the source" "found: $(grep -nE "$net_re" "$INIT" | head -1)"
+  else
+    ok "no network call in the source"
+  fi
+
+  # Task 1.4, asserted where it can be asserted absolutely. The runtime inode
+  # checks above prove the happy paths did not replace a file; this proves the
+  # capability is not in the script at all, including on paths no fixture here
+  # reaches. Comments are stripped first — this file's own header discusses the
+  # `ln -s` it removed, and so does the initializer's.
+  destr_re='^[[:space:]]*(ln|mv|rm)[[:space:]]'
+  if sed 's/#.*//' "$INIT" | grep -nE "$destr_re" >/dev/null; then
+    bad "the source never moves, links or deletes" \
+        "found: $(sed 's/#.*//' "$INIT" | grep -nE "$destr_re" | head -1)"
+  else
+    ok "the source never moves, links or deletes"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
 echo
-echo "J. The collapse never destroys CLAUDE.md before its replacement exists (code review M4)"
-# ---------------------------------------------------------------------------
-# The collapse path ran `rm -f CLAUDE.md` and then `ln -s`. A failing link left
-# the repository with NO CLAUDE.md at all, and the die message named the link it
-# could not create rather than the file it had just removed. No content is lost
-# — the preflight has already proved the two files byte-identical, so it all
-# survives in AGENTS.md — but a repository is left in a state the operator did
-# not ask for and is not told about.
-#
-# install.sh:190 handles the same ordering in sweep_vendored and says so out
-# loud: "a failed `ln` leaves the binding as nothing at all. Saying so is the
-# whole point." This is that argument applied one directory over.
-#
-# `ln` is doubled to fail, which is the only honest way to reach the branch:
-# every real filesystem condition that breaks `ln -s` here also breaks the `rm`
-# that precedes it, so the window cannot be opened with permissions alone.
-r="$(new_repo collapse-ln-fails)"
-printf 'shared rule\n' > "$r/AGENTS.md"
-printf 'shared rule\n' > "$r/CLAUDE.md"          # byte-identical: collapsible
-cat > "$FAKEBIN/ln" <<'EOF'
-#!/usr/bin/env bash
-echo "ln: simulated failure" >&2
-exit 1
-EOF
-chmod +x "$FAKEBIN/ln"
-run_init "$r"
-rm -f "$FAKEBIN/ln"
-
-[ "$RC" -ne 0 ] \
-  && ok "a failing link is a non-zero exit" \
-  || bad "a failing link is a non-zero exit" "exited 0 having not created the link"
-[ -e "$r/CLAUDE.md" ] \
-  && ok "CLAUDE.md survives a link that could not be created" \
-  || bad "CLAUDE.md survives a link that could not be created" \
-         "it was removed before the replacement existed, and is now gone"
-[ -f "$r/AGENTS.md" ] && grep -q 'shared rule' "$r/AGENTS.md" \
-  && ok "and AGENTS.md still carries the content" \
-  || bad "and AGENTS.md still carries the content" "the shared rule is gone"
-
-# ---------------------------------------------------------------------------
-echo
-echo "K. The initializer enrols the repository in the floor (task 2.8b)"
+echo "L. The initializer enrols the repository in the floor"
 # ---------------------------------------------------------------------------
 # WITHOUT THIS THE ARTIFACTS ARE INERT. The published pre-commit runs in every
 # repository on a bound machine and exits 0 for want of this key, so a project
@@ -471,73 +695,6 @@ run_init "$r"
   && ok "and it reads as true under the dispatcher's own --type=bool" \
   || bad "and it reads as true under the dispatcher's own --type=bool" \
          "the dispatcher would not treat this repository as enrolled"
-
-# ---------------------------------------------------------------------------
-echo
-echo "L. AGENTS.md is already a symlink — the arrangement that closes a cycle"
-# ---------------------------------------------------------------------------
-# THE CASE THAT DESTROYED TWO REPOSITORIES. Every structural check the script
-# and this suite made was satisfied while both names ended at mode 120000
-# pointing at each other and neither could be read.
-#
-# `-f` and `cmp` both dereference, so the preflight compared CLAUDE.md to
-# itself, found it trivially identical, and never refused. The link guard then
-# asked `-L CLAUDE.md` — false, it is the real file — and moved a fresh symlink
-# over it. AGENTS.md -> CLAUDE.md -> AGENTS.md, ELOOP, content gone.
-r=$(new_repo agents-is-link)
-printf '# Real rules\n\nNever force-push to main.\n' > "$r/CLAUDE.md"
-( cd "$r" && ln -s CLAUDE.md AGENTS.md )
-c_before=$(shasum -a 256 "$r/CLAUDE.md" | cut -d' ' -f1)
-run_init "$r"
-
-[ "$RC" -ne 0 ] && ok "an AGENTS.md symlink is refused" \
-  || bad "an AGENTS.md symlink is refused" "exited 0 — this is the loop being created"
-
-printf '%s' "$OUT" | grep -qi 'agents\.md' \
-  && ok "the refusal names AGENTS.md" \
-  || bad "the refusal names AGENTS.md" "output: $(printf '%s' "$OUT" | head -2)"
-
-# Read through the name rather than stat it: -f and -L are exactly the checks
-# that could not tell a working link from a loop.
-if cat "$r/CLAUDE.md" >/dev/null 2>&1 \
-   && [ "$(shasum -a 256 "$r/CLAUDE.md" | cut -d' ' -f1)" = "$c_before" ]; then
-  ok "CLAUDE.md is still readable and byte-identical"
-else
-  bad "CLAUDE.md is still readable and byte-identical" \
-      "read: $(cat "$r/CLAUDE.md" 2>&1 | head -1)"
-fi
-
-[ "$(cd "$r" && readlink AGENTS.md)" = "CLAUDE.md" ] \
-  && ok "AGENTS.md still points where it did" \
-  || bad "AGENTS.md still points where it did" \
-         "readlink: $(cd "$r" && readlink AGENTS.md 2>&1)"
-
-# ---------------------------------------------------------------------------
-echo
-echo "M. Both names are readable after a successful run"
-# ---------------------------------------------------------------------------
-# The assertion whose absence let this ship. Case A asserted AGENTS.md is a
-# regular file and CLAUDE.md is a symlink pointing at it — every one of which is
-# true of a repository whose instruction file cannot be read at all. Only a read
-# distinguishes a working link from a loop.
-r=$(new_repo readable)
-run_init "$r"
-
-a_read=$(cat "$r/AGENTS.md" 2>/dev/null); a_rc=$?
-c_read=$(cat "$r/CLAUDE.md" 2>/dev/null); c_rc=$?
-
-[ "$a_rc" -eq 0 ] && [ -n "$a_read" ] \
-  && ok "AGENTS.md can be read and is non-empty" \
-  || bad "AGENTS.md can be read and is non-empty" "rc=$a_rc"
-
-[ "$c_rc" -eq 0 ] && [ -n "$c_read" ] \
-  && ok "CLAUDE.md can be read and is non-empty" \
-  || bad "CLAUDE.md can be read and is non-empty" \
-         "rc=$c_rc — a symlink cycle reads exactly like this"
-
-[ "$a_read" = "$c_read" ] \
-  && ok "both names return the same content" \
-  || bad "both names return the same content" "the two names disagree"
 
 echo
 echo "  passed: $pass   failed: $fail"

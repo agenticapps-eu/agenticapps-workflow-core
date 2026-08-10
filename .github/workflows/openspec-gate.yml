@@ -65,7 +65,11 @@ jobs:
       # variable is ignored: that would re-establish it as a name the gate knows,
       # which is the thing being removed. Row call sites are unchanged at 57 —
       # those two lines carried an env prefix and never matched that pattern.
-      MIN_SCORED_ROWS: "69"
+      #
+      # 69 -> 81 at gate 2.1.0. Twelve rows for the instruction-file pair —
+      # section G — which is the gate's second blocking condition. Raising is
+      # free, and this is the direction the comment above expects.
+      MIN_SCORED_ROWS: "81"
       # A SECOND, INDEPENDENT FLOOR — on the harness SOURCE, not its output.
       # MIN_SCORED_ROWS is scraped from the harness's own stdout, so it bounds
       # only HONEST shrinkage: a stub that prints "TOTAL: 71 passed, 0 failed"
@@ -74,7 +78,8 @@ jobs:
       # invocations as well. Neither floor bounds row CORRECTNESS; see the
       # residual noted in the delta. Same rule as above: raising is free,
       # lowering takes a recorded decision.
-      MIN_ROW_CALLSITES: "57"
+      # 57 -> 69 at gate 2.1.0, one per section-G row.
+      MIN_ROW_CALLSITES: "69"
     steps:
       - uses: actions/checkout@v7
         with:

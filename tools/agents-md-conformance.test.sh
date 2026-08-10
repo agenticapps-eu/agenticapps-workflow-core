@@ -285,10 +285,15 @@ run_harness "$FX/noversion.md"; rc=$?
 expect_exit 1 "$rc" "a section with no content version fails"
 expect_row FAIL "carries no content version" "unversioned section reported — stale prose could never be repaired"
 
-echo "═══ F. CLAUDE.md is never scored by any row"
+echo "═══ F. CLAUDE.md is scored only where it is one of two copies"
+# The carve-out narrowed at two-real-instruction-files: `CLAUDE.md` is out of
+# scope where it is the SOLE instruction file, and in scope where the repository
+# carries both names — because then it holds the shared file's bytes and every
+# requirement here governs them. The fixture directory below deliberately holds
+# no AGENTS.md, which is the exempt shape.
 mk_good "$FX/CLAUDE.md"
 run_harness "$FX/CLAUDE.md"; rc=$?
-expect_exit 2 "$rc" "CLAUDE.md is refused"
+expect_exit 2 "$rc" "CLAUDE.md alone is refused"
 if grep -q "OUT-OF-SCOPE" "$OUT"; then
   ok "CLAUDE.md refusal names the reason"
 else
@@ -300,6 +305,23 @@ if grep -qE "^  (PASS|FAIL|WARN)" "$OUT"; then
   no "CLAUDE.md produced scored rows"
 else
   ok "CLAUDE.md produced no scored rows at all"
+fi
+
+# …and the other half, which is new. A repository carrying BOTH names holds one
+# instruction file under two paths; the file Claude reads is the file every
+# other host reads, so exempting it would exempt the shared content itself. The
+# condition is the sibling, never the file type — the pair are two regular files
+# now, and asking `-L` would have exempted exactly the arrangement that replaced
+# the symlink.
+PAIR="$FX/pair"; mkdir -p "$PAIR"
+mk_good "$PAIR/AGENTS.md"
+cp "$PAIR/AGENTS.md" "$PAIR/CLAUDE.md"
+run_harness "$PAIR/CLAUDE.md"; rc=$?
+expect_exit 0 "$rc" "CLAUDE.md beside an AGENTS.md is scored, and a conformant one passes"
+if grep -qE "^  (PASS|FAIL|WARN)" "$OUT"; then
+  ok "and it produced scored rows"
+else
+  no "it was accepted but scored nothing — the carve-out is still swallowing it"
 fi
 
 echo "═══ G. Unscoreable targets abort, distinguishably"

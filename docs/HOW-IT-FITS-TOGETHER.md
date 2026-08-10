@@ -149,7 +149,12 @@ The only host-specific content an installer may write into the shared file is
 one link per agent. Two copies of an instruction are not extra information —
 they are the same instruction stated twice, and they drift.
 
-In core, `AGENTS.md` is a symlink to `CLAUDE.md`. One rule, one home.
+In core, `AGENTS.md` and `CLAUDE.md` are two regular files holding identical
+content. One rule, two names — and the pre-commit gate fails a commit in which
+they diverge, which is the enforcement that replaced the symlink's guarantee.
+`AGENTS.md` was a symlink to `CLAUDE.md` until 2026-08-10; the link made the two
+the same inode by construction, and the price was a mechanism that owned an
+entire file in order to deliver an eight-line pointer.
 
 `tools/agents-md-conformance.sh` *checks* all of this and writes none of it.
 That gap is why `--project` had to be deferred.
