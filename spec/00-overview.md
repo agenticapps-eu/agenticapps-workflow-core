@@ -1,7 +1,7 @@
 ---
 id: 00-overview
 section_type: framing
-spec_version: 2.0.0
+spec_version: 2.1.0
 ---
 
 # 00 — Overview
@@ -97,7 +97,20 @@ every consumer, and prior-major conformance claims become obsolete per §09.
 and nothing is renumbered, exactly as §15's retirement established — closing the
 gap would invalidate every §14–§21 cross-reference in the fleet.
 
-Three earlier attempts to retire it failed, and the reason is worth keeping: each
+**Spec 2.1.0 (2026-08-10)** narrows §18's escape-hatch MUST. That clause requires
+a documented hatch for whatever a host blocks on, and it had been vacuous since
+gate 2.0.0 because a red `validate` was the only blocking condition and a hatch
+could release nothing. Gate 2.1.0 adds a second — the two instruction-file names
+must be readable, regular and byte-identical — which made the clause live again
+and would have demanded a hatch for precisely the check whose whole value is that
+it has none. §18 now names both conditions and states that neither takes one.
+Minor rather than major: it removes an obligation and adds none, so a host
+conformant at 2.0.0 stays conformant. It does **not** require hosts to implement
+the pair check; where the two names live and what must be true of them is an
+instruction-file requirement, and the gate script is only where the pre-commit
+surface happens to be.
+
+Three earlier attempts to retire §13 failed, and the reason is worth keeping: each
 argued from **local machine state** — a skills directory, a deleted symlink,
 `install.sh`'s `ARCHIVED` variable — about a section that leaves its implementing
 skill's name to the host's discretion. Local absence never evidenced anything

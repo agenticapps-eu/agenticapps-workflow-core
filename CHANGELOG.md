@@ -20,6 +20,34 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**Spec 2.0.0 → 2.1.0 — minor. §18's escape-hatch MUST is narrowed, because the
+gate now blocks on a second condition.** `AGENTS.md` and `CLAUDE.md` are two
+regular files with identical content rather than one file under a symlink, and
+the equality the link gave by construction is now a pre-commit check: both names
+must be readable, regular and byte-identical, judged from the staged index.
+`init-project` goes 1.2.0 → **2.0.0** (it no longer moves, replaces, links or
+deletes anything — its only write to an existing file is between the markers)
+and the gate goes 2.0.0 → **2.1.0**.
+
+§18 required a documented escape hatch for whatever a host blocks on. That MUST
+had been vacuous since gate 2.0.0 — a red `validate` was the only blocker and a
+hatch could release nothing — and a second blocker made it live again, demanding
+a hatch for the one check whose value is that it has none. §18 now names both
+conditions and says neither takes one.
+
+**Conformance impact: none for a host that does nothing.** The change removes an
+obligation and adds none, and §18 does **not** require hosts to implement the
+pair check — that requirement belongs to the instruction file, and lives in the
+gate script only because that is where the pre-commit surface is. A host that
+re-vendors the gate gets the check; one that does not, does not.
+
+The counter-argument, recorded rather than buried: a host that re-vendors gate
+2.1.0 acquires a blocking condition it did not have, which looks like a break.
+It is not one this section imposes. §18's own contract is that hosts vendor the
+canonical script rather than reimplement it, so what the script blocks on is
+already outside their control, and nothing in §18 obliges them to take the new
+copy.
+
 **Spec 1.6.0 → 2.0.0 — MAJOR. Core binds no database-security or design audit
 skill, and the gate's escape hatch is gone.** Two conditional gate bindings are
 removed. `database-security` and `db-pre-launch-audit` lose

@@ -21,6 +21,25 @@
 # Exit 0 = all cases pass. Exit 1 = at least one failed (names are printed).
 set -uo pipefail
 
+# THE FIXTURES MUST NOT INHERIT THE MACHINE'S GIT CONFIGURATION, and this is not
+# tidiness — without it every install case on this machine fails.
+#
+# The installer resolves its destination through git, which honours
+# `core.hooksPath`. This machine sets that GLOBALLY, to the published floor at
+# `~/.agenticapps/git-hooks`, so a scratch repository with no local override
+# resolves its hooks directory to a shared path outside itself — where the
+# global floor's own `pre-commit` already sits. The installer then refuses,
+# CORRECTLY, to overwrite a hook another installer wrote, and eight cases that
+# assert a successful install fail for a reason that has nothing to do with the
+# installer. CI, which has no global git config, stayed green throughout.
+#
+# Same rule as `unset OPENSPEC_GATE_SELF` in the change-gate harness: a
+# measurement tool must not inherit state from the thing it measures. Set rather
+# than unset, because there is no variable to clear — the leak is a config FILE,
+# and `/dev/null` is how git is told there is none.
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+
 INSTALLER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/install-core-git-hooks.sh"
 [ -x "$INSTALLER" ] || { printf 'missing or non-executable: %s\n' "$INSTALLER" >&2; exit 1; }
 SRC="$(cd "$(dirname "$INSTALLER")/.." && pwd -P)"

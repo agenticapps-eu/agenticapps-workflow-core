@@ -41,14 +41,28 @@ harness_safe_label() { # $1 = path
 TARGET="${1:-}"
 [ -n "$TARGET" ] || { echo "usage: $0 <path-to-AGENTS.md>" >&2; exit 2; }
 
-# §12: CLAUDE.md is out of scope, and its lack of markers is not a violation.
-# Refusing the target is how "never scored by any row" is made observable —
-# a harness that merely happened not to look could start looking by accident.
+# §12: CLAUDE.md is out of scope — ONLY where it is the sole instruction file in
+# the repository. Refusing the target is how "never scored by any row" is made
+# observable: a harness that merely happened not to look could start looking by
+# accident.
+#
+# THE CONDITION IS WHETHER THE BYTES ARE SHARED, NEVER WHETHER THE PATH IS A
+# LINK. The carve-out's reason was that "Claude is its only reader, so there is
+# nothing to deduplicate", and a repository carrying both names inverts that
+# premise: the file Claude reads holds the same bytes codex, opencode, pi and
+# omp read. It was true of the symlink arrangement and it is equally true of the
+# two identical regular files that replaced it — which is why this asks for a
+# sibling AGENTS.md rather than asking `-L`.
 case "$(basename "$TARGET")" in
   CLAUDE.md)
-    echo "  OUT-OF-SCOPE  $(harness_safe_label "$TARGET") — CLAUDE.md is excluded by spec §12;" >&2
-    echo "                Claude is its only reader, so there is nothing to deduplicate." >&2
-    exit 2
+    if [ -e "$(dirname "$TARGET")/AGENTS.md" ]; then
+      : # in scope: it is one of two copies of the shared instruction file
+    else
+      echo "  OUT-OF-SCOPE  $(harness_safe_label "$TARGET") — CLAUDE.md is excluded by spec §12" >&2
+      echo "                where it is the only instruction file: Claude is its only reader," >&2
+      echo "                so there is nothing to deduplicate. No AGENTS.md sits beside it." >&2
+      exit 2
+    fi
     ;;
 esac
 

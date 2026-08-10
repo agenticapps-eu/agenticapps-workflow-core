@@ -3,8 +3,16 @@
 The shared workflow logic behind the AgenticApps spec-first loop. Every host and
 every fleet project resolves its behaviour from here.
 
-`AGENTS.md` is a symlink to this file. One rule, one home — so no host can read a
-different version of it.
+`AGENTS.md` and this file are two regular files holding identical content. One
+rule, two names — and the pre-commit gate fails a commit in which they diverge,
+so no host can read a different version of it.
+
+`AGENTS.md` was a symlink to this file until 2026-08-10. The link made them the
+same bytes by construction, which was a real guarantee bought at a real price: a
+mechanism delivering an eight-line pointer took ownership of the entire file, and
+when the initializer got a guard wrong it cost two repositories 22,292 bytes.
+Identity is enforced now instead of constructed. Edit both, or edit one and copy
+it over the other — the gate will not let you forget.
 
 ## How to work in this repo
 
@@ -36,12 +44,15 @@ repo's *working-tree* reference implementation rather than the published copy, s
 core scores the bytes it ships (ADR-0028). It is the one self-hosting binder;
 every other project resolves the published copy through a shim.
 
-**The gate blocks on exactly one condition** — `openspec validate --all` is not
-green. Review evidence is computed and reported, never enforced: reviewer count,
-verdicts and independence all produce `NOTE` lines and none of them fails any
-surface. A blocked edit means a spec delta that does not parse, so fix the delta.
-It never means "go get a review". There is no escape hatch — reviews do not
-block, so there is nothing for one to release.
+**The gate blocks on two conditions, and neither of them is a review.**
+`openspec validate --all` must be green, and — at commit time only — `AGENTS.md`
+and `CLAUDE.md` must be readable, regular and byte-identical. Review evidence is
+computed and reported, never enforced: reviewer count, verdicts and independence
+all produce `NOTE` lines and none of them fails any surface. A blocked edit means
+a spec delta that does not parse, so fix the delta. It never means "go get a
+review". Neither blocker has an escape hatch, and §18 names both as taking none:
+for a red `validate` there is nothing to release, and for the pair a hatch could
+only ever permit committing the divergence the check exists to prevent.
 
 The practical consequence: a green gate is the weakest possible evidence that
 anyone read the delta. Running the plan reviewers before code is a discipline you
@@ -52,3 +63,18 @@ keep, not one the machine keeps for you.
 - Feature branches and PRs. Never commit directly to `main`.
 - ADRs are append-only. Correct one with a new ADR, not an edit.
 - `.planning/` was removed on 2026-08-05; OpenSpec carries the planning now.
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
+
+## The AgenticApps workflow
+
+Work moves through the OpenSpec lifecycle, and how to do that lives in the
+`agentic-apps-workflow` skill on this machine — not in this file. Read the
+skill for the loop, the gates and the coding discipline.
+
+This repository carries two workflow artifacts: `openspec/`, which is its
+durable truth, and this instruction file. Everything else — skills, hooks,
+enforcement — is machine-level and comes from `install.sh`.
+
+<!-- END: agentic-apps-workflow sections -->

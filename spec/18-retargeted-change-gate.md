@@ -228,12 +228,34 @@ truth table is normative:
   non-conformant." Allowing on a missing review is now the policy, so the
   clause names the one condition that must still fail closed.
 - **MUST** provide a documented escape hatch (an env var) for whatever the
-  host blocks on; an undocumented bypass is non-conformant. Where the only
-  blocking condition is a red `validate`, there is nothing a hatch could
-  release, and a host **MUST NOT** retain a review-oriented hatch as a no-op:
-  a documented variable that no longer does anything advertises an escape the
-  host cannot provide. A hatch **MUST NOT** be documented as bypassing
-  validation when it does not.
+  host blocks on, **except** where the blocking condition is one this section
+  names as taking none; an undocumented bypass is non-conformant. A host
+  **MUST NOT** retain a review-oriented hatch as a no-op: a documented variable
+  that no longer does anything advertises an escape the host cannot provide. A
+  hatch **MUST NOT** be documented as bypassing validation when it does not.
+
+  Two conditions take no hatch, and both are named here rather than left to a
+  host to infer:
+
+  1. **A red `openspec validate --all`.** There is nothing a hatch could
+     release: the change is wrong on its own terms, and the fix is the same
+     work either way.
+  2. **The two instruction-file names not being readable, regular and
+     byte-identical**, where a host's pre-commit surface checks that. The
+     remedy is to copy one file over the other, so a hatch could only ever
+     permit committing the divergence the check exists to prevent — which is
+     the thing that gets exported once and never unset.
+
+  Until spec 2.1.0 this bullet reasoned from "where the only blocking condition
+  is a red `validate`, there is nothing a hatch could release". That was true
+  and it expired: gate 2.1.0 blocks on a second condition, so a clause that had
+  been vacuous since gate 2.0.0 became live again and would have required a
+  hatch for precisely the check whose value is that it has none. **This is a
+  narrowing of a MUST, not a new obligation** — nothing a host had to do before
+  2.1.0 changes, and the pair check itself is not required of hosts by this
+  section. Where the two names live and what must be true of them belongs to
+  the instruction-file requirements, not to the change gate; it is enforced
+  from the gate script only because that is where the pre-commit surface is.
 
 ### Reviewer-CLI robustness
 

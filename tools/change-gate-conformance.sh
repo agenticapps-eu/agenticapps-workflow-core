@@ -896,6 +896,144 @@ score_gate() {
     'tasks.md has changed' "$fx" "$(p_claude src/main.go)"
   rm -rf "$fx"
 
+  # ── G. The instruction-file pair (change-gate-enforcement) ─────────────────
+  # The second thing this gate BLOCKS on, and the only one that is not about the
+  # change artifacts. Until two-real-instruction-files, AGENTS.md and CLAUDE.md
+  # were one inode and could not diverge; they are two regular files now, and
+  # the equality the symlink gave by construction is these rows.
+  #
+  # Scored against `--pre-commit` only. The requirement is written about a
+  # commit, and hook mode decides one edit at a time — an instruction file that
+  # diverged three edits ago is not this edit's fault, and blocking it there
+  # would interrupt whoever is nearest rather than whoever did it.
+  echo "  ── G. The instruction-file pair (--pre-commit) ──"
+
+  # A repo with a commit behind it, so a staged DELETION is expressible: the
+  # index has no entry for a deleted path, so `ls-files` cannot see one and only
+  # a diff against HEAD can. Enrolment is set exactly as the initializer writes
+  # it — locally, `--type=bool` readable.
+  make_pair_fixture() { # $1 = enrolled yes|no ; echoes the fixture dir
+    local d enrolled="$1"
+    d="$(make_fixture 0)"
+    (
+      cd "$d/repo" || exit 1
+      printf 'shared rules\n' > AGENTS.md
+      printf 'shared rules\n' > CLAUDE.md
+      git add AGENTS.md CLAUDE.md src/main.go >/dev/null 2>&1
+      git commit -qm base >/dev/null 2>&1
+      [ "$enrolled" = yes ] && git config --local agenticapps.workflow.enrolled true
+    ) >/dev/null 2>&1
+    printf '%s' "$d"
+  }
+
+  # The core case. Both names staged, contents differ -> the commit fails, and
+  # it says which two files and what is wrong with them.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" && printf 'shared rules\ndrifted\n' > CLAUDE.md && git add CLAUDE.md ) >/dev/null 2>&1
+  run_row_stderr_has "--pre-commit, the two names have diverged -> block" 1 \
+    "CLAUDE.md" "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # The converse, and the row that stops the check from being a blanket refusal.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" && printf 'shared rules\nnew line in both\n' | tee AGENTS.md > CLAUDE.md \
+      && git add AGENTS.md CLAUDE.md ) >/dev/null 2>&1
+  run_row "--pre-commit, the two names agree -> allow" 0 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # A symlink is REJECTED, never resolved. A resolved link compares equal to
+  # itself and would pass the equality check while reinstating the arrangement
+  # the initializer no longer produces — which is how a symlink cycle survived
+  # every structural check for 36 hours.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" && rm -f CLAUDE.md && ln -s AGENTS.md CLAUDE.md && git add CLAUDE.md ) >/dev/null 2>&1
+  run_row_stderr_has "--pre-commit, one name staged as a symlink -> block" 1 \
+    "regular file" "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # STAGED, NOT WORKTREE, in both directions — and these two rows are the whole
+  # reason the check reads the index. A pre-commit check that compares worktree
+  # files asserts something other than what is about to be committed.
+  #
+  # (a) a staged divergence that an unstaged edit hides on disk must still fail.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" \
+      && printf 'shared rules\nstaged divergence\n' > CLAUDE.md && git add CLAUDE.md \
+      && printf 'shared rules\n' > CLAUDE.md ) >/dev/null 2>&1
+  run_row "--pre-commit, staged divergence hidden by an unstaged edit -> block" 1 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # (b) an unstaged edit must not fail a commit whose staged content is fine.
+  # Both failure directions teach the operator that the check is noise, and the
+  # second is the one that arrives during ordinary work in progress.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" && printf 'shared rules\nwork in progress\n' > CLAUDE.md ) >/dev/null 2>&1
+  run_row "--pre-commit, unstaged edit over an identical staged pair -> allow" 0 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # Enrolment is the predicate for PRESENCE, and only for presence. A repository
+  # that never ran the initializer has nothing to compare and gets no new work.
+  fx="$(make_fixture 0)"
+  ( cd "$fx/repo" && printf 'claude only\n' > CLAUDE.md && git add CLAUDE.md ) >/dev/null 2>&1
+  run_row "--pre-commit, one name only, not enrolled -> allow" 0 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # Enrolled and carrying one name is not an offence either — plenty of enrolled
+  # repositories predate the pair. What is an offence is REMOVING one.
+  fx="$(make_fixture 0)"
+  (
+    cd "$fx/repo" && printf 'agents only\n' > AGENTS.md
+    git add AGENTS.md src/main.go >/dev/null 2>&1 && git commit -qm base >/dev/null 2>&1
+    git config --local agenticapps.workflow.enrolled true
+    printf 'x\n' >> AGENTS.md && git add AGENTS.md
+  ) >/dev/null 2>&1
+  run_row "--pre-commit, enrolled, one name and no deletion -> allow" 0 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # Without this the pair is trivially escapable: delete one name and the
+  # equality check has nothing to compare, so the strictest requirement in the
+  # capability is satisfied by removing its subject. An ordinary `git rm`
+  # reaches this by accident.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" && git rm -q CLAUDE.md ) >/dev/null 2>&1
+  run_row_stderr_has "--pre-commit, enrolled, staged deletion of one name -> block" 1 \
+    "CLAUDE.md" "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  fx="$(make_pair_fixture no)"
+  ( cd "$fx/repo" && git rm -q CLAUDE.md ) >/dev/null 2>&1
+  run_row "--pre-commit, NOT enrolled, staged deletion of one name -> allow" 0 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # UNREADABLE IS ITS OWN ROW, and the only one a structural inspection cannot
+  # reach: both halves of a symlink cycle look like a plausible file to `-L` and
+  # `readlink`, the staged blobs are identical and fine, and the instruction
+  # file cannot be read at all. Two repositories sat like this for about 36
+  # hours with every check green.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" && rm -f AGENTS.md && ln -s CLAUDE.md AGENTS.md \
+      && rm -f CLAUDE.md && ln -s AGENTS.md CLAUDE.md ) >/dev/null 2>&1
+  run_row_stderr_has "--pre-commit, an unreadable instruction file -> block" 1 \
+    "AGENTS.md" "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # The pair is checked even when nothing but openspec/ is staged. The early
+  # exit above it is about the CHANGE gate — "only artifacts staged, nothing to
+  # gate" — and it would otherwise launder a divergent pair through any commit
+  # that touched no code.
+  fx="$(make_pair_fixture yes)"
+  ( cd "$fx/repo" && printf 'shared rules\ndrifted\n' > CLAUDE.md && git add CLAUDE.md \
+      && printf 'x\n' > openspec/changes/add-thing/design.md && git add openspec ) >/dev/null 2>&1
+  run_row "--pre-commit, divergence with only openspec/ otherwise staged -> block" 1 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
+  # A repository carrying neither name — most of them — must be untouched by
+  # all of the above.
+  fx="$(make_fixture 0)"
+  ( cd "$fx/repo" && git add src/main.go ) >/dev/null 2>&1
+  run_row "--pre-commit, no instruction file at all -> unaffected" 0 "$fx" '' --pre-commit
+  rm -rf "$fx"
+
   local pd=$((pass - p0)) fd=$((fail - f0)) idd=$((inconclusive - i0))
   echo "  ── $pd passed, $fd failed, $idd inconclusive of $((pd + fd + idd)) rows"
 }
