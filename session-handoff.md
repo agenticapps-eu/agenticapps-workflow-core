@@ -1,9 +1,9 @@
 # Session Handoff — 2026-08-10 (twenty-eighth session)
 
-`two-real-instruction-files` is **implemented, tested and pushed** on
-`feat/two-real-instruction-files` (PR #107, one commit `572a067` plus a merge of
-#106). Nothing is half-finished. **Publishing is deliberately held** — that is
-the first decision the next session inherits.
+`two-real-instruction-files` is **implemented, tested, published and complete**
+on `feat/two-real-instruction-files` (PR #107). Every task in the change is
+ticked. `agents-task-viewer` was retired and deleted in the same session, which
+is what cleared the publish hold. Nothing is half-finished.
 
 ## Accomplished
 
@@ -19,7 +19,18 @@ the first decision the next session inherits.
 - **Core migrated**, by merging #106 in. Both names are regular files, one blob.
 - **`tools/agents-md-conformance.sh`** no longer refuses `CLAUDE.md` outright —
   only where it is the sole instruction file. 77 → 79 rows, green.
-- **A sixth enrolled repository found**: `agents-task-viewer`.
+- **A sixth enrolled repository found and retired**: `agents-task-viewer`. It
+  was an experiment, it appeared in no inventory, and it was the last repository
+  on the machine holding the old symlink arrangement. Notice merged (PR #20),
+  GitHub repo archived, 84M checkout deleted, family `CLAUDE.md` records it.
+- **Published.** `~/.agenticapps/bin/` carries gate **2.1.0** and init-project
+  **2.0.0**. The published copy scores 81/81, and a real `git commit` in an
+  enrolled scratch repo is refused through the whole machine path.
+- **`tools/test-install-core-git-hooks.sh` fixed: 8/16 → 16/16.** It was red for
+  the same reason a scratch-repo test misled me earlier — the fixtures inherited
+  the machine's **global** `core.hooksPath`, so they resolved to the global
+  floor's hooks directory and the installer refused, correctly, to overwrite a
+  hook it did not write. CI has no global git config, so CI never saw it.
 
 ## Decisions
 
@@ -27,8 +38,16 @@ the first decision the next session inherits.
   resolves the working tree, so the new check failed every commit here until the
   migration landed. **#106 is now redundant and can be closed** — its commit is
   in #107's history.
-- **Hold publishing.** `./install.sh` is what makes the check reach every
-  enrolled repository, and `agents-task-viewer` would be blocked on the spot.
+- **Publishing was held, then released.** `./install.sh` is the moment the check
+  reaches every enrolled repository, and `agents-task-viewer` would have been
+  blocked on the spot. The hold was lifted only after that repository was gone
+  and all four remaining enrolled repositories were dry-run against the new gate
+  at `rc=0`. Evidence before the machine-wide write, not after.
+- **Retire `agents-task-viewer` rather than migrate it.** It was an experiment
+  that was built, worked, and is not being carried forward — migrating it would
+  have been maintenance spent on something about to stop existing. Its 45
+  no-remote commits are pre-squash history of a merged PR, so nothing was lost;
+  the tip SHA is recorded in two places anyway.
 - **Amend §18 rather than add an escape hatch.** The hatch MUST had been vacuous
   since gate 2.0.0; a second blocker made it live and would have demanded a hatch
   for the one check whose value is that it has none. §18 now names both
@@ -56,26 +75,28 @@ the first decision the next session inherits.
 
 ## Next session: start here
 
-**Migrate `agents-task-viewer`, then publish.** It is enrolled, its index stages
-`CLAUDE.md` at mode `120000`, and it is the only thing between here and
-`./install.sh`. Give it one reviewable commit in its own repository — replace the
-link with a copy of `AGENTS.md`'s content — then verify with
-`git ls-files --stage AGENTS.md CLAUDE.md` (the index, not the worktree, is what
-the check reads), then run `./install.sh` here and re-measure the published
-version markers. Only then are tasks 2.6, 5.1 and 5.3 closable and the change
-archivable.
+**Merge PR #107, then archive the change.** The work is done and the artifacts
+are already published, so the merge is the last step that changes anything:
+`gh pr merge 107`, then `openspec archive two-real-instruction-files`, which
+folds the four spec deltas into their slots. **Close PR #106 unmerged** — its
+commit is in #107's history, so merging both would be merging the same change
+twice. Check CI first: the floors moved (`MIN_SCORED_ROWS` 69 → 81,
+`MIN_ROW_CALLSITES` 57 → 69) and this is the first run against them.
 
 ## Open questions
 
-1. **`tools/test-install-core-git-hooks.sh` is RED on `main`**, not from this
-   work — verified by stashing. Every row exits 1 or 127. Unrelated to this
-   change and not investigated.
-2. **The proposal's migration inventory is still wrong in the file.** It says
-   five repositories; it is six. `tasks.md` §5.1 records the correction and the
+1. **The proposal's migration inventory is still wrong in the file.** It says
+   five repositories; it was six. `tasks.md` §5.1 records the correction and the
    reason — the inventory enumerated repositories carrying the workflow
-   *section*, and the floor dispatches on the *enrolment key*.
-3. **`cmux` is excluded as being removed** and was never re-checked. If that
-   repository outlives the plan, it carries the old arrangement.
+   *section*, and the floor dispatches on the *enrolment key*. The proposal is a
+   record of what was believed when it was written, so it stays as it is.
+2. **`cmux` is excluded as being removed** and was never re-checked. If that
+   repository outlives the plan, it carries the old arrangement. It is not
+   enrolled, so the gate does not reach it either way.
+3. **Only `tools/test-install-core-git-hooks.sh` was hardened against the global
+   git config.** The other suites pass on this machine, which may be because
+   they isolate or because they never resolve `core.hooksPath`. Not
+   distinguished.
 4. Carried over: AGE-510, AGE-509, no interception of destructive SQL,
    `normalize-claude-md` has no implementation, `claude-workflow` has 11 commits
    on no remote, the installer has no retired-artifact sweep.
