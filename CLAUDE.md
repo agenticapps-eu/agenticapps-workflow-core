@@ -52,3 +52,17 @@ keep, not one the machine keeps for you.
 - Feature branches and PRs. Never commit directly to `main`.
 - ADRs are append-only. Correct one with a new ADR, not an edit.
 - `.planning/` was removed on 2026-08-05; OpenSpec carries the planning now.
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+
+## The AgenticApps workflow
+
+Work moves through the OpenSpec lifecycle, and how to do that lives in the
+`agentic-apps-workflow` skill on this machine — not in this file. Read the
+skill for the loop, the gates and the coding discipline.
+
+This repository carries two workflow artifacts: `openspec/`, which is its
+durable truth, and this instruction file. Everything else — skills, hooks,
+enforcement — is machine-level and comes from `install.sh`.
+
+<!-- END: agentic-apps-workflow sections -->
