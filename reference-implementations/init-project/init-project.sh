@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # init-project.sh — establish what a repository carries to use this workflow.
 #
-# init-project-version: 1.1.0
+# init-project-version: 1.2.0
+#
+#   1.2.0 — refuses a symlinked AGENTS.md, stops `cmp` comparing a path to
+#           itself, and reads both names before reporting success. Without all
+#           three it turned a repository's instruction file into a symlink cycle
+#           that no check on either side could see. Two repositories, 2026-08-10.
 #
 #   cd <your repo> && ~/.agenticapps/bin/init-project.sh
 #
@@ -58,6 +63,24 @@ if [ -L CLAUDE.md ]; then
     || die "CLAUDE.md already links to $(readlink CLAUDE.md) — refusing to rewrite it"
 fi
 
+# AGENTS.md AS A SYMLINK IS THE ARRANGEMENT THAT CLOSES A CYCLE, and until this
+# check existed nothing looked for it. The write below makes CLAUDE.md a link to
+# AGENTS.md; if AGENTS.md is already a link back, both names end at mode 120000
+# pointing at each other, every read returns ELOOP, and the content is gone.
+#
+# Measured 2026-08-10: two repositories in this fleet, byte-identical link blobs
+# in both, undetected for about 36 hours. Nothing noticed because an unreadable
+# instruction file is indistinguishable from an absent one.
+#
+# Refused rather than repaired, like every other hostile state here: which name
+# should hold the content is the operator's call, not this script's.
+if [ -L AGENTS.md ]; then
+  die "AGENTS.md is a symlink to $(readlink AGENTS.md). This script makes CLAUDE.md
+            the link, and creating it while AGENTS.md is one would point the two names at
+            each other and destroy the file. Put the real instruction file at AGENTS.md —
+            or move the content there and remove the link — then re-run."
+fi
+
 # Both names as separate regular files. Identical content has no rule to choose
 # between, so it collapses; differing content is a decision about which rule
 # survives, and that is not this script's to make.
@@ -65,7 +88,13 @@ fi
 # There is no COLLAPSE flag any more. It existed only to authorise an `rm -f
 # CLAUDE.md` before the link was made, and the write below replaces the file in
 # one step instead — so the refusal is all this block was ever for.
-if [ -f AGENTS.md ] && [ -f CLAUDE.md ] && [ ! -L CLAUDE.md ]; then
+#
+# BOTH NAMES ARE TESTED FOR BEING LINKS, not just CLAUDE.md. `-f` and `cmp` each
+# dereference, so when one name is a link to the other this block compared a
+# file to ITSELF, found it trivially identical, and waved through the very
+# arrangement it exists to refuse. A comparison that can pass by aliasing is not
+# evidence that two independent files agree.
+if [ -f AGENTS.md ] && [ ! -L AGENTS.md ] && [ -f CLAUDE.md ] && [ ! -L CLAUDE.md ]; then
   cmp -s AGENTS.md CLAUDE.md \
     || die "AGENTS.md and CLAUDE.md differ. Reconcile them by hand — collapsing them
             would decide which rule survives, and that is yours to decide."
@@ -127,16 +156,35 @@ if [ -L CLAUDE.md ]; then
 else
   # BUILT BESIDE THE DESTINATION, THEN MOVED OVER IT. This was `rm -f
   # CLAUDE.md` followed by `ln -s`, and a failing link left the repository with
-  # neither file while the message named only the link it could not create. No
-  # content was at risk — `cmp -s` above has already proved the two byte-
-  # identical, so it all survives in AGENTS.md — but the operator was left a
-  # repository they did not ask for and were not told about. `mv -f` replaces a
-  # regular file in one step, so CLAUDE.md is never absent.
+  # neither file while the message named only the link it could not create.
+  # `mv -f` replaces a regular file in one step, so CLAUDE.md is never absent.
+  #
+  # THIS COMMENT USED TO SAY NO CONTENT WAS AT RISK, because "`cmp -s` above has
+  # already proved the two byte-identical, so it all survives in AGENTS.md".
+  # That invariant did not hold and the claim licensed the `mv -f` that
+  # destroyed two repositories: when AGENTS.md was a link back to CLAUDE.md,
+  # `cmp` had compared CLAUDE.md to itself and proved nothing, and AGENTS.md was
+  # not a second copy of anything. What makes the write safe now is the
+  # preflight refusal of a symlinked AGENTS.md, not this comparison.
   tmp=".CLAUDE.md.init-project.$$"
   ln -s AGENTS.md "$tmp" || die "could not create the CLAUDE.md link — CLAUDE.md is untouched"
   mv -f "$tmp" CLAUDE.md || { rm -f "$tmp"; die "could not move the link into place — CLAUDE.md is untouched"; }
   say "CLAUDE.md    -> AGENTS.md"
 fi
+
+# VERIFIED BY READING, NEVER BY STAT. `-L` reports true for BOTH halves of a
+# symlink cycle and `readlink` reports a plausible target for each, so every
+# structural check this script and its suite made was satisfied by two
+# repositories whose instruction file could not be read at all. Only a read
+# tells a working link from a loop.
+a_content=$(cat AGENTS.md 2>/dev/null) \
+  || die "AGENTS.md cannot be read after the run — refusing to report success"
+c_content=$(cat CLAUDE.md 2>/dev/null) \
+  || die "CLAUDE.md cannot be read after the run — refusing to report success"
+[ -n "$a_content" ] \
+  || die "the instruction file is empty after the run — refusing to report success"
+[ "$a_content" = "$c_content" ] \
+  || die "AGENTS.md and CLAUDE.md do not return the same content after the run"
 
 # ENROLMENT — the write that makes the two above mean anything.
 #
