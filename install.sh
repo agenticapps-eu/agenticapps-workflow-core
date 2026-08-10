@@ -49,7 +49,7 @@ init-project/init-project.sh:init-project-version"
 HOSTS="claude:.claude/skills:claude
 codex:.codex/skills:codex
 opencode:.config/opencode/skills:opencode
-pi:.agents/skills:pi
+pi:.pi/agent/skills:pi
 omp:.agents/skills:omp"
 
 # Names this workflow installed under that the archived-symlink sweep cannot
