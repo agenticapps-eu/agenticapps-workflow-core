@@ -13,25 +13,33 @@
 - [ ] 1.5 Refuse a symlinked name in either direction, naming which one and the
       migration step.
 - [ ] 1.6 GREEN, twice.
-- [ ] 1.7 Bump `init-project-version` — the publisher arbitrates on it — and
-      publish via `install.sh`.
+- [ ] 1.7 Scope the preservation claim to bytes OUTSIDE the markers: updating an
+      existing block necessarily rewrites bytes inside them.
 
-## 2. The gate check
+## 2. The gate check — published together with the writer
+
+Neither ships alone. A writer without the check is the GSD outcome; a check
+without the writer fails repositories nobody has migrated.
 
 - [ ] 2.1 RED: a repository whose two names differ fails the commit; a symlink
       fails; unreadable fails; one name alone does not.
 - [ ] 2.2 Implement it in the gate reference implementation.
 - [ ] 2.3 GREEN, and confirm it fails a real commit in a scratch repository
       rather than only in the harness.
-- [ ] 2.4 Bump the gate version and publish.
+- [ ] 2.4 Compare the STAGED index blob and mode, never the worktree.
+- [ ] 2.5 Fail a staged deletion of either name in an enrolled repository,
+      keyed on `agenticapps.workflow.enrolled`.
+- [ ] 2.6 Bump BOTH versions and publish the writer and the gate in one step.
 
-## 3. Migration — five repositories, one PR each
+## 3. Migration — four repositories, one PR each
 
-- [ ] 3.1 `agenticapps-workflow-core` (54 lines, `AGENTS.md` is the link)
-- [ ] 3.2 `callbot` (542)
-- [ ] 3.3 `cparx` (280)
-- [ ] 3.4 `fx-signal-agent` (303, `AGENTS.md` is the link)
-- [ ] 3.5 `cmux` (274)
+Done ahead of the check by operator decision; until section 2 lands they are
+kept identical by hand. `cmux` is excluded: the repository is being removed.
+
+- [x] 3.1 `agenticapps-workflow-core` — PR #106, 68 lines each
+- [ ] 3.2 `callbot` (542) — handled in that repository's own session
+- [x] 3.3 `cparx` — PR #132, 280 lines each
+- [x] 3.4 `fx-signal-agent` — PR #134, 317 lines each
 - [ ] 3.6 After each: both names regular, readable, byte-identical, and a commit
       passes the new check.
 

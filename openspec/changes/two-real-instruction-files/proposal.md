@@ -45,9 +45,12 @@ Three costs are structural rather than accidental:
 ## What replaces it
 
 Both names are regular files with identical content. The initializer's only
-write is between the markers: it inserts or updates the workflow block in
-whichever files exist and creates a file containing just the block where one
-does not. It never moves, replaces, links or deletes a file.
+write to a file that already exists is **between the markers**: it inserts or
+updates the workflow block and touches nothing outside it. Where one name is
+absent it is created holding **the same content as its peer** — block included,
+not the block alone — because the two are required to end up identical. Where
+both are absent, both are created holding just the block. It never moves,
+replaces, links or deletes a file.
 
 The equality the symlink gave by construction becomes a gate check: `AGENTS.md`
 and `CLAUDE.md` must be byte-identical, and a commit where they diverge fails.
