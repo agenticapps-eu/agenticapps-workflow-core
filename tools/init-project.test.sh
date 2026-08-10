@@ -244,6 +244,30 @@ assert_pair "$r" "bare"
   || bad "and nothing else is written" \
          "unexpected: $(unexpected_paths "$r" | tr '\n' ' ')"
 
+# THE WRITER'S OUTPUT MUST SATISFY THE SCORER, and nothing asserted that until
+# core's own AGENTS.md finally carried a section and CI failed on it. The two
+# tools had been in the same repository for weeks with no row joining them: the
+# initializer wrote a section carrying no `section-version`, which
+# `agents-md-conformance.sh` fails, and every repository the initializer touched
+# got one. It went unseen because core's AGENTS.md was a symlink to a CLAUDE.md
+# with no section at all, and a file with no section is conformant.
+#
+# Scored against the real harness rather than by re-stating its rules here. A
+# hand-written copy of "must contain section-version" would agree with itself
+# and would not have caught the next requirement the scorer grows.
+AMC="$ROOT/tools/agents-md-conformance.sh"
+if [ -x "$AMC" ]; then
+  if bash "$AMC" "$r/AGENTS.md" >"$TMP/amc.out" 2>&1; then
+    ok "the written file scores clean against tools/agents-md-conformance.sh"
+  else
+    bad "the written file scores clean against tools/agents-md-conformance.sh" \
+        "$(grep -m2 '  FAIL' "$TMP/amc.out" || tail -2 "$TMP/amc.out")"
+  fi
+else
+  bad "the written file scores clean against tools/agents-md-conformance.sh" \
+      "the scorer is missing at $AMC — the cross-check cannot run"
+fi
+
 for p in .claude .codex .github commands claude-md workflow-config.md; do
   [ ! -e "$r/$p" ] && ok "no $p" \
     || bad "no $p" "the initializer wrote a host, hook, or CI artifact"

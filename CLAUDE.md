@@ -65,6 +65,7 @@ keep, not one the machine keeps for you.
 - `.planning/` was removed on 2026-08-05; OpenSpec carries the planning now.
 
 <!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+<!-- section-version: 1.0.0 -->
 
 ## The AgenticApps workflow
 

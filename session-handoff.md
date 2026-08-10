@@ -7,11 +7,11 @@ is what cleared the publish hold. Nothing is half-finished.
 
 ## Accomplished
 
-- **`init-project` 1.2.0 → 2.0.0.** No `ln -s`, no `mv -f`, no `rm`: its only
+- **`init-project` 1.2.0 → 2.1.0.** No `ln -s`, no `mv -f`, no `rm`: its only
   write to an existing file is between the markers, in place, so the file keeps
   its path, inode and mode. The block is now *updated* rather than skipped when
   present. A symlink under either name is refused, naming which one and the
-  migration step; so is a FIFO. 17 RED → **101/101 GREEN twice**.
+  migration step; so is a FIFO. 17 RED → **102/102 GREEN twice**.
 - **`gate` 2.0.0 → 2.1.0.** A second blocking condition: `AGENTS.md` and
   `CLAUDE.md` must be readable, regular and byte-identical. 12 new harness rows
   (section G), 6 RED → **81/81 GREEN**, plus five real commits in a scratch repo.
@@ -24,8 +24,13 @@ is what cleared the publish hold. Nothing is half-finished.
   on the machine holding the old symlink arrangement. Notice merged (PR #20),
   GitHub repo archived, 84M checkout deleted, family `CLAUDE.md` records it.
 - **Published.** `~/.agenticapps/bin/` carries gate **2.1.0** and init-project
-  **2.0.0**. The published copy scores 81/81, and a real `git commit` in an
+  **2.1.0**. The published gate scores 81/81, and a real `git commit` in an
   enrolled scratch repo is refused through the whole machine path.
+- **init-project 2.0.0 → 2.1.0: the section now carries `section-version`.** CI
+  caught it on the first run — `agents-md-conformance.sh` has required a content
+  version all along, the writer never emitted one, and nothing noticed because
+  core's `AGENTS.md` was a symlink to a section-less `CLAUDE.md`. The writer's
+  suite now scores its own output against the real scorer.
 - **`tools/test-install-core-git-hooks.sh` fixed: 8/16 → 16/16.** It was red for
   the same reason a scratch-repo test misled me earlier — the fixtures inherited
   the machine's **global** `core.hooksPath`, so they resolved to the global
@@ -62,7 +67,7 @@ is what cleared the publish hold. Nothing is half-finished.
 
 ## Files modified
 
-`reference-implementations/init-project/init-project.sh` (rewritten, 2.0.0) ·
+`reference-implementations/init-project/init-project.sh` (rewritten, 2.1.0) ·
 `reference-implementations/openspec-change-gate/openspec-change-gate.sh`
 (`instruction_pair_check`, wired first in pre-commit; 2.1.0) ·
 `tools/init-project.test.sh` (rewritten; symlink assertions inverted) ·
@@ -78,10 +83,13 @@ is what cleared the publish hold. Nothing is half-finished.
 **Merge PR #107, then archive the change.** The work is done and the artifacts
 are already published, so the merge is the last step that changes anything:
 `gh pr merge 107`, then `openspec archive two-real-instruction-files`, which
-folds the four spec deltas into their slots. **Close PR #106 unmerged** — its
-commit is in #107's history, so merging both would be merging the same change
-twice. Check CI first: the floors moved (`MIN_SCORED_ROWS` 69 → 81,
-`MIN_ROW_CALLSITES` 57 → 69) and this is the first run against them.
+folds the four spec deltas into their slots.
+
+**Then re-run `init-project.sh` in `callbot`, `cparx`, `fx-signal-agent` and
+`fbc-platform`.** All four carry a section with no `section-version`, and the
+in-place block update is what repairs it — this is the first real use of the
+update path 2.0.0 made possible, so watch that it leaves everything outside the
+markers alone.
 
 ## Open questions
 

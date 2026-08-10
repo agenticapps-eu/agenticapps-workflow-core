@@ -143,6 +143,22 @@ hook at all.
       and each was dry-run against the new gate at `rc=0`, with zero pair-check
       complaints, before `./install.sh` was allowed to run.
 
+- [x] 5.5 **The initializer wrote a section that core's own scorer fails.**
+      `tools/agents-md-conformance.sh` has required a `section-version` in the
+      marker body all along — without one the prose is permanent, since adding an
+      agent is a no-op once the markers exist and the byte-identical rule forbids
+      a later host rewriting it. The writer never emitted one, so every
+      repository it touched got a section with no repair path.
+
+      **It survived because the two tools had no row joining them**, and because
+      core's own `AGENTS.md` was a symlink to a `CLAUDE.md` carrying no section —
+      and a file with no section is conformant. Giving core a real section in this
+      change is what made CI fail, which is the check working. Fixed in
+      init-project **2.1.0**, added to core's two files, and the writer's suite
+      now scores its output against the real scorer rather than re-stating its
+      rules. The fleet's four version-less sections are repaired by re-running the
+      initializer, which is the in-place block update 2.0.0 made possible.
+
 - [x] 5.4 **`tools/test-install-core-git-hooks.sh` was RED on `main`, and the
       cause is the same leak this change kept tripping over.** The suite's
       fixtures inherited the machine's **global** `core.hooksPath`, so every

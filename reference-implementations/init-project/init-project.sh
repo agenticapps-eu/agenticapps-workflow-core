@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 # init-project.sh — establish what a repository carries to use this workflow.
 #
-# init-project-version: 2.0.0
+# init-project-version: 2.1.0
 #
+#   2.1.0 — the section it writes carries `<!-- section-version: 1.0.0 -->`.
+#           `tools/agents-md-conformance.sh` has required a content version all
+#           along and this writer never emitted one, so every repository it
+#           touched got a section whose prose has no supported repair path. It
+#           survived because core's own AGENTS.md was a symlink to a CLAUDE.md
+#           with no section, and a file with no section is conformant — the two
+#           tools lived in one repository with no test joining them until the
+#           2.0.0 migration gave core a real section and CI failed on it.
+#           * a re-run UPDATES the block in place, which is what 2.0.0 made
+#             possible and this is its first real use: the fleet's version-less
+#             sections are repaired by running the initializer again
 #   2.0.0 — TWO REAL FILES. `CLAUDE.md` is no longer a symlink to `AGENTS.md`;
 #           both names are regular files holding identical content, and the
 #           equality the link gave by construction is now a gate check
@@ -186,8 +197,19 @@ fi
 # A pointer, never a copy. Behaviour lives in the skill, which is one file
 # reaching every host; a copy here would be a version of it, and versions in
 # repositories are the drift this workflow removes.
+# SECTION-VERSION IS NOT DECORATION. Without it the section's prose is permanent:
+# adding an agent is a no-op once the markers are present, and the byte-identical
+# rule forbids a later host rewriting it, so a repository provisioned from a
+# template citing a since-deleted system goes on citing it for ever.
+# `tools/agents-md-conformance.sh` has required it all along and this writer never
+# emitted it — a gap that survived because core's own AGENTS.md was a symlink to a
+# CLAUDE.md carrying no section, and a file with no section is conformant. Bump it
+# whenever the prose below changes.
+SECTION_VERSION='1.0.0'
+
 render_block() {
   printf '%s\n' "$BEGIN_MARKER"
+  printf '<!-- section-version: %s -->\n' "$SECTION_VERSION"
   printf '\n## The AgenticApps workflow\n\n'
   printf 'Work moves through the OpenSpec lifecycle, and how to do that lives in the\n'
   printf '`agentic-apps-workflow` skill on this machine — not in this file. Read the\n'
