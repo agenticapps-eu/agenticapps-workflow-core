@@ -1735,6 +1735,23 @@ case "$(line_for 'gate:')" in
          "gate line: $(line_for 'gate:')" "$OUT" ;;
 esac
 
+# TWO REVIEWERS RAISED THIS AND THE FIRST REMEDY WAS DECLINED. The dispatcher
+# resolves OPENSPEC_GATE from each repository's hook cwd, and a slashless value
+# goes through PATH; --check resolves it once, from wherever it was run. Carrying
+# per-repository gate state for a case nobody has is scope creep — but reporting
+# an absolute-looking verdict on a value the checker cannot speak for is a false
+# claim, and the cheap fix is to stop making it.
+setup_case
+plant_gate
+run_binder
+OPENSPEC_GATE=some/relative/gate run_binder_with --check
+unset OPENSPEC_GATE
+case "$(line_for 'gate:')" in
+  *"NOT AN ABSOLUTE PATH"*) ok "a non-absolute gate override is reported as one this check cannot speak for" ;;
+  *) bad "a non-absolute gate override is reported as one this check cannot speak for" \
+         "gate line: $(line_for 'gate:')" "$OUT" ;;
+esac
+
 # ---------------------------------------------------------------------------
 echo
 echo "floor binder — --check reports what the floor does not reach (2.5)"
@@ -2057,6 +2074,46 @@ case "$(line_for 'escapee')" in
   '') bad "a hooks.d entry resolving outside hooks.d is not listed as running" \
           "the entry is not mentioned at all" "$OUT" ;;
   *) ok "a hooks.d entry resolving outside hooks.d is not listed as running" ;;
+esac
+
+# A RELATIVE LINK LEAVES THE DIRECTORY JUST AS SURELY AS AN ABSOLUTE ONE, and
+# the dispatcher's own comment says so — it anchors a relative target to the
+# link's parent before canonicalising. The first version of this check copied
+# the shape of that test without the anchoring, so it resolved relative targets
+# from the CHECKER'S cwd. Only an absolute link was covered, which is why the
+# suite went green over it.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$HOOKDIR/hooks.d" "$HOME/.agenticapps/outside"
+printf '#!/bin/sh\nexit 0\n' > "$HOME/.agenticapps/outside/evil"; chmod +x "$HOME/.agenticapps/outside/evil"
+ln -s ../../outside/evil "$HOOKDIR/hooks.d/rel-escapee"
+run_binder_with --check
+case "$(line_for 'rel-escapee')" in
+  *"RESOLVES OUTSIDE"*) ok "a RELATIVE hooks.d link that escapes is reported as escaping" ;;
+  *) bad "a RELATIVE hooks.d link that escapes is reported as escaping" \
+         "entry line: $(line_for 'rel-escapee')" "$OUT" ;;
+esac
+
+# The other direction, and the one that actually fails against the bug: a
+# relative link that stays INSIDE hooks.d must not be called an escape. Resolved
+# from the checker's cwd it never matches, so every legitimate relative entry
+# reads as "every commit in every enrolled repository is blocked" — sending an
+# operator to repair a machine that is fine.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$HOOKDIR/hooks.d"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/hooks.d/real"; chmod +x "$HOOKDIR/hooks.d/real"
+ln -s ./real "$HOOKDIR/hooks.d/rel-inside"
+run_binder_with --check
+case "$(line_for 'rel-inside')" in
+  *"RESOLVES OUTSIDE"*) bad "a RELATIVE hooks.d link that stays inside is not called an escape" \
+                            "resolved from the checker's cwd instead of the link's parent" \
+                            "entry line: $(line_for 'rel-inside')" ;;
+  '') bad "a RELATIVE hooks.d link that stays inside is not called an escape" \
+          "the entry is not mentioned at all" "$OUT" ;;
+  *) ok "a RELATIVE hooks.d link that stays inside is not called an escape" ;;
 esac
 
 # F3 — A GLOBAL BINDING EXISTING IS NOT A GLOBAL BINDING WORKING. check_machine

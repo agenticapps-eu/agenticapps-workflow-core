@@ -187,6 +187,16 @@ doctors come to disagree about one machine.
 > them blocks the commit. A report that listed the entries as active would
 > describe a healthy machine that is in fact wedged.
 
+#### Scenario: The gate override is not an absolute path
+
+- **WHEN** `OPENSPEC_GATE` or `OPENSPEC_CHANGE_GATE` is set to a value that is
+  not an absolute path
+- **THEN** `--check` reports that it cannot speak for what actually runs, because
+  the dispatcher resolves the override from each repository's hook directory and
+  a value with no slash goes through `PATH`
+- **AND** SHALL NOT report the gate as present or absent on the strength of
+  resolving it from the directory the check was run in
+
 #### Scenario: A composition entry resolves outside hooks.d
 
 - **WHEN** a `hooks.d` entry is a symlink whose canonical target is outside

@@ -236,7 +236,8 @@ one declined:
   is real and is recorded here rather than built.
 
 Seven assertions were written for the five accepted findings, all observed RED,
-then GREEN twice. The suite went 132 → 139.
+then GREEN twice. The suite went 132 → 139 assertions at that point; the PR
+review below took it to 146.
 
 ---
 

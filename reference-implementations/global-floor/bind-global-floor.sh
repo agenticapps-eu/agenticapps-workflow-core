@@ -157,6 +157,26 @@ command -v git >/dev/null 2>&1 || {
 marker() { grep -m1 -oE "^# $1: *[0-9]+\.[0-9]+\.[0-9]+" "$2" 2>/dev/null | awk '{print $3}'; }
 newer()  { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
 
+# MIRRORS THE DISPATCHER'S resolved_dir_of, and must: this is the same question
+# the dispatcher answers at commit time, and a report that answers it differently
+# is worse than no report. A RELATIVE target is anchored to the link's own parent
+# — resolving it from the checker's working directory is the bug this replaced,
+# and it called every legitimate relative entry an escape. The walk is bounded
+# because a symlink cycle here would hang the report rather than fail it.
+entry_dir_of() {
+  local p="$1" t n=0
+  while [ -h "$p" ] && [ "$n" -lt 16 ]; do
+    t="$(readlink "$p")"
+    case "$t" in
+      /*) p="$t" ;;
+      *)  p="$(dirname "$p")/$t" ;;
+    esac
+    n=$((n + 1))
+  done
+  [ -h "$p" ] && return 1
+  (cd "$(dirname "$p")" 2>/dev/null && pwd -P)
+}
+
 # Two facts about the machine that the repository sections need. A repository
 # can be enrolled, resolve to the published directory, and still be ungated
 # because the dispatcher cannot run or the gate behind it is missing.
@@ -258,7 +278,23 @@ check_machine() {
   # nothing here, and a report that stopped at the dispatcher would state the
   # opposite of the truth about that machine.
   gate="${OPENSPEC_GATE:-${OPENSPEC_CHANGE_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}}"
-  if [ -x "$gate" ]; then
+  # THE ONE CLAIM THIS CHECK CANNOT MAKE. The dispatcher resolves the override
+  # from each repository's hook working directory, and a slashless value goes
+  # through PATH — so for a non-absolute value, what runs depends on the
+  # repository and on an environment this run cannot see. Carrying per-repository
+  # gate state to chase that would be scope creep; saying nothing while printing
+  # a verdict would be a false claim. So it says which.
+  case "$gate" in
+    /*) ;;
+    *) GATE_ACTIVE=0
+       say "  gate: $gate — NOT AN ABSOLUTE PATH. The dispatcher resolves it from each"
+       say "    repository's hook directory, and a value with no slash goes through"
+       say "    PATH, so what actually runs is not something this check can speak for."
+       gate='' ;;
+  esac
+  if [ -z "$gate" ]; then
+    :
+  elif [ -x "$gate" ]; then
     say "  gate: $gate — present and executable"
   elif [ -e "$gate" ]; then
     GATE_ACTIVE=0
@@ -295,7 +331,7 @@ check_machine() {
       # CANONICAL target, never the link text: a relative link leaves the
       # directory just as surely as an absolute one.
       if [ -h "$e" ]; then
-        etgt="$(cd "$(dirname "$(readlink "$e")")" 2>/dev/null && pwd -P)"
+        etgt="$(entry_dir_of "$e")"
         if [ -z "$etgt" ] || ! same_dir "$etgt" "$HOOKS_DIR/hooks.d"; then
           say "  hooks.d entry: ${e##*/} — RESOLVES OUTSIDE hooks.d. The dispatcher"
           say "    refuses it, so every commit in every enrolled repository is blocked."

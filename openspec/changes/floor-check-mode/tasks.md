@@ -190,3 +190,23 @@ inline comments were read rather than the check.
 - [x] 5.4 Two task cross-references in `REVIEWS.md` pointed at the wrong tasks,
       stale since §2 was renumbered. Corrected: enrolment is 2.5 and displacement
       2.6, not 2.3 and 2.4.
+- [x] 5.5 RED then GREEN, second review round: **the relative-symlink case my
+      own fix did not cover.** 5.3 reproduced the shape of the dispatcher's
+      containment test without its anchoring — `dirname "$(readlink "$e")"`
+      resolves a relative target from the *checker's* cwd, not the link's parent
+      — and the test only used an absolute link, so the suite went green over it.
+      The dispatcher's own comment says a relative link leaves the directory just
+      as surely as an absolute one. `entry_dir_of` now mirrors `resolved_dir_of`,
+      bounded walk and all. The failing direction was the benign one: every
+      legitimate relative entry read as "every enrolled commit is blocked".
+- [x] 5.6 RED then GREEN: **a non-absolute `OPENSPEC_GATE` is reported as one
+      this check cannot speak for.** Both the step-4 reviewer and the PR reviewer
+      raised it; the first remedy — per-repository gate state — was declined as
+      scope creep and that decline stands. The second remedy is cheaper and
+      correct: the dispatcher resolves the override from each repository's hook
+      directory and a slashless value goes through `PATH`, so the check stops
+      printing a verdict it cannot support instead of building machinery to
+      support it.
+- [x] 5.7 Test counts aligned across `session-handoff.md`, `REVIEWS.md` and the
+      PR, each now saying what it counts. They had drifted apart as assertions
+      were added round by round: 79 at `HEAD`, 146 now.

@@ -11,7 +11,10 @@ first action next session, after the PR merges.
   repository; writes nothing; exits 0 whatever it finds.
 - **Grammar: `--check [repository ...]`**, no repository meaning the cwd's. No
   scan, no declared root, no walk.
-- **Suite 79 → 139**, GREEN twice, every new assertion observed RED first.
+- **`tools/global-floor-bind.test.sh`: 79 assertions → 146**, GREEN twice at
+  every step, every new assertion observed RED first. (79 is the suite at
+  `HEAD` before this change; the intermediate figures in `REVIEWS.md` are the
+  counts at the moment each review round was folded in.)
   `shellcheck -S warning` clean on everything added.
 - **Step 2b run properly**: gemini and codex, both REQUEST-CHANGES, both finding
   the same HIGH independently. Step 4: codex on the diff, REQUEST-CHANGES, six
@@ -83,10 +86,10 @@ with no enforcement at all.
    when its pattern does not match, long before the `--check` section. Not a
    regression from this change (reproduced on `HEAD`), but the documented teeth
    check now covers only the first third of the file.
-3. **The gate override is resolved once, against the checker's cwd**, so a
-   relative or slashless `OPENSPEC_GATE` would be reported wrongly. Declined
-   deliberately — every realistic value is absolute — and recorded in
-   `REVIEWS.md` rather than built.
+3. ~~The gate override is resolved once, against the checker's cwd.~~ **Closed.**
+   Two reviewers raised it. The heavy remedy (per-repository gate state) stays
+   declined; the cheap one is built — a non-absolute override is now reported as
+   one the check cannot speak for, rather than given a verdict it cannot support.
 4. **`workflow-installation` still says a reporting surface "is owed".** True
    when written; after the archive, `--check` is that surface and is specified in
    the same capability. Left alone rather than opening a MODIFIED block to change
