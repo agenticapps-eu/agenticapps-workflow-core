@@ -1,8 +1,9 @@
 # Session Handoff — 2026-08-11 (twenty-ninth session)
 
-`floor-check-mode` is **implemented, reviewed, verified and shipped as PR #112**
-(branch `floor-check-mode`, gate CI green). It is **not archived** — that is the
-first action next session, after the PR merges.
+`floor-check-mode` is **shipped and archived**. PR #112 squash-merged to `main`
+as `1feef27`; the delta folded into the four spec slots on the first `openspec
+archive` attempt — no refusal, because the MODIFIED block was a verified
+superset. Nothing is in flight.
 
 ## Accomplished
 
@@ -39,9 +40,10 @@ first action next session, after the PR merges.
 - **The review trailer is NOT forged.** Its digest asserts which artifacts the
   reviewers saw; both reviews are of the pre-resolution delta. `trailer-absent`
   is the honest state. Recorded as a skill/gate divergence instead.
-- **Not archived in the implementation PR**, matching `#107 → #108`: archiving
-  first would put the requirements into the live spec while `main` has no
-  implementation.
+- **Archived in its own PR after the merge**, matching `#107 → #108`: archiving
+  first would have put the requirements into the live spec while `main` had no
+  implementation. `core-self-enforcement` went 50 → 54 scenarios with all three
+  originals intact; `workflow-installation` gained three requirements.
 - **Task 4.3 inverted.** It said to bump `global-floor-version` and publish; that
   marker is on the *dispatcher* (1.1.0, byte-unchanged), the binder carries no
   marker and is not published. Bumping it would have told every machine its
@@ -58,15 +60,7 @@ deltas rewritten after review) · `openspec/changes/floor-check-mode/tasks.md`
 
 ## Next session: start here
 
-**Merge #112, then archive.** `openspec archive floor-check-mode` folds both
-deltas into `openspec/specs/`. The `core-self-enforcement` delta is a MODIFIED
-block that **restates the live requirement verbatim and appends** — verified as a
-pure superset (3 original scenarios preserved, 4 added), so the archive should
-not refuse the way `two-real-instruction-files` did three times. Archive in its
-own PR, as `#108` was. Nothing needs publishing: the binder runs from the
-checkout and carries no version marker.
-
-**Then decide what to do about the two ungated repositories the mode found.**
+**Decide what to do about the two ungated repositories the mode found.**
 `codex-workflow` and `opencode-workflow` each carry a `.git/hooks/pre-commit`
 (5.8K and 2.3K, 25 July) that the global binding displaced, and neither is
 enrolled — so both are completely ungated: hook on disk, nothing running it, no

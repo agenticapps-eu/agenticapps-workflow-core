@@ -738,3 +738,57 @@ bind" is one act: the orders are not symmetric and the safe one costs nothing.
 - **THEN** it SHALL leave the binding in place
 - **AND** SHALL report it as declared rather than as redundant
 
+**Where the declaration is absent the binding is at risk**, and that condition
+SHALL be reportable rather than discovered by its consequences. The sweep's rule
+reads the *value* of the setting, so an undeclared binding on core is
+indistinguishable from the five redundant ones it exists to remove, and the next
+installer run unsets it. Nothing on disk says so before it happens, and after it
+happens the symptom is that core's commits are scored by the published gate
+rather than by the working tree it is editing — which is the one thing ADR-0028
+exists to prevent, arriving silently.
+
+The binder's check mode is where that is reported, because it is the artifact
+that establishes the declaration and therefore the one that knows what a correct
+one looks like.
+
+**Core SHALL be classified by where its binding points, not by whether one
+exists.** Reading only presence gets every case but one wrong, and each wrong
+answer sends a reader somewhere useless:
+
+| State | What presence-reading says | What is true |
+|---|---|---|
+| unset, machine unbound | governed by the floor | nothing governs it; git resolves core's own hooks directory |
+| declared, pointing elsewhere | correctly bound | core is **not** scored by its working tree, and a declaration cannot launder an arbitrary path |
+| undeclared, pointing elsewhere | at risk of being swept | not sweepable at all — the sweep removes only a binding naming the directory git would resolve anyway, and the migration refuses a foreign one by name |
+
+#### Scenario: The declaration is missing
+
+- **WHEN** core carries a local `core.hooksPath` that names core's own hooks
+  directory and is not declared
+- **THEN** `--check` SHALL report the binding as undeclared and at risk of being
+  swept
+- **AND** SHALL NOT report core as correctly bound
+
+#### Scenario: The binding points somewhere other than core's own hooks
+
+- **WHEN** core carries a local `core.hooksPath` naming a directory that is not
+  core's own hooks directory, declared or not
+- **THEN** `--check` SHALL report it as foreign, naming both paths
+- **AND** SHALL NOT report it as at risk of being swept, because the sweep does
+  not remove it
+
+#### Scenario: Core has no local binding and no floor governs it
+
+- **WHEN** core carries no local `core.hooksPath` and no global binding is set
+- **THEN** `--check` SHALL report that nothing binds core and name the directory
+  git resolves
+- **AND** SHALL NOT report core as governed by the floor
+
+#### Scenario: The declaration is present
+
+- **WHEN** core carries a local `core.hooksPath` naming core's own hooks
+  directory, with `agenticapps.hooksbinding=declared`
+- **THEN** `--check` SHALL report it as declared
+- **AND** SHALL NOT report it as redundant, which is what its value alone would
+  suggest
+
