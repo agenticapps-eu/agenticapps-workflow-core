@@ -119,6 +119,399 @@ command -v git >/dev/null 2>&1 || {
   say "git configuration, so it cannot be bound without it. Install git, then re-run."
   exit 1; }
 
+# ── Check ──────────────────────────────────────────────────────────────────
+#
+#   bind-global-floor.sh --check [repository ...]
+#
+# BEFORE THE DIRECTORY GUARDS AND BEFORE THE mkdir, and the placement is the
+# requirement rather than a convenience. Everything below this block writes —
+# the mkdir creates the published directory, the inventory prompts, the publish
+# and the bind mutate the machine — so a check mode wired in at any later point
+# would create the very directory it is reporting on. Measured before this
+# existed: `--check` was parsed as a repository name, and the run created
+# ~/.agenticapps/git-hooks on its way to refusing it.
+#
+# IT REPORTS AND REPAIRS NOTHING, AND IT EXITS 0 WHATEVER IT FINDS. A mode that
+# can change state is one an operator has to think before running, and the whole
+# value here is that asking is free. A caller that branched on the exit status
+# would turn a report into a gate — a different decision with different failure
+# modes — and would make "the floor is unbound" indistinguishable from "the
+# command did not run".
+#
+# WHY A REPORT IS OWED AT ALL. The floor is bound once per machine and governs
+# only repositories carrying `agenticapps.workflow.enrolled`. Both halves are
+# invisible from inside a repository: an unenrolled repository looks exactly
+# like an enrolled one, and is ungated. Measured 2026-08-11, 39 of 41
+# repositories under one root resolved to the published dispatcher and nothing
+# in any of them said so.
+#
+# THE REPOSITORIES ARE THE ONES IT IS GIVEN. There is no scan and no declared
+# root. The migration set is named and never discovered, and a mode that only
+# inspects has no better claim to walk the machine than the mode that mutates;
+# a census whose scope is hard-coded answers a question nobody asked and reports
+# the answer as though it were complete.
+
+# The same two one-liners install.sh uses to judge its four published
+# executables. Currency is the same question here as it is there, and answering
+# it a second way is how two doctors come to disagree about one machine.
+marker() { grep -m1 -oE "^# $1: *[0-9]+\.[0-9]+\.[0-9]+" "$2" 2>/dev/null | awk '{print $3}'; }
+newer()  { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
+
+# Two facts about the machine that the repository sections need. A repository
+# can be enrolled, resolve to the published directory, and still be ungated
+# because the dispatcher cannot run or the gate behind it is missing.
+FLOOR_ACTIVE=1
+GATE_ACTIVE=1
+# Whether the dispatcher git runs is one this checkout can vouch for. Separate
+# from FLOOR_ACTIVE, because a hand-edited hook is perfectly runnable — the
+# question it answers is not "does git run the floor" but "is the floor still
+# this checkout's gate", and collapsing the two makes the verdict over-claim.
+FLOOR_VOUCHED=1
+# The global binding as check_machine found it. Whatever it points at, git
+# prefers it over `.git/hooks` — so its mere presence is what decides whether a
+# repository with no local binding of its own is governed by the floor.
+GLOBAL_BINDING=''
+
+check_machine() {
+  local pub="$HOOKS_DIR/pre-commit" pv cv gate v e n=0
+
+  say "machine"
+
+  if [ -L "$HOOKS_DIR" ]; then
+    say "  published directory: $HOOKS_DIR — A SYMLINK. The directory git runs hooks"
+    say "    from must be one you own outright; a symlink redirects all of them at once."
+  elif [ -d "$HOOKS_DIR" ]; then
+    say "  published directory: $HOOKS_DIR — present"
+    # THE CONDITION THIS BINDER REFUSES TO PUBLISH INTO, reported rather than
+    # only refused. A machine already in this state reads as perfectly healthy
+    # to a mode that compares content: the comparison does catch a substituted
+    # hook, but it cannot show that the machine is open to the substitution at
+    # all. `find -perm` rather than `stat`, whose format flags differ between
+    # macOS and GNU.
+    if [ -n "$(find "$HOOKS_DIR" -maxdepth 0 \( -perm -g+w -o -perm -o+w \) 2>/dev/null)" ]; then
+      say "    and it is group- or world-writable, so another local account could"
+      say "    replace the hook that runs on every commit you make. chmod 755 it."
+    fi
+  else
+    say "  published directory: $HOOKS_DIR — absent, nothing has been published here"
+  fi
+
+  # CONTENT AND THE EXECUTE BIT ARE SEPARATE FACTS, and the bit is the decisive
+  # one: git does not run a hook without it, so correct bytes and no bit is a
+  # floor that reads as healthy and enforces nothing. Reporting such a hook as
+  # "current" would be true about the file and false about the machine.
+  if [ -L "$pub" ]; then
+    say "  dispatcher: a symlink — what git runs is not what this checkout published"
+    FLOOR_ACTIVE=0
+  elif [ ! -e "$pub" ]; then
+    say "  dispatcher: absent — nothing is published at $pub"
+    FLOOR_ACTIVE=0
+  elif [ ! -f "$pub" ]; then
+    # `[ -x ]` IS TRUE OF A DIRECTORY, and `grep` on a FIFO blocks forever.
+    # Neither is a hook git can run, and one of them would hang the report
+    # rather than failing it — so the type is settled before anything reads it.
+    say "  dispatcher: not a regular file — git cannot run it"
+    FLOOR_ACTIVE=0
+  elif [ ! -x "$pub" ]; then
+    say "  dispatcher: NOT EXECUTABLE — git does not run a hook without the bit, so the"
+    say "    floor is NOT ACTIVE whatever its content says"
+    FLOOR_ACTIVE=0
+  else
+    # THE PUBLISHER PRESERVES A DESTINATION THAT IS STRICTLY NEWER, by design.
+    # So bytes differing from this checkout is the NORMAL condition of a machine
+    # ahead of this clone, and reporting it as drift is how a report teaches its
+    # reader to ignore it. The marker is what separates the two.
+    pv="$(marker "$MARKER_KEY" "$pub")"; cv="$(marker "$MARKER_KEY" "$SRC")"
+    if cmp -s "$pub" "$SRC"; then
+      say "  dispatcher: current ($pv)"
+    elif [ -z "$pv" ]; then
+      # GIT RUNNING THE FLOOR AND THE FLOOR BEING THIS CHECKOUT'S GATE ARE TWO
+      # CLAIMS. These two states are the ones where somebody edited the file, so
+      # what it enforces is not vouched for by anything — while it is still
+      # perfectly runnable, which is why FLOOR_ACTIVE stays 1 and the verdict is
+      # qualified instead. `ahead` is deliberately NOT in this class: the
+      # publisher preserves a newer destination by design.
+      FLOOR_VOUCHED=0
+      say "  dispatcher: present with no parseable marker — version unknown, and its"
+      say "    bytes differ from this checkout's"
+    elif [ "$pv" = "$cv" ]; then
+      FLOOR_VOUCHED=0
+      say "  dispatcher: MODIFIED — version $pv matches this checkout, its bytes do not"
+    elif newer "$pv" "$cv"; then
+      say "  dispatcher: ahead of this checkout (published $pv, checkout $cv)"
+    else
+      say "  dispatcher: not current (published $pv, checkout $cv)"
+    fi
+  fi
+
+  if [ "$FLOOR_ACTIVE" = 0 ]; then
+    say "    → commits in every repository this binding governs proceed UNGATED and"
+    say "      silently. git does not fail when the hook it resolves cannot be run."
+  fi
+
+  # THE SURFACE A SUMMARY DROPS, and the one that matters most. The dispatcher
+  # FAILS OPEN when the gate is missing: it warns and exits 0, deliberately,
+  # because a commit hook that hard-fails on absent tooling teaches people to
+  # pass --no-verify and disables the floor permanently rather than momentarily.
+  # So a floor that is bound, published, current and executable still gates
+  # nothing here, and a report that stopped at the dispatcher would state the
+  # opposite of the truth about that machine.
+  gate="${OPENSPEC_GATE:-${OPENSPEC_CHANGE_GATE:-$HOME/.agenticapps/bin/openspec-change-gate.sh}}"
+  if [ -x "$gate" ]; then
+    say "  gate: $gate — present and executable"
+  elif [ -e "$gate" ]; then
+    GATE_ACTIVE=0
+    say "  gate: $gate — present but NOT EXECUTABLE."
+    say "    The dispatcher fails open on a gate it cannot run: it warns and exits 0,"
+    say "    so enrolled repositories are committing UNGATED."
+  else
+    GATE_ACTIVE=0
+    say "  gate: $gate — ABSENT."
+    say "    The dispatcher fails open on a missing gate: it warns and exits 0, so"
+    say "    enrolled repositories are committing UNGATED."
+  fi
+
+  # THE DISPATCHER REFUSES TO RUN AT ALL on any of these three, which blocks
+  # every commit in every enrolled repository. Listing the entries as "runs
+  # after the gate" would describe a machine that is in fact wedged, so the
+  # directory's own state is settled before any entry is named.
+  if [ -L "$HOOKS_DIR/hooks.d" ]; then
+    say "  hooks.d: A SYMLINK — the dispatcher REFUSES to run at all while it is one,"
+    say "    so every commit in every enrolled repository is being blocked."
+  elif [ -d "$HOOKS_DIR/hooks.d" ] && [ ! -O "$HOOKS_DIR/hooks.d" ]; then
+    say "  hooks.d: NOT OWNED BY YOU — the dispatcher REFUSES to run while it is not,"
+    say "    so every commit in every enrolled repository is being blocked."
+  elif [ -d "$HOOKS_DIR/hooks.d" ] &&
+       [ -n "$(find "$HOOKS_DIR/hooks.d" -maxdepth 0 \( -perm -g+w -o -perm -o+w \) 2>/dev/null)" ]; then
+    say "  hooks.d: group- or world-writable — the dispatcher REFUSES to run while it"
+    say "    is, so every commit in every enrolled repository is being blocked."
+  elif [ -d "$HOOKS_DIR/hooks.d" ]; then
+    for e in "$HOOKS_DIR/hooks.d"/*; do
+      [ -f "$e" ] && [ -x "$e" ] || continue
+      n=$((n + 1))
+      say "  hooks.d entry: ${e##*/} — runs after the gate, on every enrolled commit"
+    done
+    [ "$n" = 0 ] && say "  hooks.d: present, no executable entries"
+  else
+    say "  hooks.d: absent — no composition entries"
+  fi
+
+  # CI IS NOT A SURFACE THIS REPORTS. Whether a workflow file exists is visible
+  # from here; whether it blocks a merge is a setting on the forge. Inferring
+  # the second from the first is the false assurance this mode exists to remove.
+
+  v="$(git config --global --get --type=path core.hooksPath 2>/dev/null)"
+  GLOBAL_BINDING="$v"
+  if [ -z "$v" ]; then
+    say "  global core.hooksPath: unset — the floor is NOT bound"
+    say "    to bind it, run: $SELF_DIR/bind-global-floor.sh"
+  elif [ ! -d "$v" ]; then
+    # Verified on git 2.50.1: a commit under a core.hooksPath naming an absent
+    # directory SUCCEEDS, exit 0, in silence. A dangling binding does not break
+    # the machine loudly, it removes the floor quietly — and this is the only
+    # surface that would ever mention it.
+    say "  global core.hooksPath: $v — DANGLING, that directory does not exist."
+    say "    Commits in every repository this binding governs proceed UNGATED and"
+    say "    silently: git does not fail when core.hooksPath names a missing directory."
+  elif same_dir "$v" "$HOOKS_DIR"; then
+    say "  global core.hooksPath: $v — the published directory"
+  else
+    say "  global core.hooksPath: $v — FOREIGN, it is not the published directory at"
+    say "    $HOOKS_DIR, so this workflow's floor is not what runs."
+  fi
+}
+
+# Core's binding is reported wherever the mode is run from, because the binder
+# repairs core wherever it is run from: it resolves core through its own
+# location, not through the operator's shell.
+check_core() {
+  local root top v declared default
+  root="$(cd "$SELF_DIR/../.." && pwd)"
+  say "core"
+  top="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)"
+  if [ -z "$top" ] || ! same_dir "$top" "$root"; then
+    say "  $root is not the top of a git repository, so this binder is not running"
+    say "  from inside core's checkout and there is no local binding to report."
+    return
+  fi
+  v="$(git -C "$top" config --local --get --type=path core.hooksPath 2>/dev/null)"
+  declared="$(git -C "$top" config --local --get agenticapps.hooksbinding 2>/dev/null)"
+
+  # CLASSIFIED BY WHERE THE BINDING POINTS, not by whether one exists. Reading
+  # only presence gets all three of the cases below wrong: an unset binding on an
+  # unbound machine is not "governed by the floor", a declared binding aimed
+  # somewhere else is not core self-gating, and a foreign binding is not
+  # sweepable — the migration refuses to sweep one by name.
+  default="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  [ -n "$default" ] || default="$(git -C "$top" rev-parse --git-common-dir 2>/dev/null)"
+  case "$default" in '' | /*) ;; *) default="$top/$default" ;; esac
+  default="$default/hooks"
+
+  if [ -z "$v" ] && [ -n "$GLOBAL_BINDING" ]; then
+    say "  core's local core.hooksPath: unset — core is governed by the published"
+    say "    floor rather than by the gate in the working tree it is editing, which"
+    say "    inverts what ADR-0028 exists to keep."
+  elif [ -z "$v" ]; then
+    say "  core's local core.hooksPath: unset, and no floor binding governs it either —"
+    say "    git resolves $default"
+  else
+    case "$v" in /*) ;; *) v="$top/$v" ;; esac
+  fi
+  if [ -z "$v" ]; then
+    :
+  elif ! same_dir "$v" "$default"; then
+    # The migration refuses exactly this, one level down, and for the same
+    # reason: a binding pointing elsewhere is a deliberate act by somebody, and
+    # calling it healthy because it carries a declaration would let a
+    # declaration launder any path at all.
+    say "  core's local core.hooksPath: $v — FOREIGN. It does not name core's own"
+    say "    hooks directory ($default), so core is not scored by its working tree."
+  elif [ "$declared" = declared ]; then
+    say "  core's local core.hooksPath: $v — declared"
+  else
+    # REDUNDANT BY VALUE AND LOAD-BEARING IN FACT. The sweep reads the value, and
+    # this one names the directory git would resolve anyway, so it is
+    # indistinguishable from the five redundant bindings the sweep exists to
+    # remove. Losing it hands core to the published gate, and the symptom is
+    # that core's commits are scored by a copy rather than by the bytes it ships.
+    say "  core's local core.hooksPath: $v — NOT DECLARED, and at risk of being swept."
+    say "    The sweep reads the value, and this one names the directory git would"
+    say "    resolve anyway, so nothing distinguishes it from a redundant binding."
+    say "    Declare it with: git -C $top config --local agenticapps.hooksbinding declared"
+  fi
+}
+
+check_repo() {
+  local given="$1" top common resolved own lhp enrolled_v reason='' h
+  top="$(git -C "$given" rev-parse --show-toplevel 2>/dev/null)"
+  if [ -z "$top" ]; then
+    # REPORTED AND SKIPPED, never fatal. The migration stops the whole run on a
+    # bad name because it is about to mutate and a set that cannot be stated
+    # correctly cannot be accepted correctly. A report has no such reason, and
+    # discarding nine good sections because the tenth name was wrong is a cost
+    # with nothing bought by it.
+    say "repository: $given — not a git repository, skipped"
+    return
+  fi
+  say "repository: $top"
+  # A TYPED PATH IS NOT AN IDENTITY, and the migration refuses one for that
+  # reason — there it would mutate a repository nobody named. Resolving one here
+  # is a different act: the resolution is printed, so the operator can see which
+  # repository they were answered about.
+  same_dir "$given" "$top" || say "  named as $given, which is inside it"
+
+  # `--path-format` ARRIVED IN GIT 2.31, and its absence must not be silent.
+  # Without the fallback `--git-common-dir` returns nothing, `own` becomes
+  # `/hooks`, and displacement is then never reported for any repository on the
+  # machine — a report answering "nothing is displaced" because it looked in the
+  # wrong place. The migration path already carries this fallback twice; the
+  # check path is the same question and gets the same answer.
+  common="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  [ -n "$common" ] || common="$(git -C "$top" rev-parse --git-common-dir 2>/dev/null)"
+  case "$common" in '' | /*) ;; *) common="$top/$common" ;; esac
+  own="$common/hooks"
+
+  # `--git-path hooks` HONORS core.hooksPath, and that is exactly why it is the
+  # right call here: the question is not what is configured, it is what git will
+  # actually do in this repository.
+  resolved="$(git -C "$top" rev-parse --path-format=absolute --git-path hooks 2>/dev/null)"
+  [ -n "$resolved" ] || resolved="$(git -C "$top" rev-parse --git-path hooks 2>/dev/null)"
+  case "$resolved" in '' | /*) ;; *) resolved="$top/$resolved" ;; esac
+  lhp="$(git -C "$top" config --local --get --type=path core.hooksPath 2>/dev/null)"
+  # GIT RESOLVES A RELATIVE VALUE PER REPOSITORY, never against whatever
+  # directory the checker was run from — and a relative value is not exotic:
+  # husky has shipped `core.hooksPath = .husky/_` for years. Testing it from
+  # here would report a perfectly good hooks directory as missing, for every
+  # repository except the one the checker happened to be standing in.
+  case "$lhp" in '' | /*) ;; *) lhp="$top/$lhp" ;; esac
+  # READ EXACTLY AS THE DISPATCHER READS IT: --local, --type=bool, and the value
+  # must normalise to true. `false`, a value git cannot read as a boolean, and a
+  # key set only in global configuration all commit ungated, so a laxer reader
+  # here would produce a report that disagrees with the hook.
+  enrolled_v="$(git -C "$top" config --local --type=bool --get agenticapps.workflow.enrolled 2>/dev/null)"
+
+  say "  effective hooks directory: ${resolved:-unresolvable}"
+
+  if [ -n "$lhp" ] && ! same_dir "$lhp" "$HOOKS_DIR"; then
+    say "  a local core.hooksPath names $lhp, which git prefers, so the global floor"
+    say "    does NOT govern this repository."
+    [ -d "$lhp" ] || say "    That directory does not exist, so this repository is ungated."
+  fi
+
+  if [ "$enrolled_v" = true ]; then
+    say "  enrolled: yes"
+  else
+    say "  enrolled: no"
+    # ENROLMENT IS AN ACT. Reporting that a repository carries `openspec/` and is
+    # not enrolled says what is true; saying it ought to be enrolled would infer
+    # intent from the shape of a directory, which is the predicate this
+    # capability already refused to build, wearing a report's clothes.
+    [ -d "$top/openspec" ] && say "    it carries openspec/ and is not enrolled, so the floor does not gate it"
+  fi
+
+  # Displacement, not override. Measured on git 2.50.1: with core.hooksPath set,
+  # `.git/hooks` is not consulted at all, so a repository hook cannot bypass the
+  # floor — the floor silently displaces the repository hook, and nothing says so.
+  if [ -n "$resolved" ] && [ -d "$own" ] && ! same_dir "$resolved" "$own"; then
+    for h in "$own"/*; do
+      [ -f "$h" ] && [ -x "$h" ] || continue
+      # GIT NEVER RUNS A .sample — it matches hooks by exact name — so nothing
+      # about one is displaced. Every fresh clone ships thirteen or fourteen of
+      # them and they are executable, so reporting them buries the finding in
+      # itself: measured across 41 named repositories, 535 of the 537 displaced
+      # entries were samples and 2 were real.
+      case "$h" in *.sample) continue ;; esac
+      say "  displaced: $h is no longer consulted — git resolves hooks from $resolved"
+    done
+  fi
+
+  # OUTSIDE THE FLOOR IS NOT THE SAME AS UNGATED, and core is the case that
+  # proves it: it binds locally by design (ADR-0028) so its commits are scored
+  # by the gate in the working tree it is editing rather than by the published
+  # copy, and that hook carries no enrolment predicate at all. Naming the
+  # surface that remains is the difference between "the workflow moved its
+  # floor" and "the workflow got weaker", which are indistinguishable from the
+  # outside unless something says which.
+  if [ -n "$resolved" ] && same_dir "$resolved" "$own" && [ -f "$own/pre-commit" ] && [ -x "$own/pre-commit" ]; then
+    say "  its own $own/pre-commit is what git runs here"
+  fi
+
+  if [ "$enrolled_v" != true ]; then
+    reason='it is not enrolled'
+  elif [ -z "$resolved" ] || ! same_dir "$resolved" "$HOOKS_DIR"; then
+    reason='its hooks do not resolve to the published directory'
+  elif [ "$FLOOR_ACTIVE" != 1 ]; then
+    reason='the published dispatcher cannot run'
+  elif [ "$GATE_ACTIVE" != 1 ]; then
+    reason='the dispatcher fails open, because the gate it invokes cannot run'
+  fi
+  # THE VERDICT NAMES THE FLOOR, because the floor is the only thing this mode
+  # can speak for. A bare "gated: no" is read as "nothing gates this
+  # repository", which is false wherever another surface remains — and the
+  # repository an operator runs this in most is exactly such a case.
+  if [ -n "$reason" ]; then
+    say "  gated by the floor: no — $reason"
+  elif [ "$FLOOR_VOUCHED" != 1 ]; then
+    say "  gated by the floor: yes, but the dispatcher is MODIFIED — git runs it, and"
+    say "    what it enforces is not this checkout's gate"
+  else
+    say "  gated by the floor: yes"
+  fi
+}
+
+if [ "${1:-}" = --check ]; then
+  shift
+  say "check — nothing here is written and nothing is repaired"
+  check_machine
+  check_core
+  if [ $# -gt 0 ]; then
+    for name in "$@"; do check_repo "$name"; done
+  else
+    check_repo "$PWD"
+  fi
+  exit 0
+fi
+
 # ── The published directory ────────────────────────────────────────────────
 # The dispatcher refuses a symlinked or group/world-writable `hooks.d`, because
 # either lets another local account supply code that runs on every commit. It
