@@ -99,7 +99,7 @@ migration stops the whole run on a bad name because it is about to mutate; a
 report has no such reason, and refusing one section of it discards the other
 nine.
 
-**codex's second HIGH is accepted in full.** Tasks 2.3 and 2.4 become scenarios,
+**codex's second HIGH is accepted in full.** Tasks 2.5 and 2.6 become scenarios,
 and the enrolment lookup is pinned to what the dispatcher actually does —
 `--local --type=bool`, value must normalise to `true` — so `false`, a malformed
 value and a global-only key all read as *not enrolled*, which is the dispatcher's
@@ -127,7 +127,7 @@ consulted at all. Measured here on git 2.50.1 (Apple Git-155) — a repository
 with an executable `.git/hooks/pre-commit` and a global `core.hooksPath` ran the
 floor's hook and never the local one. So a local hook cannot silently bypass the
 floor; the floor silently *displaces* the local hook, which is the inverse
-condition and is task 2.4. The finding pointed at the right file for the wrong
+condition and is task 2.6. The finding pointed at the right file for the wrong
 reason, and the scenario it asked for exists — reporting displacement rather
 than override.
 

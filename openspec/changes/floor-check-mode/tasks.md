@@ -163,3 +163,30 @@ and the mode whose entire product is a sentence is exactly where that gap lives.
       dispatcher is byte-unchanged by this diff, and publish nothing.
       **Asserted:** `git diff --quiet HEAD -- reference-implementations/global-floor/pre-commit`
       is clean, and the binder still carries no version marker of any kind.
+
+## 5. Findings from the PR review (CodeRabbit, #112)
+
+All four accepted; the check's own "pass" state hid them, which is why the
+inline comments were read rather than the check.
+
+- [x] 5.1 RED then GREEN: **a global binding existing is not a global binding
+      working.** `check_core` read only whether `GLOBAL_BINDING` was non-empty
+      and then told the operator that the published floor governs core — while
+      `check_machine` had already classified that same value as *dangling* or
+      *foreign*. For a dangling binding **nothing** governs core and its commits
+      proceed silently, which is the opposite of what the section said. The
+      classification is now made once, where the value is examined, and read by
+      `check_core` instead of re-derived from emptiness.
+- [x] 5.2 RED then GREEN: the qualified verdict named `MODIFIED` for a
+      dispatcher with **no parseable marker**, contradicting a machine section
+      three lines above it. `FLOOR_VOUCHED` is cleared by two states; the verdict
+      now names the class and points at the line that says which.
+- [x] 5.3 RED then GREEN: a `hooks.d` entry symlinked **outside** `hooks.d` was
+      listed as running after the gate. The dispatcher refuses it, which blocks
+      the commit — so that machine is wedged and the report called it healthy.
+      Judged on the canonical target, never the link text, exactly as the
+      dispatcher does. The surface table had required this all along and the
+      implementation did not do it.
+- [x] 5.4 Two task cross-references in `REVIEWS.md` pointed at the wrong tasks,
+      stale since §2 was renumbered. Corrected: enrolment is 2.5 and displacement
+      2.6, not 2.3 and 2.4.

@@ -2014,10 +2014,84 @@ printf '# hand-edited\n' >> "$HOOKDIR/pre-commit"
 git -C "$REPO" config --local agenticapps.workflow.enrolled true
 run_binder_with --check
 case "$(line_for 'gated by the floor:')" in
-  *MODIFIED*) ok "an enrolled repository behind a hand-edited dispatcher is not reported plainly gated" ;;
+  *"NOT VOUCHED FOR"*) ok "an enrolled repository behind a hand-edited dispatcher is not reported plainly gated" ;;
   *) bad "an enrolled repository behind a hand-edited dispatcher is not reported plainly gated" \
          "verdict line: $(line_for 'gated by the floor:')" "$OUT" ;;
 esac
+
+# FLOOR_VOUCHED is cleared in TWO branches — hand-edited, and no parseable
+# marker — so a verdict hardcoding "MODIFIED" contradicts the machine section
+# for the second one, which printed "no parseable marker" three lines earlier.
+# A report that disagrees with itself in one screen is worse than either half.
+setup_case
+plant_gate
+run_binder
+awk '!/^# global-floor-version: /' "$HOOKDIR/pre-commit" > "$HOOKDIR/pre-commit.tmp"
+mv "$HOOKDIR/pre-commit.tmp" "$HOOKDIR/pre-commit"; chmod +x "$HOOKDIR/pre-commit"
+git -C "$REPO" config --local agenticapps.workflow.enrolled true
+run_binder_with --check
+case "$(line_for 'gated by the floor:')" in
+  *MODIFIED*) bad "an unmarked dispatcher is not called MODIFIED by the verdict" \
+                  "the machine section says 'no parseable marker' and the verdict says MODIFIED" \
+                  "verdict line: $(line_for 'gated by the floor:')" ;;
+  *"NOT VOUCHED FOR"*) ok "an unmarked dispatcher is not called MODIFIED by the verdict" ;;
+  *) bad "an unmarked dispatcher is not called MODIFIED by the verdict" \
+         "verdict line: $(line_for 'gated by the floor:')" "$OUT" ;;
+esac
+
+# F2 — THE DISPATCHER REFUSES AN ENTRY THAT LEAVES hooks.d, by canonical target
+# and not by link text, and refusing means the commit is blocked. Listing such an
+# entry as "runs after the gate" describes a machine that is in fact wedged, and
+# the spec's own surface table already requires the containment test.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$HOOKDIR/hooks.d" "$CASE/outside"
+printf '#!/bin/sh\nexit 0\n' > "$CASE/outside/evil"; chmod +x "$CASE/outside/evil"
+ln -s "$CASE/outside/evil" "$HOOKDIR/hooks.d/escapee"
+run_binder_with --check
+case "$(line_for 'escapee')" in
+  *"runs after the gate"*) bad "a hooks.d entry resolving outside hooks.d is not listed as running" \
+                               "the dispatcher REFUSES it, so every enrolled commit is blocked" \
+                               "entry line: $(line_for 'escapee')" ;;
+  '') bad "a hooks.d entry resolving outside hooks.d is not listed as running" \
+          "the entry is not mentioned at all" "$OUT" ;;
+  *) ok "a hooks.d entry resolving outside hooks.d is not listed as running" ;;
+esac
+
+# F3 — A GLOBAL BINDING EXISTING IS NOT A GLOBAL BINDING WORKING. check_machine
+# already classifies the same value as dangling or foreign; check_core read only
+# whether it was non-empty, and then told the operator that the published floor
+# governs core. For a dangling binding NOTHING governs core, and this section is
+# the product of the mode.
+setup_case
+git config --global core.hooksPath "$CASE/gone"
+git -C "$CORE" config --local --unset core.hooksPath 2>/dev/null
+run_binder_with --check
+if ! checked; then
+  bad "a dangling global binding is not reported as governing core" "no report" "$OUT"
+elif said "governed by the published"; then
+  bad "a dangling global binding is not reported as governing core" \
+      "the binding names a directory that does not exist — nothing governs core" \
+      "core line: $(line_for "core's local core.hooksPath:")"
+else
+  ok "a dangling global binding is not reported as governing core"
+fi
+
+setup_case
+mkdir -p "$CASE/foreign-hooks"
+git config --global core.hooksPath "$CASE/foreign-hooks"
+git -C "$CORE" config --local --unset core.hooksPath 2>/dev/null
+run_binder_with --check
+if ! checked; then
+  bad "a foreign global binding is not reported as the published floor governing core" "no report" "$OUT"
+elif said "governed by the published"; then
+  bad "a foreign global binding is not reported as the published floor governing core" \
+      "the binding is not the published directory" \
+      "core line: $(line_for "core's local core.hooksPath:")"
+else
+  ok "a foreign global binding is not reported as the published floor governing core"
+fi
 
 # THE DISPATCHER REFUSES TO RUN AT ALL on a group- or world-writable hooks.d —
 # every commit in every enrolled repository blocked. A report that lists the

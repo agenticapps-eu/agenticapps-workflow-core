@@ -187,6 +187,17 @@ doctors come to disagree about one machine.
 > them blocks the commit. A report that listed the entries as active would
 > describe a healthy machine that is in fact wedged.
 
+#### Scenario: A composition entry resolves outside hooks.d
+
+- **WHEN** a `hooks.d` entry is a symlink whose canonical target is outside
+  `hooks.d`
+- **THEN** `--check` reports that the dispatcher refuses it, so every commit in
+  every enrolled repository is blocked
+- **AND** SHALL NOT list it as running after the gate
+- **AND** the containment SHALL be judged on the canonical target, never the
+  link text, because a relative link leaves the directory just as surely as an
+  absolute one
+
 #### Scenario: The gate executable the dispatcher invokes is absent
 
 - **WHEN** the floor is bound and the published dispatcher is current and

@@ -171,9 +171,10 @@ FLOOR_VOUCHED=1
 # prefers it over `.git/hooks` — so its mere presence is what decides whether a
 # repository with no local binding of its own is governed by the floor.
 GLOBAL_BINDING=''
+GLOBAL_STATE='unset'
 
 check_machine() {
-  local pub="$HOOKS_DIR/pre-commit" pv cv gate v e n=0
+  local pub="$HOOKS_DIR/pre-commit" pv cv gate v e etgt n=0
 
   say "machine"
 
@@ -289,6 +290,18 @@ check_machine() {
     for e in "$HOOKS_DIR/hooks.d"/*; do
       [ -f "$e" ] && [ -x "$e" ] || continue
       n=$((n + 1))
+      # AN ENTRY MUST RESOLVE INSIDE hooks.d, and the dispatcher REFUSES one that
+      # does not — which blocks the commit rather than skipping the entry. On the
+      # CANONICAL target, never the link text: a relative link leaves the
+      # directory just as surely as an absolute one.
+      if [ -h "$e" ]; then
+        etgt="$(cd "$(dirname "$(readlink "$e")")" 2>/dev/null && pwd -P)"
+        if [ -z "$etgt" ] || ! same_dir "$etgt" "$HOOKS_DIR/hooks.d"; then
+          say "  hooks.d entry: ${e##*/} — RESOLVES OUTSIDE hooks.d. The dispatcher"
+          say "    refuses it, so every commit in every enrolled repository is blocked."
+          continue
+        fi
+      fi
       say "  hooks.d entry: ${e##*/} — runs after the gate, on every enrolled commit"
     done
     [ "$n" = 0 ] && say "  hooks.d: present, no executable entries"
@@ -302,6 +315,15 @@ check_machine() {
 
   v="$(git config --global --get --type=path core.hooksPath 2>/dev/null)"
   GLOBAL_BINDING="$v"
+  # A BINDING EXISTING IS NOT A BINDING WORKING, and check_core needs the
+  # difference. Classified once, here, where the value is already being
+  # examined — re-deriving it from emptiness one function later is how core came
+  # to be reported as governed by a floor that does not exist.
+  if [ -z "$v" ]; then GLOBAL_STATE='unset'
+  elif [ ! -d "$v" ]; then GLOBAL_STATE='dangling'
+  elif same_dir "$v" "$HOOKS_DIR"; then GLOBAL_STATE='published'
+  else GLOBAL_STATE='foreign'
+  fi
   if [ -z "$v" ]; then
     say "  global core.hooksPath: unset — the floor is NOT bound"
     say "    to bind it, run: $SELF_DIR/bind-global-floor.sh"
@@ -347,13 +369,24 @@ check_core() {
   case "$default" in '' | /*) ;; *) default="$top/$default" ;; esac
   default="$default/hooks"
 
-  if [ -z "$v" ] && [ -n "$GLOBAL_BINDING" ]; then
-    say "  core's local core.hooksPath: unset — core is governed by the published"
-    say "    floor rather than by the gate in the working tree it is editing, which"
-    say "    inverts what ADR-0028 exists to keep."
-  elif [ -z "$v" ]; then
-    say "  core's local core.hooksPath: unset, and no floor binding governs it either —"
-    say "    git resolves $default"
+  if [ -z "$v" ]; then
+    case "$GLOBAL_STATE" in
+      published)
+        say "  core's local core.hooksPath: unset — core is governed by the published"
+        say "    floor rather than by the gate in the working tree it is editing, which"
+        say "    inverts what ADR-0028 exists to keep." ;;
+      foreign)
+        say "  core's local core.hooksPath: unset, and the global binding"
+        say "    ($GLOBAL_BINDING) is not the published directory — core's commits are"
+        say "    scored by hooks this workflow did not publish." ;;
+      dangling)
+        say "  core's local core.hooksPath: unset, and the global binding"
+        say "    ($GLOBAL_BINDING) does not exist — so NOTHING gates core and its"
+        say "    commits proceed silently." ;;
+      *)
+        say "  core's local core.hooksPath: unset, and no floor binding governs it either —"
+        say "    git resolves $default" ;;
+    esac
   else
     case "$v" in /*) ;; *) v="$top/$v" ;; esac
   fi
@@ -492,8 +525,13 @@ check_repo() {
   if [ -n "$reason" ]; then
     say "  gated by the floor: no — $reason"
   elif [ "$FLOOR_VOUCHED" != 1 ]; then
-    say "  gated by the floor: yes, but the dispatcher is MODIFIED — git runs it, and"
-    say "    what it enforces is not this checkout's gate"
+    # NAMES THE CLASS, NOT ONE OF ITS TWO MEMBERS. FLOOR_VOUCHED is cleared by
+    # a hand-edited dispatcher AND by one with no parseable marker; hardcoding
+    # "MODIFIED" made the verdict contradict a machine section three lines above
+    # that had just said "no parseable marker".
+    say "  gated by the floor: yes, but the dispatcher is NOT VOUCHED FOR — git runs"
+    say "    it, and what it enforces is not this checkout's gate; the dispatcher"
+    say "    line above says which state it is in"
   else
     say "  gated by the floor: yes"
   fi
