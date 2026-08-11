@@ -45,8 +45,8 @@ nor blank lines.
 > machine-level floor supersedes `tools/install-core-git-hooks.sh` as the thing
 > the installer invokes, so the floor binder takes that helper's variable and its
 > call site: one variable for one variable, one call for one call. The published
-> hook, the foreign-binding refusal and the `--check` reports live in the binder
-> and the gate, which carry no budget.
+> hook and the foreign-binding refusal live in the binder and the gate, which
+> carry no budget.
 >
 > The budget is therefore **not raised here**, and that is a measured claim
 > rather than an aspiration: the arithmetic is 217 → 217. The escape clause is
@@ -148,10 +148,11 @@ a directory. A predicate that guesses from shape makes the wrong outcome rarer
 without making it impossible, and its failures are silent for the person hit
 by them.
 
-The cost is named: an unenrolled repository that ought to be governed is
-silently ungated. `--check` SHALL therefore report a repository that carries
-`openspec/` and is not enrolled, so the gap is visible rather than assumed
-absent. Without that report this predicate is a drifting list under another name.
+The cost is named rather than mitigated: an unenrolled repository that ought to
+be governed is silently ungated, and nothing here reports it. A predicate whose
+failures are invisible is a drifting list under another name, so a reporting
+surface is owed — it is specified separately, because specifying it here would
+describe a mode this change does not build.
 
 #### Scenario: An unenrolled repository is left alone
 
@@ -175,14 +176,6 @@ absent. Without that report this predicate is a drifting list under another name
   not green
 - **THEN** the commit SHALL be blocked, exactly as a per-repository install would
   have blocked it
-
-#### Scenario: A repository carries openspec but never enrolled
-
-- **WHEN** `--check` runs in a repository that carries `openspec/` and has no
-  enrolment key
-- **THEN** it SHALL report the repository as unenrolled and therefore ungated
-- **AND** SHALL NOT report the machine's global binding as governing it
-- **AND** the installer neither prevents nor repairs this
 
 ### Requirement: No repository is left with neither surface
 
@@ -566,8 +559,8 @@ The two orders are not symmetric and the safe one costs nothing.
 
 - **WHEN** a run is interrupted after publishing and before binding
 - **THEN** re-running completes the binding without republishing from scratch
-- **AND** `--check` reports the intermediate state as published-but-unbound
-  rather than as bound
+- **AND** the intermediate state is published-but-unbound, which is a state the
+  machine can be left in and a reader must be able to tell apart from bound
 
 ### Requirement: A foreign global hooks binding is reported, never overwritten
 
@@ -691,9 +684,9 @@ directory.
 **The canonical paths are pinned here rather than left to `install.sh`:** the
 published directory is `~/.agenticapps/git-hooks/`, the dispatcher is
 `~/.agenticapps/git-hooks/pre-commit`, and the composition directory is
-`~/.agenticapps/git-hooks/hooks.d/`. `--check` must verify that
-`core.hooksPath` "resolves to the published directory", which is unverifiable
-while the directory is named only in prose.
+`~/.agenticapps/git-hooks/hooks.d/`. Anything verifying that `core.hooksPath`
+"resolves to the published directory" needs those names to be normative, and
+they are unverifiable while the directory is named only in prose.
 
 **Dispatch order and failure semantics, stated because an earlier revision said
 both "run each entry" and "fail on the first non-zero" and those are different
@@ -706,8 +699,9 @@ contracts:**
   non-zero exit fails the commit; remaining entries do not run. Fail-fast, not
   run-all.
 - An entry that is **not executable** is skipped and reported, not silently
-  ignored — the same reasoning that makes `--check` verify the dispatcher's own
-  execute bit.
+  ignored. A hook that cannot run and says nothing is the failure this whole
+  capability exists to remove, and it applies to the dispatcher's own execute
+  bit as much as to an entry's.
 - Entries whose names begin with `.` or end in `~`, `.bak`, `.sample`, `.orig`
   or `.rej` are skipped. Editor and packaging debris in a hooks directory is
   the normal case, and executing it is how a stale backup becomes policy.
@@ -776,74 +770,3 @@ exactly this reason, correctly and by its own local binding.
   gate
 - **THEN** the published hook SHALL NOT execute it
 - **AND** the refusal SHALL hold whether or not the shared gate is available
-
-#### Scenario: A repository has hooks the global directory does not carry
-
-- **WHEN** a repository's own hooks are displaced by the global binding
-- **THEN** the condition is reportable by `--check` rather than silent
-
-### Requirement: The check mode reports which enforcement surfaces are active
-
-`--check` SHALL report whether `core.hooksPath` is set, whether it resolves to
-the published directory, and whether the published `pre-commit` is current by
-content against the checkout.
-
-It SHALL report the **effective** binding for the repository it runs in, not the
-global one. A local `core.hooksPath` is preferred by git, so reporting the
-global binding as active is simply wrong wherever one is set — and one is set in
-six repositories today. A `--check` that says the floor is bound while the
-repository it ran in is outside the floor is worse than no report, because it is
-believed.
-
-Removing a surface makes it more important, not less, that an operator can see
-which surfaces remain. "The workflow got weaker" and "the workflow moved its
-floor" are indistinguishable from the outside unless something says which.
-
-#### Scenario: The machine is fully bound
-
-- **WHEN** `--check` runs on a bound machine
-- **THEN** it reports the global binding as present and current
-- **AND** it names the surfaces that enforce the gate
-
-#### Scenario: The machine is unbound
-
-- **WHEN** `--check` runs where `core.hooksPath` is unset
-- **THEN** it reports the floor as not bound
-- **AND** it states what to run to bind it
-
-#### Scenario: The repository is outside the floor
-
-- **WHEN** `--check` runs in a repository with a local `core.hooksPath`
-- **THEN** it reports the effective binding rather than the global one
-- **AND** it states that the global floor does not govern this repository
-
-#### Scenario: The binding is dangling
-
-- **WHEN** `core.hooksPath` is set to a directory that does not exist
-- **THEN** `--check` reports the binding as dangling
-- **AND** it states that commits in every repository the binding governs are
-  proceeding **ungated and silently**, rather than failing
-
-> **An earlier revision of this scenario had it backwards**, asserting that
-> `git commit` fails machine-wide until the directory is restored. Tested on
-> git 2.50.1 with `core.hooksPath` pointing at an absent directory: the commit
-> **succeeds, exit 0**, and nothing is reported. A dangling binding does not
-> break the machine loudly; it removes the floor quietly, which is the failure
-> mode `core-self-enforcement` names as the one this workflow must not have.
-> The correction matters because it changes what `--check` is *for* here: it is
-> not a convenience that explains a visible breakage, it is the only surface
-> that would ever mention this at all.
-
-#### Scenario: The published hook is not executable
-
-- **WHEN** the published `pre-commit` has correct content but lacks its execute
-  bit
-- **THEN** `--check` reports the floor as **not active**
-- **AND** SHALL NOT report it as current on the strength of content alone,
-  because git does not run a non-executable hook
-
-#### Scenario: The published hook has been hand-edited
-
-- **WHEN** the published `pre-commit` differs by content from the checkout at
-  the same version
-- **THEN** `--check` reports it as modified rather than current

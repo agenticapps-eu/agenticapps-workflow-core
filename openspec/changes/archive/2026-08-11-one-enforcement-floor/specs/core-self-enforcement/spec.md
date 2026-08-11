@@ -54,6 +54,25 @@ trade this change makes and does not conceal.
 - **AND** an installer exists that writes the `pre-commit` hook into the repository's resolved hooks directory
 - **AND** no `PreToolUse` hook SHALL be required in `.claude/settings.json`
 
+#### Scenario: All three interposition points run the gate
+
+The header is kept because a `MODIFIED` block replaces a requirement whole, so
+dropping it would read as a scenario deleted by accident rather than by decision.
+It is retired on purpose, and this is the record of that.
+
+Its third point was a `PreToolUse` hook "registered in `.claude/settings.json`".
+Core has carried no such file since the host wiring was removed — measured
+2026-08-11, `.claude/` holds `commands/`, `hooks/`, `skills/` and
+`settings.local.json`, and no `settings.json`. The scenario has therefore been
+asserting a registration that does not exist, which is the shape of staleness
+this capability is meant to catch in others.
+
+- **WHEN** the core repository is inspected for gate wiring
+- **THEN** exactly two interposition points SHALL be required, not three, as the
+  scenario above states
+- **AND** a host session hook SHALL NOT be one of them, because it cannot gate
+  the session that installed it and does not exist for a human with an editor
+
 #### Scenario: A host session hook is present anyway
 
 - **WHEN** a `PreToolUse` hook registered against the gate is found in core
@@ -151,10 +170,9 @@ is a trade accepted with its cost named, not a property the override lacks.
   core has no local `core.hooksPath`
 - **THEN** the published hook runs and core is gated by the shared install
 - **AND** core's CI job SHALL fail, because it is the only surface whose verdict
-  someone is obliged to look at
-- **AND** `--check` SHALL also report it, as the local diagnosis
-- **AND** the condition SHALL NOT be reported only by `--check`, which nobody
-  runs until they already suspect something
+  someone is obliged to look at. A local diagnosis is worth having too, but this
+  condition SHALL NOT be reported *only* by a mode nobody runs until they
+  already suspect something
 
 #### Scenario: The shared install is absent
 
@@ -286,6 +304,21 @@ ancestor and re-appending the remaining components.
 - **AND** SHALL NOT attempt to create or write a literal `.git/hooks/` path
 - **AND** SHALL report that the hook it installs is shared with the main checkout
 
+#### Scenario: core.hooksPath points outside the working tree
+
+Kept as a header so its retirement is a decision on the record rather than a
+scenario that vanished. It is superseded by the narrowed scenario immediately
+below, and the reason is given there: unbounded "outside the working tree" also
+described the machine-level published directory, so this scenario required
+installing into the very directory the refusal above forbids.
+
+- **WHEN** the installer runs where `core.hooksPath` names a directory outside
+  the working tree
+- **THEN** the bare condition SHALL NOT decide the outcome, because it does not
+  distinguish the repository's own git common directory from the machine's
+  published hooks directory
+- **AND** the scenario below SHALL decide it instead
+
 #### Scenario: core.hooksPath points outside the working tree but inside the git common directory
 
 - **WHEN** the installer runs where `core.hooksPath` names a directory outside
@@ -394,10 +427,3 @@ bind" is one act: the orders are not symmetric and the safe one costs nothing.
 - **WHEN** the sweep evaluates core's local `core.hooksPath`
 - **THEN** it SHALL leave the binding in place
 - **AND** SHALL report it as declared rather than as redundant
-
-#### Scenario: The declaration is missing
-
-- **WHEN** core carries a local `core.hooksPath` that is not declared
-- **THEN** `--check` SHALL report the binding as undeclared and at risk of being
-  swept
-- **AND** SHALL NOT report core as correctly bound
