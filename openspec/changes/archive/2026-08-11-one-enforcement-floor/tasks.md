@@ -990,3 +990,62 @@ reproduced end to end. The two below are its own findings, fixed here.
       ends in the real one, so the first version of the assertion passed while
       proving nothing. **`install.sh` is back at exactly 217 executable lines**,
       its budget — both fixes were written long, measured at 229, and compacted
+
+## 12. Narrowed before archiving (2026-08-11)
+
+**The premise expired while the change sat open, and the mechanism shipped
+anyway.** Both halves are worth stating plainly.
+
+### The case as written, re-measured
+
+The proposal argued from: *"eleven repositories carry a `pre-commit`, over ten
+distinct hooks directories. Nine of those are this gate, in four different sizes
+— 1201, 1376, 2270 and 5844 bytes. One authority, nine copies, four versions,
+and nothing on the machine reports the divergence."*
+
+Re-measured 2026-08-11 across all 41 repositories under `~/Sourcecode`, resolving
+each hooks directory with `git rev-parse --path-format=absolute --git-path hooks`
+rather than assuming `.git/hooks`:
+
+| | then (2026-08-07) | now |
+|---|---|---|
+| repositories with a `pre-commit` | 11 | **41** |
+| distinct hooks directories | 10 | **3** |
+| copies of the gate hook | 9, in 4 sizes | **2** |
+
+Thirty-nine of the forty-one resolve to the one published floor — 10258 bytes,
+`global-floor-version: 1.1.0`. Exactly two carry their own: core, at 1376 bytes
+and deliberately (ADR-0028, the self-hosting binder), and `claude-workflow` at
+1201, unmarked, in a repository that is being deleted. The 2270 and 5844 copies
+are gone because those repositories are gone.
+
+**The divergence this change exists to end has ended** — half by its own section
+2, and half because the repositories holding the divergent copies were deleted
+for unrelated reasons. That is worth recording rather than quietly banking: a
+plan whose measurements are four days old is a plan about a fleet that no longer
+exists, and this one survived only because the direction happened to hold.
+
+### What ships here, and what does not
+
+- [x] 12.1 **The floor's requirements are archived, because the floor is live and
+      unspecified.** `bind-global-floor.sh` is built, installed, governing 39
+      repositories, and covered by 97 green assertions across
+      `tools/global-floor.test.sh` (18) and `tools/global-floor-bind.test.sh`
+      (79) — while not one of its requirements appears in `openspec/specs/`.
+      Shipped code with no spec behind it is the failure this repository has
+      already had once, under a different name.
+- [x] 12.2 **`--check` is excised, not archived.** It is referenced throughout
+      the binder and specified in fourteen requirements' worth of prose, and it
+      does not exist: `bind-global-floor.sh --check` parses `--check` as a
+      repository argument and refuses. Archiving it would have made core
+      non-conformant to its own spec on the day the spec landed.
+
+      Removed: the requirement `The check mode reports which enforcement surfaces
+      are active`, three scenarios whose only actor was `--check`, and six prose
+      clauses that leaned on it. Where a clause named a real cost, the cost is
+      kept and the reporting surface is named as owed.
+- [x] 12.3 **Sections 4, 5, 7 and the `--check` half of 8 move to a follow-up.**
+      They are 26 tasks of real work — build `--check`, drop `--project`, the
+      eleven missing tests, the evidence — against roughly 19 that the fleet
+      re-measurement made moot. Splitting is not deferral: it is refusing to
+      carry a task list that no longer describes the work.
