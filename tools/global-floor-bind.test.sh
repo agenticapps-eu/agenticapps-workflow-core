@@ -1426,6 +1426,963 @@ else
       "rc=$RC binding='$(bound)'" "$OUT"
 fi
 
+
+# ===========================================================================
+# --check — change floor-check-mode
+# ===========================================================================
+# A mode on the same script, so it lives in the same suite: a separate file
+# would duplicate the isolation guard, the fixtures and the vacuous-pass
+# guards, and a second copy of an isolation guard is a second thing that can be
+# wrong about the operator's real machine.
+#
+# WHAT IS DIFFERENT ABOUT ASSERTING A REPORT. Every case above asserts a state
+# change; these assert a sentence. That makes them coupled to wording, which is
+# a real cost and the smaller one — the alternative is asserting that the mode
+# exited 0, which a mode that printed nothing also does. The RED baseline is
+# the reason the coupling is affordable: today `--check` is parsed as a
+# repository name and refused, so every assertion below fails before the
+# implementation exists rather than passing vacuously.
+#
+# The dispatcher reads these from the environment in preference to the planted
+# path, and they are inherited from whoever started the suite. Unset once, here,
+# rather than per case: a case that forgot would assert against whatever gate
+# the operator's machine happens to have.
+unset OPENSPEC_GATE OPENSPEC_CHANGE_GATE
+
+# `--check` needs no runner of its own — it is an argument, and run_binder_with
+# already runs the binder from $REPO with arguments and stdin pinned.
+
+# Several assertions below are about what a line does NOT say. Grepping the
+# whole output would let a word from another section satisfy or defeat them:
+# "current" appears in the dispatcher's verdict and could appear in prose
+# anywhere, and the difference between "reported as ahead" and "reported as
+# modified" is exactly one line.
+line_for() { grep -F "$1" "$CASE/out" 2>/dev/null | head -1; }
+
+# THE THIRD VACUOUS-PASS GUARD, and `ran` is not it. Today's binder parses
+# `--check` as a repository name and REFUSES — which produces output, so `ran`
+# is satisfied by the very state these cases exist to fail against. Measured
+# against that refusal before this existed: six of the negative assertions below
+# passed, because "the report does not say X" is true of a report that does not
+# exist. Every negative assertion opens with this instead.
+#
+# It also pins one byte of contract: the mode announces itself, so a reader of
+# the output can tell a report from a refusal without counting lines.
+checked() { grep -q '^global-floor: check' "$CASE/out" 2>/dev/null; }
+
+# The whole of $HOME, by path and by content. `--check` promises not to write,
+# and the two ways to break that promise are creating something and editing
+# something — a path listing alone would miss the second, and $GIT_CONFIG_GLOBAL
+# lives inside $HOME, so this covers the configuration claim as well.
+home_state() {
+  find "$HOME" 2>/dev/null | sort
+  find "$HOME" -type f -exec shasum {} + 2>/dev/null | sort
+}
+
+# Stamp a version marker onto the PUBLISHED copy, leaving the checkout's alone.
+# This is the only way to reach the states the publisher's arbitration exists
+# for — ahead of the checkout, behind it — on a machine where publishing always
+# writes the checkout's own bytes.
+republish_version() {
+  local f="$HOOKDIR/pre-commit" v="$1"
+  awk -v v="$v" '/^# global-floor-version: /{print "# global-floor-version: " v; next} {print}' "$f" > "$f.tmp"
+  mv "$f.tmp" "$f"
+  chmod +x "$f"
+}
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check reports the machine (2.2)"
+
+setup_case
+run_binder_with --check
+if ran && said "unset" && said "NOT bound"; then
+  ok "an unset global core.hooksPath is reported as not bound"
+else
+  bad "an unset global core.hooksPath is reported as not bound" "rc=$RC" "${OUT:-<no output>}"
+fi
+
+# The scenario requires it to state what to run. A report that names a defect
+# and not its remedy sends the reader to the source of the tool to find out.
+if said "bind-global-floor.sh"; then
+  ok "and it names the command that would bind it"
+else
+  bad "and it names the command that would bind it" "$OUT"
+fi
+
+setup_case
+plant_gate
+run_binder                       # publish and bind for real
+run_binder_with --check
+if [ "$RC" -eq 0 ] && said "$HOOKDIR" && said "the published directory"; then
+  ok "a bound machine is reported as bound to the published directory"
+else
+  bad "a bound machine is reported as bound to the published directory" "rc=$RC" "$OUT"
+fi
+
+# THE FAILURE MODE THIS MODE EXISTS FOR. Measured on git 2.50.1: a commit under
+# a core.hooksPath naming an absent directory SUCCEEDS, exit 0, silently. So the
+# report must say so in the strongest terms available to it — nothing else on
+# the machine will ever mention this.
+setup_case
+git config --global core.hooksPath "$CASE/gone"
+run_binder_with --check
+if ran && said "DANGLING"; then
+  ok "a dangling global binding is reported as dangling"
+else
+  bad "a dangling global binding is reported as dangling" "rc=$RC" "${OUT:-<no output>}"
+fi
+
+if said "UNGATED" && said "every repository"; then
+  ok "and the report states that commits proceed ungated and silently, machine-wide"
+else
+  bad "and the report states that commits proceed ungated and silently, machine-wide" "$OUT"
+fi
+
+setup_case
+FOREIGN="$CASE/somewhere-else/hooks"
+mkdir -p "$FOREIGN"
+git config --global core.hooksPath "$FOREIGN"
+run_binder_with --check
+if ran && said "FOREIGN" && said "$FOREIGN"; then
+  ok "a foreign global binding is reported as foreign and named"
+else
+  bad "a foreign global binding is reported as foreign and named" "rc=$RC" "${OUT:-<no output>}"
+fi
+
+# An empty hooks directory silences the floor exactly as a missing one does, and
+# it is the state a publish that failed after mkdir leaves behind. Nothing
+# distinguishes the two from a commit's point of view.
+setup_case
+mkdir -p "$HOOKDIR"
+git config --global core.hooksPath "$HOOKDIR"
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *absent*) ok "a published directory holding no dispatcher reports the dispatcher absent" ;;
+  *) bad "a published directory holding no dispatcher reports the dispatcher absent" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+if said "UNGATED"; then
+  ok "and it states that commits proceed ungated, as for a dangling binding"
+else
+  bad "and it states that commits proceed ungated, as for a dangling binding" "$OUT"
+fi
+
+# THE ONE CONDITION THE BINDER REFUSES ON AND THE REPORT WAS SILENT ABOUT.
+# Publishing into a group- or world-writable directory is refused outright,
+# because another local account could replace the hook that runs on every commit
+# — but a machine already in that state reads as perfectly healthy to a mode that
+# only compares content. Content comparison does catch a substituted hook; what
+# it cannot show is that the machine is open to the substitution at all, and this
+# is the surface whose whole job is showing posture.
+setup_case
+mkdir -p "$HOOKDIR"
+chmod g+w "$HOOKDIR"
+git config --global core.hooksPath "$HOOKDIR"
+run_binder_with --check
+if said "group- or world-writable"; then
+  ok "a group- or world-writable published directory is reported"
+else
+  bad "a group- or world-writable published directory is reported" \
+      "the binder REFUSES to publish into one, and the report says nothing" "rc=$RC" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check distinguishes the dispatcher's currency states (2.3)"
+
+setup_case
+run_binder
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *current*) ok "a dispatcher identical to the checkout is reported as current" ;;
+  *) bad "a dispatcher identical to the checkout is reported as current" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+# Content and the execute bit are separate facts and the bit is the decisive
+# one: git does not run a non-executable hook, so correct bytes without it is a
+# floor that reports as healthy and enforces nothing.
+setup_case
+run_binder
+chmod -x "$HOOKDIR/pre-commit"
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *"NOT EXECUTABLE"*) ok "a non-executable dispatcher is reported as not executable" ;;
+  *) bad "a non-executable dispatcher is reported as not executable" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+if ! checked || [ -z "$(line_for 'dispatcher:')" ]; then
+  bad "and it is NOT reported as current on the strength of its content" \
+      "there is no dispatcher line to negate — this assertion would pass vacuously" "$OUT"
+else
+  case "$(line_for 'dispatcher:')" in
+    *current*) bad "and it is NOT reported as current on the strength of its content" \
+                   "the dispatcher line says 'current' for a hook git will not run" \
+                   "dispatcher line: $(line_for 'dispatcher:')" ;;
+    *) ok "and it is NOT reported as current on the strength of its content" ;;
+  esac
+fi
+
+if said "NOT ACTIVE"; then
+  ok "and the floor is reported as not active"
+else
+  bad "and the floor is reported as not active" "$OUT"
+fi
+
+setup_case
+run_binder
+printf '# hand-edited\n' >> "$HOOKDIR/pre-commit"
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *MODIFIED*) ok "a hand-edited dispatcher at the same version is reported as modified" ;;
+  *) bad "a hand-edited dispatcher at the same version is reported as modified" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+# THE ONE THE REVIEWER FOUND. install-shared-artifact.sh preserves a destination
+# that is strictly newer, deliberately — so bytes differing from the checkout is
+# the NORMAL state of a machine ahead of this clone. Reporting it as drift is
+# how a report teaches its reader to ignore it.
+setup_case
+run_binder
+republish_version 9.9.9
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *ahead*) ok "a dispatcher newer than the checkout is reported as ahead of it" ;;
+  *) bad "a dispatcher newer than the checkout is reported as ahead of it" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+if ! checked || [ -z "$(line_for 'dispatcher:')" ]; then
+  bad "and NOT as modified, which is the state the publisher preserves by design" \
+      "there is no dispatcher line to negate — this assertion would pass vacuously" "$OUT"
+else
+  case "$(line_for 'dispatcher:')" in
+    *MODIFIED*) bad "and NOT as modified, which is the state the publisher preserves by design" \
+                    "dispatcher line: $(line_for 'dispatcher:')" ;;
+    *) ok "and NOT as modified, which is the state the publisher preserves by design" ;;
+  esac
+fi
+
+setup_case
+run_binder
+republish_version 0.9.0
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *"not current"*) ok "a dispatcher older than the checkout is reported as not current" ;;
+  *) bad "a dispatcher older than the checkout is reported as not current" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+setup_case
+mkdir -p "$HOOKDIR" "$CASE/elsewhere"
+printf '#!/bin/sh\nexit 0\n' > "$CASE/elsewhere/hook"; chmod +x "$CASE/elsewhere/hook"
+ln -s "$CASE/elsewhere/hook" "$HOOKDIR/pre-commit"
+git config --global core.hooksPath "$HOOKDIR"
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *symlink*) ok "a symlinked dispatcher is reported as a symlink" ;;
+  *) bad "a symlinked dispatcher is reported as a symlink" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check reports the gate the dispatcher invokes (2.4)"
+
+# The dispatcher FAILS OPEN when the gate is missing: it warns and exits 0,
+# deliberately, because a hook that hard-fails on absent tooling teaches people
+# to pass --no-verify. So a bound machine with a current, executable dispatcher
+# and no gate enforces NOTHING, and a report that stopped at the dispatcher
+# would state the opposite of the truth about it.
+setup_case
+run_binder                       # bound and published, but plant_gate not called
+run_binder_with --check
+if said "ABSENT" && said "openspec-change-gate.sh"; then
+  ok "an absent gate executable is reported and named"
+else
+  bad "an absent gate executable is reported and named" "rc=$RC" "$OUT"
+fi
+
+if said "fails open"; then
+  ok "and the report states that the dispatcher fails open, so enrolled repositories commit ungated"
+else
+  bad "and the report states that the dispatcher fails open, so enrolled repositories commit ungated" "$OUT"
+fi
+
+setup_case
+plant_gate
+run_binder
+run_binder_with --check
+case "$(line_for 'gate:')" in
+  *ABSENT*) bad "a present, executable gate is not reported as absent" \
+                "gate line: $(line_for 'gate:')" ;;
+  '') bad "a present, executable gate is not reported as absent" "no gate line at all" "$OUT" ;;
+  *) ok "a present, executable gate is not reported as absent" ;;
+esac
+
+setup_case
+plant_gate
+run_binder
+chmod -x "$HOME/.agenticapps/bin/openspec-change-gate.sh"
+run_binder_with --check
+case "$(line_for 'gate:')" in
+  *"NOT EXECUTABLE"*) ok "a non-executable gate is reported, because the dispatcher fails open on it too" ;;
+  *) bad "a non-executable gate is reported, because the dispatcher fails open on it too" \
+         "gate line: $(line_for 'gate:')" "$OUT" ;;
+esac
+
+# TWO REVIEWERS RAISED THIS AND THE FIRST REMEDY WAS DECLINED. The dispatcher
+# resolves OPENSPEC_GATE from each repository's hook cwd, and a slashless value
+# goes through PATH; --check resolves it once, from wherever it was run. Carrying
+# per-repository gate state for a case nobody has is scope creep — but reporting
+# an absolute-looking verdict on a value the checker cannot speak for is a false
+# claim, and the cheap fix is to stop making it.
+setup_case
+plant_gate
+run_binder
+OPENSPEC_GATE=some/relative/gate run_binder_with --check
+unset OPENSPEC_GATE
+case "$(line_for 'gate:')" in
+  *"NOT AN ABSOLUTE PATH"*) ok "a non-absolute gate override is reported as one this check cannot speak for" ;;
+  *) bad "a non-absolute gate override is reported as one this check cannot speak for" \
+         "gate line: $(line_for 'gate:')" "$OUT" ;;
+esac
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check reports what the floor does not reach (2.5)"
+
+setup_case
+plant_gate
+run_binder
+git -C "$REPO" config --local agenticapps.workflow.enrolled true
+run_binder_with --check
+if said "enrolled: yes" && said "gated by the floor: yes"; then
+  ok "an enrolled repository on a bound machine is reported as gated"
+else
+  bad "an enrolled repository on a bound machine is reported as gated" "rc=$RC" "$OUT"
+fi
+
+# THE ROW THE WHOLE MODE IS FOR. The 2026-08-08 measurement found five
+# repositories carrying live OpenSpec changes and not one enrolled, and the
+# reason nobody noticed is that nothing reported it.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$REPO/openspec"
+run_binder_with --check
+if said "enrolled: no" && said "gated by the floor: no"; then
+  ok "a repository carrying openspec/ and no enrolment key is reported as ungated"
+else
+  bad "a repository carrying openspec/ and no enrolment key is reported as ungated" "rc=$RC" "$OUT"
+fi
+
+if said "openspec/"; then
+  ok "and the report says it carries openspec/, which is what makes the absence worth reading"
+else
+  bad "and the report says it carries openspec/, which is what makes the absence worth reading" "$OUT"
+fi
+
+# Enrolment is an ACT. A mode that inferred intent from the shape of a directory
+# would be the predicate this capability refused to build, wearing a report's
+# clothes — so the report states what is true and stops.
+if ! checked || ! said "enrolled: no"; then
+  bad "and it does NOT assert that the repository ought to be enrolled" \
+      "there is no enrolment report to negate — this assertion would pass vacuously" "$OUT"
+elif said "ought to be enrolled" || said "should be enrolled"; then
+  bad "and it does NOT assert that the repository ought to be enrolled" \
+      "the report infers intent from the presence of a directory" "$OUT"
+else
+  ok "and it does NOT assert that the repository ought to be enrolled"
+fi
+
+# Three ways for a report to disagree with the hook, each its own assertion.
+# The dispatcher reads --local --type=bool and requires `true`, so all three of
+# these commit ungated while a laxer reader would call them enrolled.
+setup_case
+plant_gate
+run_binder
+git -C "$REPO" config --local agenticapps.workflow.enrolled false
+run_binder_with --check
+if said "enrolled: no"; then
+  ok "enrolment set to false reads as not enrolled, exactly as the dispatcher reads it"
+else
+  bad "enrolment set to false reads as not enrolled, exactly as the dispatcher reads it" "$OUT"
+fi
+
+setup_case
+plant_gate
+run_binder
+git -C "$REPO" config --local agenticapps.workflow.enrolled banana
+run_binder_with --check
+if said "enrolled: no"; then
+  ok "a malformed enrolment value reads as not enrolled"
+else
+  bad "a malformed enrolment value reads as not enrolled" "$OUT"
+fi
+
+setup_case
+plant_gate
+run_binder
+git config --global agenticapps.workflow.enrolled true
+run_binder_with --check
+if said "enrolled: no"; then
+  ok "enrolment set only in global configuration reads as not enrolled"
+else
+  bad "enrolment set only in global configuration reads as not enrolled" \
+      "a global key would enrol every repository on the machine at once" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check reports displaced repository hooks (2.6)"
+
+# Measured on git 2.50.1: with core.hooksPath set, .git/hooks is not consulted
+# at all. A repository hook cannot bypass the floor; the floor displaces the
+# repository hook, and nothing says so.
+setup_case
+plant_gate
+run_binder
+printf '#!/bin/sh\nexit 1\n' > "$REPO/.git/hooks/pre-commit"
+chmod +x "$REPO/.git/hooks/pre-commit"
+run_binder_with --check
+if said "displaced"; then
+  ok "a repository hook displaced by the global binding is reported rather than silent"
+else
+  bad "a repository hook displaced by the global binding is reported rather than silent" "rc=$RC" "$OUT"
+fi
+
+# GIT NEVER RUNS A .sample, so nothing about one is displaced. Every fresh clone
+# ships thirteen or fourteen of them, executable — measured across 41 named
+# repositories, 535 of the 537 displaced entries reported were samples and 2 were
+# real. A report whose true finding is 0.4% of its own output has buried it.
+setup_case
+plant_gate
+run_binder
+printf '#!/bin/sh\nexit 0\n' > "$REPO/.git/hooks/pre-commit.sample"
+chmod +x "$REPO/.git/hooks/pre-commit.sample"
+run_binder_with --check
+if ! checked; then
+  bad "a .sample hook is not reported as displaced, because git never runs one" \
+      "no report was produced, so there is nothing to negate" "$OUT"
+elif said "pre-commit.sample"; then
+  bad "a .sample hook is not reported as displaced, because git never runs one" \
+      "$(grep -F 'displaced' "$CASE/out" | head -2)"
+else
+  ok "a .sample hook is not reported as displaced, because git never runs one"
+fi
+
+setup_case
+plant_gate
+run_binder
+mkdir -p "$CASE/repo-own-hooks"
+git -C "$REPO" config --local core.hooksPath "$CASE/repo-own-hooks"
+run_binder_with --check
+if said "does NOT govern"; then
+  ok "a repository with a local core.hooksPath is reported as outside the floor"
+else
+  bad "a repository with a local core.hooksPath is reported as outside the floor" "rc=$RC" "$OUT"
+fi
+
+# A dangling LOCAL binding ungates one repository. Saying "every repository this
+# binding governs" there would be false, and it is the sentence the machine
+# section prints for the global case — so the two must not share wording.
+setup_case
+plant_gate
+run_binder
+git -C "$REPO" config --local core.hooksPath "$CASE/repo-hooks-gone"
+run_binder_with --check
+if said "gated by the floor: no"; then
+  ok "a repository whose own binding is dangling is reported as ungated"
+else
+  bad "a repository whose own binding is dangling is reported as ungated" "rc=$RC" "$OUT"
+fi
+
+if ! checked || ! said "gated by the floor: no"; then
+  bad "and the consequence is not described as machine-wide" \
+      "there is no repository verdict to negate — this assertion would pass vacuously" "$OUT"
+elif said "every repository"; then
+  bad "and the consequence is not described as machine-wide" \
+      "a dangling LOCAL binding governs one repository; the rest of the machine is unaffected" "$OUT"
+else
+  ok "and the consequence is not described as machine-wide"
+fi
+
+# A REPOSITORY OUTSIDE THE FLOOR IS NOT THEREFORE UNGATED, and core is the case
+# that proves it: it sets a local core.hooksPath by design (ADR-0028) so that its
+# commits are scored by the gate in the working tree it is editing rather than by
+# the published copy. That hook carries no enrolment predicate and gates
+# unconditionally. Found by running the mode on the real machine after the suite
+# was green — it reported core, the repository an operator runs this in most,
+# as flatly "gated: no", which is true about the floor and false about the
+# repository. "The workflow got weaker" and "the workflow moved its floor" are
+# indistinguishable from the outside unless something says which.
+setup_case
+plant_gate
+run_binder
+OWN="$(gated_repo own-surface redundant ours)"
+run_binder_with --check "$OWN"
+if said "$OWN/.git/hooks/pre-commit" && said "is what git runs here"; then
+  ok "a repository outside the floor with its own hook has that hook named as the surface"
+else
+  bad "a repository outside the floor with its own hook has that hook named as the surface" \
+      "rc=$RC" "$OUT"
+fi
+
+if ! checked; then
+  bad "and the verdict says it is the FLOOR that does not gate it, not that nothing does" \
+      "no report was produced, so there is no verdict to read" "$OUT"
+elif said "gated by the floor: no"; then
+  ok "and the verdict says it is the FLOOR that does not gate it, not that nothing does"
+else
+  bad "and the verdict says it is the FLOOR that does not gate it, not that nothing does" \
+      "verdict line: $(line_for 'gated')" "$OUT"
+fi
+
+# `--path-format` ARRIVED IN GIT 2.31, and the migration path already carries a
+# fallback for its absence — two of them. The check path was written without
+# either, and the failure is silent rather than loud: `--git-common-dir` returns
+# empty, the repository's own hooks directory resolves to `/hooks`, and
+# displacement is never reported for any repository on the machine. A report
+# that answers "nothing is displaced" because it looked in the wrong place is
+# worse than one that errors.
+#
+# run_binder_answering is what makes this testable at all: no fixture can
+# produce an old git, so the call is answered instead of the binary replaced.
+setup_case
+plant_gate
+run_binder
+printf '#!/bin/sh\nexit 1\n' > "$REPO/.git/hooks/pre-commit"
+chmod +x "$REPO/.git/hooks/pre-commit"
+run_binder_answering '*--path-format=absolute*--git-common-dir*' '' --check
+if said "displaced"; then
+  ok "displacement is still reported where git does not support --path-format"
+else
+  bad "displacement is still reported where git does not support --path-format" \
+      "--git-common-dir returned empty and nothing fell back to the plain form" "rc=$RC" "$OUT"
+fi
+
+setup_case
+plant_gate
+run_binder
+git -C "$REPO" config --local agenticapps.workflow.enrolled true
+run_binder_answering '*--path-format=absolute*--git-path*hooks*' '' --check
+if said "gated by the floor: yes"; then
+  ok "the effective hooks directory still resolves where git does not support --path-format"
+else
+  bad "the effective hooks directory still resolves where git does not support --path-format" \
+      "an enrolled repository on a bound machine was reported ungated" "rc=$RC" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check reports core's own binding (2.7)"
+
+setup_case
+run_binder                       # establishes and declares core's local binding
+run_binder_with --check
+case "$(line_for "core's local core.hooksPath:")" in
+  *declared*) ok "core's declared local binding is reported as declared" ;;
+  *) bad "core's declared local binding is reported as declared" \
+         "core line: $(line_for "core's local core.hooksPath:")" "$OUT" ;;
+esac
+
+# A binding that is redundant BY VALUE and load-bearing in fact. The sweep reads
+# the value, so an undeclared one is indistinguishable from the five it exists
+# to remove — and the symptom of losing it is that core's commits are scored by
+# the published gate rather than the working tree it is editing.
+setup_case
+git -C "$CORE" config --local core.hooksPath "$CORE_HOOKS"
+run_binder_with --check
+if said "NOT DECLARED" && said "swept"; then
+  ok "core's undeclared local binding is reported as at risk of being swept"
+else
+  bad "core's undeclared local binding is reported as at risk of being swept" "rc=$RC" "$OUT"
+fi
+
+if ! checked || ! said "NOT DECLARED"; then
+  bad "and core is NOT reported as correctly bound" \
+      "there is no core report to negate — this assertion would pass vacuously" "$OUT"
+elif said "— declared"; then
+  bad "and core is NOT reported as correctly bound" \
+      "the report calls an undeclared binding declared" "$OUT"
+else
+  ok "and core is NOT reported as correctly bound"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check does not over-claim what it cannot see (step-4 review)"
+
+# GIT RUNNING THE FLOOR AND THE FLOOR BEING THIS CHECKOUT'S GATE ARE TWO CLAIMS.
+# A hand-edited dispatcher is still executable, so git still runs it — and a bare
+# "gated: yes" over the top of a MODIFIED verdict says the repository is
+# protected by a file whose contents nobody can vouch for. `ahead` is
+# deliberately NOT in this class: the publisher preserves a newer destination by
+# design, and flagging it would be the false alarm the plan review warned of.
+setup_case
+plant_gate
+run_binder
+printf '# hand-edited\n' >> "$HOOKDIR/pre-commit"
+git -C "$REPO" config --local agenticapps.workflow.enrolled true
+run_binder_with --check
+case "$(line_for 'gated by the floor:')" in
+  *"NOT VOUCHED FOR"*) ok "an enrolled repository behind a hand-edited dispatcher is not reported plainly gated" ;;
+  *) bad "an enrolled repository behind a hand-edited dispatcher is not reported plainly gated" \
+         "verdict line: $(line_for 'gated by the floor:')" "$OUT" ;;
+esac
+
+# FLOOR_VOUCHED is cleared in TWO branches — hand-edited, and no parseable
+# marker — so a verdict hardcoding "MODIFIED" contradicts the machine section
+# for the second one, which printed "no parseable marker" three lines earlier.
+# A report that disagrees with itself in one screen is worse than either half.
+setup_case
+plant_gate
+run_binder
+awk '!/^# global-floor-version: /' "$HOOKDIR/pre-commit" > "$HOOKDIR/pre-commit.tmp"
+mv "$HOOKDIR/pre-commit.tmp" "$HOOKDIR/pre-commit"; chmod +x "$HOOKDIR/pre-commit"
+git -C "$REPO" config --local agenticapps.workflow.enrolled true
+run_binder_with --check
+case "$(line_for 'gated by the floor:')" in
+  *MODIFIED*) bad "an unmarked dispatcher is not called MODIFIED by the verdict" \
+                  "the machine section says 'no parseable marker' and the verdict says MODIFIED" \
+                  "verdict line: $(line_for 'gated by the floor:')" ;;
+  *"NOT VOUCHED FOR"*) ok "an unmarked dispatcher is not called MODIFIED by the verdict" ;;
+  *) bad "an unmarked dispatcher is not called MODIFIED by the verdict" \
+         "verdict line: $(line_for 'gated by the floor:')" "$OUT" ;;
+esac
+
+# F2 — THE DISPATCHER REFUSES AN ENTRY THAT LEAVES hooks.d, by canonical target
+# and not by link text, and refusing means the commit is blocked. Listing such an
+# entry as "runs after the gate" describes a machine that is in fact wedged, and
+# the spec's own surface table already requires the containment test.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$HOOKDIR/hooks.d" "$CASE/outside"
+printf '#!/bin/sh\nexit 0\n' > "$CASE/outside/evil"; chmod +x "$CASE/outside/evil"
+ln -s "$CASE/outside/evil" "$HOOKDIR/hooks.d/escapee"
+run_binder_with --check
+case "$(line_for 'escapee')" in
+  *"runs after the gate"*) bad "a hooks.d entry resolving outside hooks.d is not listed as running" \
+                               "the dispatcher REFUSES it, so every enrolled commit is blocked" \
+                               "entry line: $(line_for 'escapee')" ;;
+  '') bad "a hooks.d entry resolving outside hooks.d is not listed as running" \
+          "the entry is not mentioned at all" "$OUT" ;;
+  *) ok "a hooks.d entry resolving outside hooks.d is not listed as running" ;;
+esac
+
+# A RELATIVE LINK LEAVES THE DIRECTORY JUST AS SURELY AS AN ABSOLUTE ONE, and
+# the dispatcher's own comment says so — it anchors a relative target to the
+# link's parent before canonicalising. The first version of this check copied
+# the shape of that test without the anchoring, so it resolved relative targets
+# from the CHECKER'S cwd. Only an absolute link was covered, which is why the
+# suite went green over it.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$HOOKDIR/hooks.d" "$HOME/.agenticapps/outside"
+printf '#!/bin/sh\nexit 0\n' > "$HOME/.agenticapps/outside/evil"; chmod +x "$HOME/.agenticapps/outside/evil"
+ln -s ../../outside/evil "$HOOKDIR/hooks.d/rel-escapee"
+run_binder_with --check
+case "$(line_for 'rel-escapee')" in
+  *"RESOLVES OUTSIDE"*) ok "a RELATIVE hooks.d link that escapes is reported as escaping" ;;
+  *) bad "a RELATIVE hooks.d link that escapes is reported as escaping" \
+         "entry line: $(line_for 'rel-escapee')" "$OUT" ;;
+esac
+
+# The other direction, and the one that actually fails against the bug: a
+# relative link that stays INSIDE hooks.d must not be called an escape. Resolved
+# from the checker's cwd it never matches, so every legitimate relative entry
+# reads as "every commit in every enrolled repository is blocked" — sending an
+# operator to repair a machine that is fine.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$HOOKDIR/hooks.d"
+printf '#!/bin/sh\nexit 0\n' > "$HOOKDIR/hooks.d/real"; chmod +x "$HOOKDIR/hooks.d/real"
+ln -s ./real "$HOOKDIR/hooks.d/rel-inside"
+run_binder_with --check
+case "$(line_for 'rel-inside')" in
+  *"RESOLVES OUTSIDE"*) bad "a RELATIVE hooks.d link that stays inside is not called an escape" \
+                            "resolved from the checker's cwd instead of the link's parent" \
+                            "entry line: $(line_for 'rel-inside')" ;;
+  '') bad "a RELATIVE hooks.d link that stays inside is not called an escape" \
+          "the entry is not mentioned at all" "$OUT" ;;
+  *) ok "a RELATIVE hooks.d link that stays inside is not called an escape" ;;
+esac
+
+# F3 — A GLOBAL BINDING EXISTING IS NOT A GLOBAL BINDING WORKING. check_machine
+# already classifies the same value as dangling or foreign; check_core read only
+# whether it was non-empty, and then told the operator that the published floor
+# governs core. For a dangling binding NOTHING governs core, and this section is
+# the product of the mode.
+setup_case
+git config --global core.hooksPath "$CASE/gone"
+git -C "$CORE" config --local --unset core.hooksPath 2>/dev/null
+run_binder_with --check
+if ! checked; then
+  bad "a dangling global binding is not reported as governing core" "no report" "$OUT"
+elif said "governed by the published"; then
+  bad "a dangling global binding is not reported as governing core" \
+      "the binding names a directory that does not exist — nothing governs core" \
+      "core line: $(line_for "core's local core.hooksPath:")"
+else
+  ok "a dangling global binding is not reported as governing core"
+fi
+
+setup_case
+mkdir -p "$CASE/foreign-hooks"
+git config --global core.hooksPath "$CASE/foreign-hooks"
+git -C "$CORE" config --local --unset core.hooksPath 2>/dev/null
+run_binder_with --check
+if ! checked; then
+  bad "a foreign global binding is not reported as the published floor governing core" "no report" "$OUT"
+elif said "governed by the published"; then
+  bad "a foreign global binding is not reported as the published floor governing core" \
+      "the binding is not the published directory" \
+      "core line: $(line_for "core's local core.hooksPath:")"
+else
+  ok "a foreign global binding is not reported as the published floor governing core"
+fi
+
+# THE DISPATCHER REFUSES TO RUN AT ALL on a group- or world-writable hooks.d —
+# every commit in every enrolled repository blocked. A report that lists the
+# entries as "runs after the gate" describes a machine that is in fact wedged.
+setup_case
+plant_gate
+run_binder
+mkdir -p "$HOOKDIR/hooks.d"
+chmod g+w "$HOOKDIR/hooks.d"
+run_binder_with --check
+case "$(line_for 'hooks.d')" in
+  *REFUSES*) ok "a group- or world-writable hooks.d is reported as blocking every commit" ;;
+  *) bad "a group- or world-writable hooks.d is reported as blocking every commit" \
+         "hooks.d line: $(line_for 'hooks.d')" "$OUT" ;;
+esac
+
+# `[ -x ]` IS TRUE OF A DIRECTORY, and grep on a FIFO blocks forever. Neither is
+# a hook git can run, and one of them hangs the report rather than failing it.
+setup_case
+mkdir -p "$HOOKDIR/pre-commit"
+git config --global core.hooksPath "$HOOKDIR"
+run_binder_with --check
+case "$(line_for 'dispatcher:')" in
+  *"not a regular file"*) ok "a directory at the dispatcher's path is reported as not a runnable file" ;;
+  *) bad "a directory at the dispatcher's path is reported as not a runnable file" \
+         "dispatcher line: $(line_for 'dispatcher:')" "$OUT" ;;
+esac
+
+# GIT RESOLVES A RELATIVE core.hooksPath PER REPOSITORY, not against whatever
+# directory the checker was run from — and a relative value is not exotic: husky
+# has shipped `core.hooksPath = .husky/_` for years.
+# NAMED, NOT THE CWD — and that distinction is the whole test. Run against the
+# repository the checker is standing in and a relative value resolves correctly
+# by accident, because the two directories coincide. The first version of this
+# case did exactly that and passed against the bug.
+setup_case
+plant_gate
+run_binder
+REL="$(gated_repo relhooks none absent)"
+mkdir -p "$REL/myhooks"
+git -C "$REL" config --local core.hooksPath myhooks
+run_binder_with --check "$REL"
+if ! checked; then
+  bad "a relative local core.hooksPath is not reported as a missing directory" \
+      "no report was produced" "$OUT"
+elif said "That directory does not exist"; then
+  bad "a relative local core.hooksPath is not reported as a missing directory" \
+      "resolved against the checker's cwd instead of the repository" "$OUT"
+else
+  ok "a relative local core.hooksPath is not reported as a missing directory"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check classifies core by where its binding POINTS (step-4 review)"
+
+# Three sub-cases, and the first implementation got all three wrong by reading
+# only whether a value and a declaration existed.
+setup_case
+run_binder_with --check                      # machine unbound, core unbound
+if ! checked; then
+  bad "an unbound core on an unbound machine is not reported as governed by the floor" \
+      "no report was produced" "$OUT"
+elif said "governed by the published"; then
+  bad "an unbound core on an unbound machine is not reported as governed by the floor" \
+      "there is no floor binding at all on this machine" "$OUT"
+else
+  ok "an unbound core on an unbound machine is not reported as governed by the floor"
+fi
+
+setup_case
+mkdir -p "$CASE/husky"
+git -C "$CORE" config --local core.hooksPath "$CASE/husky"
+git -C "$CORE" config --local agenticapps.hooksbinding declared
+run_binder_with --check
+case "$(line_for "core's local core.hooksPath:")" in
+  *FOREIGN*) ok "a declared binding pointing away from core's own hooks is reported foreign, not healthy" ;;
+  *) bad "a declared binding pointing away from core's own hooks is reported foreign, not healthy" \
+         "core line: $(line_for "core's local core.hooksPath:")" "$OUT" ;;
+esac
+
+# The sweep only removes a binding that names the directory git would resolve
+# anyway. A foreign one is refused by the migration BY NAME, so calling it
+# sweepable sends an operator to defend something that was never at risk.
+setup_case
+mkdir -p "$CASE/husky2"
+git -C "$CORE" config --local core.hooksPath "$CASE/husky2"
+run_binder_with --check
+if ! checked; then
+  bad "a foreign undeclared binding is not reported as at risk of being swept" \
+      "no report was produced" "$OUT"
+elif said "at risk of being swept"; then
+  bad "a foreign undeclared binding is not reported as at risk of being swept" \
+      "the sweep only removes bindings naming the directory git would resolve anyway" "$OUT"
+else
+  ok "a foreign undeclared binding is not reported as at risk of being swept"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check takes the repositories it is given (2.8)"
+
+setup_case
+plant_gate
+run_binder
+run_binder_with --check
+if said "$REPO"; then
+  ok "with no repository named, it reports the one it was run in"
+else
+  bad "with no repository named, it reports the one it was run in" "rc=$RC" "$OUT"
+fi
+
+setup_case
+plant_gate
+run_binder
+R1="$(gated_repo one none absent)"
+R2="$(gated_repo two none absent)"
+run_binder_with --check "$R1" "$R2"
+if said "$R1" && said "$R2"; then
+  ok "two named repositories are both reported"
+else
+  bad "two named repositories are both reported" "rc=$RC" "$OUT"
+fi
+
+if [ "$(grep -nF "$R1" "$CASE/out" | head -1 | cut -d: -f1)" -lt "$(grep -nF "$R2" "$CASE/out" | head -1 | cut -d: -f1)" ]; then
+  ok "and in the order they were given"
+else
+  bad "and in the order they were given" "$OUT"
+fi
+
+# The migration stops the whole run on a bad name because it is about to mutate.
+# A report has no such reason, and discarding nine good sections because the
+# tenth name was wrong is a cost with nothing bought by it.
+setup_case
+plant_gate
+run_binder
+GOOD="$(gated_repo good none absent)"
+mkdir -p "$CASE/not-a-repo"
+run_binder_with --check "$CASE/not-a-repo" "$GOOD"
+if said "not a git repository" || said "not a git repo"; then
+  ok "a name that is not a repository is reported as such"
+else
+  bad "a name that is not a repository is reported as such" "rc=$RC" "$OUT"
+fi
+
+if said "$GOOD"; then
+  ok "and the run continues to the repositories after it"
+else
+  bad "and the run continues to the repositories after it" "$OUT"
+fi
+
+if [ "$RC" -eq 0 ]; then
+  ok "and a bad name does not make the report exit non-zero"
+else
+  bad "and a bad name does not make the report exit non-zero" "rc=$RC" "$OUT"
+fi
+
+setup_case
+plant_gate
+run_binder
+mkdir -p "$REPO/sub/dir"
+run_binder_with --check "$REPO/sub/dir"
+if said "$REPO"; then
+  ok "a name inside a repository resolves to that repository's top, and the report names it"
+else
+  bad "a name inside a repository resolves to that repository's top, and the report names it" \
+      "rc=$RC" "$OUT"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "floor binder — --check reports and repairs nothing (3.1, 3.2)"
+
+# The binder as it stands creates the published hooks directory BEFORE it parses
+# its arguments — measured, and it is why this mode cannot be wired in at any
+# convenient point in the flow. A check that creates the very directory it is
+# reporting on has answered a different question than the one it was asked.
+setup_case
+BEFORE="$(home_state)"
+run_binder_with --check
+AFTER="$(home_state)"
+if ran && [ "$BEFORE" = "$AFTER" ]; then
+  ok "a check on an empty home creates and modifies nothing under it"
+else
+  bad "a check on an empty home creates and modifies nothing under it" \
+      "$(diff <(printf '%s\n' "$BEFORE") <(printf '%s\n' "$AFTER") | head -6)" "$OUT"
+fi
+
+if [ ! -d "$HOOKDIR" ]; then
+  ok "and it does not create the published hooks directory it is reporting on"
+else
+  bad "and it does not create the published hooks directory it is reporting on" \
+      "$HOOKDIR exists after a run that promised to write nothing"
+fi
+
+if ! checked; then
+  bad "and it sets no git configuration, at global scope or local" \
+      "no report was produced, so a binder that wrote nothing would satisfy this" "$OUT"
+elif [ -z "$(bound)" ] && [ -z "$(git -C "$REPO" config --local --get core.hooksPath 2>/dev/null)" ] \
+   && [ -z "$(core_bound)" ] && [ -z "$(core_declared)" ]; then
+  ok "and it sets no git configuration, at global scope or local"
+else
+  bad "and it sets no git configuration, at global scope or local" \
+      "global='$(bound)' repo='$(git -C "$REPO" config --local --get core.hooksPath 2>/dev/null)'" \
+      "core='$(core_bound)' declared='$(core_declared)'"
+fi
+
+# Exit 0 whatever it finds. A caller that branches on the status turns a report
+# into a gate, which is a different decision — and it would make "the floor is
+# unbound" indistinguishable from "the command did not run".
+setup_case
+git config --global core.hooksPath "$CASE/gone"
+mkdir -p "$REPO/openspec"
+run_binder_with --check
+if ran && [ "$RC" -eq 0 ]; then
+  ok "a machine where everything it could report is wrong still exits 0"
+else
+  bad "a machine where everything it could report is wrong still exits 0" "rc=$RC" "${OUT:-<no output>}"
+fi
+
+setup_case
+run_binder_with --check
+UNBOUND_RC=$RC
+setup_case
+plant_gate
+run_binder
+run_binder_with --check
+if [ "$UNBOUND_RC" -eq 0 ] && [ "$RC" -eq 0 ]; then
+  ok "the exit code is the same on a bound machine and an unbound one, so it does not encode the findings"
+else
+  bad "the exit code is the same on a bound machine and an unbound one, so it does not encode the findings" \
+      "unbound rc=$UNBOUND_RC, bound rc=$RC"
+fi
+
 # ---------------------------------------------------------------------------
 echo
 echo "----------------------------------------------------------------"

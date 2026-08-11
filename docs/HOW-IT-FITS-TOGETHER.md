@@ -157,7 +157,8 @@ the same inode by construction, and the price was a mechanism that owned an
 entire file in order to deliver an eight-line pointer.
 
 `tools/agents-md-conformance.sh` *checks* all of this and writes none of it.
-That gap is why `--project` had to be deferred.
+Nothing in this repository writes it either — `init-project.sh` provisions the
+workflow section, not the file's whole shape.
 
 ## The installer
 
@@ -226,11 +227,6 @@ skill and the diagram disagree, the diagram wins.
 
 ## What is not finished
 
-- **`--project` is dropped, not pending.** It needed a project-shim installer
-  and an instruction-file provisioner. Once the floor is bound machine-wide
-  there is no per-repository hook left for it to install, and what remained
-  depends on the open question below. Its Phase 5b sequencing constraint is
-  released.
 - **The setup capability window is open on purpose.** This change removes
   `setup-agenticapps-workflow` before its replacement exists. The alternative
   was leaving a binding into an archived checkout, which is the condition the

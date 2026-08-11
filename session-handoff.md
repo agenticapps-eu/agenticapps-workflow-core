@@ -1,163 +1,99 @@
-# Session Handoff — 2026-08-10 (twenty-eighth session)
+# Session Handoff — 2026-08-11 (twenty-ninth session)
 
-`two-real-instruction-files` is **shipped**: implemented, tested, published,
-merged (#107) and **archived** into the four spec slots. #106 is closed as
-superseded. `agents-task-viewer` was retired and deleted in the same session,
-which is what cleared the publish hold. Nothing is in flight.
+`floor-check-mode` is **implemented, reviewed, verified and shipped as PR #112**
+(branch `floor-check-mode`, gate CI green). It is **not archived** — that is the
+first action next session, after the PR merges.
 
 ## Accomplished
 
-- **`init-project` 1.2.0 → 2.1.0.** No `ln -s`, no `mv -f`, no `rm`: its only
-  write to an existing file is between the markers, in place, so the file keeps
-  its path, inode and mode. The block is now *updated* rather than skipped when
-  present. A symlink under either name is refused, naming which one and the
-  migration step; so is a FIFO. 17 RED → **102/102 GREEN twice**.
-- **`gate` 2.0.0 → 2.1.0.** A second blocking condition: `AGENTS.md` and
-  `CLAUDE.md` must be readable, regular and byte-identical. 12 new harness rows
-  (section G), 6 RED → **81/81 GREEN**, plus five real commits in a scratch repo.
-- **spec 2.0.0 → 2.1.0**, minor. §18's escape-hatch MUST narrowed.
-- **Core migrated**, by merging #106 in. Both names are regular files, one blob.
-- **`tools/agents-md-conformance.sh`** no longer refuses `CLAUDE.md` outright —
-  only where it is the sole instruction file. 77 → 79 rows, green.
-- **A sixth enrolled repository found and retired**: `agents-task-viewer`. It
-  was an experiment, it appeared in no inventory, and it was the last repository
-  on the machine holding the old symlink arrangement. Notice merged (PR #20),
-  GitHub repo archived, 84M checkout deleted, family `CLAUDE.md` records it.
-- **Published.** `~/.agenticapps/bin/` carries gate **2.1.0** and init-project
-  **2.1.0**. The published gate scores 81/81, and a real `git commit` in an
-  enrolled scratch repo is refused through the whole machine path.
-- **init-project 2.0.0 → 2.1.0: the section now carries `section-version`.** CI
-  caught it on the first run — `agents-md-conformance.sh` has required a content
-  version all along, the writer never emitted one, and nothing noticed because
-  core's `AGENTS.md` was a symlink to a section-less `CLAUDE.md`. The writer's
-  suite now scores its own output against the real scorer.
-- **`tools/test-install-core-git-hooks.sh` fixed: 8/16 → 16/16.** It was red for
-  the same reason a scratch-repo test misled me earlier — the fixtures inherited
-  the machine's **global** `core.hooksPath`, so they resolved to the global
-  floor's hooks directory and the installer refused, correctly, to overwrite a
-  hook it did not write. CI has no global git config, so CI never saw it.
+- **`--check` on `bind-global-floor.sh`**, the requirement `one-enforcement-floor`
+  specified and never built. Reports the machine, core, and one section per named
+  repository; writes nothing; exits 0 whatever it finds.
+- **Grammar: `--check [repository ...]`**, no repository meaning the cwd's. No
+  scan, no declared root, no walk.
+- **`tools/global-floor-bind.test.sh`: 79 assertions → 146**, GREEN twice at
+  every step, every new assertion observed RED first. (79 is the suite at
+  `HEAD` before this change; the intermediate figures in `REVIEWS.md` are the
+  counts at the moment each review round was folded in.)
+  `shellcheck -S warning` clean on everything added.
+- **Step 2b run properly**: gemini and codex, both REQUEST-CHANGES, both finding
+  the same HIGH independently. Step 4: codex on the diff, REQUEST-CHANGES, six
+  findings. `REVIEWS.md` carries both rounds and every resolution.
+- **`--project` dropped** from the two places in `docs/HOW-IT-FITS-TOGETHER.md`
+  that named it — and they contradicted each other.
+- **The fleet re-measured with the mode itself.**
 
 ## Decisions
 
-- **Merge #106 into this branch rather than wait for it.** Core's own hook
-  resolves the working tree, so the new check failed every commit here until the
-  migration landed. #106 was then closed unmerged, its commit being in #107's
-  history — merging both would have landed the same change twice.
-- **Refresh the deltas rather than force the archive.** `openspec archive`
-  refused three times, each time naming scenarios the MODIFIED blocks would have
-  deleted: three in `agent-lifecycle-management`, one in
-  `host-neutral-instruction-files`, six in `project-onboarding` — five of which
-  were only RENAMED, since a header that changes wording reads as a scenario
-  removed. Every one was carried through, and the directory/dangling-link
-  scenario gained the FIFO case the implementation already handles.
-- **Publishing was held, then released.** `./install.sh` is the moment the check
-  reaches every enrolled repository, and `agents-task-viewer` would have been
-  blocked on the spot. The hold was lifted only after that repository was gone
-  and all four remaining enrolled repositories were dry-run against the new gate
-  at `rc=0`. Evidence before the machine-wide write, not after.
-- **Retire `agents-task-viewer` rather than migrate it.** It was an experiment
-  that was built, worked, and is not being carried forward — migrating it would
-  have been maintenance spent on something about to stop existing. Its 45
-  no-remote commits are pre-squash history of a merged PR, so nothing was lost;
-  the tip SHA is recorded in two places anyway.
-- **Amend §18 rather than add an escape hatch.** The hatch MUST had been vacuous
-  since gate 2.0.0; a second blocker made it live and would have demanded a hatch
-  for the one check whose value is that it has none. §18 now names both
-  conditions as taking none. Minor: it removes an obligation and adds none, and
-  it does **not** oblige hosts to implement the pair check.
-- **Preservation is scoped to bytes outside the markers**, and asserted two ways
-  — a digest of the file minus the marker range for the update case, and an
-  exact-prefix comparison for the append case, since appending necessarily adds
-  the blank separator line.
-- **Inode assertions**, because every content assertion in the suite is satisfied
-  by a `mv` of a fresh file over the destination — which is what task 1.4 forbids.
+- **Positional repositories, not a scan.** Both plan reviewers wanted a census
+  mechanism (a `--scan` root, a declared root). Neither was taken: the binder's
+  own text says the migration set is *named, never discovered*, and a mode that
+  only inspects has no better claim to walk the machine than the mode that
+  mutates.
+- **The mode goes before the `mkdir -p`.** Measured, not assumed: the old binder
+  created `~/.agenticapps/git-hooks` on its way to refusing `--check`.
+- **`FLOOR_VOUCHED` is separate from `FLOOR_ACTIVE`.** A hand-edited dispatcher
+  is perfectly runnable, so "git runs the floor" and "the floor is this
+  checkout's gate" are two claims. Collapsing them would have dragged `ahead`
+  in — the false alarm the plan review warned about.
+- **The review trailer is NOT forged.** Its digest asserts which artifacts the
+  reviewers saw; both reviews are of the pre-resolution delta. `trailer-absent`
+  is the honest state. Recorded as a skill/gate divergence instead.
+- **Not archived in the implementation PR**, matching `#107 → #108`: archiving
+  first would put the requirements into the live spec while `main` has no
+  implementation.
+- **Task 4.3 inverted.** It said to bump `global-floor-version` and publish; that
+  marker is on the *dispatcher* (1.1.0, byte-unchanged), the binder carries no
+  marker and is not published. Bumping it would have told every machine its
+  correct dispatcher was stale.
 
 ## Files modified
 
-`reference-implementations/init-project/init-project.sh` (rewritten, 2.1.0) ·
-`reference-implementations/openspec-change-gate/openspec-change-gate.sh`
-(`instruction_pair_check`, wired first in pre-commit; 2.1.0) ·
-`tools/init-project.test.sh` (rewritten; symlink assertions inverted) ·
-`tools/change-gate-conformance.sh` (+section G, 12 rows) ·
-`tools/agents-md-conformance.sh` + `.test.sh` (carve-out narrowed) ·
-`.github/workflows/openspec-gate.yml` (floors 69→81, 57→69) ·
-`spec/18-retargeted-change-gate.md`, `spec/00-overview.md`, `CHANGELOG.md` ·
-`docs/HOW-IT-FITS-TOGETHER.md` · `AGENTS.md` + `CLAUDE.md` (both, identically) ·
-`openspec/changes/two-real-instruction-files/tasks.md`.
+`reference-implementations/global-floor/bind-global-floor.sh` (+393, the whole
+`--check` block, inserted before the mkdir) · `tools/global-floor-bind.test.sh`
+(+826, 60 new assertions) · `openspec/changes/floor-check-mode/specs/*` (both
+deltas rewritten after review) · `openspec/changes/floor-check-mode/tasks.md`
+(all 4.x closed, 2.10–2.13 added) · `openspec/changes/floor-check-mode/REVIEWS.md`
+(new) · `docs/HOW-IT-FITS-TOGETHER.md` (`--project` removed, two places).
 
 ## Next session: start here
 
-**The fleet repair is done, and it was two repositories, not four.** The claim
-that all four carried a version-less section was wrong: it read a
-`section-version: (none)` sweep as meaning the section existed without a version,
-when in two of them there is no section at all.
+**Merge #112, then archive.** `openspec archive floor-check-mode` folds both
+deltas into `openspec/specs/`. The `core-self-enforcement` delta is a MODIFIED
+block that **restates the live requirement verbatim and appends** — verified as a
+pure superset (3 original scenarios preserved, 4 added), so the archive should
+not refuse the way `two-real-instruction-files` did three times. Archive in its
+own PR, as `#108` was. Nothing needs publishing: the binder runs from the
+checkout and carries no version marker.
 
-| repo | state | action |
-|---|---|---|
-| `cparx` | section, no version | fixed — PR #134, one line per file |
-| `fx-signal-agent` | section, no version; migration PR still open | fixed **inside** that PR, so it lands correct rather than landing wrong |
-| `callbot` | two identical regular files, **no section** | provisioned — PR #111 |
-| `fbc-platform` | see below — the survey read a feature branch | migrated **and** provisioned — PR #151 |
-
-Both fixes were written by `init-project.sh` 2.1.0 rather than by hand, so the
-block matches what the writer emits and a re-run is a no-op. Diff in each case is
-`2 files changed, 2 insertions(+)`, both rewritten in place, nothing outside the
-markers touched. cparx scored 9/1 before and 10/0 after.
-
-**All four enrolled repositories are now at standard**, verified from the index
-on `origin/main` rather than the worktree: both names mode `100644`, one blob
-each, section present and versioned.
-
-**`fbc-platform` was the find of the session, and my survey had it wrong twice.**
-It reported "`CLAUDE.md` only, no section" because it read whatever branch each
-checkout happened to be on — and that repository sits on a feature branch. On
-`main` it carries both names, and `AGENTS.md` is mode `120000`, a symlink to
-`CLAUDE.md`.
-
-That would be ordinary except the repository sets **`core.symlinks=false`**, so
-git checks the entry out as a plain text file whose entire content is the string
-`CLAUDE.md`. **That is the Windows failure mode the proposal argued from, reached
-on macOS through a repository setting** — and it means codex, opencode, pi and
-omp have been reading eleven bytes and no instructions from that repository.
-Only Claude ever saw the real file. Nothing detected it, because every structural
-check reports a plausible file.
-
-Two consequences worth carrying:
-
-- **Survey from the index, and name the ref.** A worktree sweep answers about
-  whichever branch someone left checked out, which is not a fact about the
-  repository. `git ls-tree origin/main` is the question actually being asked.
-- **`core.symlinks=false` makes the index mode authoritative and the filesystem
-  mute.** Writing a regular file over the link is not enough — git keeps the
-  `120000` entry because it will not trust the file type it sees. The mode had to
-  be set explicitly with `git update-index --cacheinfo 100644`. The gate caught
-  it: the commit blocked on "staged as a symlink" until the mode changed.
-
-**Both provisioning commits were made from temporary git worktrees**, not the
-live checkouts. `callbot`'s had 22 uncommitted files from a parallel session —
-including an edit inside `AGENTS.md` itself — which a first attempt nearly swept
-into the commit. Both live checkouts were left on the branch and with the working
-tree they had.
-
-Two open changes remain, neither touched this session:
-`initializer-cannot-destroy-instruction-file` (complete, unarchived — check
-whether 2.0.0 subsumed it before archiving) and `one-enforcement-floor`
-(55/100).
+**Then decide what to do about the two ungated repositories the mode found.**
+`codex-workflow` and `opencode-workflow` each carry a `.git/hooks/pre-commit`
+(5.8K and 2.3K, 25 July) that the global binding displaced, and neither is
+enrolled — so both are completely ungated: hook on disk, nothing running it, no
+marker. They are host repositories scheduled for deletion, so this was recorded
+and not repaired. If deletion slips, they are the two repositories on the machine
+with no enforcement at all.
 
 ## Open questions
 
-1. **The proposal's migration inventory is still wrong in the file.** It says
-   five repositories; it was six. `tasks.md` §5.1 records the correction and the
-   reason — the inventory enumerated repositories carrying the workflow
-   *section*, and the floor dispatches on the *enrolment key*. The proposal is a
-   record of what was believed when it was written, so it stays as it is.
-2. **`cmux` is excluded as being removed** and was never re-checked. If that
-   repository outlives the plan, it carries the old arrangement. It is not
-   enrolled, so the gate does not reach it either way.
-3. **Only `tools/test-install-core-git-hooks.sh` was hardened against the global
-   git config.** The other suites pass on this machine, which may be because
-   they isolate or because they never resolve `core.hooksPath`. Not
-   distinguished.
-4. Carried over: AGE-510, AGE-509, no interception of destructive SQL,
+1. **The `openspec-change-review` skill and the gate disagree about REVIEWS.md.**
+   The skill documents YAML frontmatter; the gate parses an
+   `<!-- openspec-review-trailer -->` block only `run-plan-review.sh` emits. Every
+   hand-written REVIEWS.md is therefore `trailer-absent`. Worth reconciling in
+   the skill, not worked around per change.
+2. **`GLOBAL_FLOOR_BIND_BIN=/usr/bin/true` no longer reaches the end of the
+   suite** and has not since `run_binder_cut` was added — the helper hard-exits
+   when its pattern does not match, long before the `--check` section. Not a
+   regression from this change (reproduced on `HEAD`), but the documented teeth
+   check now covers only the first third of the file.
+3. ~~The gate override is resolved once, against the checker's cwd.~~ **Closed.**
+   Two reviewers raised it. The heavy remedy (per-repository gate state) stays
+   declined; the cheap one is built — a non-absolute override is now reported as
+   one the check cannot speak for, rather than given a verdict it cannot support.
+4. **`workflow-installation` still says a reporting surface "is owed".** True
+   when written; after the archive, `--check` is that surface and is specified in
+   the same capability. Left alone rather than opening a MODIFIED block to change
+   a tense.
+5. Carried over: AGE-510, AGE-509, no interception of destructive SQL,
    `normalize-claude-md` has no implementation, `claude-workflow` has 11 commits
    on no remote, the installer has no retired-artifact sweep.
