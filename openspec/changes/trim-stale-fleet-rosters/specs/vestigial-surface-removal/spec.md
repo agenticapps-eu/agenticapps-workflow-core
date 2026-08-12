@@ -103,3 +103,40 @@ where no determination could be reached.
   record
 - **THEN** it SHALL be treated as a record and retained, because the cost of
   keeping a dead file is bounded and the cost of deleting a reason is not
+
+### Requirement: A published copy may not contradict what it publishes
+
+Where this repository publishes a copy of an enforcement artifact, that copy SHALL
+match the implementation it publishes, or SHALL be removed. A published copy that
+nothing resolves SHALL be removed rather than corrected.
+
+`gate/openspec-change-gate.sh` is the worked example. It defaults
+`MIN_REVIEWERS=2`, returns a blocking exit on insufficient reviewers, and treats
+`GSD_SKIP_REVIEWS` as a live bypass of that live block, with `gate/README.md`
+documenting it as contract. Nothing resolves it — `install.sh` publishes the
+reference implementation into `~/.agenticapps/bin/` through
+`install-shared-artifact.sh`, and the installed copy is byte-identical to that.
+So it enforces nothing and misinforms everyone.
+
+*This paragraph named `resolve-core-artifact.sh` as the thing that mapped the
+shared install to the reference implementation until 2026-08-12. That was never
+true of core's own installer, which has always published directly; the resolver
+served a **host** repository's installer, letting it publish core's artifacts
+from a pin instead of vendoring their bytes. With all four host repositories
+deleted it had no caller and was retired, and the sentence is corrected to name
+the mechanism that actually runs. The conclusion it supports is untouched:
+nothing resolves the published gate copy, and that was as true before the
+correction as after.*
+
+#### Scenario: A published copy is stale and unresolved
+
+- **WHEN** a published copy of an enforcement artifact is resolved by no
+  installer, tool, or hook, and states behaviour the implementation no longer has
+- **THEN** it SHALL be removed rather than updated, because a copy that nothing
+  reads has no reader to serve
+
+#### Scenario: A published copy is live
+
+- **WHEN** an installer or hook does resolve a published copy
+- **THEN** it SHALL be kept synchronised with the implementation, and the
+  resolution path SHALL be recorded so the question is answerable without a sweep

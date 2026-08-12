@@ -35,7 +35,6 @@
 #
 # One repository name per line. Blank lines and # comments ignored.
 
-agents-task-viewer
 callbot
 cparx
 fbc-platform
@@ -45,3 +44,11 @@ fx-signal-agent
 # both checkouts were deleted from this machine and both remotes are archived.
 # A declared repository that is not on disk is reported as MISSING REPO, which
 # is correct for one that should be there and noise for one that is retired.
+#
+# agents-task-viewer was retired on 2026-08-10 and removed from this file on
+# 2026-08-12. It carried the one declared opt-out (normalize-claude-md), and
+# check-shims.sh reported MISSING REPO for it every run in between — two days of
+# an absence line that could never be cleared. That is the cost this block
+# exists to stop paying: a permanent absence is indistinguishable in the output
+# from a repository someone forgot to clone, and reading it often enough teaches
+# the operator to look past the line where a real gap will one day appear.

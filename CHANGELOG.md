@@ -20,6 +20,57 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**The rosters name only what can exist.** Five retired repositories were still
+declared in four places on 2026-08-12 — `claude-workflow`, `codex-workflow`,
+`opencode-workflow` and `pi-agentic-apps-workflow` (archived on GitHub
+2026-08-05, checkouts deleted 2026-08-12), plus `agents-task-viewer` (retired
+2026-08-10). No conformance impact for host implementers, because there are no
+host implementers.
+
+- **`reference-implementations/project-hooks/FLEET`** drops `agents-task-viewer`.
+  `check-shims.sh` had reported `MISSING REPO` for it on every run since
+  2026-08-10 — an absence line that could never be cleared.
+- **`change-gate-conformance.sh` and `reviewer-cli-conformance.sh`** score a
+  roster of 2 rather than 6: `core` and `shared-install`. Totals are unchanged
+  at 162/0 and 38/0, because the four were already scoring nothing. **What the
+  sweep proves is restated rather than quietly reduced** — two entries measure
+  *publish drift*, whether the bytes this repo ships are the bytes an installed
+  machine runs, and `scored 2 of 2` is not fleet coverage.
+- **`tools/drift-report.sh` and `tools/drift-report.test.sh` are retired.** Its
+  `HOSTS` array declared exactly the four host repositories and nothing else, so
+  its final run scored **`OK: 0 · DRIFT: 0 · SKIP: 60`** — recorded here because
+  after the deletion nothing can produce that number again. Canonical-prose
+  drift is now measured by nothing; `spec/09` states why, and defers a re-scoped
+  check until there is a host to scope it against rather than leaving the
+  question implicit.
+- **Pin-and-resolve is withdrawn whole.** The resolvable-but-not-attempted
+  branch, `--resolve` on `change-gate-conformance.sh`,
+  `reference-implementations/shared-install/resolve-core-artifact.sh` and
+  `tools/resolve-core-artifact-conformance.sh` all go together. The resolver
+  existed so a **host** repo's installer could publish core's artifacts from a
+  pin instead of vendoring their bytes; core's own `install.sh` has never used
+  it, publishing directly through `install-shared-artifact.sh`. Two plan
+  reviewers independently refused an earlier draft that deleted the branch while
+  keeping the resolver published — that would have left an interface whose
+  safety rules had to be reconstructed from an old commit. **Those rules are not
+  lost, they are moot**, and if pin-and-resolve ever returns they must return
+  with it rather than be rewritten from memory: `spec/20` at commit `a15de90`.
+- **`vestigial-surface-removal` gains one narrow carve-out**, because it exempts
+  `tools/` and every test harness from deletion and therefore forbade three of
+  the retirements above. A **record** documents what was true; an **instrument**
+  measures a subject it declares, and one whose declared subject is *entirely*
+  retired does neither. Three conditions must all hold — the subject is
+  declared, every entry in it is retired, and no other input supplies a subject
+  — so "nobody runs it" is not this condition, and neither is an empty roster on
+  an instrument that also takes arguments.
+- **Two requirements were citing `resolve-core-artifact.sh` in the present tense
+  as the thing mapping the shared install to the reference implementation.** It
+  never was, for core — that described the *host* install path. Corrected in
+  `change-gate-enforcement` and `vestigial-surface-removal`; what the sentence
+  supported is unchanged, since nothing resolved `gate/openspec-change-gate.sh`
+  before the correction either. Found by obeying the scenario that requires the
+  resolver mapping be read and named rather than assumed.
+
 **Spec 2.0.0 → 2.1.0 — minor. §18's escape-hatch MUST is narrowed, because the
 gate now blocks on a second condition.** `AGENTS.md` and `CLAUDE.md` are two
 regular files with identical content rather than one file under a symlink, and

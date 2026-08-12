@@ -1039,14 +1039,17 @@ score_gate() {
 }
 
 # ── entry point ──────────────────────────────────────────────────────────────
-USAGE="usage: $0 <gate-script> [...] | --family [--resolve]"
+USAGE="usage: $0 <gate-script> [...] | --family"
 
 FAMILY_MODE=0
-RESOLVE=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --family)  FAMILY_MODE=1; shift ;;
-    --resolve) RESOLVE=1; shift ;;
+    # --resolve was removed on 2026-08-12 with the pin-and-resolve branch it
+    # drove. It is not silently ignored: an unknown flag falls through to the
+    # target list and is rejected as an unscoreable target, so an operator with
+    # it in a script learns that it stopped doing something rather than
+    # believing it still does.
     *)         break ;;
   esac
 done
@@ -1059,9 +1062,6 @@ if [ "$FAMILY_MODE" = "1" ] && [ "$#" -gt 0 ]; then
   echo "--family cannot be combined with explicit target paths (got: $(harness_safe_label "$1"))" >&2
   exit 2
 fi
-if [ "$RESOLVE" = "1" ] && [ "$FAMILY_MODE" != "1" ]; then
-  echo "$USAGE" >&2; echo "--resolve requires --family" >&2; exit 2
-fi
 
 if [ "$FAMILY_MODE" = "1" ]; then
   FAMILY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -1069,11 +1069,23 @@ if [ "$FAMILY_MODE" = "1" ]; then
   # output. An absolute path differs per machine, so two complete sweeps would
   # produce output that cannot be diffed; it also carries $HOME and workspace
   # roots into CI logs.
+  #
+  # WHAT TWO ENTRIES PROVE, which is not what six proved.
+  #
+  # `core` is this repository's working-tree reference implementation and
+  # `shared-install` is the copy install.sh publishes to ~/.agenticapps/bin/.
+  # A sweep over the two measures PUBLISH DRIFT — whether the bytes this repo
+  # ships are the bytes an installed machine runs. It is not coverage of a
+  # fleet of independent implementations, and `scored 2 of 2` must not be read
+  # as though it were. There is no such fleet to cover.
+  #
+  # claude-workflow, codex-workflow, opencode-workflow and
+  # pi-agentic-apps-workflow were removed on 2026-08-12: archived on GitHub
+  # 2026-08-05, checkouts deleted 2026-08-12. Each vendored its own copy of
+  # this gate. Their absence had already been reported on every run for a week,
+  # and deleting codex-workflow's stale copy is what took this harness from
+  # 237/6 to 162/0 — a copy that no longer exists cannot report as divergent.
   ROSTER="core|$FAMILY/agenticapps-workflow-core/reference-implementations/openspec-change-gate/openspec-change-gate.sh
-claude-workflow|$FAMILY/claude-workflow/bin/openspec-change-gate.sh
-codex-workflow|$FAMILY/codex-workflow/bin/openspec-change-gate.sh
-opencode-workflow|$FAMILY/opencode-workflow/bin/openspec-change-gate.sh
-pi-agentic-apps-workflow|$FAMILY/pi-agentic-apps-workflow/bin/openspec-change-gate.sh
 shared-install|$HOME/.agenticapps/bin/openspec-change-gate.sh"
 
   roster_total=0
@@ -1101,57 +1113,24 @@ shared-install|$HOME/.agenticapps/bin/openspec-change-gate.sh"
       continue
     fi
 
-    # "Not vendored" and "unscoreable" are different facts. A host that moved
-    # to pin-and-resolve did not become unmeasurable; the harness merely
-    # declined to go and get the bytes.
-    host_dir="${path%/bin/openspec-change-gate.sh}"
-    if [ "$REASON" = "not found" ] &&
-       [ -f "$host_dir/bin/resolve-core-artifact.sh" ] &&
-       [ -f "$host_dir/tools/core-vendor.manifest" ]; then
-      if [ "$RESOLVE" = "1" ]; then
-        # The resolver's stdout is a PATH THIS HARNESS WILL EXECUTE, and it
-        # comes from a script in another repository. The pin makes the resolver
-        # trustworthy about BYTES — it accepts nothing that does not hash to the
-        # manifest — but it says nothing about where it puts them. Treating that
-        # stdout as an arbitrary filesystem path meant executing whatever it
-        # named and then deleting it.
-        #
-        # So: the resolve runs into a scratch directory this harness owns, the
-        # returned path must land inside it, and the path is screened like any
-        # other target before it is scored. Cleanup removes the scratch
-        # directory, never a path the resolver chose.
-        rdir="$(mktemp -d)"
-        resolved="$(cd "$rdir" && TMPDIR="$rdir" bash \
-                      "$host_dir/bin/resolve-core-artifact.sh" \
-                      "$host_dir/tools/core-vendor.manifest" \
-                      bin/openspec-change-gate.sh 2>/dev/null)"
-        rrc=$?
-        # Absolutise before comparing: a relative path from the resolver would
-        # otherwise never match the prefix and would be rejected as an escape.
-        case "$resolved" in
-          /*) rabs="$resolved" ;;
-          *)  rabs="$rdir/$resolved" ;;
-        esac
-        if [ "$rrc" -eq 0 ] && [ -n "$resolved" ] &&
-           [ "${rabs#"$rdir"/}" != "$rabs" ] && harness_screen_target "$rabs"; then
-          p0="$pass"; f0="$fail"
-          score_gate "$rabs" "$label (resolved from pin)"
-          [ $((pass - p0 + fail - f0)) -gt 0 ] && roster_scored=$((roster_scored + 1))
-          rm -rf "$rdir"
-          continue
-        fi
-        rm -rf "$rdir"
-        if [ "$rrc" -eq 0 ] && [ -n "$resolved" ]; then
-          roster_unscored="$roster_unscored  $label — resolver returned a path outside its scratch dir; refused"$'\n'
-        else
-          roster_unscored="$roster_unscored  $label — resolve from pin FAILED"$'\n'
-        fi
-      else
-        roster_unscored="$roster_unscored  $label — not vendored; resolvable from pin, not attempted (--resolve)"$'\n'
-      fi
-    else
-      roster_unscored="$roster_unscored  $label — $REASON"$'\n'
-    fi
+    # An absent entry is reported with its screening reason, and the harness
+    # does not speculate about why it is absent.
+    #
+    # A pin-and-resolve branch stood here until 2026-08-12. It distinguished a
+    # host that vendored nothing and resolved this artifact from a pinned commit
+    # from one that was simply missing, and `--resolve` would go and fetch the
+    # bytes. Both went with the four host repositories: the branch fired only for
+    # an entry that was absent AND whose directory held bin/resolve-core-artifact.sh
+    # and tools/core-vendor.manifest, and every entry that could satisfy that was
+    # one of the four. Neither remaining entry can — `core` is a working tree that
+    # is present whenever this harness is, and `shared-install` is a plain
+    # installed file with no resolver beside it.
+    #
+    # Its security rules are not lost, they are moot: they governed executing a
+    # path chosen by a script in another repository, and no such act remains.
+    # They are recorded in full at commit a15de90 and must come back WITH the
+    # capability if it ever returns, never be reconstructed from memory.
+    roster_unscored="$roster_unscored  $label — $REASON"$'\n'
   done <<< "$ROSTER"
 
   echo

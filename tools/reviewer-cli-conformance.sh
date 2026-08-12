@@ -262,14 +262,26 @@ if [ "$FAMILY_MODE" = "1" ] && [ "$#" -gt 0 ]; then
 fi
 
 if [ "$FAMILY_MODE" = "1" ]; then
-  root="$(cd "$(dirname "$0")/../.." && pwd)"
-  # label|path. The canonical goes first so a fleet run reads as "the bar,
-  # then the fleet". Entries are named by a stable logical label throughout.
+  # `root`, the family directory, was resolved here until 2026-08-12. It existed
+  # only to build the four host-repository paths; neither remaining entry is a
+  # sibling of this repository.
+  # label|path. The canonical goes first so a run reads as "the bar, then the
+  # copy". Entries are named by a stable logical label throughout.
+  #
+  # WHAT TWO ENTRIES PROVE, which is not what six proved.
+  #
+  # `core` is this repository's reference implementation and `shared-install`
+  # the copy install.sh publishes to ~/.agenticapps/bin/. The sweep measures
+  # PUBLISH DRIFT — shipped bytes against installed bytes — not coverage of a
+  # fleet of independent implementations. `scored 2 of 2` must not be read as
+  # the latter; there is no such fleet left to cover.
+  #
+  # claude-workflow, codex-workflow, opencode-workflow and
+  # pi-agentic-apps-workflow were removed on 2026-08-12: archived on GitHub
+  # 2026-08-05, checkouts deleted 2026-08-12. Removing them took this harness
+  # from 57 assertions to 38 — lost coverage of implementations that no longer
+  # exist, which is not coverage at all.
   ROSTER="core|$(dirname "$0")/../reference-implementations/reviewer-cli/reviewer-cli.sh
-claude-workflow|$root/claude-workflow/bin/reviewer-cli.sh
-codex-workflow|$root/codex-workflow/bin/reviewer-cli.sh
-opencode-workflow|$root/opencode-workflow/bin/reviewer-cli.sh
-pi-agentic-apps-workflow|$root/pi-agentic-apps-workflow/bin/reviewer-cli.sh
 shared-install|$HOME/.agenticapps/bin/reviewer-cli.sh"
 
   roster_total=0 roster_scored=0 roster_unscored=""
@@ -288,14 +300,12 @@ shared-install|$HOME/.agenticapps/bin/reviewer-cli.sh"
         roster_unscored="$roster_unscored  $label — reached but produced no scored row"$'\n'
       fi
     else
-      host_dir="${path%/bin/reviewer-cli.sh}"
-      if [ "$REASON" = "not found" ] &&
-         [ -f "$host_dir/bin/resolve-core-artifact.sh" ] &&
-         [ -f "$host_dir/tools/core-vendor.manifest" ]; then
-        roster_unscored="$roster_unscored  $label — not vendored; resolvable from pin, not attempted"$'\n'
-      else
-        roster_unscored="$roster_unscored  $label — $REASON"$'\n'
-      fi
+      # An absent entry is reported with its screening reason. The
+      # pin-and-resolve distinction that stood here until 2026-08-12 — not
+      # vendored, resolvable from a pin, not attempted — went with the four host
+      # repositories that were its only possible subject. This harness
+      # implemented the reporting half only; it never fetched anything.
+      roster_unscored="$roster_unscored  $label — $REASON"$'\n'
     fi
   done <<< "$ROSTER"
 

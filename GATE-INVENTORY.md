@@ -64,7 +64,8 @@ Linear owns *what's next*. That's the "complementary, not conflicting" you descr
 | secret scanner (gitleaks, ADR-0006) | KEEP — CI/pre-commit; unrelated. |
 | session-handoff (host-scoped) | KEEP — but it now references the active change(s), not a GSD phase (STATE.md is gone). |
 | task-size routing (tiny/small vs medium/large) | KEEP — small changes skip heavy gates; medium/large REQUIRE plan-review + code-review + an ADR. Maps 1:1. |
-| migration framework + drift-report | KEEP — versions the standard; now also carries the planning→openspec migration. |
+| migration framework | KEEP — versions the standard; now also carries the planning→openspec migration. |
+| drift-report | **RETIRED 2026-08-12.** Split from the row above, which paired the two. Its `HOSTS` array declared only the four host repositories, deleted the same day; last run `OK: 0 · DRIFT: 0 · SKIP: 60`. Canonical-prose drift is measured by nothing now — see `spec/09-conformance.md`, which defers whether a re-scoped check is wanted until there is a host to scope it against. |
 
 ## E. What actually retires (net) — and nothing is lost
 

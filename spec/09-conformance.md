@@ -159,11 +159,27 @@ any conformance level.
 
 ## Drift
 
-`tools/drift-report.sh` in this repo is an advisory check that
-compares canonical-block presence across known host clones. It does
-not gate conformance at v0.1.0. Stricter enforcement (per-host CI
-that fetches the spec at the cited version and asserts canonical
-presence) is reserved for a later spec version.
+Canonical-prose drift is **not measured by any tool in this repo**, and
+has not been since 2026-08-12.
+
+`tools/drift-report.sh` did it: an advisory check comparing
+canonical-block presence across known host clones, never a gate. Its
+subject was declared in a `HOSTS` array naming the four host
+repositories — `claude-workflow`, `codex-workflow`,
+`opencode-workflow`, `pi-agentic-apps-workflow` — which were archived
+on GitHub on 2026-08-05 and deleted from disk on 2026-08-12. Its last
+run scored `OK: 0 · DRIFT: 0 · SKIP: 60`. It was retired with its
+subject rather than left reporting on nothing.
+
+**Whether a re-scoped drift check is wanted is deferred, not
+answered.** There is nothing to scope it against today: drift is a
+disagreement between this spec and a host that reproduces its prose,
+and no such host exists. The question reopens the day one does, and
+the answer then should be built for that host rather than recovered
+from a tool written for four different ones. Stricter enforcement —
+per-host CI that fetches the spec at the cited version and asserts
+canonical presence — remains reserved for a later spec version, and is
+the shape to prefer if it returns.
 
 ## Updating between versions
 

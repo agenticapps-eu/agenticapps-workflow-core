@@ -54,14 +54,20 @@ pass=0 fail=0 skip=0
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# ── the five harnesses, with their shape ─────────────────────────────────────
+# ── the harnesses, with their shape ──────────────────────────────────────────
 # M = multi-target (tally, continues past a bad target)
 # S = single-target (aborts on a bad target)
+#
+# resolve-core-artifact-conformance.sh was removed on 2026-08-12 with the
+# artifact it scored. resolve-core-artifact.sh existed so that a HOST repo's
+# install.sh could publish core's artifacts from a pin instead of vendoring
+# their bytes; all four host repositories were deleted the same day, and core's
+# own install.sh has never used it — it publishes through
+# install-shared-artifact.sh directly.
 HARNESSES="
 change-gate-conformance.sh:M:roster
 run-plan-review-conformance.sh:M:norost
 reviewer-cli-conformance.sh:M:roster
-resolve-core-artifact-conformance.sh:S:norost
 shared-install-conformance.sh:S:norost
 installer-prereq-conformance.sh:S:norost
 "
@@ -258,11 +264,40 @@ for entry in $HARNESSES; do
         "$H" 'scored [0-9]+ of [0-9]+' --family
       row_output_lacks "J2. SLOW roster output carries no absolute \$HOME path" \
         "$H" "$HOME/" --family
-      row_output "J3. SLOW pin-and-resolve host reported as resolvable, not merely absent" \
-        "$H" 'resolvable|not attempted' --family
     else
       note "J. roster coverage rows (set HARNESS_TEST_SLOW=1) — needs a real sweep"
     fi
+
+    # K. THE ROSTER IS A DECLARATION, so it is asserted literally rather than
+    #    counted. `core` is this repo's working-tree reference implementation
+    #    and `shared-install` the copy install.sh publishes; between them a
+    #    sweep measures publish drift, which is the only thing left to measure
+    #    since the four host repositories were deleted on 2026-08-12.
+    #
+    #    Asserted against the SOURCE, not a run: a roster entry whose repo is
+    #    absent produces no output naming it, so a run cannot distinguish "not
+    #    declared" from "declared and missing" — which is the whole defect this
+    #    file exists to pin, met one level up. Adding an entry must therefore
+    #    fail here and be added here deliberately.
+    declared="$(sed -n '/^ *ROSTER="/,/"$/p' "$H" |
+                sed 's/^ *ROSTER="//' |
+                grep -oE '^[a-z][a-z0-9-]*\|' | tr -d '|' | sort | tr '\n' ' ')"
+    if [ "$declared" = "core shared-install " ]; then
+      ok "K. roster declares exactly core + shared-install"
+    else
+      bad "K. roster declares exactly core + shared-install" \
+        "declares: ${declared:-<nothing parsed>}"
+    fi
+  fi
+
+  # L. --resolve went with the pin-and-resolve branch it drove. It fetched an
+  #    artifact from a host's pinned commit and executed it; with no host
+  #    repository left, it can only ever resolve nothing. Asserted as a usage
+  #    error rather than as absent output, because a flag that is silently
+  #    ignored looks identical to one that ran and found nothing.
+  if [ "$name" = "change-gate-conformance.sh" ]; then
+    row_reason "L. --resolve is rejected, not silently ignored" \
+      "$H" 'usage|unknown|unrecognized' --family --resolve
   fi
 done
 
