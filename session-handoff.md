@@ -1,4 +1,4 @@
-# Session Handoff — 2026-08-11 (twenty-ninth session)
+# Session Handoff — 2026-08-12 (twenty-ninth session)
 
 `floor-check-mode` is **shipped and archived**. PR #112 squash-merged to `main`
 as `1feef27`; the delta folded into the four spec slots on the first `openspec
@@ -60,13 +60,35 @@ deltas rewritten after review) · `openspec/changes/floor-check-mode/tasks.md`
 
 ## Next session: start here
 
-**Decide what to do about the two ungated repositories the mode found.**
-`codex-workflow` and `opencode-workflow` each carry a `.git/hooks/pre-commit`
-(5.8K and 2.3K, 25 July) that the global binding displaced, and neither is
-enrolled — so both are completely ungated: hook on disk, nothing running it, no
-marker. They are host repositories scheduled for deletion, so this was recorded
-and not repaired. If deletion slips, they are the two repositories on the machine
-with no enforcement at all.
+**Nothing is pending.** The two ungated repositories `--check` found were
+`codex-workflow` and `opencode-workflow`, and the retirement below removed them
+along with the condition.
+
+**The four per-host workflow repositories are retired and deleted** (2026-08-12,
+144M): `claude-workflow`, `codex-workflow`, `opencode-workflow`,
+`pi-agentic-apps-workflow`. All four had been archived on GitHub since
+2026-08-05; only the checkouts survived. Verified before deleting: no symlink
+under any host config directory or anywhere in `~/Sourcecode` resolved into
+them, no global npm link, and `install.sh` names them only as a tombstone list.
+All five hosts still bind into core.
+
+Measured after: the fleet is 41 → **37** repositories; repositories carrying
+`openspec/` while unenrolled 4 → **1** (core, which self-gates by ADR-0028); and
+repositories with a hook the floor displaced 2 → **0**.
+
+**Deleting `codex-workflow` turned a red harness green.**
+`tools/change-gate-conformance.sh --family` was 237 passed / **6 failed**, every
+failure that repository's stale gate copy predating gate 2.1.0's instruction-pair
+check. It is now **162 passed / 0 failed**. A stale copy that no longer exists
+cannot report as divergent.
+
+**`claude-workflow` was deleted knowing it held content nothing else held** — 11
+commits on two branches no remote had, plus a stash 6 commits off any remote
+touching `migrations/run-tests.sh`. That was raised, four options were put, and
+"accept the loss" was chosen. The SHAs are in the family `CLAUDE.md` for the
+record and **not as a recovery path**: unlike `agents-task-viewer`, whose
+no-remote commits were pre-squash history of a merged PR and so still on `main`,
+these objects lived only in that checkout.
 
 ## Open questions
 
@@ -88,6 +110,18 @@ with no enforcement at all.
    when written; after the archive, `--check` is that surface and is specified in
    the same capability. Left alone rather than opening a MODIFIED block to change
    a tense.
-5. Carried over: AGE-510, AGE-509, no interception of destructive SQL,
+5. **Two conformance rosters still declare the four dead host repositories.**
+   `tools/change-gate-conformance.sh --family` now scores **2 of 6** roster
+   entries and `reviewer-cli-conformance.sh --family` dropped 57 → 38
+   assertions. Both handle absence gracefully, so this is lost coverage rather
+   than breakage — but a roster that names four things that cannot exist is a
+   declaration going stale in place. Trimming it to `core` + `shared-install` is
+   a core change with a spec delta, not a silent edit.
+6. **`reference-implementations/project-hooks/FLEET` still declares
+   `agents-task-viewer`**, retired 2026-08-10. Pre-existing, unrelated to this
+   deletion — `check-shims.sh` has reported `MISSING REPO` for it since. The
+   FLEET roster never named the host repositories, so nothing there went stale
+   today.
+7. Carried over: AGE-510, AGE-509, no interception of destructive SQL,
    `normalize-claude-md` has no implementation, `claude-workflow` has 11 commits
    on no remote, the installer has no retired-artifact sweep.
