@@ -1,8 +1,13 @@
 # Session Handoff — 2026-08-12 (thirtieth session)
 
-`trim-stale-fleet-rosters` is **implemented and open as PR #114**, not yet
-merged and not yet archived. Branch `chore/trim-stale-fleet-rosters`, three
-commits, 22 files, +1053/−1044.
+`trim-stale-fleet-rosters` is **shipped and archived**. PR #114 squash-merged as
+`ba22627`, archived in PR #115 as `e9c5b6a`. **Nothing is in flight.**
+
+The archive folded six blocks across three capabilities on the first attempt —
+no refusal, because every MODIFIED block carried the full requirement text with
+its scenarios. `openspec validate --all` is 12/12; `check-shims.sh` reports no
+`MISSING REPO`; both conformance harnesses report `scored 2 of 2` at 162/0 and
+38/0.
 
 ## Accomplished
 
@@ -67,20 +72,26 @@ spec deltas).
 
 ## Next session: start here
 
-**Merge PR #114, then archive in its own PR.** The delta touches three
-capabilities — `conformance-harness-reporting` (one REMOVED, one MODIFIED, one
-ADDED), `vestigial-surface-removal` (two MODIFIED) and `change-gate-enforcement`
-(one MODIFIED) — so the archive is the largest fold this repo has done. Check
-the MODIFIED blocks are supersets before assuming `openspec archive` takes them
-on the first attempt.
+**Nothing is pending.** The fleet rosters are consistent for the first time
+since 2026-08-10: every declared target can exist, and the two harness sweeps
+say what they measure.
+
+The most likely next thread is open question 2 — an ADR for the
+record/instrument distinction, which is a reusable rule currently recorded only
+inside one capability's requirement body.
 
 ## Open questions
 
-1. **Step 4 had one reviewer, not two.** codex timed out at 300s and again at
-   550s on a 1,503-line diff prompt, having reviewed the same change's *plan*
-   fine at 2b. Worth establishing whether `reviewer-cli.sh` needs a larger
-   default `REVIEWER_TIMEOUT` for diff-sized prompts, or whether diffs should be
-   chunked. Recorded in `REVIEWS.md` under *Not counted*.
+1. **Two review rounds each had a hole, in different places, and both are worth
+   fixing before the next change.** At step 4 codex timed out at 300s and again
+   at 550s on a 1,503-line diff prompt, having reviewed the same change's *plan*
+   fine at 2b — so `reviewer-cli.sh` may need a larger default
+   `REVIEWER_TIMEOUT` for diff-sized prompts, or diffs may need chunking. And
+   CodeRabbit reported `pass` / *Review completed* on #114 while posting **8
+   actionable comments**, one of them a Major that was a genuine contradiction
+   in the spec delta — then reported `pass` / *Review rate limited* on #115,
+   which is the not-reviewed state wearing the same green check. **Neither PR's
+   check state carried any information about whether it was read.**
 2. **`tools/drift-report.test.sh` was deleted with its tool, and it was this
    repo's first test of any kind** (ADR-0019). Nothing is lost that the archive
    does not hold, but the ADR still describes it in the present tense. ADRs are
