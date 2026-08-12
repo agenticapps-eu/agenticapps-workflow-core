@@ -17,10 +17,16 @@ no host is expected to satisfy would make that sentence false, and would
 present hosts with a section they must read to discover it does not apply to
 them.
 
-`tools/drift-report.sh` is deliberately out of scope. It is a sixth instrument
-with similar SKIP semantics, but it is advisory by contract — its exit code is
-always 0 — so it makes no certification that a false green could corrupt. It is
-named here so the next reader does not file it as the same defect.
+`tools/drift-report.sh` was the sixth instrument and is **retired**, deleted on
+2026-08-12 with `tools/drift-report.test.sh`. It compared canonical-prose blocks
+in `spec/` against the instruction files of host clones, and its `HOSTS` array
+declared exactly the four host repositories whose checkouts were deleted the same
+day. Its last run scored `OK: 0 · DRIFT: 0 · SKIP: 60` — it had no subject left,
+and nothing in this repository invoked it. It is named here, still, for the
+reason it was named here before: so that the next reader who meets its SKIP
+semantics in the git history does not file them as an instance of the false-green
+defect this capability exists to close. Its exit code was unconditionally 0, so
+it certified nothing and could corrupt nothing.
 
 Two shapes exist and are treated differently throughout:
 
@@ -29,8 +35,20 @@ Two shapes exist and are treated differently throughout:
   `run-plan-review-conformance.sh` and `reviewer-cli-conformance.sh` are of
   this shape.
 - A **single-target harness** accepts exactly one target and aborts on a target
-  it cannot use. `resolve-core-artifact-conformance.sh` and
-  `shared-install-conformance.sh` are of this shape.
+  it cannot use. `shared-install-conformance.sh` is of this shape.
+  `resolve-core-artifact-conformance.sh` was the other and is retired, with the
+  published `resolve-core-artifact.sh` it scored.
+
+**What a roster sweep proves changed with the fleet, and the harnesses SHALL NOT
+overstate it.** With the four host repositories retired, `--family` scores
+`core` — this repository's working-tree reference implementation — and
+`shared-install`, the copy `install.sh` publishes to `~/.agenticapps/bin/`. That
+is a real and continuing measurement, and it is **publish drift**: whether the
+bytes this repository ships are the bytes an installed machine runs. It is not
+coverage of a fleet of independent implementations, because after 2026-08-12
+there are none. A sweep SHALL NOT present its coverage line as evidence about
+host implementations, and the flag name `--family` is retained for its callers
+rather than as a claim about what is scored.
 
 A harness SHALL treat a row as **scored** only when that row reached a verdict
 of pass or fail, and SHALL compute its **scored total** as its passed count
@@ -264,54 +282,6 @@ malformed when in fact their fleet was missing.
 - **THEN** it is reported as not scored with emptiness as the reason, and does
   not by itself fail the run
 
-### Requirement: A roster entry resolvable from a pin SHALL be reported as such
-
-Where a roster entry is absent because its host resolves that artifact from a
-pinned commit rather than vendoring it, and the host ships both a resolver and
-a pin manifest, the harness SHALL report the entry as resolvable-but-not-
-attempted, distinguishably from an entry that is simply not found.
-
-"Not vendored" and "unscoreable" are different facts. A host that moved to
-pin-and-resolve did not become unmeasurable; the harness merely declined to go
-and get the bytes. A coverage line that conflates the two teaches the reader
-that the number is as high as it can be, when it is only as high as the default
-mode chose to make it.
-
-A harness SHOULD offer an opt-in mode that resolves such entries and scores
-them; where offered, that mode SHALL NOT be the default. The reporting half is
-a SHALL and the resolving half a SHOULD, deliberately: naming an entry
-honestly costs nothing and is required of every roster harness, while going and
-fetching the bytes is a genuine capability that a given harness may not have.
-`change-gate-conformance.sh` implements both; `reviewer-cli-conformance.sh`
-implements the reporting half only, and is conformant. Resolution reaches a remote
-commit and fails closed on an unreachable source, so making it the default
-would let a network fault turn a conformance sweep red for a reason bearing no
-relation to conformance, and would make the instrument unusable offline. A
-measurement tool that cannot run without the network is a weaker tool than one
-that reports honestly on what it could reach.
-
-When the opt-in mode is used and a resolve fails, the entry SHALL be reported
-as not scored with the resolve failure as its reason. A failed resolve SHALL
-NOT be reported as an absent artifact.
-
-#### Scenario: A pin-and-resolve host is swept in the default mode
-
-- **WHEN** a roster entry is absent but its host ships a resolver and a pin
-  manifest, and no opt-in resolve was requested
-- **THEN** the entry is reported as not scored, resolvable from its pin, not
-  attempted — and not as merely not found
-
-#### Scenario: The opt-in resolve mode is requested
-
-- **WHEN** the sweep is run in the resolving mode and the pin resolves
-- **THEN** the entry is scored in full and counts toward the coverage numerator
-
-#### Scenario: The opt-in resolve mode is requested and the network is down
-
-- **WHEN** the sweep is run in the resolving mode and the resolve fails
-- **THEN** the entry is reported as not scored with the resolve failure named,
-  distinguishably from an absent artifact
-
 ### Requirement: Roster mode and explicit targets SHALL NOT be combined silently
 
 A harness invoked with both a roster flag and explicit target paths SHALL exit
@@ -368,4 +338,63 @@ sure they are asked it.
 - **THEN** the harness reports it as not scored with the same reason it would
   give for a deliberate removal, and the run's coverage line shows the reduced
   count
+
+### Requirement: A roster declares only targets that can exist
+
+A **roster** is any list of targets declared in this repository and read by an
+instrument that reports on them — `--family` in the conformance harnesses,
+`FLEET` and `SHIMMED-HOOKS` in `reference-implementations/project-hooks/`, and
+any future list of the same shape. A roster SHALL NOT declare a target whose
+subject has been retired. When a repository or artifact is retired, every roster
+naming it SHALL be trimmed in the same act, and the removal SHALL be recorded in
+the roster itself as a dated comment naming what left and when.
+
+The rule is stated over **targets**, not repositories, because a roster entry is
+not always one. After this change the two conformance rosters hold `core` — this
+repository's working-tree reference implementation — and `shared-install`, the
+copy `install.sh` publishes to `~/.agenticapps/bin/`. Neither is a repository,
+and a rule phrased over repositories would not reach the entries that remain
+while claiming to govern them.
+
+A roster is a declaration, and its whole value is that a member missing from the
+set is detectable. A member that cannot exist inverts that: it produces the same
+absence on every run forever, which is indistinguishable in the output from a
+member that is temporarily uncloned and materially different in what it means.
+Read enough times, a permanent absence trains the operator to discount the
+absence line — and the next real gap arrives on a surface that has already
+taught its reader to look past it.
+
+This does **not** reintroduce a rule that absence fails a run. Absence remains
+non-fatal under the requirement that governs it, and a harness still SHALL NOT
+claim to distinguish deliberate absence from accidental. The obligation here is
+on the *declaration*, discharged when the roster is edited, not on the harness at
+run time — an instrument cannot tell a retired target from an uncloned one, which
+is precisely why the roster has to.
+
+The dated comment is required because a bare deletion leaves the next reader
+unable to tell a retirement from an accident, and the diff that would answer it
+is the one place nobody looks. `reference-implementations/project-hooks/FLEET`
+sets the form.
+
+#### Scenario: A target is retired while rosters name it
+
+- **WHEN** a repository or published artifact is retired and one or more rosters
+  in this repository declare it
+- **THEN** every roster naming it is trimmed in the same change, each keeping a
+  dated comment naming the removed target
+
+#### Scenario: A declared target is merely not present
+
+- **WHEN** a roster declares a target that still exists but is not present on
+  this machine
+- **THEN** it stays declared and is reported as absent, because that absence is
+  the finding the declaration exists to produce
+
+#### Scenario: Trimming would empty a roster
+
+- **WHEN** trimming would leave a roster with no entry that can exist
+- **THEN** the roster is trimmed regardless, and whether the instrument reading
+  it is retired is decided under `vestigial-surface-removal` — which requires
+  that the instrument have no remaining subject through any other input, an
+  empty roster alone being insufficient
 

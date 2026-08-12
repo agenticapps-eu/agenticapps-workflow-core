@@ -865,9 +865,21 @@ returns a blocking exit when reviewers are insufficient, treats
 `GSD_SKIP_REVIEWS=1` as a live bypass of that live block, and reports *"BLOCKED —
 no code edits until validate is GREEN and every active change has >= N
 reviewers"*. `gate/README.md` documents this as contract. It has been superseded
-since 2.0.0 and nothing points at it: `resolve-core-artifact.sh` maps the shared
-install to the reference implementation, and `~/.agenticapps/bin/` holds a
-byte-identical copy of that.
+since 2.0.0 and nothing points at it: `install.sh` publishes the reference
+implementation into `~/.agenticapps/bin/` through `install-shared-artifact.sh`,
+and that directory holds a byte-identical copy of the implementation.
+
+*The clause naming the resolver was corrected on 2026-08-12. It read
+"`resolve-core-artifact.sh` maps the shared install to the reference
+implementation", which was never true of **core's** installer — core has always
+published directly. `resolve-core-artifact.sh` served a **host** repository's
+installer, letting it publish core's artifacts from a pinned commit instead of
+vendoring their bytes, which is why it read as part of the publish story. All
+four host repositories were deleted on 2026-08-12, leaving it with no caller, and
+it was retired in the same change. The scenario below requires the resolver
+mapping be read and named rather than assumed; reading it is what found this
+sentence naming the wrong one. What the sentence supports does not move — nothing
+resolved `gate/openspec-change-gate.sh` before the correction either.*
 
 #### Scenario: A published copy enforces a withdrawn threshold
 
