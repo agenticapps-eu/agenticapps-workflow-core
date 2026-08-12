@@ -48,13 +48,23 @@ tools/reviewer-cli-conformance.sh --family
 **Current spec version:** 1.0.0 (released 2026-07-24) — the first major,
 replacing the GSD-engine front end with the **OpenSpec + Superpowers** front
 end (§16–§19, ADR-0021). **No host cites 1.0.0 yet:** it coexists with the 0.x
-line (§09 "Two front ends coexist"), the fleet below remains valid at
-**0.10.0**, and the first adoption target is the cParX app repo (pilot recorded
+line (§09 "Two front ends coexist"), the fleet below was valid at **0.10.0**
+when each row was written and is now a historical record, and the first
+adoption target was the cParX app repo (pilot recorded
 in `PILOT-REPORT.md` / `MEASUREMENT.md`, migrated via
 `docs/recipes/0001-planning-to-openspec.md`). See `CHANGELOG.md`
 in the spec root for the host-implementer actions required to move a
 host row between versions. Host rows below move via the
 host's own adoption PR, not via this file.
+
+> **The table below is a historical record, not the current fleet.** All four
+> host repositories were archived on GitHub on 2026-08-05 and their checkouts
+> deleted on 2026-08-12; `agenticapps-dashboard` was retired 2026-08-05. Every
+> row states what was true of that repository on the date it names, and the rows
+> are kept for that reason — they are the only account of how each host reached
+> its conformance level. Nothing here describes a repository you can clone and
+> run today, and no row should be read as an obligation on anyone. Hosts now
+> resolve the workflow from this repository directly; see the root `README.md`.
 
 | Host repo | Type | Spec version implemented | Conformance level | Notes |
 |---|---|---|---|---|
@@ -87,17 +97,22 @@ host's own adoption PR, not via this file.
   block, so the row was removed rather than left as a permanent pending claim
   (ADR-0019). Both defects were fixed at host v0.2.0 — the `implements_spec`
   citation and the §11 canonical block — which is what makes a row possible
-  again. The removal from `tools/drift-report.sh` still stands for now; see
-  below.
+  again. Its removal from `tools/drift-report.sh` was reversed on 2026-07-19,
+  and that tool was itself retired on 2026-08-12; see below.
 
-## Which repos the drift report checks
+## Which repos the drift report checked
 
-`tools/drift-report.sh` scores only the rows above that **author** canonical
+**`tools/drift-report.sh` was retired on 2026-08-12** and nothing measures
+canonical-prose drift now. `spec/09-conformance.md` records why and what would
+have to be true for a re-scoped check to be worth building.
+
+While it existed it scored only the rows above that **authored** canonical
 prose: claude-workflow, codex-workflow, opencode-workflow, and — as of
-2026-07-19 — pi-agentic-apps-workflow. The
-agenticapps-dashboard row is a consumer — it reads workflow artifacts and
-authors none — so canonical-prose checks do not apply to it and it is not
-scored. See ADR-0019.
+2026-07-19 — pi-agentic-apps-workflow. Those four were its entire declared
+subject, so deleting their checkouts left it scoring nothing: its last run
+reported `OK: 0 · DRIFT: 0 · SKIP: 60`. The agenticapps-dashboard row was a
+consumer — it read workflow artifacts and authored none — so canonical-prose
+checks never applied to it. See ADR-0019.
 
 ## Conformance levels
 

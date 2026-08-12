@@ -120,18 +120,6 @@ A harness offering a roster (`--family`) mode additionally:
   stopped vendoring an artifact because it now resolves it from a pinned commit
   is conformant, and a harness that went red for it would punish the correct
   architecture and become a check nobody reads.
-- **MUST** report an entry whose host ships both a resolver and a pin manifest
-  as resolvable-but-not-attempted, distinguishably from one that is simply not
-  found. "Not vendored" and "unscoreable" are different facts.
-- **SHOULD** offer an opt-in mode that resolves such entries and scores them;
-  where offered, that mode **MUST NOT** be the default. Reporting an entry
-  honestly is a MUST and costs nothing; fetching the bytes is a capability a
-  given harness may not have. `change-gate-conformance.sh` implements both;
-  `reviewer-cli-conformance.sh` implements reporting only, and is conformant.
-  The default matters because: resolution reaches a remote commit and
-  fails closed, so a default resolve would let a network fault turn a
-  conformance sweep red for a reason unrelated to conformance, and would make
-  the instrument unusable offline.
 - **MUST NOT** maintain a list of roster entries whose absence is expected, and
   MUST NOT claim to distinguish deliberate absence from accidental. Such a list
   is state that must track architectural decisions taken in other repositories;
@@ -141,24 +129,35 @@ A harness offering a roster (`--family`) mode additionally:
   coverage line it replaced. Whether an absence was intended is a question for
   the reader, and the report's job is to ensure they are asked it.
 
-A harness implementing the resolving mode additionally:
+## Withdrawn on 2026-08-12: the pin-and-resolve rules
 
-- **MUST NOT** treat the resolver's output as an arbitrary filesystem path. The
-  pin makes a resolver trustworthy about **bytes** — it accepts nothing that
-  does not hash to the manifest — and says nothing about **where** it writes
-  them. A harness that executes whatever path the resolver names, and then
-  deletes it, has handed a script in another repository the ability to choose
-  what this one runs and removes. The resolve MUST be directed into a scratch
-  location the harness owns, the returned path MUST be rejected unless it lands
-  inside that location, it MUST then be screened like any other target, and
-  cleanup MUST remove the harness's own scratch location rather than a path the
-  resolver chose.
+Two rules stood here and are withdrawn, not relaxed. A harness **MUST** have
+reported an entry whose host shipped both a resolver and a pin manifest as
+resolvable-but-not-attempted; a harness offering the opt-in resolving mode
+**MUST NOT** have treated the resolver's output as an arbitrary filesystem path,
+and had to confine the resolve to a scratch location it owned.
 
-## Out of scope
+Both had exactly one class of subject: a roster entry that was absent *and*
+whose directory held `bin/resolve-core-artifact.sh` and
+`tools/core-vendor.manifest`. Only the four host repositories could ever satisfy
+that, and they were archived on 2026-08-05 and deleted on 2026-08-12. The rosters
+now hold `core` and `shared-install` — a working tree and an installed file,
+neither of them a host directory — so neither rule has anything left to bind.
+`resolve-core-artifact.sh` was retired in the same change; core's own
+`install.sh` never used it.
 
-`tools/drift-report.sh` has similar SKIP semantics but is advisory by contract —
-its exit status is unconditionally 0 — so it makes no certification a false
-green could corrupt. Named here so it is not filed as the same defect.
+The confinement rule governed **executing a path chosen by a script in another
+repository**, and no such act remains. If pin-and-resolve ever returns to a
+roster, that rule MUST return with it and MUST NOT be reconstructed from memory:
+it is recorded in full at commit `a15de90`.
+
+`tools/drift-report.sh` was named here as out of scope — a sixth instrument with
+similar SKIP semantics but advisory by contract, its exit status unconditionally
+0, so it certified nothing a false green could corrupt. It was retired on
+2026-08-12 with the same four repositories, which were its entire declared
+subject. It is still named, for the same reason it was named before: so that a
+reader meeting its SKIP semantics in the history does not file them as an
+instance of the defect this section closes.
 
 ## Conformance
 

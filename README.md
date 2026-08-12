@@ -12,22 +12,25 @@ satisfies.
 
 ## Why this exists
 
-Four sibling repos share the same workflow discipline:
+**This repository is the only implementation.** Every host — Claude Code, Codex
+CLI, opencode, pi — resolves its behaviour from here: `install.sh` publishes the
+executables to `~/.agenticapps/bin/` and symlinks the skills into each host's
+directory. There is no per-host copy to keep in step.
 
-- [`claude-workflow`](https://github.com/agenticapps-eu/claude-workflow) —
-  scaffolder for Claude Code projects.
-- [`pi-agentic-apps-workflow`](https://github.com/agenticapps-eu/pi-agentic-apps-workflow) —
-  scaffolder for pi.dev projects.
-- `codex-workflow` — scaffolder for OpenAI Codex CLI projects (planned).
-- [`agenticapps-dashboard`](https://github.com/agenticapps-eu/agenticapps-dashboard) —
-  artifact viewer that consumes workflow output.
+That is the outcome the spec was written for rather than the situation it was
+written in. Four sibling scaffolders once shared this discipline —
+`claude-workflow`, `codex-workflow`, `opencode-workflow` and
+`pi-agentic-apps-workflow` — with the canonical text living only in
+`claude-workflow`. As the others adopted parts of it, prose drift emerged: small
+wording divergences, half-ported sections, missing red flags. A canonical spec
+was the answer to four implementations slowly forking; publishing one set of
+bytes to every host removed the four. All four were archived on GitHub on
+2026-08-05 and their checkouts deleted on 2026-08-12, as was
+`agenticapps-dashboard`, the artifact viewer that consumed workflow output
+(retired 2026-08-05).
 
-Until now, the canonical text for the discipline lived only in
-`claude-workflow`. As pi adopted parts of it, prose drift emerged:
-small wording divergences, half-ported sections, missing red flags.
-Without a canonical spec, every new host either re-derives the
-discipline or copies the latest snapshot of one host's prose — and
-the four implementations slowly fork.
+The spec still earns its place: it is what the skills, the gate and the
+reference implementations are held to, and what a future host would adopt.
 
 This repo is the source of truth. Host repos cite a spec version,
 reproduce canonical-prose blocks verbatim, and satisfy declarative
@@ -100,7 +103,8 @@ reference-implementations/
   README.md                Table of host repos and their conformance state
 
 tools/
-  drift-report.sh          Advisory health check (not CI)
+  *.test.sh                Test suites for the reference implementations
+  *-conformance.sh         Harnesses scoring published artifacts against spec/
 
 PILOT-REPORT.md            cParX OpenSpec pilot (2026-07-24) — the proven recipe
 MEASUREMENT.md             Measured-trial evidence for the v1.0.0 adoption
@@ -134,9 +138,12 @@ A host claims conformance at one of three levels:
 - **`consumer-only`** — the host reads workflow artifacts produced
   by another host but does not author them itself (e.g. the dashboard).
 
-Conformance is honor-system at v0.1.0. `tools/drift-report.sh` is
-advisory, not a CI gate. Stricter enforcement is reserved for a later
-spec version.
+Conformance is honor-system. Canonical-prose drift was measured by
+`tools/drift-report.sh`, which was advisory rather than a CI gate and
+was retired on 2026-08-12 along with the four host repositories that
+were its entire subject. Nothing measures it now, and `spec/09` records
+why and what would have to be true for a re-scoped check to be worth
+building. Stricter enforcement is reserved for a later spec version.
 
 ## Versioning
 
