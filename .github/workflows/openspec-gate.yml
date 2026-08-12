@@ -9,9 +9,12 @@
 #   1. It scores and runs reference-implementations/openspec-change-gate/
 #      openspec-change-gate.sh, NOT bin/openspec-change-gate.sh. Core has no
 #      bin/ — that was the HOST layout, and the four host repositories that used
-#      it were deleted on 2026-08-12 along with resolve-core-artifact.sh, which
-#      mapped between the two. The divergence stands because the template still
-#      names bin/, not because a host still reads it.
+#      it were deleted on 2026-08-12. The mapping between the two layouts lived
+#      in reference-implementations/shared-install/resolve-core-artifact.sh,
+#      published by THIS repo rather than owned by any host; it was retired in
+#      the same change because those hosts were its only callers. The divergence
+#      stands because the template still names bin/, not because a host still
+#      reads it.
 #
 #   2. Core resolves its own WORKING-TREE copy rather than the shared install
 #      at ~/.agenticapps/bin/. This is the exact inverse of the shim every

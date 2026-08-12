@@ -98,6 +98,19 @@ resolvable by editing the proposal: it needs either a narrow delta amending that
 requirement, or the retirement dropped. Put to the operator; nothing in §4 or §5
 of `tasks.md` proceeds until it is answered.
 
+**Answered: amend the requirement with a narrow delta.** Three options were put
+— amend, keep both tools and retire only the published resolver, or delete
+anyway and record the conflict. The third was argued against and not taken: it
+would have left two specs contradicting each other with nothing saying which
+won. The amendment is a MODIFIED block on *This capability governs shipped
+enforcement and interface surface only*, drawing a **record** (documents what
+was true) apart from an **instrument** (measures a subject it declares), with
+three conditions that must all hold before the `tools/` exemption yields. §0 of
+`tasks.md` exists because of this answer, and it is ordered first so the
+amendment is proposed and reviewed *before* the deletions it permits — doing it
+the other way is shipping against the spec and amending afterwards to match,
+which this workflow names as a red flag.
+
 **codex HIGH 2 — accepted.** The ADDED requirement is recast in terms of roster
 *targets*, not repositories, and the proposal states what the two-target sweep
 proves: it compares core's working-tree reference implementation against the
@@ -179,3 +192,62 @@ defect and the documentation is corrected).
 
 **Nothing else was found, and that is one reviewer's opinion rather than two.**
 Recorded as a gap in this round, not as a clean result.
+
+---
+
+# Step 4, second reader — CodeRabbit on the PR
+
+Its check reported `pass` / *Review completed*, and it posted **8 actionable
+comments**. The green check is not the result; the comments are. Six were taken,
+two were declined on the merits.
+
+## Taken
+
+- [MAJOR] `specs/vestigial-surface-removal/spec.md` — **the two scenarios
+  contradicted each other.** The record scenario said a *test* SHALL NOT be
+  deleted; the new one said a qualifying *test harness* SHALL be. A test harness
+  satisfies both. This was a real defect introduced by this change, and the
+  precedent it would have set is worse than the file it governs: an unresolved
+  overlap is decided by whoever reads it, differently each time. The record
+  scenario now excludes the carve-out case explicitly, and the requirement body
+  states the precedence and why the narrower rule wins.
+- `proposal.md` — said "three rosters" while its own table listed four
+  locations. Now: four places, three trimmed and one retired outright.
+- `REVIEWS.md` — recorded codex HIGH 1 as escalated to the operator and never
+  recorded the answer. A review file that poses a blocking question and does not
+  say how it was settled is worse than one that never asked.
+- `tasks.md` preamble — "three deletions" against four deleted files. Now three
+  deletion groups, four files, both named.
+- `tasks.md` 4.1 — the checkbox was ticked over a noted deviation, which lets a
+  tick override a record. The acceptance condition is restated to what the
+  ordering existed to protect (the measurement outlives the tool, committed in
+  `d40fdf1` before the `git rm`), so the two now agree.
+- `.github/workflows/openspec-gate.yml` — the comment could be read as the
+  resolver having been deleted *with* the hosts. It was published by this repo
+  and retired separately because those hosts were its only callers. Named.
+
+## Declined
+
+- [MINOR] `tools/reviewer-cli-conformance.sh` — *"count unscoreable roster
+  targets as synthetic failures; increment `fail` and `roster_scored` for each"*.
+  **This would violate the capability it cites.** `conformance-harness-reporting`
+  says plainly: *"A roster entry that is absent SHALL NOT by itself fail the
+  run"*, with the reason given — a harness that went red for a host that stopped
+  vendoring *"would punish the correct architecture and become a check nobody
+  reads"*. The synthetic-failed-row rule it invokes governs an **explicitly named
+  target**, which is a different requirement and deliberately so. The behaviour
+  is also unchanged by this diff. Not a defect.
+- [MINOR] `tools/change-gate-conformance.sh` — *"add an explicit `--resolve`
+  parser branch"* so standalone and reversed-order use produce a usage error
+  rather than a missing-target report. Verified all three positions first:
+  `--family --resolve` → `--family cannot be combined with explicit target paths
+  (got: --resolve)`; `--resolve` alone → `UNSCOREABLE --resolve — not found`,
+  0/1/0; `--resolve --family` → both named, 0/2/0. Every route is non-zero and
+  names the token, so it is not silently ignored — which is the property that
+  mattered. Declined because the fix re-encodes a retired flag's name into the
+  parser, and *"a vestigial enforcement artifact is removed, not annotated"* is
+  the requirement this same change amends. An inert branch named `--resolve` is
+  the artifact-retained-on-the-strength-of-its-name pattern, one level down.
+  **Recorded as a real trade-off, not a dismissal**: the cost is that an operator
+  with `--resolve` in an old script reads "not found" and may think a file is
+  missing rather than a flag retired.

@@ -56,6 +56,15 @@ retained. This does not reach a tool that is merely unused, unloved, or between
 subjects; "nobody runs it" is not this condition, and neither is an empty roster
 on an instrument that also takes arguments.
 
+**Where this and the record rule both describe the same file, this one governs,
+and only here.** A test harness is a record *and* — when it exists solely to
+exercise a qualifying instrument — part of that instrument, so the two scenarios
+below would otherwise both apply and disagree. The narrower rule wins because it
+is the one with conditions: a test harness escapes the record rule only by
+meeting all three, and any test that does not is a record like any other. Stating
+the precedence rather than leaving it to be inferred is the point — an unresolved
+overlap is decided by whoever reads it, differently each time.
+
 The tiebreaker below is unchanged and still decides genuine ambiguity toward
 retention. This carve-out applies only where the three conditions are
 *established by measurement and recorded*, which is a determination, not an
@@ -65,7 +74,8 @@ where no determination could be reached.
 #### Scenario: An artifact is a record rather than an interface
 
 - **WHEN** an artifact is a decision record, an archived change, a changelog
-  entry, a test, or authored documentation
+  entry, a test, or authored documentation, **and** it is not a test harness
+  meeting all three conditions of the scenario below
 - **THEN** it SHALL NOT be deleted by this capability, whatever the diagram shows
 
 #### Scenario: An instrument's declared subject is entirely retired

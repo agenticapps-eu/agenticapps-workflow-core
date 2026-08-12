@@ -1,6 +1,7 @@
 # Tasks — the rosters name only what can exist
 
-**Sized to the diff.** Four rosters, three deletions, one branch removal, one
+**Sized to the diff.** Four rosters, three deletion groups (four files: the
+drift report and its test, the resolver and its harness), one branch removal, one
 narrow spec amendment. Every task below either deletes something, asserts what is
 left, or corrects a sentence that describes what is gone. If this list grows a
 task that *adds* behaviour to a harness, something has been smuggled in.
@@ -96,14 +97,17 @@ deferred, and §0 exists because the deletions in §4 were forbidden as drafted.
 
 ## 4. `drift-report.sh` is retired
 
-- [x] 4.1 Record its final measurement in `CHANGELOG.md` before deleting it —
-      `OK: 0 · DRIFT: 0 · SKIP: 60` on 2026-08-12 — because after the deletion
-      nothing can produce that number again.
-      **Done, but not in the order written.** The number was captured in
-      `proposal.md` and committed before the deletion; the `CHANGELOG.md` entry
-      was written after, with the rest of §6. The requirement was that the
-      measurement outlive the tool, and it did — but the task said CHANGELOG and
-      the CHANGELOG came second, so this is recorded rather than ticked silently.
+- [x] 4.1 Capture its final measurement — `OK: 0 · DRIFT: 0 · SKIP: 60` on
+      2026-08-12 — in a **committed artifact before the deletion**, because after
+      it nothing can produce that number again. It must also reach `CHANGELOG.md`
+      by close-out.
+      **The acceptance condition is restated, not quietly satisfied.** As first
+      written this task required the CHANGELOG entry itself to precede the
+      deletion, and it did not: the number was committed in `proposal.md`
+      (commit `d40fdf1`) before `git rm`, and the CHANGELOG entry followed in
+      §6. What the ordering existed to protect — that the measurement outlives
+      the tool — held throughout. The condition now says that, so the checkbox
+      and the record agree instead of the checkbox overriding a noted deviation.
 - [x] 4.2 Delete `tools/drift-report.sh` and `tools/drift-report.test.sh` under
       §0. Evidence for the three conditions: its subject is declared in the
       `HOSTS` array; all four entries are the host repositories deleted

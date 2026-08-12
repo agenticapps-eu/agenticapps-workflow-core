@@ -5,7 +5,9 @@
 Four host repositories — `claude-workflow`, `codex-workflow`, `opencode-workflow`
 and `pi-agentic-apps-workflow` — were archived on GitHub on 2026-08-05 and their
 checkouts deleted on 2026-08-12. `agents-task-viewer` was retired on 2026-08-10.
-Five repositories are gone; three rosters in this repository still declare them.
+Five repositories are gone, and **four** places in this repository still declare
+them: three are trimmed and the fourth is retired outright, because every entry
+it declared was one of the five.
 
 A roster is a **declaration**, and that is the whole reason this repo has them.
 `reference-implementations/project-hooks/FLEET` says it in its own header: an
