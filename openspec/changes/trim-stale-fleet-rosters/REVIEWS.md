@@ -141,3 +141,41 @@ before the change and passes after.
 section states the decision and its reason, rather than going silent.
 
 **gemini LOW — accepted.** Task 5.3 names the verdict.
+
+---
+
+# Step 4 — code review on the diff
+
+Read the diff, not the plan: `git diff main...HEAD` over `tools/`,
+`reference-implementations/`, `spec/`, `README.md`, `GATE-INVENTORY.md` and
+`.github/`.
+
+## Reviewer: gemini (model unpinned)
+
+VERDICT: REQUEST-CHANGES
+
+- [TRIVIAL] `tools/change-gate-conformance.sh:1044–1048` — the comment says the
+  removed `--resolve` is "rejected as an unscoreable target", but with `--family`
+  it breaks out of the parse loop and is caught by the roster-plus-explicit-path
+  check instead, which is a different error.
+
+## Not counted
+
+- codex — exit 4, timed out at 300s and again at 550s on the 1,503-line diff
+  prompt. It reviewed this change's plan successfully at step 2b, so this is a
+  size or load problem rather than an unavailable CLI. One vendor reviewed the
+  diff, not two.
+
+## Resolution
+
+**Accepted, and verified rather than taken on trust.** Both routes were run:
+`--family --resolve` exits with `--family cannot be combined with explicit target
+paths (got: --resolve)`, and bare `--resolve` reports `UNSCOREABLE --resolve —
+not found` with a 0/1/0 tally. The comment described only the second and asserted
+it of both. Corrected to name each route and what it prints. The behaviour was
+already right; the comment was the defect, which is the class this repository
+treats as a defect rather than a nit (`spec/09`: header and code disagreeing is a
+defect and the documentation is corrected).
+
+**Nothing else was found, and that is one reviewer's opinion rather than two.**
+Recorded as a gap in this round, not as a clean result.

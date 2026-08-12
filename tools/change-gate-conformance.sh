@@ -1046,10 +1046,13 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --family)  FAMILY_MODE=1; shift ;;
     # --resolve was removed on 2026-08-12 with the pin-and-resolve branch it
-    # drove. It is not silently ignored: an unknown flag falls through to the
-    # target list and is rejected as an unscoreable target, so an operator with
-    # it in a script learns that it stopped doing something rather than
-    # believing it still does.
+    # drove. It is not silently ignored, by either route: after `--family` it
+    # breaks out of this loop and is caught by the roster-plus-explicit-path
+    # check below as "cannot be combined" (naming it in the message); on its own
+    # it falls through to the target list and is rejected as an unscoreable
+    # target. Both are non-zero and both name it, so an operator with it in a
+    # script learns it stopped doing something rather than believing it still
+    # does.
     *)         break ;;
   esac
 done
