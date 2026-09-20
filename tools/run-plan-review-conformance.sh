@@ -757,6 +757,154 @@ PSTUB
     "has:saw the nested spec" "$WORK" add-thing --implementing-host claude gemini
   rm -rf "$WORK"
 
+  # ── I. Review lens ─────────────────────────────────────────────────────────
+  echo
+  echo "  I. Review lens — the rule sets reach the reviewer"
+
+  # WHY THE PRODUCER CARRIES IT. The reviewers are third-party CLIs invoked
+  # headless; nothing else in the run tells them which standards to read. The
+  # workflow skill states the lens for a host that loads it, and a vendor CLI
+  # spawned by this script is not that host.
+  lens_stub() { # $1 = fixture, $2 = regex the prompt must carry
+    cat > "$1/stub/reviewer-cli.sh" <<LSTUB
+#!/usr/bin/env bash
+if grep -qE '$2' "\$2" 2>/dev/null; then
+  printf 'VERDICT: APPROVE\n\n- lens present\n'
+else
+  printf 'VERDICT: APPROVE\n\n- LENS MISSING\n'
+fi
+LSTUB
+    chmod +x "$1/stub/reviewer-cli.sh"
+  }
+
+  WORK="$(make_fixture)"; lens_stub "$WORK" 'the-pragmatic-programmer'
+  run_row_file "the prompt names the-pragmatic-programmer as the lens" \
+    "has:lens present" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # Plan-review reads a SPEC DELTA. `refactoring` is a lens on code smells in a
+  # diff and belongs at code-review; sending it here would also contradict the
+  # workflow skill's step table, which is the mapping's one authority.
+  # Scoped to the INSTRUCTION BLOCK. The artifacts below the marker may say
+  # "refactoring" for their own reasons — this change's own proposal does — and
+  # a whole-prompt grep would then pass only on a sanitised fixture.
+  WORK="$(make_fixture)"
+  printf '\nThe word refactoring appears in the artifacts.\n' >> "$WORK/repo/$CHANGE_REL/proposal.md"
+  cat > "$WORK/stub/reviewer-cli.sh" <<'RSTUB'
+#!/usr/bin/env bash
+head -n "$(( $(grep -n -- '--- CHANGE:' "$2" | head -1 | cut -d: -f1) - 1 ))" "$2" > /tmp/.instr.$$
+if grep -q 'refactoring' /tmp/.instr.$$; then
+  printf 'VERDICT: APPROVE\n\n- REFACTORING IN THE INSTRUCTION BLOCK\n'
+else
+  printf 'VERDICT: APPROVE\n\n- instruction block names one book\n'
+fi
+rm -f /tmp/.instr.$$
+RSTUB
+  chmod +x "$WORK/stub/reviewer-cli.sh"
+  run_row_file "…and not refactoring, which reads diffs, not deltas" \
+    "has:instruction block names one book" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # A reviewer machine may not have the skills installed, and two of the four
+  # vendor arms do not resolve skills at all. A lens that cannot be read must
+  # degrade to a plain review that SAYS so, never to a silent half-review.
+  WORK="$(make_fixture)"; lens_stub "$WORK" 'not available'
+  run_row_file "…and tells a reviewer without them to say so" \
+    "has:lens present" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # The lens is INSTRUCTION, not evidence. Were it appended to the artifacts it
+  # would read as part of the change under review, and the digest below would
+  # bind text the author never wrote.
+  WORK="$(make_fixture)"
+  cat > "$WORK/stub/reviewer-cli.sh" <<'OSTUB'
+#!/usr/bin/env bash
+lens=$(grep -n 'the-pragmatic-programmer' "$2" | head -1 | cut -d: -f1)
+marker=$(grep -n -- '--- CHANGE:' "$2" | head -1 | cut -d: -f1)
+if [ -n "$lens" ] && [ -n "$marker" ] && [ "$lens" -lt "$marker" ]; then
+  printf 'VERDICT: APPROVE\n\n- lens in the instruction block\n'
+else
+  printf 'VERDICT: APPROVE\n\n- LENS IN THE ARTIFACTS\n'
+fi
+OSTUB
+  chmod +x "$WORK/stub/reviewer-cli.sh"
+  run_row_file "the lens sits in the instruction block, above the artifacts" \
+    "has:lens in the instruction block" "$WORK" add-thing --implementing-host claude gemini
+  rm -rf "$WORK"
+
+  # The digest binds the artifacts reviewed. Adding the lens must not move it,
+  # or every review written before this change would read as stale.
+  #
+  # Compared against a PRE-LENS producer, not against a second run of the same
+  # one: two runs of one producer prove only that the run is deterministic. The
+  # pre-lens copy is built by deleting the lens paragraph from the producer
+  # under test, so the comparison is this producer with and without it.
+  WORK="$(make_fixture)"
+  dl="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  rm -rf "$WORK"
+  PRE="$(mktemp "${TMPDIR:-/tmp}/prelens.XXXXXX")"
+  awk '/^If the skill/{skip=1} skip&&/^EOF$/{skip=0} !skip' "$PRODUCER" > "$PRE"
+  chmod +x "$PRE"
+  # Greps the LENS SENTENCE, not the skill name: the name also appears in the
+  # comment above the heredoc, which the strip leaves in place and which never
+  # reaches a prompt.
+  if grep -q 'read its mini rule set' "$PRE"; then
+    echo "  ????  the pre-lens producer still carries the lens — comparison unusable"
+    inconclusive=$((inconclusive+1))
+  else
+    WORK="$(make_fixture)"
+    dp="$(PRODUCER="$PRE" digest_after "$WORK" add-thing --implementing-host claude gemini)"
+    assert_eq "adding the lens leaves the digest of an unchanged change untouched" "$dl" "$dp"
+    rm -rf "$WORK"
+  fi
+  rm -f "$PRE"
+
+  # …and tasks.md stays outside it, so a ticked checkbox does not stale a review.
+  WORK="$(make_fixture)"
+  printf -- '- [ ] an unreviewed task\n' >> "$WORK/repo/$CHANGE_REL/tasks.md"
+  dt="$(digest_after "$WORK" add-thing --implementing-host claude gemini)"
+  assert_eq "a ticked task does not move the digest either" "$dl" "$dt"
+  rm -rf "$WORK"
+
+  # THE MAPPING HAS ONE AUTHORITY, and this is the row that makes that true
+  # rather than merely claimed. The workflow skill's step table and this
+  # producer's prompt are two artifacts stating one fact; nothing else compares
+  # them, so they could drift while every other row here passes.
+  SKILLMD="$(cd "$(dirname "$PRODUCER")/../.." 2>/dev/null && pwd)/skills/agentic-apps-workflow/SKILL.md"
+  if [ ! -f "$SKILLMD" ]; then
+    echo "  ????  the workflow skill was not found beside the producer — mapping cross-check skipped"
+    inconclusive=$((inconclusive+1))
+  else
+    # Scoped to the Rule sets section: the gates table carries its own
+    # `plan-review` row, and an unscoped match reads that one first.
+    want="$(awk -F'|' '/^## Rule sets/{inrules=1} inrules && /^\| plan-review \|/{print $3; exit}' "$SKILLMD" | grep -oE '`[a-z-]+`' | tr -d '`' | sort -u)"
+    if [ -z "$want" ]; then
+      echo "  ????  no plan-review row parsed from the skill table — cross-check unusable"
+      inconclusive=$((inconclusive+1))
+    else
+      WORK="$(make_fixture)"
+      cat > "$WORK/stub/reviewer-cli.sh" <<'XSTUB'
+#!/usr/bin/env bash
+# $LENS_WANT is the skill table's plan-review row, passed in by the harness.
+# The prompt's set is DERIVED, not matched against a fixed list: a book added
+# to the table must show up here, and a hard-coded vocabulary would skip it.
+instr="$(head -n "$(( $(grep -n -- '--- CHANGE:' "$2" | head -1 | cut -d: -f1) - 1 ))" "$2")"
+got="$(printf '%s' "$instr" | grep -oE '`[a-z][a-z0-9-]{3,}`' | tr -d '`' | sort -u | tr '\n' ' ')"
+want="$(printf '%s' "$LENS_WANT" | tr ' ' '\n' | sort -u | tr '\n' ' ')"
+if [ "$got" = "$want" ]; then
+  printf 'VERDICT: APPROVE\n\n- prompt matches the skill table\n'
+else
+  printf 'VERDICT: APPROVE\n\n- MAPPING DRIFT: prompt=[%s] table=[%s]\n' "$got" "$want"
+fi
+XSTUB
+      chmod +x "$WORK/stub/reviewer-cli.sh"
+      LENS_WANT="$(printf '%s' "$want" | tr '\n' ' ')" \
+      run_row_file "the prompt's books are exactly the skill table's plan-review row" \
+        "has:prompt matches the skill table" "$WORK" add-thing --implementing-host claude gemini
+      rm -rf "$WORK"
+    fi
+  fi
+
   # ── H. Cross-check ─────────────────────────────────────────────────────────
   echo
   echo "  H. Cross-check — the gate counts what the producer published"
