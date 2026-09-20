@@ -33,7 +33,7 @@ most context pressure and the rules already shaped the delta), and `release-it`
 its prompt, because the reviewers are separate CLIs that never loaded the skill;
 it sits above the `--- CHANGE:` marker and outside the digest, so no existing
 `REVIEWS.md` goes stale, and it degrades to a plain review that says the lens
-was unavailable. Conformance section I (6 rows), including a digest comparison against a pre-lens copy of the producer. New capability
+was unavailable. Conformance section I (7 rows), including a digest comparison against a pre-lens copy of the producer and a derived cross-check against the skill's step table. New capability
 `rule-set-lenses`. Additive; no conformance impact for host implementers, but a
 host republishing the producer gets 1.3.0 from `install.sh`.
 
