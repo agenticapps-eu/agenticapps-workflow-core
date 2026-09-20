@@ -38,16 +38,27 @@ Neighbours unchanged: `agents-md-conformance.test.sh` 79/79, `install.test.sh`
       in `design.md`.
 - [x] 4.2 Plan-review round 2 (codex REQUEST-CHANGES; gemini, opencode exit 1).
       Four findings fixed in the skill, one rejected — see `design.md`.
-- [ ] 4.3 Scratch repository holding `docs/decisions/0001-x.md`, section 1.1.0,
-      `/grill-with-docs` to a locked decision on two hosts, once with the
-      workflow skill loaded and once in a bare `/grill-me` session. Pass:
-      `docs/decisions/0002-*.md`, no `docs/adr/`, no `docs/agents/`, instruction
-      files byte-identical.
-- [ ] 4.4 Same, numbering by date. Pass: `ADR-YYYY-MM-DD-*.md`.
-- [ ] 4.5 `/improve-codebase-architecture` in cparx flags any candidate that
-      contradicts a record in `docs/decisions/` instead of silently proposing it.
-- [ ] 4.6 Code-review on the diff; archive; ship; re-run `install.sh` so the
-      published `~/.agenticapps/bin/init-project.sh` is 2.2.0.
+- [x] 4.3 Scratch repo `docs/decisions/0001-one.md`, initializer run (section
+      1.1.0), a locked decision recorded on **two hosts**: claude wrote
+      `0002-postgres-for-idempotency-keys.md`, codex wrote
+      `0003-single-worker-outbox-polling.md`. No `docs/adr/`, no `docs/agents/`,
+      both instruction files byte-identical. Claude's own account names the
+      mechanism: *"the skill defaults to `docs/adr/`, but this repo's CLAUDE.md
+      says decision records live in `docs/decisions/` and nowhere else, so that
+      wins"* — the instruction file decided it, not the workflow skill, which is
+      the bare-session case this task exists for.
+- [x] 4.4 Scratch repo seeded with `ADR-2026-05-13-performance-history-naming.md`;
+      codex wrote `ADR-2026-09-20-exponential-backoff-with-jitter.md` — the
+      home's own scheme, not `NNNN-`.
+- [x] 4.5 cparx probe: asked where records live, how many, which directory a
+      deepening survey reads first, and whether `docs/adr/` would ever be
+      created. Answers: `docs/decisions/` citing the instruction file, 44
+      numbered records plus two unnumbered, `docs/decisions/` read first
+      *"every ADR carries an Alternatives Rejected section"*, and `docs/adr/`
+      would not be created.
+- [x] 4.6 Shipped in PR #117 and published on both machines: laptop and Mac
+      mini both report `init-project` 2.2.0 and skill 4.1.0 across claude,
+      codex, opencode and pi.
 
 ## 5. Fleet — one branch and commit per repository
 
@@ -55,4 +66,6 @@ Neighbours unchanged: `agents-md-conformance.test.sh` 79/79, `install.test.sh`
       `workflow-section-1-1` from `origin/main` in callbot, cparx, fbc-platform,
       fx-signal-agent: every hunk inside the markers, twins byte-identical, all
       name `docs/decisions/`. Staged.
-- [ ] 5.2 Commit (signed), push, PR each — merge after this change ships.
+- [x] 5.2 Merged: callbot #115, cparx #244, fbc-platform #416,
+      fx-signal-agent #238. Each carries section 1.1.0 naming `docs/decisions/`,
+      twin files byte-identical. cparx's setup output was reverted in #243.

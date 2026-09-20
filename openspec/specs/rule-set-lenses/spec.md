@@ -1,5 +1,11 @@
-## ADDED Requirements
+# rule-set-lenses Specification
 
+## Purpose
+Which book rule sets are read at which step of the loop, at what size, and how
+the plan-review lens reaches reviewers that never loaded the workflow skill.
+Rules cost tokens on every turn they are loaded, so they go where a decision is
+being made: design, plan-review and code-review — and not during apply.
+## Requirements
 ### Requirement: A rule set is read at the step that uses it
 
 The workflow SHALL name, per step, which book rule sets are read and at which
@@ -58,14 +64,16 @@ Two rule sets that push the same decision SHALL NOT be loaded together:
 #### Scenario: A change touches an integration
 
 - **WHEN** a change adds or alters an external integration
-- **THEN** `release-it` MAY additionally be read at `mini`
+- **THEN** `release-it` SHOULD additionally be read at `mini`
+- **AND** the choice SHALL be stated in the change's `design.md`
 - **AND** its absence SHALL NOT block the change
 
 #### Scenario: A change touches storage or a data pipeline
 
 - **WHEN** a change alters storage, a schema or a data pipeline
-- **THEN** `designing-data-intensive-applications` MAY additionally be read at
-  `mini`
+- **THEN** `designing-data-intensive-applications` SHOULD additionally be read
+  at `mini`
+- **AND** the choice SHALL be stated in the change's `design.md`
 - **AND** its absence SHALL NOT block the change
 
 #### Scenario: Two rule sets that push the same decision
@@ -170,3 +178,4 @@ claim about the reviewer's reading list.
 - **WHEN** a rule set changes upstream after a review was written
 - **THEN** the review SHALL remain valid evidence for the artifacts it names
 - **AND** nothing SHALL claim the review used the earlier or the later text
+

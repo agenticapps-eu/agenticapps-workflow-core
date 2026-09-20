@@ -34,10 +34,16 @@
       lens is read ("Read `the-pragmatic-programmer` mini rule set: yes").
       Five findings accepted — see `design.md`. Rounds kept as
       `REVIEWS-round{1,2,3}.md`.
-- [ ] 3.3 Code-review on the diff, naming the two books to the reviewer — the
-      first exercise of the code-review path this change describes.
-- [ ] 3.4 Archive; ship; `install.sh` on both machines so the published
-      `run-plan-review.sh` is 1.3.0.
+- [x] 3.3 Code-review on the diff (codex, read-only), with
+      `the-pragmatic-programmer` and `refactoring` named to it — the first
+      exercise of the path this change describes. Four findings, all fixed:
+      the prompt paraphrased the rule set's points (a second copy of text this
+      repo does not own — now it names the skill and summarises nothing,
+      producer 1.3.1); the locked apply decision lived only in `design.md`
+      (**ADR-0032**); the CHANGELOG said six conformance rows, not seven; the
+      conditional scenarios said `MAY` where the requirement said `SHOULD`.
+- [x] 3.4 Shipped in PR #118; `install.sh` run on both machines. The 1.3.1
+      prompt fix ships with this archive — re-run `install.sh` after it merges.
 
 ## 4. Follow-up, tracked separately
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-plan-review-version: 1.3.0
+# run-plan-review-version: 1.3.1
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. Installers MUST refuse to overwrite a higher
@@ -436,6 +436,11 @@ compute_digest() { # $1 = change dir
 # the clause degrades to a plain review that SAYS the lens was unavailable
 # rather than to a silent half-review.
 #
+# IT NAMES THE BOOK AND SUMMARISES NOTHING. An earlier revision pasted a
+# paraphrase of the rule set's main points into the prompt — a second, drifting
+# copy of text this repository does not own, which is exactly what binding
+# instead of vendoring exists to prevent. The reviewer reads the skill.
+#
 # ONE BOOK HERE, not the code-review pair. This step reads a spec delta, and
 # `refactoring` is a lens on smells in a diff — it belongs where a diff exists.
 # The workflow skill's step table is the mapping's one authority; a second
@@ -451,9 +456,7 @@ captures the intent. Reply with a verdict line "VERDICT: APPROVE" or
 "VERDICT: REQUEST-CHANGES", then a short bullet list of concrete issues.
 
 If the skill \`the-pragmatic-programmer\` is available to you, read its mini rule set
-first and review through it: one authoritative home per fact, orthogonality, explicit
-contracts and failure boundaries, reversible choices, no behaviour that works for
-reasons nobody can state. State in one line whether you read it; if it is not available
+first and review through it. State in one line whether you read it. If it is not available
 to you, review without it and say so.
 EOF
 # ONE SNAPSHOT drives all three of prompt, digest and publication.

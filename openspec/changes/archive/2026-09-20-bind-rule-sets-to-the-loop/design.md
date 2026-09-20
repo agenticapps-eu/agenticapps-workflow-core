@@ -147,3 +147,14 @@ Five findings, all accepted, two of them holes in this change's own tests:
   requirement that says so and says why: binding a third-party skill's bytes
   would stale every open review on any upstream edit, and the digest binds the
   artifacts reviewed, which is what staleness would actually misdescribe.
+
+## Code-review (codex, read-only, lens named)
+
+The path this change describes, used on this change. It found what three rounds
+of plan-review did not: the prompt carried a **paraphrase** of the rule set's
+main points, which is a second copy of text this repository does not own — the
+exact drift binding exists to prevent, and forbidden by this delta's own first
+requirement. The prompt now names the skill and summarises nothing (producer
+1.3.1). It also caught that the locked apply decision sat only in `design.md`
+while this workflow requires a record for one (ADR-0032), a six-versus-seven row
+count in the CHANGELOG, and `MAY` scenarios under a `SHOULD` requirement.
