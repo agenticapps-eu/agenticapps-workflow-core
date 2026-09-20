@@ -20,6 +20,25 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**One home for decision records, whoever writes them.** Bound planning skills
+(`domain-modeling` via `grill-with-docs`, `improve-codebase-architecture`,
+`wayfinder`) default to `docs/adr/`; the fleet keeps records in
+`docs/decisions/`. `agentic-apps-workflow` 4.1.0 adds a *Decisions and domain
+language* section that overrides those defaults machine-level: one home per
+repository, numbering by the home's existing scheme, a record for every locked
+decision on Medium/Large (hard to reverse + a real trade-off; surprise is
+guidance, not a condition),
+rejected alternatives always named, `CONTEXT.md` as the glossary, and no
+per-repository skill configurator. Because that skill is not loaded on every
+turn, `init-project` 2.2.0 also writes the repository's decision home and
+`CONTEXT.md` into the instruction-file section (section-version 1.0.0 → 1.1.0):
+whichever of `docs/decisions/`, `docs/adr/` and `adrs/` holds records
+(README/index excluded), `docs/decisions/` if none, refused if several.
+`spec/00-overview.md`'s ADR definition now points at the decision home. ADR-0031. Re-running the initializer updates an existing
+section in place. New capability `decision-records`. Additive; no conformance
+impact for host implementers. Repositories pick up the section by re-running
+`~/.agenticapps/bin/init-project.sh` after `install.sh` republishes it.
+
 **The rosters name only what can exist.** Five retired repositories were still
 declared in four places on 2026-08-12 — `claude-workflow`, `codex-workflow`,
 `opencode-workflow` and `pi-agentic-apps-workflow` (archived on GitHub
