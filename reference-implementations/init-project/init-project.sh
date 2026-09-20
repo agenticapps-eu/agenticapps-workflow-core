@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 # init-project.sh — establish what a repository carries to use this workflow.
 #
-# init-project-version: 2.1.0
+# init-project-version: 2.2.0
 #
+#   2.2.0 — the section names this repository's DECISION HOME and its glossary
+#           (section-version 1.1.0). Bound planning skills default to
+#           `docs/adr/`; the fleet keeps records in `docs/decisions/` and core
+#           in `adrs/`, and the workflow skill that overrides the default is not
+#           loaded on every turn. The instruction file is. It names whichever of
+#           those three holds records (README.md and index.md do not count),
+#           `docs/decisions/` when none does, and refuses a repository where
+#           more than one does. Re-running updates the 1.0.0 section in place —
+#           that is how the fleet receives it.
 #   2.1.0 — the section it writes carries `<!-- section-version: 1.0.0 -->`.
 #           `tools/agents-md-conformance.sh` has required a content version all
 #           along and this writer never emitted one, so every repository it
@@ -180,6 +189,36 @@ if [ -n "$BASE" ]; then
   fi
 fi
 
+# THE DECISION HOME — a fact about this repository, resolved before any write.
+# Bound planning skills default to `docs/adr/`; the fleet keeps records in
+# `docs/decisions/`, and core itself in `adrs/`. The section names whichever of
+# the three already HOLDS records, so a repository is never given a second home
+# by being told the default. A record is any markdown file directly in the
+# directory except README.md and index.md: a README alone is not a home, and
+# the fleet does not uniformly follow one naming scheme, so none is required.
+# Two or more directories holding records are two homes, and choosing which
+# survives is a decision about this repository's history — refused, like every
+# other such choice here.
+holds_records() {
+  local f
+  [ -d "$1" ] || return 1
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    case "${f##*/}" in README.md|index.md) ;; *) return 0 ;; esac
+  done
+  return 1
+}
+HOMES=""
+for d in docs/decisions docs/adr adrs; do
+  holds_records "$d" && HOMES="$HOMES $d/"
+done
+set -- $HOMES
+if [ "$#" -gt 1 ]; then
+  die "$* all hold decision records — more than one home. Move the records into one
+            of them with a reviewable commit, then re-run."
+fi
+DECISIONS_HOME=${1:-docs/decisions/}
+
 # --- Write ------------------------------------------------------------------
 
 if [ -d openspec ]; then
@@ -205,7 +244,7 @@ fi
 # emitted it — a gap that survived because core's own AGENTS.md was a symlink to a
 # CLAUDE.md carrying no section, and a file with no section is conformant. Bump it
 # whenever the prose below changes.
-SECTION_VERSION='1.0.0'
+SECTION_VERSION='1.1.0'
 
 render_block() {
   printf '%s\n' "$BEGIN_MARKER"
@@ -217,6 +256,10 @@ render_block() {
   printf 'This repository carries two workflow artifacts: `openspec/`, which is its\n'
   printf 'durable truth, and this instruction file. Everything else — skills, hooks,\n'
   printf 'enforcement — is machine-level and comes from `install.sh`.\n\n'
+  printf '## Decisions and domain language\n\n'
+  printf 'Decision records in this repository live in `%s` and nowhere else,\n' "$DECISIONS_HOME"
+  printf 'whatever directory an installed skill defaults to. The domain glossary is\n'
+  printf '`CONTEXT.md` at the root. When and how to write either is in the same skill.\n\n'
   printf '%s\n' "$END_MARKER"
 }
 
