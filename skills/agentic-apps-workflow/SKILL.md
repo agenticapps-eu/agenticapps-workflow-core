@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 4.0.0
+version: 4.1.0
 implements_spec: 1.0.0
 description: |
   The AgenticApps spec-first workflow. MUST activate on any task that writes or
@@ -128,6 +128,50 @@ everywhere and is the only name that does.
 everywhere but invoked **on demand** rather than fired automatically on any UI
 change. Nothing blocks branch close on either any more (ADR-0030, superseding
 ADR-0011 and ADR-0012). Bind a skill to either gate if you want it back.
+
+## Decisions and domain language
+
+Bound skills write decision records and a glossary on their own, with their own
+defaults. This section decides, and it overrides any installed skill's default.
+
+**One home for records.** The repository's instruction file names it — one of
+`docs/decisions/` (the fleet's), `docs/adr/` or `adrs/` — and that line wins. A
+bound skill that defaults elsewhere reads and writes the named home instead:
+`domain-modeling`, and through it `grill-with-docs` and `wayfinder`; and
+`improve-codebase-architecture`, which also reads records so it does not
+re-suggest a rejected one. Never create a second home; if another candidate has
+gained records since the section was written, stop and report both — re-running
+the initializer refuses until they are reconciled. Number a new record one above
+the highest `NNNN-` already in the home; if the home uses only
+`ADR-YYYY-MM-DD-slug.md`, use today's date; if it holds no numbered record, start
+at `0001-slug.md`. If the instruction file names no home, say so and use
+`docs/decisions/`. Multi-context layouts (`CONTEXT-MAP.md`) are out of
+scope; follow the map if one exists.
+
+**When.** Medium and Large changes record every **locked** decision: hard to
+reverse, *and* the outcome of a real trade-off between genuine alternatives. A
+decision that would surprise a reader without context is the strongest case for
+a record, but it is not a condition. A decision that is not locked goes in the
+change's `design.md`. Small and Tiny changes need neither.
+
+**What.** A paragraph is enough: context, decision, why. It always names at least
+one rejected alternative. Code-review reports a record without one as incomplete.
+
+**Glossary.** `CONTEXT.md` at the repository root is the domain glossary: terms
+and meanings, never implementation. Use its words in names, specs, tasks and
+tests. (The per-phase `CONTEXT.md` of the retired layout lives only under
+`docs/legacy-planning/` and is a different file.) If a root `CONTEXT.md` exists
+and is not a glossary, stop and ask before writing to it.
+
+**No per-repository configuration.** Do not run a bound skill's configurator
+(`setup-matt-pocock-skills` and the like). It writes configuration a repository
+does not carry, and edits one instruction file name where there are two. The
+skill runs on these overrides and its own defaults instead. A skill that wants
+an issue tracker (`wayfinder`) uses the local-markdown tracker under `.scratch/`:
+first add `.scratch/` to the file `git rev-parse --git-path info/exclude` prints
+(in a worktree `.git` is a file, not a directory) — never to `.gitignore` — and
+stop if `git ls-files .scratch` shows anything already tracked. Then read `issue-tracker-local.md` inside the installed
+`setup-matt-pocock-skills` for its operations. Read it; never run the skill.
 
 ## Coding Discipline (NON-NEGOTIABLE)
 

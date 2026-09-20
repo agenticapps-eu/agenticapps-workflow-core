@@ -720,6 +720,147 @@ run_init "$r"
   || bad "and it reads as true under the dispatcher's own --type=bool" \
          "the dispatcher would not treat this repository as enrolled"
 
+# ---------------------------------------------------------------------------
+echo
+echo "M. The section names this repository's decision home (adr-home-for-bound-skills)"
+# ---------------------------------------------------------------------------
+# WHY A FACT AND NOT A RULE. The section is a pointer, never a copy of the
+# skill's behaviour. Where this repository keeps its records is not behaviour —
+# it is a fact about this repository that no machine can supply, which is exactly
+# what the instruction file exists to carry. It is also the one thing a bound
+# skill will otherwise get wrong on every turn the workflow skill is not loaded,
+# because the instruction file is loaded on every turn and the skill is not.
+
+# The section's own bytes, between the markers, so an assertion about the
+# section cannot be satisfied by an operator's text outside it.
+section_of() {
+  sed -n "\|$BEGIN_MARKER|,\|$END_MARKER|p" "$1" 2>/dev/null
+}
+
+# M1 — nothing recorded yet: the default home is named, and not created.
+r=$(new_repo "no-records")
+run_init "$r"
+[ "$RC" -eq 0 ] && ok "no records: exits zero" || bad "no records: exits zero" "rc=$RC: $OUT"
+section_of "$r/AGENTS.md" | grep -qF '`docs/decisions/`' \
+  && ok "no records: the section names docs/decisions/" \
+  || bad "no records: the section names docs/decisions/" "$(section_of "$r/AGENTS.md" | head -20)"
+[ ! -e "$r/docs" ] \
+  && ok "no records: the directory is named, not created" \
+  || bad "no records: the directory is named, not created" "docs/ now exists"
+section_of "$r/AGENTS.md" | grep -qF '`CONTEXT.md`' \
+  && ok "the section names the glossary, CONTEXT.md" \
+  || bad "the section names the glossary, CONTEXT.md" "not named inside the markers"
+section_of "$r/AGENTS.md" | grep -qF 'section-version: 1.0.0' \
+  && bad "the section version moved past 1.0.0, because its prose changed" "still 1.0.0" \
+  || ok "the section version moved past 1.0.0, because its prose changed"
+assert_pair "$r" "no records"
+
+# M2 — records already live in docs/decisions/.
+r=$(new_repo "decisions")
+mkdir -p "$r/docs/decisions" && printf '# One\n' > "$r/docs/decisions/0001-one.md"
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF '`docs/decisions/`' \
+  && ok "docs/decisions/ holds records: it is named" \
+  || bad "docs/decisions/ holds records: it is named" "rc=$RC"
+
+# M3 — records live only in docs/adr/: that is the home, and no second one is
+# introduced by naming the default instead.
+r=$(new_repo "adr")
+mkdir -p "$r/docs/adr" && printf '# One\n' > "$r/docs/adr/0001-one.md"
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF '`docs/adr/`' \
+  && ok "only docs/adr/ holds records: docs/adr/ is named" \
+  || bad "only docs/adr/ holds records: docs/adr/ is named" "rc=$RC: $(section_of "$r/AGENTS.md" | grep docs/)"
+section_of "$r/AGENTS.md" | grep -qF '`docs/decisions/`' \
+  && bad "only docs/adr/ holds records: docs/decisions/ is not named" "a second home was introduced" \
+  || ok "only docs/adr/ holds records: docs/decisions/ is not named"
+[ ! -e "$r/docs/decisions" ] \
+  && ok "only docs/adr/ holds records: docs/decisions/ is not created" \
+  || bad "only docs/adr/ holds records: docs/decisions/ is not created" "it exists"
+
+# M4 — two homes, both holding records. Which one survives is a decision about
+# this repository's history, and like every such choice in this script it is
+# refused rather than guessed. Nothing may be written before the refusal.
+r=$(new_repo "two-homes")
+mkdir -p "$r/docs/adr" "$r/docs/decisions"
+printf '# A\n' > "$r/docs/adr/0001-a.md"
+printf '# B\n' > "$r/docs/decisions/0001-b.md"
+run_init "$r"
+[ "$RC" -ne 0 ] && ok "two homes with records: refused" || bad "two homes with records: refused" "rc=0"
+printf '%s' "$OUT" | grep -q 'docs/adr' && printf '%s' "$OUT" | grep -q 'docs/decisions' \
+  && ok "two homes with records: the refusal names both" \
+  || bad "two homes with records: the refusal names both" "$OUT"
+[ ! -e "$r/AGENTS.md" ] && [ ! -e "$r/CLAUDE.md" ] && [ ! -e "$r/openspec" ] \
+  && ok "two homes with records: nothing is written" \
+  || bad "two homes with records: nothing is written" "a write happened before the refusal"
+
+# M5 — an empty docs/adr/ is not a home. A directory someone created and never
+# used must not outrank the default.
+r=$(new_repo "empty-adr")
+mkdir -p "$r/docs/adr"
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF '`docs/decisions/`' \
+  && ok "an empty docs/adr/ is not a home: docs/decisions/ is named" \
+  || bad "an empty docs/adr/ is not a home: docs/decisions/ is named" "rc=$RC"
+
+# M6 — the fleet case: a repository carrying the 1.0.0 section, which has no
+# decision line. Re-running is how the fleet gets it, so the upgrade path is
+# the requirement, and nothing outside the markers may move.
+r=$(new_repo "upgrade")
+mkdir -p "$r/docs/decisions" && printf '# One\n' > "$r/docs/decisions/0001-one.md"
+{
+  printf '# Operator content\n\nKeep me.\n\n'
+  printf '%s\n' "$BEGIN_MARKER"
+  printf '<!-- section-version: 1.0.0 -->\n\n## The AgenticApps workflow\n\nOLD PROSE.\n\n'
+  printf '%s\n' "$END_MARKER"
+  printf '\nTrailing operator content.\n'
+} > "$r/AGENTS.md"
+cp "$r/AGENTS.md" "$r/CLAUDE.md"
+outside_before=$(digest_outside_markers "$r/AGENTS.md")
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF '`docs/decisions/`' \
+  && ok "a 1.0.0 section is updated to name the decision home" \
+  || bad "a 1.0.0 section is updated to name the decision home" "rc=$RC"
+[ "$(digest_outside_markers "$r/AGENTS.md")" = "$outside_before" ] \
+  && ok "and no byte outside the markers moved" \
+  || bad "and no byte outside the markers moved" "operator content changed"
+assert_pair "$r" "upgrade"
+
+# M7 — a README is not a record. A directory holding only a README.md must
+# neither become the home nor trigger the two-homes refusal (plan-review round 1).
+r=$(new_repo "readme-adr")
+mkdir -p "$r/docs/adr" "$r/docs/decisions"
+printf '# About ADRs\n' > "$r/docs/adr/README.md"
+printf '# One\n' > "$r/docs/decisions/0001-one.md"
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF '`docs/decisions/`' \
+  && ok "a README-only docs/adr/ is not a home and is not a second one" \
+  || bad "a README-only docs/adr/ is not a home and is not a second one" "rc=$RC: $OUT"
+
+# M8 — `adrs/` is a recognised home (core's own layout).
+r=$(new_repo "adrs")
+mkdir -p "$r/adrs" && printf '# Ten\n' > "$r/adrs/0010-ten.md"
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF '`adrs/`' \
+  && ok "records only in adrs/: adrs/ is named" \
+  || bad "records only in adrs/: adrs/ is named" "rc=$RC: $(section_of "$r/AGENTS.md" | grep -i 'live in')"
+
+# M9 — an irregularly named record still counts; the home is not defined by
+# a naming scheme the fleet does not uniformly follow.
+r=$(new_repo "irregular")
+mkdir -p "$r/docs/adr" && printf '# x\n' > "$r/docs/adr/phase22-descope-decision.md"
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF '`docs/adr/`' \
+  && ok "an irregularly named record still makes a home" \
+  || bad "an irregularly named record still makes a home" "rc=$RC"
+
 echo
 echo "  passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]

@@ -227,7 +227,9 @@ expected outcome verifiable against the phase's `must_have` list.
 grep result, screenshot path, curl response) that demonstrates a
 `must_have` is satisfied. Section 06 specifies the evidence rules.
 
-**ADR** — Architecture Decision Record at `docs/decisions/NNNN-slug.md`.
+**ADR** — Architecture Decision Record in the repository's decision home —
+`docs/decisions/` by default, numbered by the home's own scheme (capability
+`decision-records`).
 Captures non-trivial technology / architecture / UX decisions with
 rationale and rejected alternatives. The ADRs in `adrs/` are
 host-agnostic decisions that apply across implementations.
