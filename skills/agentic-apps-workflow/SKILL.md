@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 4.1.0
+version: 4.2.0
 implements_spec: 1.0.0
 description: |
   The AgenticApps spec-first workflow. MUST activate on any task that writes or
@@ -172,6 +172,44 @@ first add `.scratch/` to the file `git rev-parse --git-path info/exclude` prints
 (in a worktree `.git` is a file, not a directory) — never to `.gitignore` — and
 stop if `git ls-files .scratch` shows anything already tracked. Then read `issue-tracker-local.md` inside the installed
 `setup-matt-pocock-skills` for its operations. Read it; never run the skill.
+
+## Rule sets — the books, at the step that uses them
+
+Book rule sets are bound skills, installed on this machine. Each ships three
+sizes; `mini` is what its `SKILL.md` loads. Read one where a decision is being
+made, not as a standing instruction — an instruction that is loaded on every
+turn is paid for on every turn.
+
+| Step | Read | Size |
+|---|---|---|
+| grilling · propose | `the-pragmatic-programmer` · `domain-driven-design-distilled` | mini |
+| plan-review | `the-pragmatic-programmer` | mini |
+| apply | **nothing loaded by the workflow** | — |
+| code-review | `the-pragmatic-programmer` · `refactoring` | mini |
+| a change adding or altering an integration | `release-it` | mini |
+| a change altering storage, schema or a data pipeline | `designing-data-intensive-applications` | mini |
+
+**Apply loads none of them, deliberately.** The implementer carries the most
+context pressure in the loop, and by then the rules have already shaped the
+spec delta and the tasks. If you name one yourself, that is your call — this is
+about what the workflow loads unasked. `codebase-design` still fires by itself when an
+interface is being shaped; that is the discipline the implementation needs.
+
+**Plan-review carries its own.** `run-plan-review.sh` puts the request in the
+prompt it hands each reviewer, because those reviewers are separate CLIs that
+never loaded this skill, and asks each to say whether it read the rule set.
+Nothing to do by hand. The table row above is the mapping's one authority: a
+conformance row compares the prompt against it, so the two cannot drift.
+
+**Code-review is yours to pass.** `requesting-code-review` is upstream and takes
+no lens, so name the two books when you invoke it and let the reviewer read
+them; it reads only the diff and can afford them.
+
+Bound, never vendored: name them unprefixed, as above. A rule set that is not
+installed is **reported and the step continues** — a missing upstream tool is
+never a block. Do not load `clean-code` beside `the-pragmatic-programmer`, or
+`a-philosophy-of-software-design` beside `codebase-design`: each pair pushes the
+same decision twice, and the second copy only adds tokens.
 
 ## Coding Discipline (NON-NEGOTIABLE)
 
