@@ -20,6 +20,23 @@ Each entry below names the conformance impact for host implementers.
 
 ## [Unreleased]
 
+**The books, at the step that uses them.** Three rule sets from
+`ciembor/agent-rules-books` are installed machine-wide; this binds them to the
+loop instead of leaving them to fire on description match.
+`agentic-apps-workflow` 4.2.0 adds a *Rule sets* section:
+`the-pragmatic-programmer` + `domain-driven-design-distilled` at grilling and
+propose, `the-pragmatic-programmer` alone at plan-review (that step reads a delta, not a
+diff), `the-pragmatic-programmer` +
+`refactoring` at code-review, **nothing at apply** (the implementer carries the
+most context pressure and the rules already shaped the delta), and `release-it`
+/ DDIA conditionally. `run-plan-review.sh` 1.3.0 carries the plan-review lens in
+its prompt, because the reviewers are separate CLIs that never loaded the skill;
+it sits above the `--- CHANGE:` marker and outside the digest, so no existing
+`REVIEWS.md` goes stale, and it degrades to a plain review that says the lens
+was unavailable. Conformance section I (6 rows), including a digest comparison against a pre-lens copy of the producer. New capability
+`rule-set-lenses`. Additive; no conformance impact for host implementers, but a
+host republishing the producer gets 1.3.0 from `install.sh`.
+
 **One home for decision records, whoever writes them.** Bound planning skills
 (`domain-modeling` via `grill-with-docs`, `improve-codebase-architecture`,
 `wayfinder`) default to `docs/adr/`; the fleet keeps records in

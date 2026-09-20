@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-plan-review-version: 1.2.0
+# run-plan-review-version: 1.3.0
 #
 # VERSION MARKER — read by every host installer before writing this file to the
 # SHARED path ~/.agenticapps/bin/. Installers MUST refuse to overwrite a higher
@@ -427,11 +427,34 @@ compute_digest() { # $1 = change dir
 }
 
 # Assemble the review prompt from the change artifacts.
+#
+# THE LENS TRAVELS WITH THE PROMPT, and it has to. The workflow skill states
+# which rule sets a reviewer reads, but the reviewers here are third-party CLIs
+# this script spawns headless — they are not the host that loaded that skill,
+# and nothing else in the run reaches them. Two of the four vendor arms do not
+# resolve skills at all, and a reviewer machine may not have them installed, so
+# the clause degrades to a plain review that SAYS the lens was unavailable
+# rather than to a silent half-review.
+#
+# ONE BOOK HERE, not the code-review pair. This step reads a spec delta, and
+# `refactoring` is a lens on smells in a diff — it belongs where a diff exists.
+# The workflow skill's step table is the mapping's one authority; a second
+# book sent from here would be a second answer to the same question.
+#
+# It is INSTRUCTION, not evidence: it sits above the `--- CHANGE:` marker and
+# outside the digest set, so it neither reads as part of the change under
+# review nor moves the digest that binds reviews already written.
 read -r -d '' INSTRUCT <<EOF || true
 You are an adversarial reviewer. Review this OpenSpec change for correctness, missing
 scenarios, wrong assumptions, security/PII issues, and whether the spec delta actually
 captures the intent. Reply with a verdict line "VERDICT: APPROVE" or
 "VERDICT: REQUEST-CHANGES", then a short bullet list of concrete issues.
+
+If the skill \`the-pragmatic-programmer\` is available to you, read its mini rule set
+first and review through it: one authoritative home per fact, orthogonality, explicit
+contracts and failure boundaries, reversible choices, no behaviour that works for
+reasons nobody can state. State in one line whether you read it; if it is not available
+to you, review without it and say so.
 EOF
 # ONE SNAPSHOT drives all three of prompt, digest and publication.
 #
