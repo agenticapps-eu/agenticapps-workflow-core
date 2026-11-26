@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # init-project.sh — establish what a repository carries to use this workflow.
 #
-# init-project-version: 2.2.0
+# init-project-version: 2.3.0
+#
+#   2.3.0 — the section shrinks to what must hold on a turn where the skill is
+#           not loaded (section-version 1.2.0): a one-sentence pointer that names
+#           decision-record work, "add no copies of workflow skills, hooks or
+#           host config", and the decision home with "append-only once merged".
+#           The glossary line goes: CONTEXT.md is a fleet constant the skill
+#           states, not a fact about one repository (trim-instruction-files).
 #
 #   2.2.0 — the section names this repository's DECISION HOME and its glossary
 #           (section-version 1.1.0). Bound planning skills default to
@@ -244,22 +251,18 @@ fi
 # emitted it — a gap that survived because core's own AGENTS.md was a symlink to a
 # CLAUDE.md carrying no section, and a file with no section is conformant. Bump it
 # whenever the prose below changes.
-SECTION_VERSION='1.1.0'
+SECTION_VERSION='1.2.0'
 
 render_block() {
   printf '%s\n' "$BEGIN_MARKER"
   printf '<!-- section-version: %s -->\n' "$SECTION_VERSION"
   printf '\n## The AgenticApps workflow\n\n'
-  printf 'Work moves through the OpenSpec lifecycle, and how to do that lives in the\n'
-  printf '`agentic-apps-workflow` skill on this machine — not in this file. Read the\n'
-  printf 'skill for the loop, the gates and the coding discipline.\n\n'
-  printf 'This repository carries two workflow artifacts: `openspec/`, which is its\n'
-  printf 'durable truth, and this instruction file. Everything else — skills, hooks,\n'
-  printf 'enforcement — is machine-level and comes from `install.sh`.\n\n'
-  printf '## Decisions and domain language\n\n'
-  printf 'Decision records in this repository live in `%s` and nowhere else,\n' "$DECISIONS_HOME"
-  printf 'whatever directory an installed skill defaults to. The domain glossary is\n'
-  printf '`CONTEXT.md` at the root. When and how to write either is in the same skill.\n\n'
+  printf 'Code, spec and decision-record work here follows the `agentic-apps-workflow`\n'
+  printf 'skill. Add no copies of workflow skills, hooks or host config: `install.sh`\n'
+  printf 'provides them machine-level.\n\n'
+  printf 'Decision records live in `%s` and nowhere else, whatever directory an\n' "$DECISIONS_HOME"
+  printf 'installed skill defaults to. Once merged, a record is append-only: correct it\n'
+  printf 'with a new record.\n\n'
   printf '%s\n' "$END_MARKER"
 }
 

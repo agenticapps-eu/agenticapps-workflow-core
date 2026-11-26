@@ -747,12 +747,25 @@ section_of "$r/AGENTS.md" | grep -qF '`docs/decisions/`' \
 [ ! -e "$r/docs" ] \
   && ok "no records: the directory is named, not created" \
   || bad "no records: the directory is named, not created" "docs/ now exists"
-section_of "$r/AGENTS.md" | grep -qF '`CONTEXT.md`' \
-  && ok "the section names the glossary, CONTEXT.md" \
-  || bad "the section names the glossary, CONTEXT.md" "not named inside the markers"
-section_of "$r/AGENTS.md" | grep -qF 'section-version: 1.0.0' \
-  && bad "the section version moved past 1.0.0, because its prose changed" "still 1.0.0" \
-  || ok "the section version moved past 1.0.0, because its prose changed"
+# trim-instruction-files: the glossary is a fleet constant the skill states, so
+# the section no longer names it. What stays is what must hold on a turn where
+# the skill is not loaded.
+section_of "$r/AGENTS.md" | grep -qF 'CONTEXT.md' \
+  && bad "the section does not name the glossary" "CONTEXT.md is named inside the markers" \
+  || ok "the section does not name the glossary"
+section_of "$r/AGENTS.md" | grep -qF '`agentic-apps-workflow`' \
+  && section_of "$r/AGENTS.md" | grep -qi 'decision-record work' \
+  && ok "the section points at the skill, for decision-record work too" \
+  || bad "the section points at the skill, for decision-record work too" "$(section_of "$r/AGENTS.md")"
+section_of "$r/AGENTS.md" | grep -qi 'append-only' \
+  && ok "the section states that merged records are append-only" \
+  || bad "the section states that merged records are append-only" "not stated inside the markers"
+section_of "$r/AGENTS.md" | grep -qi 'no copies of workflow skills, hooks or host config' \
+  && ok "the section forbids copies of workflow skills, hooks and host config" \
+  || bad "the section forbids copies of workflow skills, hooks and host config" "not stated inside the markers"
+section_of "$r/AGENTS.md" | grep -qF 'section-version: 1.2.0' \
+  && ok "the section carries version 1.2.0, because its prose changed" \
+  || bad "the section carries version 1.2.0, because its prose changed" "$(section_of "$r/AGENTS.md" | grep section-version)"
 assert_pair "$r" "no records"
 
 # M2 — records already live in docs/decisions/.
@@ -860,6 +873,32 @@ run_init "$r"
   && section_of "$r/AGENTS.md" | grep -qF '`docs/adr/`' \
   && ok "an irregularly named record still makes a home" \
   || bad "an irregularly named record still makes a home" "rc=$RC"
+
+# M10 — the fleet case today: every enrolled repository carries 1.1.0, which
+# names CONTEXT.md. A re-run must replace it with the current section and move
+# nothing outside the markers (trim-instruction-files, plan-review round 1).
+r=$(new_repo "upgrade-1.1.0")
+mkdir -p "$r/docs/decisions" && printf '# One\n' > "$r/docs/decisions/0001-one.md"
+{
+  printf '# Operator content\n\nKeep me.\n\n'
+  printf '%s\n' "$BEGIN_MARKER"
+  printf '<!-- section-version: 1.1.0 -->\n\n## Decisions and domain language\n\n'
+  printf 'The domain glossary is `CONTEXT.md` at the root.\n\n'
+  printf '%s\n' "$END_MARKER"
+  printf '\nTrailing operator content.\n'
+} > "$r/AGENTS.md"
+cp "$r/AGENTS.md" "$r/CLAUDE.md"
+outside_before=$(digest_outside_markers "$r/AGENTS.md")
+run_init "$r"
+[ "$RC" -eq 0 ] \
+  && section_of "$r/AGENTS.md" | grep -qF 'section-version: 1.2.0' \
+  && ! section_of "$r/AGENTS.md" | grep -qF 'CONTEXT.md' \
+  && ok "a 1.1.0 section is replaced by 1.2.0, without the glossary line" \
+  || bad "a 1.1.0 section is replaced by 1.2.0, without the glossary line" "rc=$RC: $(section_of "$r/AGENTS.md")"
+[ "$(digest_outside_markers "$r/AGENTS.md")" = "$outside_before" ] \
+  && ok "and no byte outside the markers moved" \
+  || bad "and no byte outside the markers moved" "operator content changed"
+assert_pair "$r" "upgrade-1.1.0"
 
 echo
 echo "  passed: $pass   failed: $fail"
