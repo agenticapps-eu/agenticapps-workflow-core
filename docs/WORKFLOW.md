@@ -93,8 +93,9 @@ Two things about this picture matter most:
 ## The gate that enforces it (§18)
 
 A `PreToolUse` hook inspects every code-editing tool call. Since change-gate
-**2.0.0** it blocks on exactly one condition — `openspec validate --all` is not
-green. Review evidence is **reported on every invocation and never blocks**:
+**2.0.0** it blocks an edit on exactly one condition — `openspec validate --all`
+is not green. A commit is also blocked when `AGENTS.md` and `CLAUDE.md` differ.
+Review evidence is **reported on every invocation and never blocks**:
 
 - no active change → **allow** (0)
 - writing the OpenSpec change itself → **allow, exempt** (0)

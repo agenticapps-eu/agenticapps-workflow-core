@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 4.2.0
+version: 4.3.0
 implements_spec: 1.0.0
 description: |
   The AgenticApps spec-first workflow. MUST activate on any task that writes or
@@ -17,7 +17,7 @@ Host-neutral. Nothing in this file names a host, and nothing may be added that
 does. Your host's command prefix differs (`/opsx:propose`, `$opsx:propose`, …);
 the steps do not.
 
-This file **is** `docs/workflow.mmd` in prose. If the two disagree, the diagram
+This file **is** `workflow.mmd` (core's root) in prose. If the two disagree, the diagram
 wins and this file is wrong.
 
 ## The loop
@@ -46,20 +46,31 @@ reviewing.
 
 ## What the gate actually blocks
 
-**One condition: `openspec validate --all` is not green.** A blocked edit means
-a spec delta that does not parse. Fix the delta. It never means "go get a
-review".
+**An edit is blocked on one condition: `openspec validate --all` is not green.**
+A blocked edit means a spec delta that does not parse. Fix the delta. It never
+means "go get a review".
+
+**A commit is blocked on that and one more:** where a repository carries its
+instruction file under two names, both must be readable, regular files and
+byte-identical in what is staged. Edit one, copy it over the other. Neither
+condition is a review.
 
 Review evidence is **computed and reported, never enforced**. Reviewer count,
 verdicts, independence and the trailer all produce `NOTE` lines; none fails any
 surface — not the hook, not the pre-commit hook, not `--ci`. Two rejections open
-the gate exactly as two approvals do. There is no escape hatch, because there is
-nothing to escape.
+the gate exactly as two approvals do. Neither blocker has an escape hatch: for a
+red `validate` there is nothing to release, and for the pair a hatch could only
+permit committing the divergence the check exists to prevent.
 
 > A green gate is therefore the **weakest possible evidence** that anyone read
 > the delta. Nothing makes you run the reviewers. Step 2b is a discipline you
 > keep, not one the machine keeps for you. If the gate prints a `NOTE` naming
 > objectors, address it or record why not.
+
+**Removed tools leave text behind.** GSD and GitNexus are uninstalled. A
+`/gsd-*` command, a `gitnexus` call or a `.planning/` path in a document is
+stale text: never run it or go looking for it. Correct the document or report
+it, and never delete residue on sight — that is the operator's call.
 
 ## Step 0 — the commitment ritual
 
