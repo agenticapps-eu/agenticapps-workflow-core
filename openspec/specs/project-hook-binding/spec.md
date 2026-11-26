@@ -700,8 +700,8 @@ alike:
 | **override invalid** | a variable names a path that is not an executable file, on a machine whose shared install may be perfectly healthy | **per invocation, always** |
 
 The second is the kill switch. Suppressing it suppresses the only signal that a
-hook has been switched off — and for the §18 gate, that its one blocking
-condition is not running. A rate limit adopted to quiet a benign condition would
+hook has been switched off — and for the §18 gate, that its blocking
+conditions are not running. A rate limit adopted to quiet a benign condition would
 have silenced the malign one, because the previous text wrote a single policy
 covering both.
 
@@ -774,21 +774,25 @@ fails open, silently.
 earlier revision said "§18's review requirement is advisory at the tool boundary
 until the installer has run", and similar phrasing appeared wherever this
 capability described a missing or overridden gate. A reviewer showed it is stale
-against `change-gate-enforcement`, which is explicit: the gate blocks on exactly
-one condition — `openspec validate --all` is not green — while the reviewer
-count, the verdict grammar, reviewer independence, the trailer format and the
-binding of a review to what it reviewed are computed and **reported, never
-enforced**. So an absent gate loses two things, neither of them a review
+against `change-gate-enforcement`, which is explicit: the gate blocks an edit on
+exactly one condition — `openspec validate --all` is not green — and a commit on
+that and one more, an `AGENTS.md`/`CLAUDE.md` pair that differs, while the
+reviewer count, the verdict grammar, reviewer independence, the trailer format
+and the binding of a review to what it reviewed are computed and **reported,
+never enforced**. So an absent gate loses three things, none of them a review
 requirement:
 
-1. **validation enforcement** — the only condition on which the gate blocks; and
-2. **the reporting** of review state, which was advisory before the gate went
+1. **validation enforcement** — the one condition on which an edit is blocked,
+   and one of the two on which a commit is;
+2. **the instruction-pair check** — the other commit-time condition, lost
+   wherever the pre-commit wrapper fails open with the shim (below); and
+3. **the reporting** of review state, which was advisory before the gate went
    missing and is merely absent after.
 
 Calling the loss "review enforcement" names a block the gate does not perform,
-and passes over the one it does. Every statement in this capability about what a
-missing, unresolvable or overridden gate costs SHALL be written against the
-blocking condition.
+and passes over the ones it does. Every statement in this capability about what
+a missing, unresolvable or overridden gate costs SHALL be written against the
+blocking conditions.
 
 **What is beneath it, stated correctly.** An earlier revision of this paragraph
 said §18 "places the real guarantee in the git pre-commit hook and the CI floor,
