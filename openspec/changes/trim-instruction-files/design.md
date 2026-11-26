@@ -47,9 +47,11 @@ A rule lives in the section or in the skill, never both.
 
 `change-gate-enforcement` says the gate blocks on "exactly one condition" and,
 900 lines later, requires it to fail a commit whose instruction pair differs.
-The skill, `docs/WORKFLOW.md` and `docs/HOW-IT-FITS-TOGETHER.md` copied the first
-sentence. The fix is at the owner: one condition blocks an edit, a commit is
-blocked on that and on the pair. The skill and the two docs then say the same.
+The skill, `docs/WORKFLOW.md`, `docs/HOW-IT-FITS-TOGETHER.md`, the gate's
+README and `project-hook-binding` copied the first sentence. The fix is at the
+owner: one condition blocks an edit, a commit is blocked on that and on the pair.
+Every copy then says the same. In `project-hook-binding` that changes a count:
+an absent gate loses three things, not two, because the pair check goes with it.
 
 ## Plan-review round 1 (codex, opencode REQUEST-CHANGES; gemini APPROVE)
 

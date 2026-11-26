@@ -18,6 +18,9 @@
 - [x] 2.1 Skill "What the gate actually blocks": an edit on one condition, a
       commit on that and the instruction pair.
 - [x] 2.2 Same sentence in `docs/WORKFLOW.md` and `docs/HOW-IT-FITS-TOGETHER.md`.
+- [x] 2.2a Same sentence in `reference-implementations/openspec-change-gate/README.md`,
+      and a MODIFIED `project-hook-binding` delta: an absent gate loses validation,
+      the pair check and the reporting.
 - [x] 2.3 Skill sentence: `/gsd-*`, `gitnexus` and `.planning/` in a document are
       stale text — never run them or go looking for them; correct the document
       or report it; never delete residue on sight.
@@ -26,7 +29,8 @@
 
 ## 3. Core's instruction pair
 
-- [x] 3.1 Trim the hand-written part per the phase-1 table; keep title, scope rule.
+- [x] 3.1 Trim the hand-written part per the phase-1 table; keep title, scope rule,
+      and "nothing under `skills/` may name a host".
 - [x] 3.2 Re-render core's section with the new initializer; `AGENTS.md` and
       `CLAUDE.md` byte-identical.
 

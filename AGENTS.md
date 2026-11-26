@@ -2,7 +2,8 @@
 
 This repository publishes the workflow: `skills/` and `reference-implementations/`
 hold the sources every host and fleet project resolves, so the section below
-forbids copies of them elsewhere, not editing them here.
+forbids copies of them elsewhere, not editing them here. Nothing under `skills/`
+may name a host: every host resolves the same files.
 
 If a thing is not on `workflow.mmd` and is not required to make a step on it
 work, it does not belong in this repo.

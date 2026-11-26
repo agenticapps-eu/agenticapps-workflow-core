@@ -120,8 +120,10 @@ closed, for the same reason.
 
 ## Deviations from §18's truth table
 
-None. The gate blocks on exactly one condition — `openspec validate --all` not
-green — and there is no env var that changes that.
+None. The gate blocks an edit on exactly one condition — `openspec validate
+--all` not green — and a commit on that and one more: `AGENTS.md` and
+`CLAUDE.md` not readable, regular and byte-identical in the index. There is no
+env var that changes either.
 
 Related asymmetry, worth knowing: a **missing `openspec` CLI blocks** (exit 2 —
 an unvalidatable change must not pass), while a **missing gate in the

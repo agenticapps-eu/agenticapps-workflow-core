@@ -32,7 +32,8 @@ This change does the part that belongs to core:
    - a commit is blocked on **two** conditions — validation and the
      `AGENTS.md`/`CLAUDE.md` pair. The skill says one, copying a sentence in
      `change-gate-enforcement` that contradicts that spec's own pair requirement.
-     The sentence is fixed in the spec, and the skill and two docs follow it;
+     The sentence is fixed in the spec, and the skill, two docs, the gate's README
+   and `project-hook-binding` (which lists what an absent gate loses) follow it;
    - removed-tool residue (`/gsd-*`, `gitnexus`, `.planning/`) in a document is
      stale text, never an instruction. GSD was verified gone at package, host and
      project level on 2026-11-26, but its text survives in fleet docs.
@@ -41,8 +42,9 @@ This change does the part that belongs to core:
    prose; the diagram is the root `workflow.mmd`.
 
 3. **Core's own instruction pair is trimmed** to its title, the scope rule (a thing
-   not on `workflow.mmd` and not needed by a step on it does not belong here), and
-   the re-rendered section. Removed: what README and the tree already say, the
+   not on `workflow.mmd` and not needed by a step on it does not belong here), the
+   rule that nothing under `skills/` names a host (kept from the directory table:
+   no other file states it for the directory), and the re-rendered section. Removed: what README and the tree already say, the
    symlink history (in `docs/HOW-IT-FITS-TOGETHER.md` and the archive), the gate
    explanation (now in the skill), the directory table (in README, and it listed
    the deleted `gate/`), and the "core gates itself through
