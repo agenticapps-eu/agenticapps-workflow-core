@@ -102,9 +102,11 @@ human with an editor."
 What was lost is in-session latency, and nothing else. A malformed spec delta
 now surfaces at `git commit` rather than at the first `Edit`.
 
-**The gate blocks on exactly one condition: `openspec validate --all` is not
-green.** A blocked commit means a spec delta that does not parse — so fix the
-delta. It never means "go get a review".
+**The gate blocks on two conditions, and neither is a review:** `openspec
+validate --all` is not green, or — at commit time only — `AGENTS.md` and
+`CLAUDE.md` are not readable, regular and byte-identical. A blocked commit means
+a spec delta that does not parse or an instruction pair that diverged — so fix
+that. It never means "go get a review".
 
 Review evidence — reviewer count, verdicts, independence, the trailer — is
 computed and reported, never enforced. All of it produces `NOTE` lines. Two

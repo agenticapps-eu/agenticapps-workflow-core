@@ -13,9 +13,11 @@ The gate SHALL NOT block a code edit on the state of `REVIEWS.md`. It SHALL
 report that state — absent, short of the preferred count, unverifiable, stale,
 or carrying REQUEST-CHANGES — on every invocation where it applies.
 
-The gate SHALL block on exactly one condition: `openspec validate --all` is not
-green (or the `openspec` CLI is unavailable, so the question cannot be
-answered). The reviewer count remains defined, computed and reported, because a
+The gate SHALL block an edit on exactly one condition: `openspec validate --all`
+is not green (or the `openspec` CLI is unavailable, so the question cannot be
+answered). A commit is blocked on that condition and on one more: the two
+instruction files differ (see *The gate fails a commit whose two instruction
+files differ*). Neither condition is a review. The reviewer count remains defined, computed and reported, because a
 report that miscounts is as wrong as a block that miscounts. What is removed is
 the consequence, not the arithmetic.
 
@@ -52,6 +54,12 @@ is missing. Saying so is the whole of the mechanism.
 
 - **WHEN** `openspec validate --all` fails, whatever the review state
 - **THEN** the gate blocks the edit
+
+#### Scenario: Validation is green and the instruction files differ
+
+- **WHEN** validation is green and a commit stages `AGENTS.md` and `CLAUDE.md`
+  that are not byte-identical
+- **THEN** an edit is allowed, and the commit is blocked
 
 #### Scenario: The spec is read for the reviewer count
 
