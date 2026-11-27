@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # init-project.sh — establish what a repository carries to use this workflow.
 #
-# init-project-version: 2.3.0
+# init-project-version: 2.3.1
 #
+#   2.3.1 — a section on line 1 no longer runs `head -n 0`, which BSD head
+#           rejects with an error on every update (core#121,
+#           init-marker-on-line-one). The rendered section is unchanged.
 #   2.3.0 — the section shrinks to what must hold on a turn where the skill is
 #           not loaded (section-version 1.2.0): a one-sentence pointer that names
 #           decision-record work, "add no copies of workflow skills, hooks or
@@ -280,7 +283,7 @@ render_block() {
 # verbatim; everything between them is replaced. That is the exact scope of the
 # preservation claim, and the only scope in which it can be true.
 if [ -n "$BEGIN_LINE" ]; then
-  NEW=$( { head -n "$((BEGIN_LINE - 1))" "$BASE"; render_block; tail -n "+$((END_LINE + 1))" "$BASE"; printf 'X'; } )
+  NEW=$( { [ "$BEGIN_LINE" -gt 1 ] && head -n "$((BEGIN_LINE - 1))" "$BASE"; render_block; tail -n "+$((END_LINE + 1))" "$BASE"; printf 'X'; } )
   ACTION="section updated"
 elif [ -n "$BASE" ]; then
   # Appended with one blank line between, and a newline forced onto a file that
