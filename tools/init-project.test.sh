@@ -108,6 +108,14 @@ run_init() {
   RC=$?
 }
 
+# run_init_stderr <repo> — same, but stderr alone into $ERR, so "no tool error"
+# can be asserted as an empty stderr rather than the absence of one tool's name.
+ERR=""
+run_init_stderr() {
+  ERR=$( cd "$1" && PATH="$FAKEBIN:/usr/bin:/bin" "$INIT" 2>&1 >/dev/null )
+  RC=$?
+}
+
 # run_init_no_openspec <repo> — same, with no `openspec` reachable at all.
 run_init_no_openspec() {
   local repo="$1"
@@ -136,7 +144,8 @@ digest_outside_markers() {
   b=$(grep -nF -m1 "$BEGIN_MARKER" "$f" 2>/dev/null | cut -d: -f1)
   e=$(grep -nF -m1 "$END_MARKER" "$f" 2>/dev/null | cut -d: -f1)
   if [ -z "$b" ] || [ -z "$e" ]; then shasum -a 256 "$f" | cut -d' ' -f1; return; fi
-  { head -n "$((b - 1))" "$f"; tail -n "+$((e + 1))" "$f"; } | shasum -a 256 | cut -d' ' -f1
+  # No `head -n 0`: BSD head rejects a count of 0 (init-marker-on-line-one).
+  { [ "$b" -gt 1 ] && head -n "$((b - 1))" "$f"; tail -n "+$((e + 1))" "$f"; } | shasum -a 256 | cut -d' ' -f1
 }
 
 # The preservation assertion for the OTHER half of task 1.7 — a file that had no
@@ -899,6 +908,48 @@ run_init "$r"
   && ok "and no byte outside the markers moved" \
   || bad "and no byte outside the markers moved" "operator content changed"
 assert_pair "$r" "upgrade-1.1.0"
+
+# M11 — the claude-mods case: the pair is a 1.1.0 section and nothing else, so
+# the begin marker is line 1. That once ran `head -n 0`, which BSD head rejects
+# with an error on stderr (core#121, init-marker-on-line-one). RED only on BSD
+# head: GNU head accepts a count of 0, so a green run on Linux proves nothing.
+r=$(new_repo "marker-line-1")
+{
+  printf '%s\n' "$BEGIN_MARKER"
+  printf '<!-- section-version: 1.1.0 -->\n\nOLD PROSE.\n\n'
+  printf '%s\n' "$END_MARKER"
+} > "$r/AGENTS.md"
+cp "$r/AGENTS.md" "$r/CLAUDE.md"
+run_init_stderr "$r"
+[ "$RC" -eq 0 ] && [ -z "$ERR" ] \
+  && section_of "$r/AGENTS.md" | grep -qF 'section-version: 1.2.0' \
+  && ok "marker on line 1: the section is replaced, with nothing on stderr" \
+  || bad "marker on line 1: the section is replaced, with nothing on stderr" "rc=$RC stderr: $ERR"
+assert_pair "$r" "marker-line-1"
+before=$(digest "$r/AGENTS.md")
+run_init_stderr "$r"
+[ "$RC" -eq 0 ] && [ -z "$ERR" ] \
+  && [ "$(digest "$r/AGENTS.md")" = "$before" ] \
+  && ok "marker on line 1: a second run changes nothing, with nothing on stderr" \
+  || bad "marker on line 1: a second run changes nothing, with nothing on stderr" "rc=$RC stderr: $ERR"
+assert_pair "$r" "marker-line-1 rerun"
+
+# M12 — marker on line 1 with operator content after the section.
+r=$(new_repo "marker-line-1-trailing")
+{
+  printf '%s\n' "$BEGIN_MARKER"
+  printf '<!-- section-version: 1.1.0 -->\n\nOLD PROSE.\n\n'
+  printf '%s\n' "$END_MARKER"
+  printf '\nTrailing operator content.\n'
+} > "$r/AGENTS.md"
+cp "$r/AGENTS.md" "$r/CLAUDE.md"
+outside_before=$(digest_outside_markers "$r/AGENTS.md")
+run_init_stderr "$r"
+[ "$RC" -eq 0 ] && [ -z "$ERR" ] \
+  && section_of "$r/AGENTS.md" | grep -qF 'section-version: 1.2.0' \
+  && [ "$(digest_outside_markers "$r/AGENTS.md")" = "$outside_before" ] \
+  && ok "marker on line 1: the section is replaced and trailing content unchanged, with nothing on stderr" \
+  || bad "marker on line 1: the section is replaced and trailing content unchanged, with nothing on stderr" "rc=$RC stderr: $ERR"
 
 echo
 echo "  passed: $pass   failed: $fail"
